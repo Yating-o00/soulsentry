@@ -1,0 +1,1149 @@
+import { useState, useEffect, useMemo } from "react";
+import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
+import { View, Text, ScrollView, Input } from "@tarojs/components";
+import { get, post, patch } from "@/utils/api";
+import { getToken } from "@/utils/auth";
+
+const THEME = {
+  water: "#5b82a0",
+  waterDeep: "#4a6b8a",
+  waterLight: "#8ab4c9",
+  waterFaint: "#d4e4f0",
+  waterMist: "#e8f0f5",
+  ink: "#1c1c1e",
+  inkSecondary: "#3a3a3c",
+  inkTertiary: "#63666e",
+  inkQuaternary: "#9ca0a8",
+  paper: "#f7f8fa",
+  card: "#ffffff",
+  border: "#e5e7ec",
+  done: "#7cb87a",
+  doneBg: "#e8f5e6",
+  heart: "#d48888",
+  heartDeep: "#b85a6e",
+  heartBg: "#fae8ea",
+  gold: "#c9a66b",
+  goldBg: "#f8f1e4"
+};
+
+const CATEGORY_LABEL = {
+  work: "工作",
+  personal: "个人",
+  health: "健康",
+  study: "学习",
+  family: "家庭",
+  shopping: "购物",
+  finance: "财务",
+  other: "其他"
+};
+
+const HEART_KEYWORDS = [
+  {
+    keys: ["累", "疲惫", "倦", "虚"],
+    reply: "感觉到了。你已经撑了很久，现在允许自己慢下来。",
+    action: "把今晚提醒推到 21:30"
+  },
+  {
+    keys: ["烦", "焦虑", "急", "压力"],
+    reply: "焦虑写下来就变小了。先把脑子里最吵的那件小事说出来。",
+    action: "为你空出 15 分钟"
+  },
+  {
+    keys: ["难过", "伤心", "失落"],
+    reply: "辛苦了。今天不需要产出，能被自己听见已经足够。",
+    action: "给你一个拥抱"
+  },
+  {
+    keys: ["开心", "高兴", "谢谢", "感激"],
+    reply: "真好，捕捉到了这一刻。",
+    action: "记下这份能量"
+  },
+  {
+    keys: ["慢", "来不及", "赶不上"],
+    reply: "河流本来就有快有慢，这一程慢一点没关系。",
+    action: "调整到晚些时候"
+  },
+  {
+    keys: ["想放弃", "不想做"],
+    reply: "不想做的时候，先做 2 分钟看看。两分钟之后，你仍有权停下。",
+    action: "拆成 2 分钟"
+  }
+];
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toChinaYmd(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  const str = d.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
+  return str.replace(/\//g, "-");
+}
+
+function isToday(iso) {
+  return iso ? toChinaYmd(iso) === toChinaYmd(new Date()) : false;
+}
+
+function isDone(t) {
+  return ["completed", "done", "archived"].includes(t?.status);
+}
+
+function taskTime(t) {
+  return t?.due_at || t?.end_time || t?.reminder_time;
+}
+
+function formatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function getHour(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d.getHours();
+}
+
+function isOverdue(t) {
+  const tt = taskTime(t);
+  return tt && !isDone(t) && new Date(tt) < new Date();
+}
+
+function isStale(t) {
+  if (isDone(t)) return false;
+  const created = new Date(t?.created_date);
+  if (isNaN(created.getTime())) return false;
+  const days = (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24);
+  return days > 7 && !taskTime(t);
+}
+
+function chinaIso(ymd, time) {
+  return `${ymd}T${time}:00+08:00`;
+}
+
+function tomorrowAt(time) {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return chinaIso(toChinaYmd(d), time);
+}
+
+function greetByHour() {
+  const h = new Date().getHours();
+  if (h < 9) return "早安";
+  if (h < 12) return "上午好";
+  if (h < 14) return "中午好";
+  if (h < 18) return "下午好";
+  return "晚上好";
+}
+
+function buildRiverData(tasks, notes) {
+  const hours = Array.from({ length: 16 }, (_, i) => i + 8);
+  const map = {};
+  hours.forEach((h) => {
+    map[h] = { hour: h, intensity: 0, hasHeart: false, hasTask: false, hasDone: false, height: 0 };
+  });
+
+  tasks.forEach((t) => {
+    const time = isDone(t) ? t.completed_at || t.updated_date : taskTime(t);
+    const h = getHour(time);
+    if (h == null || h < 8 || h > 23) return;
+    if (isDone(t)) {
+      map[h].intensity += 2;
+      map[h].hasDone = true;
+    } else {
+      map[h].intensity += 1;
+      map[h].hasTask = true;
+    }
+  });
+
+  notes.forEach((n) => {
+    const h = getHour(n.created_date);
+    if (h == null || h < 8 || h > 23) return;
+    map[h].intensity += 0.5;
+    map[h].hasHeart = true;
+  });
+
+  const max = Math.max(...hours.map((h) => map[h].intensity), 1);
+  hours.forEach((h) => {
+    const item = map[h];
+    item.height = item.intensity > 0 ? Math.min(100, Math.round((item.intensity / max) * 70 + 20)) : 8;
+  });
+
+  let bestStart = null;
+  let bestLen = 0;
+  let curStart = null;
+  let curLen = 0;
+  hours.forEach((h) => {
+    if (map[h].intensity >= 2) {
+      if (curStart == null) {
+        curStart = h;
+        curLen = 1;
+      } else {
+        curLen += 1;
+      }
+    } else {
+      if (curLen > bestLen) {
+        bestLen = curLen;
+        bestStart = curStart;
+      }
+      curStart = null;
+      curLen = 0;
+    }
+  });
+  if (curLen > bestLen) {
+    bestLen = curLen;
+    bestStart = curStart;
+  }
+
+  const deep = bestLen >= 2 ? { start: bestStart, end: bestStart + bestLen - 1 } : null;
+  const doneToday = tasks.filter((t) => isDone(t) && isToday(t.completed_at || t.updated_date)).length;
+  const heartsToday = notes.filter((n) => isToday(n.created_date)).length;
+  return { list: hours.map((h) => map[h]), deep, doneToday, heartsToday };
+}
+
+function buildRiverInsight(river, tasks) {
+  const active = tasks.filter((t) => !isDone(t)).length;
+  if (river.deep) {
+    return {
+      text: `你今天的深流时段是 ${river.deep.start}:00–${river.deep.end + 1}:00，把重要的事放进去会更容易进入状态。`,
+      actionText: "把一件事移过去",
+      action: "move-to-deep"
+    };
+  }
+  if (river.doneToday > 0) {
+    return {
+      text: `今天已完成 ${river.doneToday} 件事，河流正在流动。`,
+      actionText: active > 0 ? "继续推进" : "好好休息",
+      action: active > 0 ? "continue" : "rest"
+    };
+  }
+  const nowHour = new Date().getHours();
+  if (nowHour < 10) {
+    return {
+      text: "上午是大多数人最容易进入深流的时间，先选一件重要的事开始。",
+      actionText: "选一件开始",
+      action: "pick"
+    };
+  }
+  return {
+    text: "今天的河流还在等待第一条波纹。记录或完成一件小事，它会自己展开。",
+    actionText: "记一条",
+    action: "note"
+  };
+}
+
+function pickNowTask(tasks) {
+  const active = tasks.filter((t) => !isDone(t));
+  if (active.length === 0) return null;
+
+  const dueToday = active
+    .filter((t) => isToday(taskTime(t)))
+    .sort((a, b) => new Date(taskTime(a)) - new Date(taskTime(b)))[0];
+  if (dueToday) {
+    return { task: dueToday, reason: `今日 ${formatTime(taskTime(dueToday))} 到期 · 先把它安放好` };
+  }
+
+  const high = active
+    .filter((t) => ["urgent", "high"].includes(t.priority))
+    .sort((a, b) => new Date(a.created_date) - new Date(b.created_date))[0];
+  if (high) {
+    return { task: high, reason: "这是当前优先级最高的事 · 值得一段专注" };
+  }
+
+  const next = active.filter((t) => taskTime(t)).sort((a, b) => new Date(taskTime(a)) - new Date(taskTime(b)))[0];
+  if (next) {
+    return { task: next, reason: "接下来最近的一件事 · 顺手推进" };
+  }
+
+  return { task: active[0], reason: "今天还没开始动手 · 从它启动" };
+}
+
+function pickSettleTask(tasks) {
+  const candidates = tasks.filter((t) => !isDone(t) && (isOverdue(t) || isStale(t)));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => new Date(taskTime(a) || a.created_date) - new Date(taskTime(b) || b.created_date));
+  return candidates[0];
+}
+
+function settleDays(t) {
+  const ref = taskTime(t) || t.created_date;
+  if (!ref) return 0;
+  return Math.floor((Date.now() - new Date(ref).getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function isHeartNote(n) {
+  const tags = Array.isArray(n.tags) ? n.tags : [];
+  const text = String(n.plain_text || n.content || "");
+  return tags.includes("情绪") || tags.includes("心签") || (text.length < 120 && !/https?:\/\//.test(text));
+}
+
+function buildHeartReplies(notes) {
+  const hearts = notes.filter(isHeartNote).slice(0, 5);
+  return hearts.slice(0, 2).map((n) => {
+    const text = String(n.plain_text || n.content || "");
+    const matched = HEART_KEYWORDS.find((k) => k.keys.some((w) => text.includes(w))) || {
+      reply: "听见了。它会一直在这里，等你准备好再回来看。",
+      action: "留一段空白"
+    };
+    return { note: n, reply: matched.reply, action: matched.action };
+  });
+}
+
+function buildNightReview(tasks, notes) {
+  const hour = new Date().getHours();
+  if (hour < 18) return null;
+  const doneToday = tasks.filter((t) => isDone(t) && isToday(t.completed_at || t.updated_date)).length;
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  const yNote = notes.find((n) => toChinaYmd(n.created_date) === toChinaYmd(yest) && isHeartNote(n));
+  const quote = yNote ? String(yNote.plain_text || yNote.content || "").slice(0, 40) : "把今天轻轻放下，明天河流会继续。";
+  return { doneToday, quote };
+}
+
+export default function Flow() {
+  const [tasks, setTasks] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [inputText, setInputText] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [focusActive, setFocusActive] = useState(false);
+  const [focusPaused, setFocusPaused] = useState(false);
+  const [focusLeft, setFocusLeft] = useState(25 * 60);
+  const [showVoiceModal, setShowVoiceModal] = useState(false);
+
+  useDidShow(() => {
+    loadAll();
+    if (focusActive && focusPaused) {
+      setFocusPaused(false);
+    }
+  });
+
+  useDidHide(() => {
+    if (focusActive) {
+      setFocusPaused(true);
+    }
+  });
+
+  useEffect(() => {
+    if (!focusActive || focusPaused) return;
+    const id = setInterval(() => {
+      setFocusLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(id);
+          setFocusActive(false);
+          Taro.showToast({ title: "专注完成", icon: "success" });
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [focusActive, focusPaused]);
+
+  const river = useMemo(() => buildRiverData(tasks, notes), [tasks, notes]);
+  const riverInsight = useMemo(() => buildRiverInsight(river, tasks), [river, tasks]);
+  const nowTask = useMemo(() => pickNowTask(tasks), [tasks]);
+  const settleTask = useMemo(() => pickSettleTask(tasks), [tasks]);
+  const hearts = useMemo(() => buildHeartReplies(notes), [notes]);
+  const nightReview = useMemo(() => buildNightReview(tasks, notes), [tasks, notes]);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [tasksRes, notesRes] = await Promise.allSettled([
+        get("/tasks", { parent_task_id: "", limit: 200 }, { silent: true }),
+        get("/notes", { limit: 100 }, { silent: true })
+      ]);
+      const taskList = tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value) ? tasksRes.value : [];
+      const noteList = notesRes.status === "fulfilled" && Array.isArray(notesRes.value) ? notesRes.value : [];
+      setTasks(taskList);
+      setNotes(noteList);
+    } catch (_err) {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleTaskDone = async (task) => {
+    try {
+      await patch(`/tasks/${task.id}`, { status: isDone(task) ? "pending" : "completed" });
+      loadAll();
+    } catch (_err) {
+      // ignore
+    }
+  };
+
+  const rescheduleTask = async (task, time = "09:00") => {
+    try {
+      const next = tomorrowAt(time);
+      await patch(`/tasks/${task.id}`, { end_time: next, reminder_time: next });
+      Taro.showToast({ title: "已重新安排", icon: "success" });
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "安排失败", icon: "none" });
+    }
+  };
+
+  const letGoTask = async (task) => {
+    try {
+      await patch(`/tasks/${task.id}`, { status: "completed" });
+      Taro.showToast({ title: "已轻轻放下", icon: "success" });
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "操作失败", icon: "none" });
+    }
+  };
+
+  const moveToDeep = async () => {
+    const target =
+      tasks.find((t) => !isDone(t) && ["urgent", "high"].includes(t.priority)) ||
+      tasks.find((t) => !isDone(t) && isToday(taskTime(t))) ||
+      tasks.find((t) => !isDone(t));
+    if (!target) return;
+    const deepStart = river?.deep?.start || 9;
+    const time = `${pad(deepStart)}:30`;
+    try {
+      await patch(`/tasks/${target.id}`, { end_time: tomorrowAt(time), reminder_time: tomorrowAt(time) });
+      Taro.showToast({ title: "已移入明天深流时段", icon: "success" });
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "移动失败", icon: "none" });
+    }
+  };
+
+  const startFocus = () => {
+    setFocusLeft(25 * 60);
+    setFocusActive(true);
+    setFocusPaused(false);
+  };
+
+  const stopFocus = () => {
+    setFocusActive(false);
+  };
+
+  const formatFocusTime = () => {
+    const m = Math.floor(focusLeft / 60);
+    const s = focusLeft % 60;
+    return `${pad(m)}:${pad(s)}`;
+  };
+
+  const extractUrl = (text) => {
+    const m = text.match(/https?:\/\/\S+/i);
+    return m ? m[0] : null;
+  };
+
+  const saveHeart = async (text) => {
+    await post("/notes", { title: "心签", content: text, tags: ["情绪", "心签"] });
+    Taro.showToast({ title: "心签已保存", icon: "success" });
+    loadAll();
+  };
+
+  const saveLink = async (text) => {
+    const url = extractUrl(text);
+    await post("/notes", {
+      title: text.slice(0, 60).replace(url, "").trim() || "外部链接",
+      content: text,
+      tags: ["外部信息", "链接"]
+    });
+    Taro.showToast({ title: "链接已保存", icon: "success" });
+    loadAll();
+  };
+
+  const analyzeRoute = async (text) => {
+    setAnalyzing(true);
+    try {
+      const data = await post("/functions/analyzeIntent", { input: text, date: toChinaYmd(new Date()) }, { silent: true });
+      const timeline = Array.isArray(data?.timeline) ? data.timeline : [];
+      if (timeline.length > 0) {
+        const first = timeline.find((t) => t.date && t.time) || timeline[0];
+        await post("/tasks", {
+          title: data?.parsed?.intents?.[0] || text.slice(0, 60),
+          description: text,
+          priority: "medium",
+          category: "other",
+          end_time: first.date && first.time ? chinaIso(first.date, first.time) : undefined
+        });
+        Taro.showToast({ title: "约定已创建", icon: "success" });
+      } else {
+        await post("/notes", { title: "记录", content: text });
+        Taro.showToast({ title: "已记录", icon: "success" });
+      }
+      loadAll();
+    } catch (_err) {
+      await post("/notes", { title: "记录", content: text });
+      Taro.showToast({ title: "已记录", icon: "success" });
+      loadAll();
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleSend = async () => {
+    const text = inputText.trim();
+    if (!text || analyzing) return;
+    setInputText("");
+    if (extractUrl(text)) {
+      await saveLink(text);
+    } else if (text.length <= 50 && /[情绪心累烦焦虑难过开心感谢慢放弃]/.test(text)) {
+      await saveHeart(text);
+    } else {
+      await analyzeRoute(text);
+    }
+  };
+
+  const quickAction = (type) => {
+    if (type === "heart") {
+      Taro.navigateTo({ url: "/pages/note-create/index?tag=heart" });
+    } else if (type === "task") {
+      Taro.navigateTo({ url: "/pages/task-create/index" });
+    } else if (type === "voice") {
+      setShowVoiceModal(true);
+    } else if (type === "photo") {
+      Taro.chooseMedia({
+        count: 1,
+        mediaType: ["image"],
+        sourceType: ["album", "camera"],
+        success: async (res) => {
+          const file = res.tempFiles?.[0];
+          if (!file?.tempFilePath) return;
+          Taro.showLoading({ title: "上传中" });
+          try {
+            const token = getToken();
+            const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+            const apiBase = rawApi.replace(/\/$/, "");
+            const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+            const uploadRes = await Taro.uploadFile({
+              url: uploadUrl,
+              filePath: file.tempFilePath,
+              name: "file",
+              header: token ? { Authorization: `Bearer ${token}` } : {},
+              timeout: 60000
+            });
+            const data = JSON.parse(uploadRes.data || "{}");
+            if (uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url) {
+              await post("/notes", { title: "图片记录", content: data.file_url, tags: ["外部信息", "图片"] });
+              Taro.showToast({ title: "图片已保存", icon: "success" });
+              loadAll();
+            } else {
+              throw new Error(data?.message || "上传失败");
+            }
+          } catch (err) {
+            Taro.showToast({ title: err?.message || "上传失败", icon: "none" });
+          } finally {
+            Taro.hideLoading();
+          }
+        },
+        fail: () => Taro.showToast({ title: "选择图片失败", icon: "none" })
+      });
+    }
+  };
+
+  const renderHeader = () => (
+    <View
+      style={{
+        padding: "24rpx 32rpx 16rpx",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between"
+      }}
+    >
+      <View style={{ display: "flex", alignItems: "center" }}>
+        <View
+          style={{
+            width: "52rpx",
+            height: "52rpx",
+            borderRadius: "50%",
+            background: `linear-gradient(135deg, ${THEME.waterLight}, ${THEME.water})`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: "18rpx"
+          }}
+        >
+          <Text style={{ fontSize: "26rpx", color: "#fff" }}>♡</Text>
+        </View>
+        <View>
+          <Text style={{ fontSize: "32rpx", fontWeight: 500, color: THEME.ink }}>心栈 · 流</Text>
+          <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "-4rpx" }}>{greetByHour()}，今天也要善待自己</Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderRiver = () => {
+    const list = river?.list || [];
+    const deep = river?.deep;
+    const greet = greetByHour();
+    const headline = deep
+      ? `${greet} · 你今天的深流在 ${deep.start}:00–${deep.end + 1}:00`
+      : river?.doneToday
+        ? `${greet} · 今天已完成 ${river.doneToday} 件，河流正在流动`
+        : `${greet} · 今天的河流还在等待第一条波纹`;
+    const sub = deep
+      ? "把重要的事放进深流区，它会自己展开。"
+      : river?.doneToday
+        ? `还有 ${tasks.filter((t) => !isDone(t)).length} 件事在流淌。`
+        : "记录或完成一件小事，心流就会开始。";
+
+    return (
+      <View style={{ padding: "8rpx 32rpx 18rpx" }}>
+        <View
+          style={{
+            borderRadius: "36rpx",
+            padding: "40rpx 32rpx 32rpx",
+            background: "linear-gradient(160deg, #2b3a4a 0%, #3d5a73 60%, #48708c 100%)",
+            boxShadow: "0 16rpx 48rpx rgba(44,62,80,0.18)",
+            position: "relative",
+            overflow: "hidden"
+          }}
+        >
+          <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)", letterSpacing: "2rpx" }}>今天的河流</Text>
+          <Text style={{ fontSize: "34rpx", fontWeight: 300, color: "#fff", marginTop: "16rpx", lineHeight: "52rpx" }}>
+            {headline}
+          </Text>
+          <Text style={{ fontSize: "24rpx", color: "rgba(255,255,255,0.55)", marginTop: "6rpx" }}>{sub}</Text>
+
+          <ScrollView scrollX enableFlex style={{ marginTop: "28rpx", height: "160rpx" }}>
+            <View style={{ display: "flex", alignItems: "flex-end", height: "120rpx", padding: "0 8rpx" }}>
+              {list.map((item) => {
+                const inDeep = deep && item.hour >= deep.start && item.hour <= deep.end;
+                const barColor = inDeep
+                  ? "rgba(168,197,217,0.55)"
+                  : item.hasDone
+                    ? THEME.waterLight
+                    : item.hasTask
+                      ? THEME.water
+                      : item.hasHeart
+                        ? THEME.heart
+                        : "rgba(255,255,255,0.15)";
+                return (
+                  <View
+                    key={item.hour}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      width: "40rpx",
+                      marginRight: "10rpx"
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: "28rpx",
+                        height: `${item.height}rpx`,
+                        minHeight: "8rpx",
+                        borderRadius: "8rpx 8rpx 0 0",
+                        background: barColor
+                      }}
+                    />
+                    <Text style={{ fontSize: "18rpx", color: "rgba(255,255,255,0.45)", marginTop: "8rpx" }}>{item.hour}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
+
+          <View
+            style={{
+              marginTop: "24rpx",
+              padding: "20rpx 22rpx",
+              borderRadius: "16rpx",
+              background: "rgba(255,255,255,0.08)",
+              border: "1rpx solid rgba(255,255,255,0.1)"
+            }}
+          >
+            <Text style={{ fontSize: "24rpx", color: "rgba(255,255,255,0.75)", lineHeight: "42rpx" }}>
+              {riverInsight.text}
+            </Text>
+            <View
+              onClick={moveToDeep}
+              style={{
+                marginTop: "16rpx",
+                alignSelf: "flex-start",
+                padding: "12rpx 22rpx",
+                borderRadius: "12rpx",
+                background: "rgba(255,255,255,0.92)"
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", fontWeight: 500, color: "#2b3a4a" }}>{riverInsight.actionText}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderNow = () => {
+    if (!nowTask) {
+      return (
+        <View style={{ padding: "18rpx 32rpx" }}>
+          <View
+            style={{
+              background: THEME.card,
+              borderRadius: "28rpx",
+              border: `1rpx solid ${THEME.waterFaint}`,
+              padding: "32rpx"
+            }}
+          >
+            <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>今天没有待安放的事，好好休息。</Text>
+          </View>
+        </View>
+      );
+    }
+
+    const t = nowTask.task;
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View
+          style={{
+            background: THEME.card,
+            borderRadius: "28rpx",
+            border: `1rpx solid ${THEME.waterFaint}`,
+            padding: "28rpx",
+            boxShadow: "0 2rpx 12rpx rgba(122,158,184,0.06)"
+          }}
+        >
+          <View
+            style={{
+              alignSelf: "flex-start",
+              display: "flex",
+              alignItems: "center",
+              padding: "6rpx 16rpx",
+              borderRadius: "100rpx",
+              background: THEME.waterMist,
+              marginBottom: "16rpx"
+            }}
+          >
+            <Text style={{ fontSize: "22rpx", color: THEME.waterDeep, fontWeight: 500 }}>⏱ {nowTask.reason}</Text>
+          </View>
+          <Text style={{ fontSize: "34rpx", fontWeight: 500, color: THEME.ink, marginBottom: "8rpx" }}>{t.title}</Text>
+          <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, marginBottom: "24rpx" }}>
+            {CATEGORY_LABEL[t.category] || t.category || "其他"}
+            {taskTime(t) ? ` · ${formatTime(taskTime(t))}` : ""}
+            {isOverdue(t) ? " · 已逾期" : ""}
+          </Text>
+
+          <View style={{ display: "flex", flexWrap: "wrap" }}>
+            <View
+              onClick={startFocus}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "14rpx 24rpx",
+                borderRadius: "14rpx",
+                background: THEME.water,
+                marginRight: "16rpx",
+                marginBottom: "12rpx"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: "#fff" }}>▶ 开始一段专注</Text>
+            </View>
+            <View
+              onClick={() => rescheduleTask(t, "21:00")}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "14rpx 24rpx",
+                borderRadius: "14rpx",
+                background: THEME.paper,
+                border: `1rpx solid ${THEME.border}`,
+                marginRight: "16rpx",
+                marginBottom: "12rpx"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary }}>稍后</Text>
+            </View>
+            <View
+              onClick={() => toggleTaskDone(t)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                padding: "14rpx 24rpx",
+                borderRadius: "14rpx",
+                background: THEME.paper,
+                border: `1rpx solid ${THEME.border}`,
+                marginBottom: "12rpx"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary }}>已完成</Text>
+            </View>
+          </View>
+
+          {focusActive && (
+            <View
+              style={{
+                marginTop: "24rpx",
+                padding: "20rpx 24rpx",
+                borderRadius: "16rpx",
+                background: THEME.waterMist,
+                display: "flex",
+                alignItems: "center"
+              }}
+            >
+              <Text style={{ fontSize: "44rpx", fontWeight: 300, color: THEME.waterDeep, width: "140rpx" }}>
+                {formatFocusTime()}
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.waterDeep }}>专注中</Text>
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginTop: "4rpx" }}>
+                  心栈已静音非紧急提醒，结束后自动记录。
+                </Text>
+              </View>
+              <View
+                onClick={stopFocus}
+                style={{
+                  padding: "10rpx 20rpx",
+                  borderRadius: "10rpx",
+                  background: "rgba(255,255,255,0.7)"
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: THEME.inkSecondary }}>结束</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  const renderSettle = () => {
+    if (!settleTask) return null;
+    const days = settleDays(settleTask);
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View
+          style={{
+            background: `linear-gradient(135deg, ${THEME.goldBg}, #faf6ec)`,
+            borderRadius: "28rpx",
+            border: "1rpx solid #efe3c8",
+            padding: "28rpx"
+          }}
+        >
+          <View style={{ display: "flex", alignItems: "center", marginBottom: "10rpx" }}>
+            <Text style={{ fontSize: "22rpx", color: "#a8875a", fontWeight: 500 }}>♡ 有件事已经等了 {days} 天，给它一个去处吧</Text>
+          </View>
+          <Text style={{ fontSize: "30rpx", fontWeight: 500, color: THEME.ink }}>{settleTask.title}</Text>
+          <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx", marginTop: "8rpx" }}>
+            {isOverdue(settleTask) ? `原定于 ${formatTime(taskTime(settleTask))}，现在可以重新安放。` : "它在角落里待了很久，也许只需要一个决定。"}
+          </Text>
+          <View style={{ display: "flex", flexWrap: "wrap", marginTop: "24rpx" }}>
+            <View
+              onClick={() => rescheduleTask(settleTask, "09:00")}
+              style={{
+                flex: 1,
+                minWidth: "160rpx",
+                marginRight: "12rpx",
+                marginBottom: "12rpx",
+                padding: "18rpx 12rpx",
+                borderRadius: "16rpx",
+                background: "rgba(255,255,255,0.8)",
+                border: "1rpx solid #efe3c8"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: THEME.inkSecondary, textAlign: "center" }}>重新安排</Text>
+              <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, textAlign: "center", marginTop: "4rpx" }}>移到明天上午</Text>
+            </View>
+            <View
+              onClick={() =>
+                Taro.navigateTo({ url: `/pages/task-create/index?parent_task_id=${settleTask.id}&title=${encodeURIComponent(settleTask.title)}` })
+              }
+              style={{
+                flex: 1,
+                minWidth: "160rpx",
+                marginRight: "12rpx",
+                marginBottom: "12rpx",
+                padding: "18rpx 12rpx",
+                borderRadius: "16rpx",
+                background: "rgba(255,255,255,0.8)",
+                border: "1rpx solid #efe3c8"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: THEME.inkSecondary, textAlign: "center" }}>拆小一步</Text>
+              <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, textAlign: "center", marginTop: "4rpx" }}>只做最小动作</Text>
+            </View>
+            <View
+              onClick={() => letGoTask(settleTask)}
+              style={{
+                flex: 1,
+                minWidth: "160rpx",
+                marginBottom: "12rpx",
+                padding: "18rpx 12rpx",
+                borderRadius: "16rpx",
+                background: "rgba(255,255,255,0.8)",
+                border: "1rpx solid #efe3c8"
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: THEME.inkSecondary, textAlign: "center" }}>轻轻放下</Text>
+              <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, textAlign: "center", marginTop: "4rpx" }}>不再提醒</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderHearts = () => {
+    if (!hearts || hearts.length === 0) return null;
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
+          <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.heart, marginRight: "16rpx" }} />
+          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>心签 · 都被听见了</Text>
+        </View>
+        {hearts.map((h, idx) => (
+          <View key={h.note.id} style={{ display: "flex", marginBottom: idx < hearts.length - 1 ? "24rpx" : 0 }}>
+            <View style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "36rpx", marginRight: "20rpx" }}>
+              <View
+                style={{
+                  width: "18rpx",
+                  height: "18rpx",
+                  borderRadius: "50%",
+                  background: THEME.heart,
+                  border: `5rpx solid ${THEME.paper}`,
+                  marginTop: "8rpx"
+                }}
+              />
+              {idx < hearts.length - 1 && (
+                <View
+                  style={{
+                    flex: 1,
+                    width: "3rpx",
+                    background: `linear-gradient(to bottom, ${THEME.heartBg}, transparent)`,
+                    marginTop: "8rpx"
+                  }}
+                />
+              )}
+            </View>
+            <View
+              style={{
+                flex: 1,
+                background: THEME.card,
+                borderRadius: "24rpx",
+                border: `1rpx solid ${THEME.border}`,
+                padding: "24rpx",
+                boxShadow: "0 2rpx 12rpx rgba(122,158,184,0.06)"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", fontStyle: "italic", fontWeight: 300, color: THEME.inkSecondary, lineHeight: "48rpx" }}>
+                {String(h.note.plain_text || h.note.content || "").slice(0, 200)}
+              </Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginTop: "8rpx" }}>
+                {formatTime(h.note.created_date)} · {Array.isArray(h.note.tags) ? h.note.tags.slice(0, 2).join(" ") : "心签"}
+              </Text>
+              <View
+                style={{
+                  marginTop: "18rpx",
+                  padding: "16rpx 18rpx",
+                  borderRadius: "14rpx",
+                  background: THEME.heartBg,
+                  display: "flex"
+                }}
+              >
+                <View
+                  style={{
+                    width: "32rpx",
+                    height: "32rpx",
+                    borderRadius: "50%",
+                    background: `linear-gradient(135deg, ${THEME.waterLight}, ${THEME.water})`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "14rpx",
+                    flexShrink: 0,
+                    marginTop: "4rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "18rpx", color: "#fff" }}>♡</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: "24rpx", color: "#9a5f6e", lineHeight: "40rpx" }}>{h.reply}</Text>
+                  <Text style={{ fontSize: "22rpx", color: THEME.heartDeep, marginTop: "8rpx", fontWeight: 500 }}>
+                    {h.action}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const renderNightReview = () => {
+    if (!nightReview) return null;
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View
+          style={{
+            borderRadius: "28rpx",
+            padding: "28rpx",
+            background: "linear-gradient(150deg, #33395c, #4a5480)",
+            display: "flex"
+          }}
+        >
+          <View
+            style={{
+              width: "72rpx",
+              height: "72rpx",
+              borderRadius: "18rpx",
+              background: "rgba(255,255,255,0.1)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "20rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "36rpx", color: "#cfd6f2" }}>🌙</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "28rpx", fontWeight: 500, color: "#fff" }}>今晚 21:30，一起看看今天的河流</Text>
+            <Text style={{ fontSize: "24rpx", color: "rgba(255,255,255,0.6)", marginTop: "8rpx", lineHeight: "40rpx" }}>
+              今天完成了 {nightReview.doneToday} 件事。{nightReview.quote ? `昨日你说：「${nightReview.quote}」` : ""}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderBottomBar = () => (
+    <View
+      style={{
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: "100rpx",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        background: "rgba(250,251,251,0.92)",
+        borderTop: "1rpx solid rgba(232,236,239,0.6)",
+        zIndex: 50
+      }}
+    >
+      <View style={{ padding: "16rpx 28rpx 12rpx" }}>
+        <View
+          style={{
+            display: "flex",
+            alignItems: "center",
+            background: THEME.card,
+            borderRadius: "40rpx",
+            border: `1rpx solid ${THEME.border}`,
+            padding: "8rpx 8rpx 8rpx 24rpx",
+            boxShadow: "0 2rpx 8rpx rgba(0,0,0,0.04)"
+          }}
+        >
+          <Input
+            style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
+            placeholder="此刻想记下什么？"
+            value={inputText}
+            onInput={(e) => setInputText(e.detail.value)}
+            onConfirm={handleSend}
+          />
+          <View
+            onClick={handleSend}
+            style={{
+              width: "64rpx",
+              height: "64rpx",
+              borderRadius: "50%",
+              background: inputText.trim() ? THEME.water : THEME.border,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              marginLeft: "12rpx"
+            }}
+          >
+            <Text style={{ fontSize: "32rpx", color: "#fff" }}>➤</Text>
+          </View>
+        </View>
+        <View style={{ display: "flex", justifyContent: "space-around", marginTop: "12rpx" }}>
+          {[
+            { key: "heart", icon: "♡", label: "心签", color: THEME.heartDeep },
+            { key: "voice", icon: "🎤", label: "语音", color: THEME.inkQuaternary },
+            { key: "photo", icon: "📷", label: "拍照", color: THEME.inkQuaternary },
+            { key: "task", icon: "📋", label: "约定", color: THEME.inkQuaternary }
+          ].map((q) => (
+            <View
+              key={q.key}
+              onClick={() => quickAction(q.key)}
+              style={{ display: "flex", alignItems: "center", padding: "8rpx 12rpx" }}
+            >
+              <Text style={{ fontSize: "28rpx", color: q.color, marginRight: "8rpx" }}>{q.icon}</Text>
+              <Text style={{ fontSize: "24rpx", color: q.color }}>{q.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {showVoiceModal && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+          onClick={() => setShowVoiceModal(false)}
+        >
+          <View
+            style={{
+              width: "560rpx",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              padding: "48rpx",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "16rpx" }}>语音输入</Text>
+            <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, marginBottom: "48rpx", textAlign: "center" }}>
+              语音输入功能正在适配微信小程序插件，
+              即将上线。
+            </Text>
+            <View
+              onClick={() => setShowVoiceModal(false)}
+              style={{ marginTop: "8rpx", padding: "16rpx 48rpx", borderRadius: "12rpx", background: THEME.paper }}
+            >
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>知道了</Text>
+            </View>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+
+  return (
+    <View style={{ minHeight: "100vh", background: THEME.paper, display: "flex", flexDirection: "column" }}>
+      {renderHeader()}
+      <ScrollView scrollY style={{ flex: 1 }}>
+        <View style={{ paddingBottom: "320rpx" }}>
+          {loading && tasks.length === 0 ? (
+            <View style={{ padding: "60rpx", textAlign: "center" }}>
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>河流正在汇聚…</Text>
+            </View>
+          ) : (
+            <>
+              {renderRiver()}
+              {renderNow()}
+              {renderSettle()}
+              {renderHearts()}
+              {renderNightReview()}
+            </>
+          )}
+        </View>
+      </ScrollView>
+      {renderBottomBar()}
+    </View>
+  );
+}

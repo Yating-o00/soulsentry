@@ -1,0 +1,120 @@
+{
+  "name": "Device",
+  "type": "object",
+  "properties": {
+    "device_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "name_customized": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u7528\u6237\u662f\u5426\u624b\u52a8\u91cd\u547d\u540d\u8fc7\uff1b\u4e3a true \u65f6\u5fc3\u8df3/\u6ce8\u518c\u903b\u8f91\u4e0d\u518d\u8986\u76d6 name"
+    },
+    "device_type": {
+      "type": "string",
+      "enum": [
+        "phone",
+        "pc",
+        "tablet",
+        "watch",
+        "speaker",
+        "other"
+      ],
+      "default": "other"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "primary",
+        "deep_work",
+        "voice_hub",
+        "wearable",
+        "secondary"
+      ],
+      "default": "secondary"
+    },
+    "platform": {
+      "type": "string"
+    },
+    "browser": {
+      "type": "string"
+    },
+    "user_agent": {
+      "type": "string"
+    },
+    "screen_size": {
+      "type": "string"
+    },
+    "is_online": {
+      "type": "boolean",
+      "default": false
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "push_subscription": {
+      "type": "object",
+      "properties": {
+        "endpoint": {
+          "type": "string"
+        },
+        "keys": {
+          "type": "object",
+          "properties": {
+            "p256dh": {
+              "type": "string"
+            },
+            "auth": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "is_current": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "device_id",
+    "device_type"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        }
+      ]
+    },
+    "write": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "created_by_id": "{{user.id}}"
+        }
+      ]
+    }
+  }
+}

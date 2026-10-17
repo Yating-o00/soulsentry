@@ -1,0 +1,230 @@
+{
+  "name": "Note",
+  "type": "object",
+  "properties": {
+    "content": {
+      "type": "string",
+      "description": "HTML or Rich Text Content"
+    },
+    "plain_text": {
+      "type": "string",
+      "description": "Extracted plain text for search and AI analysis"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "is_pinned": {
+      "type": "boolean",
+      "default": false
+    },
+    "color": {
+      "type": "string",
+      "default": "white",
+      "enum": [
+        "white",
+        "red",
+        "orange",
+        "yellow",
+        "green",
+        "teal",
+        "blue",
+        "darkblue",
+        "purple",
+        "pink",
+        "brown",
+        "gray"
+      ]
+    },
+    "deleted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ai_analysis": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "key_points": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "category": {
+          "type": "string"
+        },
+        "related_topics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "actionable": {
+          "type": "boolean"
+        },
+        "is_emotional": {
+          "type": "boolean",
+          "description": "\u662f\u5426\u4e3a\u751f\u6d3b\u8bb0\u5f55/\u5fc3\u7075\u7075\u611f\u7b49\u504f\u611f\u6027\u7684\u5185\u5bb9"
+        },
+        "response_persona": {
+          "type": "string",
+          "enum": [
+            "comforter",
+            "mentor",
+            "friend"
+          ],
+          "description": "\u6e29\u6696\u56de\u5e94\u7684\u8eab\u4efd\uff1a\u5b89\u6170\u8005/\u5e08\u957f/\u670b\u53cb"
+        },
+        "response_title": {
+          "type": "string",
+          "description": "\u6e29\u6696\u56de\u5e94\u7684\u6807\u9898\uff0c\u5982\u300c\u4e00\u5c01\u6765\u81ea\u5b89\u6170\u8005\u7684\u4fe1\u300d"
+        },
+        "emotional_response": {
+          "type": "string",
+          "description": "AI \u7ed9\u4e88\u7528\u6237\u7684\u4eba\u6587\u5316\u6e29\u6696\u56de\u5e94\u6b63\u6587"
+        },
+        "analyzed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "shared_with": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string",
+            "enum": [
+              "view",
+              "edit"
+            ],
+            "default": "view"
+          }
+        }
+      },
+      "default": []
+    },
+    "is_shared": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_public": {
+      "type": "boolean",
+      "default": false
+    },
+    "share_token": {
+      "type": "string"
+    },
+    "share_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "share_expires_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "is_burn_after_reading": {
+      "type": "boolean",
+      "default": false
+    },
+    "last_active_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "burn_duration_minutes": {
+      "type": "number",
+      "default": 5
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "web_link",
+        "file",
+        "image",
+        "voice",
+        "external_feed",
+        "wechat_share"
+      ],
+      "default": "manual"
+    },
+    "source_url": {
+      "type": "string"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_url": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "file_type": {
+            "type": "string"
+          },
+          "file_size": {
+            "type": "number"
+          }
+        }
+      },
+      "default": []
+    },
+    "ai_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "completed",
+        "failed"
+      ],
+      "default": "pending"
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "is_public": true
+        },
+        {
+          "shared_with.user_id": "{{user.id}}"
+        }
+      ]
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

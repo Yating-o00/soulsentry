@@ -1,0 +1,326 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../lib/prisma.js";
+import { requireAuth } from "../middleware/auth.js";
+
+export const knowledgeBasesRouter = Router();
+
+const knowledgeBaseInputSchema = z.object({
+  title: z.string().min(1).max(200),
+  content: z.string().min(1).max(50000),
+  source_type: z.string().optional(),
+  source_id: z.string().optional().nullable(),
+  tags: z.any().optional(),
+  category: z.string().max(120).optional().nullable(),
+  summary: z.string().max(5000).optional().nullable(),
+  key_points: z.any().optional(),
+  embeddings: z.any().optional(),
+  access_count: z.number().int().min(0).optional(),
+  last_accessed: z.string().datetime().optional().nullable(),
+  importance: z.number().int().min(1).max(5).optional(),
+  embedding_summary: z.string().max(5000).optional().nullable(),
+  snapshot: z.any().optional(),
+  metadata: z.any().optional()
+});
+
+knowledgeBasesRouter.use(requireAuth);
+
+function serializeKnowledgeBase(item) {
+  return {
+    id: item.id,
+    title: item.title,
+    content: item.content,
+    source_type: item.sourceType,
+    source_id: item.sourceId,
+    tags: item.tags || [],
+    category: item.category,
+    summary: item.summary,
+    key_points: item.keyPoints || [],
+    embeddings: item.embeddings,
+    access_count: item.accessCount,
+    last_accessed: item.lastAccessed,
+    importance: item.importance,
+    embedding_summary: item.embeddingSummary,
+    snapshot: item.snapshot,
+    metadata: item.metadata,
+    created_by_id: item.userId,
+    created_by: item.user?.email || null,
+    created_date: item.createdAt,
+    updated_date: item.updatedAt
+  };
+}
+
+function parseSort(sort = "-created_date") {
+  const value = String(sort || "-created_date");
+  const order = value.startsWith("-") ? "desc" : "asc";
+  const key = value.replace(/^[-+]/, "");
+  const mapping = {
+    created_date: "createdAt",
+    updated_date: "updatedAt",
+    last_accessed: "lastAccessed",
+    access_count: "accessCount",
+    importance: "importance",
+    title: "title"
+  };
+  return { [mapping[key] || "createdAt"]: order };
+}
+
+function buildKnowledgeBaseData(userId, payload) {
+  // 注意：Prisma 的 KnowledgeBase 模型没有 metadata/embeddings 列，
+  // 这两字段接收后不入库（传入即 500），调用方无需传
+  return {
+    userId,
+    title: payload.title,
+    content: payload.content,
+    sourceType: payload.source_type || "manual",
+    sourceId: payload.source_id || null,
+    tags: payload.tags ?? [],
+    category: payload.category || "其他",
+    summary: payload.summary || null,
+    keyPoints: payload.key_points ?? [],
+    accessCount: payload.access_count ?? 0,
+    lastAccessed: payload.last_accessed ? new Date(payload.last_accessed) : null,
+    importance: payload.importance ?? 3,
+    embeddingSummary: payload.embedding_summary || null,
+    snapshot: payload.snapshot ?? undefined
+  };
+}
+
+knowledgeBasesRouter.get("/", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit || req.query.take || 100), 500);
+  const orderBy = parseSort(req.query.sort || req.query.orderBy);
+  const where = { userId: req.user.id };
+
+  if (req.query.id) where.id = String(req.query.id);
+  if (req.query.source_type) where.sourceType = String(req.query.source_type);
+  if (req.query.source_id) where.sourceId = String(req.query.source_id);
+  if (req.query.category) where.category = String(req.query.category);
+  if (req.query.importance) where.importance = Number(req.query.importance);
+  if (req.query.created_by && String(req.query.created_by) !== req.user.email) {
+    where.userId = "__none__";
+  }
+  if (req.query.created_by_id && String(req.query.created_by_id) !== req.user.id) {
+    where.userId = "__none__";
+  }
+
+  const items = await prisma.knowledgeBase.findMany({
+    where,
+    orderBy,
+    take: Number.isFinite(limit) ? limit : 100,
+    include: { user: true }
+  });
+
+  return res.json(items.map(serializeKnowledgeBase));
+});
+
+knowledgeBasesRouter.get("/:id", async (req, res) => {
+  const item = await prisma.knowledgeBase.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    },
+    include: { user: true }
+  });
+
+  if (!item) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "知识条目不存在" });
+  }
+
+  return res.json(serializeKnowledgeBase(item));
+});
+
+knowledgeBasesRouter.post("/", async (req, res) => {
+  const payload = knowledgeBaseInputSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const item = await prisma.knowledgeBase.create({
+    data: buildKnowledgeBaseData(req.user.id, payload.data),
+    include: { user: true }
+  });
+
+  return res.status(201).json(serializeKnowledgeBase(item));
+});
+
+knowledgeBasesRouter.patch("/:id", async (req, res) => {
+  const payload = knowledgeBaseInputSchema.partial().safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const existing = await prisma.knowledgeBase.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+
+  if (!existing) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "知识条目不存在" });
+  }
+
+  const item = await prisma.knowledgeBase.update({
+    where: { id: existing.id },
+    data: {
+      title: payload.data.title,
+      content: payload.data.content,
+      sourceType: payload.data.source_type,
+      sourceId: payload.data.source_id === undefined ? undefined : (payload.data.source_id || null),
+      tags: payload.data.tags,
+      category: payload.data.category,
+      summary: payload.data.summary,
+      keyPoints: payload.data.key_points,
+      accessCount: payload.data.access_count,
+      lastAccessed: payload.data.last_accessed === undefined ? undefined : (payload.data.last_accessed ? new Date(payload.data.last_accessed) : null),
+      importance: payload.data.importance,
+      embeddingSummary: payload.data.embedding_summary,
+      snapshot: payload.data.snapshot
+    },
+    include: { user: true }
+  });
+
+  return res.json(serializeKnowledgeBase(item));
+});
+
+// 沉淀返还：把知识条目还原到来源处（约定回到进行中、心签去掉已沉淀标记），知识副本随之移除。
+// 约定沉淀：原约定还在——直接还原，各级子约定从未被删除、随约定一并回归；
+//           原约定已删——按沉淀快照完整重建约定 + 全部子约定。
+knowledgeBasesRouter.post("/:id/restore", async (req, res) => {
+  const item = await prisma.knowledgeBase.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+
+  if (!item) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "知识条目不存在" });
+  }
+
+  const { sourceType, sourceId } = item;
+  const snap = item.snapshot && typeof item.snapshot === "object" ? item.snapshot : null;
+
+  if (sourceType === "task" && sourceId) {
+    const task = await prisma.task.findFirst({
+      where: { id: sourceId, userId: req.user.id }
+    });
+
+    if (task && !task.deletedAt) {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          status: "TODO",
+          completedAt: null,
+          metadata: { ...(task.metadata || {}), settled_as_knowledge: false, knowledge_base_id: null }
+        }
+      });
+      await prisma.knowledgeBase.delete({ where: { id: item.id } });
+      return res.json({ restored: true, source_type: "task", source_id: task.id, title: task.title });
+    }
+
+    // 原约定已删除：有快照则完整重建
+    if (snap?.task) {
+      const toPrismaStatus = (s) => {
+        const v = String(s || "").toLowerCase();
+        if (v === "completed" || v === "done") return "DONE";
+        if (v === "in_progress") return "IN_PROGRESS";
+        return "TODO";
+      };
+
+      let parentId = snap.task.parent_task_id || null;
+      if (parentId) {
+        const parent = await prisma.task.findFirst({
+          where: { id: parentId, userId: req.user.id, deletedAt: null }
+        });
+        if (!parent) parentId = null;
+      }
+
+      const created = await prisma.task.create({
+        data: {
+          userId: req.user.id,
+          title: snap.task.title || item.title,
+          description: snap.task.description || item.content,
+          status: "TODO",
+          priority: snap.task.priority || "medium",
+          category: snap.task.category || null,
+          dueAt: snap.task.due_at ? new Date(snap.task.due_at) : null,
+          reminderTime: snap.task.reminder_time ? new Date(snap.task.reminder_time) : null,
+          endTime: snap.task.end_time ? new Date(snap.task.end_time) : null,
+          isAllDay: Boolean(snap.task.is_all_day),
+          parentTaskId: parentId,
+          tags: Array.isArray(snap.task.tags) ? snap.task.tags : []
+        }
+      });
+
+      const createSubs = async (nodes, parentTaskId) => {
+        for (const n of nodes || []) {
+          const status = toPrismaStatus(n.status);
+          const child = await prisma.task.create({
+            data: {
+              userId: req.user.id,
+              title: n.title,
+              description: n.description || null,
+              status,
+              priority: n.priority || "medium",
+              parentTaskId,
+              completedAt: status === "DONE" ? new Date() : null
+            }
+          });
+          await createSubs(n.children, child.id);
+        }
+      };
+      await createSubs(snap.subtasks, created.id);
+
+      await prisma.knowledgeBase.delete({ where: { id: item.id } });
+      return res.json({
+        restored: true,
+        recreated: true,
+        source_type: "task",
+        source_id: created.id,
+        title: created.title
+      });
+    }
+
+    return res.status(409).json({ error: "SOURCE_GONE", message: "原约定已被删除，无法返还" });
+  }
+
+  if (sourceType === "note" && sourceId) {
+    const note = await prisma.note.findFirst({
+      where: { id: sourceId, userId: req.user.id }
+    });
+    if (!note || note.deletedAt) {
+      return res.status(409).json({ error: "SOURCE_GONE", message: "原心签已被删除，无法返还" });
+    }
+
+    await prisma.note.update({
+      where: { id: note.id },
+      data: {
+        metadata: { ...(note.metadata || {}), in_knowledge_base: false }
+      }
+    });
+    await prisma.knowledgeBase.delete({ where: { id: item.id } });
+    return res.json({ restored: true, source_type: "note", source_id: note.id });
+  }
+
+  return res.status(409).json({
+    error: "NO_SOURCE",
+    message: "该条目不是从约定或心签沉淀而来，无法返还"
+  });
+});
+
+knowledgeBasesRouter.delete("/:id", async (req, res) => {
+  const existing = await prisma.knowledgeBase.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+
+  if (!existing) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "知识条目不存在" });
+  }
+
+  await prisma.knowledgeBase.delete({ where: { id: existing.id } });
+  return res.status(204).send();
+});

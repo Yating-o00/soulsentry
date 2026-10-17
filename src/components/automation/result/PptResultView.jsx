@@ -1,0 +1,408 @@
+import React, { useState, useEffect } from "react";
+import { Presentation, Download, ExternalLink, Play, Pencil, Check, Type, Loader2 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import { toast } from "sonner";
+import PptPreviewModal from "./PptPreviewModal";
+import PptSlideInlineEditor from "./PptSlideInlineEditor";
+import PptThemeCompareCard from "./PptThemeCompareCard";
+
+// PPT/办公文档结果视图：封面块 + 在线预览 + 大纲 + 下载
+export default function PptResultView({ data, preview }) {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [initialSlide, setInitialSlide] = useState(0);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [fontScale, setFontScale] = useState("md"); // sm / md / lg
+  const [editedSlides, setEditedSlides] = useState(null); // 用户本地编辑后的 slides
+  const [theme, setTheme] = useState(data?.theme || "business");
+  const [renderedFile, setRenderedFile] = useState(null); // { file_url, file_name } —— 用户切换后重新渲染的 URL
+  const [rerendering, setRerendering] = useState(false);
+  const fileUrl = renderedFile?.file_url || data?.file_url;
+  const fileName = renderedFile?.file_name || data?.file_name || "演示文稿.html";
+  const title = data?.title || data?.subject || "演示文稿";
+  const subtitle = data?.subtitle || "";
+  const slides = Array.isArray(data?.slides) ? data.slides : null;
+  const outline = Array.isArray(data?.outline) ? data.outline : null;
+  const pageCount = slides?.length || outline?.length || data?.page_count || 0;
+  // 如果没有 slides 但有 outline，自动转换为可预览的 slides（兼容旧数据）
+  const baseSlides = slides && slides.length > 0
+    ? slides
+    : (outline && outline.length > 0
+        ? [{ heading: title }, ...outline.map(o => ({
+            heading: typeof o === 'string' ? o : (o.title || o.heading || ''),
+            body: typeof o === 'string' ? '' : (o.desc || o.body || '')
+          }))]
+        : null);
+  // 优先使用用户已编辑版本
+  const previewSlides = editedSlides || baseSlides;
+  const previewData = previewSlides ? { ...data, theme, slides: previewSlides } : data;
+  const canPreview = !!(previewSlides && previewSlides.length > 0);
+
+  // 调用后端 renderPpt 重新生成 HTML 并替换 fileUrl —— 用于风格/版式切换后刷新预览
+  const rerender = async (nextData) => {
+    if (!nextData || !Array.isArray(nextData.slides) || nextData.slides.length === 0) return;
+    setRerendering(true);
+    try {
+      const res = await base44.functions.invoke("renderPpt", { data: nextData });
+      if (res?.data?.file_url) {
+        setRenderedFile({ file_url: res.data.file_url, file_name: res.data.file_name });
+      }
+    } catch (e) {
+      toast.error("重新渲染失败：" + (e?.message || "未知错误"));
+    } finally {
+      setRerendering(false);
+    }
+  };
+
+  const handleThemeChange = (next) => {
+    if (next === theme) return;
+    setTheme(next);
+    rerender({ ...previewData, theme: next });
+  };
+
+  const openAt = (idx) => {
+    if (!canPreview) return;
+    setInitialSlide(idx);
+    setPreviewOpen(true);
+  };
+  // 内联切换封面预览（不打开全屏）
+  const showAt = (idx) => {
+    if (!canPreview) return;
+    setActiveIdx(idx);
+  };
+  const activeSlide = canPreview ? (previewSlides[activeIdx] || previewSlides[0]) : null;
+  const activeHeading = activeSlide?.heading || title;
+  const activeSubtitle = activeSlide?.subtitle || (activeIdx === 0 ? subtitle : "");
+  const activeBullets = Array.isArray(activeSlide?.bullets) ? activeSlide.bullets : [];
+  const activeBody = activeSlide?.body || "";
+  const activeImages = Array.isArray(activeSlide?.images)
+    ? activeSlide.images
+    : (activeSlide?.image_url ? [{ url: activeSlide.image_url, caption: activeSlide.image_caption || "" }] : []);
+  const isCover = activeIdx === 0;
+
+  // 主题预览样式 —— 与后端 renderPpt 的 themePalette 保持视觉一致
+  const themePreview = {
+    business: {
+      bg: "linear-gradient(135deg,#1e3a8a 0%,#3b0764 100%)",
+      fg: "#ffffff", muted: "rgba(255,255,255,0.8)", dot: "rgba(255,255,255,0.85)",
+    },
+    minimal: {
+      bg: "linear-gradient(135deg,#fafafa 0%,#e5e5e5 100%)",
+      fg: "#0a0a0a", muted: "rgba(10,10,10,0.7)", dot: "#dc2626",
+    },
+    tech: {
+      bg: "linear-gradient(135deg,#022c43 0%,#0c4a6e 50%,#164e63 100%)",
+      fg: "#e2e8f0", muted: "rgba(226,232,240,0.78)", dot: "#22d3ee",
+    },
+  }[theme] || {
+    bg: "linear-gradient(135deg,#1e3a5f 0%,#3b5998 100%)",
+    fg: "#ffffff", muted: "rgba(255,255,255,0.8)", dot: "rgba(255,255,255,0.85)",
+  };
+
+  // 字号档位映射 —— 使用容器查询单位 cqw，让字号随预览区域宽度等比缩放
+  const headingScale = fontScale === "sm" ? 3.2 : fontScale === "lg" ? 5.2 : 4.2;
+  const bodyScale = fontScale === "sm" ? 1.9 : fontScale === "lg" ? 2.8 : 2.3;
+  const headingStyle = { fontSize: `clamp(13px, ${headingScale}cqw, 32px)`, lineHeight: 1.25 };
+  const bodyStyle = { fontSize: `clamp(10.5px, ${bodyScale}cqw, 20px)`, lineHeight: 1.5 };
+
+  // 退出编辑模式时若切换页码则保留当前编辑（普通编辑不触发重渲染，仅更新本地）
+  const updateActiveSlide = (next) => {
+    const base = previewSlides.map((s, i) => (i === activeIdx ? next : s));
+    setEditedSlides(base);
+    // 若 layout 改变了，触发重新渲染
+    if (next?.layout && next.layout !== (activeSlide?.layout)) {
+      rerender({ ...previewData, slides: base });
+    }
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {/* 风格对比卡 —— 三种风格并排迷你呈现当前页，点击应用 */}
+      {canPreview && (
+        <div className="relative">
+          <PptThemeCompareCard
+            activeSlide={activeSlide}
+            currentTheme={theme}
+            onSelect={handleThemeChange}
+            disabled={rerendering}
+          />
+          {rerendering && (
+            <div className="absolute top-2 right-2 flex items-center gap-1 text-[10px] text-[#384877] bg-white/90 rounded-full px-2 py-0.5 shadow-sm">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              切换中
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 封面（点击数字会在此处直接切换内容；点击大屏打开全屏；可进入编辑模式）*/}
+      <div className="rounded-xl overflow-hidden border border-slate-200 relative group" style={{ containerType: "inline-size" }}>
+        {/* 工具栏 */}
+        {canPreview && (
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+            {editing && (
+              <div className="flex items-center gap-0.5 bg-white/95 rounded-full px-1 py-0.5 shadow">
+                <Type className="w-3 h-3 text-slate-500 ml-1" />
+                {["sm", "md", "lg"].map(sz => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => setFontScale(sz)}
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold transition ${
+                      fontScale === sz ? "bg-[#3b5998] text-white" : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {sz === "sm" ? "小" : sz === "lg" ? "大" : "中"}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setEditing(e => !e)}
+              className={`p-1.5 rounded-full text-[11px] font-semibold flex items-center gap-1 shadow transition ${
+                editing ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-white/95 text-slate-700 hover:bg-white"
+              }`}
+              title={editing ? "完成编辑" : "编辑当前页"}
+            >
+              {editing ? <Check className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        )}
+
+        {/* 大屏 */}
+        {editing ? (
+          <div
+            className="w-full aspect-[16/9] flex flex-col justify-center px-6 py-6 overflow-y-auto"
+            style={{ background: themePreview.bg, color: themePreview.fg }}
+          >
+            {!isCover && (
+              <div className="text-[10px] tracking-widest text-white/60 mb-1.5">{activeIdx + 1} / {previewSlides.length}</div>
+            )}
+            {isCover && <Presentation className="w-5 h-5 text-white/70 mb-2 mx-auto" />}
+            <PptSlideInlineEditor
+              slide={activeSlide || {}}
+              isCover={isCover}
+              fontScale={fontScale}
+              onChange={updateActiveSlide}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => openAt(activeIdx)}
+            disabled={!canPreview}
+            className="w-full aspect-[16/9] flex flex-col items-center justify-center px-6 py-6 relative overflow-hidden disabled:cursor-default text-left"
+            style={{ background: themePreview.bg, color: themePreview.fg }}
+          >
+            {isCover ? (
+              <div className="flex flex-col items-center justify-center w-full max-w-full">
+                <Presentation className="w-[5cqw] h-[5cqw] min-w-[18px] min-h-[18px] max-w-[36px] max-h-[36px] mb-2 opacity-80" />
+                <div style={headingStyle} className="font-bold text-center line-clamp-2 mb-1.5">{activeHeading}</div>
+                {activeSubtitle && <div style={bodyStyle} className="opacity-80 mb-2 text-center line-clamp-2">{activeSubtitle}</div>}
+                {activeBullets.length > 0 && (
+                  <ul style={bodyStyle} className="space-y-1 opacity-90 mt-1 w-full max-w-[80%]">
+                    {activeBullets.slice(0, 4).map((b, i) => (
+                      <li key={i} className="flex gap-1.5 items-start justify-start">
+                        <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                        <span className="line-clamp-2">{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {!activeBullets.length && activeBody && (
+                  <p style={bodyStyle} className="opacity-85 line-clamp-4 whitespace-pre-wrap text-center mt-1 max-w-[80%]">{activeBody}</p>
+                )}
+              </div>
+            ) : (
+              <div className="w-full max-w-full">
+                <div style={{ fontSize: "clamp(9px, 1.4cqw, 12px)" }} className="tracking-widest opacity-60 mb-1.5">{activeIdx + 1} / {previewSlides.length}</div>
+                <div style={headingStyle} className="font-bold mb-2 line-clamp-2">{activeHeading}</div>
+                {activeImages.length > 0 ? (
+                  <div className={`flex gap-2 ${activeImages.length > 1 ? 'flex-row' : 'flex-col'} items-start`}>
+                    <div className={`${activeImages.length > 1 ? 'grid grid-cols-2 gap-1.5' : 'flex'} flex-shrink-0`} style={{ width: activeImages.length > 1 ? '50%' : '45%' }}>
+                      {activeImages.slice(0, 4).map((im, i) => (
+                        <figure key={i} className="m-0 rounded overflow-hidden bg-white/10">
+                          <img src={im.url} alt={im.caption || ''} className="w-full h-auto object-cover" loading="lazy" />
+                          {im.caption && (
+                            <figcaption style={{ fontSize: 'clamp(8px, 1cqw, 11px)' }} className="opacity-70 px-1 py-0.5 truncate">{im.caption}</figcaption>
+                          )}
+                        </figure>
+                      ))}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      {activeBullets.length > 0 && (
+                        <ul style={bodyStyle} className="space-y-1 opacity-95">
+                          {activeBullets.slice(0, 4).map((b, i) => (
+                            <li key={i} className="flex gap-1.5 items-start">
+                              <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                              <span className="line-clamp-2">{b}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {!activeBullets.length && activeBody && (
+                        <p style={bodyStyle} className="opacity-90 line-clamp-4 whitespace-pre-wrap">{activeBody}</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {activeBullets.length > 0 && (
+                      <ul style={bodyStyle} className="space-y-1 opacity-95">
+                        {activeBullets.slice(0, 5).map((b, i) => (
+                          <li key={i} className="flex gap-1.5 items-start">
+                            <span className="mt-[0.6em] w-1 h-1 rounded-full bg-white/80 flex-shrink-0" />
+                            <span className="line-clamp-2">{b}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {!activeBullets.length && activeBody && (
+                      <p style={bodyStyle} className="opacity-90 line-clamp-4 whitespace-pre-wrap">{activeBody}</p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {canPreview && (
+              <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/95 text-[#1e3a5f] text-[12px] font-semibold shadow-lg">
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  全屏预览
+                </div>
+              </div>
+            )}
+          </button>
+        )}
+
+        {pageCount > 0 && (
+          <div className="bg-white px-3 py-1.5 text-[10.5px] text-slate-500 text-center border-t border-slate-100">
+            {editing
+              ? `编辑第 ${activeIdx + 1} / ${pageCount} 页 · 可调字号 · 完成后点 ✓`
+              : `共 ${pageCount} 页 · 点击下方数字切换 · 点击封面全屏`}
+          </div>
+        )}
+      </div>
+
+      {/* 预览弹层（内置渲染，不依赖远程文件）*/}
+      <PptPreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        data={previewData}
+        fileUrl={fileUrl}
+        fileName={fileName}
+        initialSlide={initialSlide}
+      />
+
+      {/* 缩略图条（单击切换上方封面，双击打开全屏）*/}
+      {pageCount > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+          {Array.from({ length: Math.min(pageCount, 12) }).map((_, i) => {
+            const isActive = i === activeIdx;
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => showAt(i)}
+                onDoubleClick={() => openAt(i)}
+                disabled={!canPreview}
+                title={`第 ${i + 1} 页（双击全屏）`}
+                className={`w-12 h-8 rounded flex items-center justify-center text-[10px] font-semibold flex-shrink-0 border transition-all active:scale-95 ${
+                  isActive
+                    ? "ring-2 ring-[#384877] border-white shadow-md scale-105"
+                    : "border-slate-200 hover:scale-110 hover:shadow-md"
+                } disabled:cursor-default`}
+                style={{ background: themePreview.bg, color: themePreview.fg }}
+              >
+                {i + 1}
+              </button>
+            );
+          })}
+          {pageCount > 12 && (
+            <button
+              type="button"
+              onClick={() => openAt(12)}
+              disabled={!canPreview}
+              className="w-12 h-8 rounded bg-slate-100 flex items-center justify-center text-slate-500 text-[10px] font-semibold flex-shrink-0 hover:bg-slate-200 transition-colors"
+            >
+              +{pageCount - 12}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 大纲 */}
+      {outline && outline.length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-200 p-3">
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">PPT 结构</div>
+          <div className="space-y-1.5">
+            {outline.slice(0, 8).map((o, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded bg-[#384877]/8 text-[#384877] text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12px] font-semibold text-slate-800 truncate">{o.title || o}</div>
+                  {o.desc && <div className="text-[10.5px] text-slate-500 truncate">{o.desc}</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 兜底文本 */}
+      {!outline && !slides && preview && (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 max-h-40 overflow-y-auto">
+          <pre className="text-[11.5px] text-slate-700 whitespace-pre-wrap font-sans leading-relaxed">{preview}</pre>
+        </div>
+      )}
+
+      {/* 预览 + 下载（标题点击在新标签内联预览，按钮点击下载）*/}
+      {fileUrl && (
+        <div className="flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-violet-50 to-indigo-50 border border-violet-200 hover:border-violet-400 hover:shadow px-3 py-2.5 transition-all">
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const res = await fetch(fileUrl);
+                const blob = await res.blob();
+                // 强制 inline 渲染（绕过对象存储的 Content-Disposition: attachment）
+                const mime = /\.html?$/i.test(fileName) ? "text/html"
+                          : /\.txt$/i.test(fileName) ? "text/plain"
+                          : (blob.type || "text/html");
+                const url = URL.createObjectURL(new Blob([blob], { type: mime }));
+                window.open(url, "_blank");
+                setTimeout(() => URL.revokeObjectURL(url), 60_000);
+              } catch {
+                window.open(fileUrl, "_blank");
+              }
+            }}
+            className="flex items-center gap-2.5 flex-1 min-w-0 group text-left"
+            title="点击在新标签页预览"
+          >
+            <div className="w-8 h-8 rounded-lg bg-white border border-violet-200 flex items-center justify-center group-hover:scale-110 transition-transform flex-shrink-0">
+              <Presentation className="w-4 h-4 text-violet-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[12.5px] font-semibold text-violet-900 truncate group-hover:underline">{fileName}</div>
+              <div className="text-[10.5px] text-violet-700 flex items-center gap-1">
+                <ExternalLink className="w-2.5 h-2.5" /> 点击标题预览
+              </div>
+            </div>
+          </button>
+          <a
+            href={fileUrl}
+            download={fileName}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-violet-300 hover:bg-violet-600 hover:border-violet-600 hover:text-white text-violet-700 text-[11.5px] font-semibold transition-all flex-shrink-0"
+            title="下载文件"
+          >
+            <Download className="w-3.5 h-3.5" />
+            下载
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}

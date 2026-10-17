@@ -1,0 +1,332 @@
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { env } from "../config/env.js";
+import { callKimiChat, invokeKimiText, parseModelJson } from "../lib/kimi.js";
+
+// 视觉模型候选：按顺序逐个尝试，全部失败才报错
+// kimi-k3 实测支持图片输入（该 key 下 moonshot-v1-*-vision 无权限）
+export const VISION_MODELS = [
+  "kimi-k3",
+  "moonshot-v1-8k-vision-preview",
+  "moonshot-v1-32k-vision-preview",
+  "moonshot-v1-128k-vision-preview",
+  "kimi-latest"
+];
+const MAX_FILE_SIZE = 8 * 1024 * 1024;
+
+const MIME_BY_EXT = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".gif": "image/gif"
+};
+
+const SYSTEM_PROMPT = `你是「心栈 SoulSentry」的图片识别助手。用户拍照或上传了一张图片，请你：
+1. 忠实转录图片中的全部文字（OCR），保持原有结构和数字准确；
+2. 判断这张图最适合沉淀成什么内容，并把关键信息整理成结构化草稿。
+
+只输出 JSON，格式：
+{
+  "extracted_text": "图中全部文字的转录",
+  "content_type": "task | note | heart | ledger | table | link | other",
+  "confidence": 0到1之间的数字,
+  "suggestion": { ... }
+}
+
+content_type 判定规则：
+- task：图中含有待办/日程/会议/就诊/服药/截止日期等需要提醒或执行的事项（如白板、便签、药盒说明、账单缴费单、海报活动信息）
+- ledger：图中是消费/收支明细，且只有「品名+金额」这类简单两列结构（如简易记账截图、外卖订单）
+- table：图中的核心内容是一张多列表格（如购物小票、账单明细、报价单、课程表、排班表、库存表、成绩单、体检指标表）；优先保留图中全部列，一行对应图中一行
+- heart：图中文字偏心情/感悟/想对自己说的话
+- note：图中是需要留存的资料信息（如说明书要点、联系方式、地址、文章截图、名片）
+- link：图的核心是一个网址/二维码指向的链接
+- other：以上都不是
+
+suggestion 按类型给字段：
+- task: {"title","description","date":"YYYY-MM-DD","time":"HH:mm","end_time":"ISO8601或空","priority":"low|medium|high|urgent","category":"work|health|family|personal|shopping|learning|finance","subtasks":["..."]}；date/time 从图中信息推断，推断不出就填空字符串，不要编造
+- ledger: {"summary":"一句话说明","entries":[{"item":"品名","category":"餐饮|交通|购物|居住|娱乐|医疗|收入|其他","amount":数字,"note":""}]}；金额必须是图中出现的数字
+- table: {"title":"表格标题","summary":"一句话说明","columns":["列1","列2","列3"],"rows":[["行1列1","行1列2","行1列3"],["行2列1","行2列2","行2列3"]]}；columns 是表头数组，rows 是与 columns 等长的字符串数组的数组；数字保持图中原文（如 12.00），合计行也要保留
+- note/heart/link: {"title","content","tags":["..."]}，content 默认用转录文字提炼
+
+拿不准的字段留空或给默认值，不要编造图中没有的信息。`;
+
+// 视觉模型全部不可用时的兜底：阿里云文字识别 OCR（OCR统一识别 RecognizeAllText），
+// 图片以二进制放 HTTP body，参数签名后放查询串；提取的文字再交 Kimi 分类结构化
+const TEXT_FALLBACK_PROMPT = `以下是用户图片经 OCR 得到的转录文本（可能有个别错字）：
+"""
+{ocrText}
+"""
+请基于这段转录文本完成与图片模式相同的分类与结构化，extracted_text 直接填这段转录文本。`;
+
+function getAliyunOcrCredentials() {
+  const keyId = process.env.ALIYUN_OCR_ACCESS_KEY_ID
+    || process.env.ALIYUN_SMS_ACCESS_KEY_ID
+    || process.env.SMS_ACCESS_KEY_ID;
+  const secret = process.env.ALIYUN_OCR_ACCESS_KEY_SECRET
+    || process.env.ALIYUN_SMS_ACCESS_KEY_SECRET
+    || process.env.SMS_ACCESS_KEY_SECRET;
+  if (!keyId || !secret) return null;
+  return { keyId, secret };
+}
+
+function percentEncode(str) {
+  return encodeURIComponent(String(str))
+    .replace(/\+/g, "%20")
+    .replace(/\*/g, "%2A")
+    .replace(/%7E/g, "~");
+}
+
+// 阿里云 RPC API V1 签名（HMAC-SHA1）；图片二进制作为 POST body
+async function ocrWithAliyun(filePath, type = "Advanced") {
+  const creds = getAliyunOcrCredentials();
+  if (!creds) return null;
+
+  const params = {
+    AccessKeyId: creds.keyId,
+    Action: process.env.ALIYUN_OCR_ACTION || "RecognizeAllText",
+    Format: "JSON",
+    SignatureMethod: "HMAC-SHA1",
+    SignatureNonce: crypto.randomUUID(),
+    SignatureVersion: "1.0",
+    Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    Type: type,
+    Version: process.env.ALIYUN_OCR_VERSION || "2021-07-07"
+  };
+
+  const sortedQuery = Object.keys(params).sort()
+    .map((k) => `${percentEncode(k)}=${percentEncode(params[k])}`)
+    .join("&");
+  const stringToSign = `POST&%2F&${percentEncode(sortedQuery)}`;
+  const signature = crypto.createHmac("sha1", `${creds.secret}&`)
+    .update(stringToSign)
+    .digest("base64");
+  const url = `https://ocr-api.${process.env.ALIYUN_OCR_REGION || "cn-hangzhou"}.aliyuncs.com/?${sortedQuery}&Signature=${percentEncode(signature)}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: fs.readFileSync(filePath),
+    signal: AbortSignal.timeout(30000)
+  });
+  const raw = await response.text();
+  let data = null;
+  try {
+    data = JSON.parse(raw);
+  } catch (_e) {
+    const error = new Error(`阿里云 OCR 返回异常（HTTP ${response.status}）：${raw.slice(0, 120)}`);
+    error.status = 502;
+    throw error;
+  }
+  if (!response.ok || data?.Code) {
+    const error = new Error(`阿里云 OCR 错误：${data?.Message || data?.Code || response.status}`);
+    error.status = 502;
+    throw error;
+  }
+
+  // 优先取汇总文字 Content，其次拼文字块
+  let text = String(data?.Data?.Content || "").trim();
+  if (!text) {
+    const blocks = [];
+    for (const sub of data?.Data?.SubImages || []) {
+      for (const b of sub?.BlockInfo?.BlockDetails || []) {
+        if (b?.BlockContent) blocks.push(String(b.BlockContent));
+      }
+    }
+    text = blocks.join("\n").trim();
+  }
+  if (!text) {
+    const error = new Error("图片中没有识别到文字");
+    error.status = 422;
+    throw error;
+  }
+  return text;
+}
+
+function resolveUploadPath(fileUrl) {
+  const raw = String(fileUrl || "").trim();
+  if (!raw.startsWith("/uploads/")) return null;
+  // 防目录穿越：只允许纯文件名
+  const name = decodeURIComponent(raw.slice("/uploads/".length)).split("/")[0];
+  if (!name || name.includes("..")) return null;
+  return path.resolve(process.cwd(), env.UPLOAD_DIR, name);
+}
+
+// 供其他 AI 管道（如心签分析）复用：把 /uploads/ 图片转成多模态消息 part；无效/不存在返回 null
+export function buildImageContentPart(fileUrl) {
+  try {
+    const filePath = resolveUploadPath(fileUrl);
+    if (!filePath || !fs.existsSync(filePath)) return null;
+    if (fs.statSync(filePath).size > MAX_FILE_SIZE) return null;
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = MIME_BY_EXT[ext] || "image/jpeg";
+    const dataUri = `data:${mime};base64,${fs.readFileSync(filePath).toString("base64")}`;
+    return { type: "image_url", image_url: { url: dataUri } };
+  } catch {
+    return null;
+  }
+}
+
+// 若文本由同一段内容连续重复多遍（视觉模型常见抖动：整体输出 2-3 遍），只保留一遍。
+// 先试整串精确重复（"xxx。xxx。xxx。"），再试行序列周期重复（A,B,C,A,B,C,...）。
+function collapseRepeats(text) {
+  const t = String(text || "").trim();
+  if (!t) return t;
+  // 整串重复：t === u.repeat(k)
+  for (const k of [3, 2]) {
+    if (t.length % k === 0) {
+      const unit = t.slice(0, t.length / k);
+      if (unit.trim() && unit.repeat(k) === t) return unit.trim();
+    }
+  }
+  // 行序列周期重复
+  const lines = t.split("\n").map((l) => l.trim());
+  for (let c = 1; c <= Math.floor(lines.length / 2); c++) {
+    const head = lines.slice(0, c);
+    if (head.every((l) => !l)) continue;
+    let repeats = 1;
+    while (repeats * c < lines.length) {
+      const seg = lines.slice(repeats * c, (repeats + 1) * c);
+      if (seg.length < c || seg.some((l, i) => l !== head[i])) break;
+      repeats++;
+    }
+    if (repeats >= 2 && repeats * c === lines.length) {
+      return head.join("\n").trim();
+    }
+  }
+  return t;
+}
+
+function normalizeDraft(result) {
+  const type = ["task", "note", "heart", "ledger", "table", "link", "other"].includes(result?.content_type)
+    ? result.content_type
+    : "note";
+  const suggestion = result?.suggestion && typeof result.suggestion === "object" ? result.suggestion : {};
+
+  // 账本条目去重：个别视觉模型会把同一批明细重复输出几遍，按 品名+金额 只保留一条
+  if (Array.isArray(suggestion.entries)) {
+    const seen = new Set();
+    suggestion.entries = suggestion.entries.filter((en) => {
+      if (!en || typeof en !== "object") return false;
+      const key = `${String(en.item || "").trim()}|${Number(en.amount) || 0}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+  // 长文本字段折叠连续重复：extracted_text / summary / content 整体抖动重复时只留一遍
+  if (suggestion.summary) suggestion.summary = collapseRepeats(suggestion.summary);
+  if (suggestion.content) suggestion.content = collapseRepeats(suggestion.content);
+  if (suggestion.title) suggestion.title = collapseRepeats(suggestion.title);
+
+  // 类型升级：≥2 条有效收支明细却判成 笔记/心签/表格 的，统一按账本处理
+  // （记账截图常被误判成"多列表格"，导致前端不生成账目）
+  const validEntries = (suggestion.entries || []).filter(
+    (en) => en && String(en.item || "").trim() && Number(en.amount) > 0
+  );
+  let finalType = type;
+  if (validEntries.length >= 2 && ["note", "heart", "table", "other"].includes(type)) {
+    finalType = "ledger";
+  }
+
+  return {
+    extracted_text: collapseRepeats(result?.extracted_text),
+    content_type: finalType,
+    confidence: typeof result?.confidence === "number" ? result.confidence : null,
+    suggestion
+  };
+}
+
+export async function analyzeImage({ fileUrl }) {
+  const filePath = resolveUploadPath(fileUrl);
+  if (!filePath) {
+    const error = new Error("无效的图片地址");
+    error.status = 400;
+    throw error;
+  }
+  if (!fs.existsSync(filePath)) {
+    const error = new Error("图片文件不存在或已过期，请重新上传");
+    error.status = 400;
+    throw error;
+  }
+
+  const stat = fs.statSync(filePath);
+  if (stat.size > MAX_FILE_SIZE) {
+    const error = new Error("图片过大，请压缩后重新上传");
+    error.status = 400;
+    throw error;
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = MIME_BY_EXT[ext] || "image/jpeg";
+  const dataUri = `data:${mime};base64,${fs.readFileSync(filePath).toString("base64")}`;
+
+  const messages = [
+    { role: "system", content: SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "请识别这张图并给出结构化草稿。" },
+        { type: "image_url", image_url: { url: dataUri } }
+      ]
+    }
+  ];
+
+  let lastError = null;
+  for (const model of VISION_MODELS) {
+    try {
+      const result = await callKimiChat({
+        messages,
+        model,
+        responseJsonSchema: true,
+        temperature: 0.2,
+        maxTokens: 4000,
+        fetchTimeout: 45000
+      });
+      return normalizeDraft(parseModelJson(result.content));
+    } catch (error) {
+      lastError = error;
+      console.log(`[analyzeImage] model ${model} failed: ${error?.message || error}`);
+    }
+  }
+
+  // 视觉模型不可用（key 未开通）：降级为阿里云 OCR 提文字 + Kimi 文本分类
+  console.log("[analyzeImage] vision models unavailable, fallback to Aliyun OCR");
+  try {
+    const preferredType = process.env.ALIYUN_OCR_TYPE || "Advanced";
+    let ocrText = null;
+    try {
+      ocrText = await ocrWithAliyun(filePath, preferredType);
+    } catch (ocrError) {
+      // 高精版能力未开通/未授权时自动降级基础版再试一次
+      if (preferredType !== "General" && /not activated|activated|forbidden|permission|denied|not valid|未开通/i.test(ocrError?.message || "")) {
+        console.log(`[analyzeImage] OCR type ${preferredType} unavailable (${ocrError?.message}), retry with General`);
+        ocrText = await ocrWithAliyun(filePath, "General");
+      } else {
+        throw ocrError;
+      }
+    }
+    if (!ocrText) {
+      const error = new Error("图片识别暂不可用：请联系管理员配置阿里云 OCR（ALIYUN_OCR_ACCESS_KEY_ID/SECRET）");
+      error.status = 503;
+      throw error;
+    }
+    const prompt = TEXT_FALLBACK_PROMPT.replace("{ocrText}", ocrText);
+    const result = await invokeKimiText({
+      prompt,
+      systemPrompt: SYSTEM_PROMPT,
+      responseJsonSchema: true,
+      temperature: 0.2,
+      fetchTimeout: 30000
+    });
+    return normalizeDraft({ ...result, extracted_text: result?.extracted_text?.trim() ? result.extracted_text : ocrText });
+  } catch (error) {
+    if (error?.status) throw error;
+    console.error("[analyzeImage] OCR fallback failed", error);
+    const err = new Error("图片识别暂不可用，请稍后重试或手动输入");
+    err.status = 502;
+    err.cause = lastError?.message;
+    throw err;
+  }
+}

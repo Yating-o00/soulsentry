@@ -1,0 +1,209 @@
+// 统一的反馈调度器——所有业务代码通过 feedback.* 发送反馈
+// 替代散落的 toast.success/error/info，确保所有通知风格一致
+import { toast } from "sonner";
+
+const BRAND_PRIMARY = "#384877";
+const BRAND_SECONDARY = "#3b5aa2";
+
+// 全局注入一次:让所有 unstyled toast 的外层 li 强制透明,消除全局 Toaster 注入的白色矩形
+if (typeof document !== "undefined" && !document.getElementById("feedback-reset-style")) {
+  const style = document.createElement("style");
+  style.id = "feedback-reset-style";
+  style.textContent = `
+    [data-sonner-toast][data-styled="false"] {
+      background: transparent !important;
+      background-color: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      padding: 0 !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      border-radius: 0 !important;
+      width: auto !important;
+      max-width: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// 重置 sonner 默认外壳（去除其白底/渐变/边框/阴影/内边距）
+// 注意：App.jsx 中给 Toaster 全局注入了 default/success/error 等 classNames(带 !important 白底),
+// 这里必须把所有可能命中的 key 全部覆盖为透明,否则会出现"双层白底"。
+const TRANSPARENT_SHELL = '!bg-transparent !bg-none !bg-white/0 !border-0 !border-transparent !shadow-none !p-0 !pr-0 !backdrop-blur-0 !backdrop-filter-none !rounded-none !w-auto !max-w-none !flex !items-stretch [&_[data-icon]]:!hidden [&_[data-close-button]]:!hidden [&]:!bg-transparent';
+const RESET_SHELL = {
+  unstyled: true,
+  classNames: {
+    toast: TRANSPARENT_SHELL,
+    default: TRANSPARENT_SHELL,
+    success: TRANSPARENT_SHELL,
+    error: TRANSPARENT_SHELL,
+    info: TRANSPARENT_SHELL,
+    warning: TRANSPARENT_SHELL,
+    loading: TRANSPARENT_SHELL,
+    title: '!m-0 !p-0 !font-normal !text-inherit',
+    description: '!m-0 !p-0 !text-inherit',
+    icon: '!hidden',
+    closeButton: '!hidden',
+  },
+};
+
+// 轻量级成功：右下角、紧凑、带主色（石墨主题）
+export const success = (message, opts = {}) => {
+  const { duration = 2800, ...rest } = opts;
+  return toast.custom(
+    (id) => (
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-[#384877]/20 shadow-[0_8px_24px_rgba(56,72,119,0.12)] min-w-[260px]">
+        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center flex-shrink-0 shadow-sm shadow-[#384877]/30">
+          <span className="text-white text-[11px] font-bold">✓</span>
+        </div>
+        <div className="flex-1 text-[13px] font-medium text-[#384877] leading-snug">{message}</div>
+        <button
+          onClick={() => toast.dismiss(id)}
+          className="text-slate-400 hover:text-slate-600 text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-slate-100 flex-shrink-0"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+      </div>
+    ),
+    {
+      position: "bottom-right",
+      duration,
+      ...RESET_SHELL,
+      ...rest,
+    }
+  );
+};
+
+// 轻量级错误：右下角、紧凑、自定义卡片(去除 sonner 外壳)
+export const error = (message, opts = {}) => {
+  const { duration = 4200, ...rest } = opts;
+  return toast.custom(
+    (id) => (
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-rose-200 shadow-[0_8px_24px_rgba(225,29,72,0.12)] min-w-[260px]">
+        <div className="w-5 h-5 rounded-full bg-rose-500 flex items-center justify-center flex-shrink-0">
+          <span className="text-white text-[11px] font-bold">!</span>
+        </div>
+        <div className="flex-1 text-[13px] font-medium text-rose-700 leading-snug">{message}</div>
+        <button
+          onClick={() => toast.dismiss(id)}
+          className="text-slate-400 hover:text-slate-600 text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-slate-100 flex-shrink-0"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+      </div>
+    ),
+    { position: "bottom-right", duration, ...RESET_SHELL, ...rest }
+  );
+};
+
+// 中性信息
+export const info = (message, opts = {}) => {
+  const { duration = 3200, ...rest } = opts;
+  return toast.custom(
+    (id) => (
+      <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-slate-200 shadow-[0_8px_24px_rgba(15,23,42,0.08)] min-w-[260px]">
+        <div className="flex-1 text-[13px] text-slate-700 leading-snug">{message}</div>
+        <button
+          onClick={() => toast.dismiss(id)}
+          className="text-slate-400 hover:text-slate-600 text-base leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-slate-100 flex-shrink-0"
+          aria-label="关闭"
+        >
+          ×
+        </button>
+      </div>
+    ),
+    { position: "bottom-right", duration, ...RESET_SHELL, ...rest }
+  );
+};
+
+// 加载中（返回 id，用于更新）
+export const loading = (message, opts = {}) => {
+  return toast.loading(message, {
+    position: "bottom-right",
+    ...opts,
+  });
+};
+
+// 更新一条 loading 为 success/error
+export const update = (id, type, message) => {
+  toast.dismiss(id);
+  if (type === "success") return success(message);
+  if (type === "error")   return error(message);
+  return info(message);
+};
+
+// 带来源提示的成功（例如"✓ 已创建 · 来源：心签页"）
+export const successWithSource = (message, sourceLabel) => {
+  return success(sourceLabel ? `${message} · ${sourceLabel}` : message);
+};
+
+// AI 富反馈卡片：完成总结、下一步建议、鼓励语
+// 右下角展示，不遮挡主要内容
+export const aiRichCard = ({ title, suggestions = [], footnote, duration = 6000 }) => {
+  return toast.custom(
+    (id) => (
+      // 蓝紫色标题条 + 白色卡身 + 斜体灰字脚注,无外层光晕
+      // 宽度自适应小屏，确保在手机上不被截断
+      <div className="w-[min(320px,92vw)] rounded-2xl overflow-hidden bg-white">
+        <div
+          className="px-4 py-2.5 flex items-center gap-2"
+          style={{ background: `linear-gradient(90deg, ${BRAND_PRIMARY} 0%, ${BRAND_SECONDARY} 100%)` }}
+        >
+          <span className="text-base">✨</span>
+          <span className="text-[13px] font-semibold text-white flex-1 line-clamp-1">{title}</span>
+          <button
+            onClick={() => toast.dismiss(id)}
+            className="text-white/70 hover:text-white text-sm leading-none w-5 h-5 flex items-center justify-center rounded hover:bg-white/15"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        {suggestions.length > 0 && (
+          <div className="px-4 py-2.5">
+            <div className="text-[11px] font-medium text-[#384877] mb-1.5 flex items-center gap-1">
+              💡 <span>下一步</span>
+            </div>
+            <ul className="space-y-1">
+              {suggestions.slice(0, 3).map((s, idx) => (
+                <li key={idx} className="text-[12px] text-slate-700 leading-snug flex gap-1.5">
+                  <span className="text-[#384877]/40 mt-0.5">·</span>
+                  <span className="flex-1">{s}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {footnote && (
+          <p className="px-4 py-2 text-[11px] italic text-slate-500 bg-slate-50/60 line-clamp-2">
+            "{footnote}"
+          </p>
+        )}
+      </div>
+    ),
+    {
+      duration,
+      position: "bottom-right",
+      ...RESET_SHELL,
+    }
+  );
+};
+
+// 执行链路全部完成：按用户偏好，静默不弹任何提示
+export const executionChainDone = (_chainTitle) => {
+  // intentionally no-op: user 选择"完全不显示"完成提示
+  return null;
+};
+
+export default {
+  success,
+  error,
+  info,
+  loading,
+  update,
+  successWithSource,
+  aiRichCard,
+  executionChainDone,
+};

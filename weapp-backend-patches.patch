@@ -1,0 +1,138 @@
+From 258607d96d5e6040d64a560074468cb9781fd8ba Mon Sep 17 00:00:00 2001
+From: Yating-o00 <dengyating0330@gmail.com>
+Date: Tue, 25 Aug 2026 14:53:44 +0800
+Subject: [PATCH 1/2] fix(weapp): call requestSubscribeMessage synchronously in
+ save button tap
+
+---
+ weapp/src/pages/task-create/index.jsx | 36 +++++++++++----------------
+ 1 file changed, 15 insertions(+), 21 deletions(-)
+
+diff --git a/weapp/src/pages/task-create/index.jsx b/weapp/src/pages/task-create/index.jsx
+index ed7b93d..1b73f82 100644
+--- a/weapp/src/pages/task-create/index.jsx
++++ b/weapp/src/pages/task-create/index.jsx
+@@ -367,24 +367,18 @@ export default function TaskCreate() {
+     }
+   };
+ 
+-  const requestReminderSubscribe = () => {
+-    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) {
+-      return Promise.resolve();
+-    }
+-    return new Promise((resolve) => {
+-      // 使用原生 wx API 更稳定；Taro 的 Promise 封装在某些版本下可能不兼容
+-      wx.requestSubscribeMessage({
+-        tmplIds: wechatTmplIds,
+-        success: (res) => {
+-          console.log("[task-create] subscribe result", res);
+-          resolve(res);
+-        },
+-        fail: (err) => {
+-          // 用户拒绝、未配置模板或环境不支持，不影响保存
+-          console.log("[task-create] subscribe request failed/ignored", err);
+-          resolve(null);
+-        }
+-      });
++  const requestReminderSubscribeSync = () => {
++    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) return;
++    // 必须在用户点击按钮的同步调用栈内发起，否则微信会拒绝
++    wx.requestSubscribeMessage({
++      tmplIds: wechatTmplIds,
++      success: (res) => {
++        console.log("[task-create] subscribe result", res);
++      },
++      fail: (err) => {
++        // 用户拒绝、未配置模板或环境不支持，不影响保存
++        console.log("[task-create] subscribe request failed/ignored", err);
++      }
+     });
+   };
+ 
+@@ -407,9 +401,9 @@ export default function TaskCreate() {
+     if (reminderISO) payload.reminder_time = reminderISO;
+     if (endISO) payload.end_time = endISO;
+ 
+-    // 如果设置了提醒时间，尝试请求微信订阅消息权限
+-    if (reminderISO && wechatTmplIds.length > 0) {
+-      await requestReminderSubscribe();
++    // 如果设置了提醒时间，同步请求微信订阅消息权限
++    if (reminderISO) {
++      requestReminderSubscribeSync();
+     }
+ 
+     setLoading(true);
+-- 
+2.39.5 (Apple Git-154)
+
+
+From 289aaa4b2bdf8cf9f237b5648d99292314c93955 Mon Sep 17 00:00:00 2001
+From: Yating-o00 <dengyating0330@gmail.com>
+Date: Tue, 25 Aug 2026 16:04:44 +0800
+Subject: [PATCH 2/2] fix(backend): send WeChat subscribe message even when Web
+ Push succeeds
+
+---
+ backend/src/services/reminderSender.js | 24 ++++++++++++++++++------
+ 1 file changed, 18 insertions(+), 6 deletions(-)
+
+diff --git a/backend/src/services/reminderSender.js b/backend/src/services/reminderSender.js
+index e21873a..af8f056 100644
+--- a/backend/src/services/reminderSender.js
++++ b/backend/src/services/reminderSender.js
+@@ -62,12 +62,15 @@ async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
+   const pushEnabled = shouldSendPush(preferences);
+   const openid = getOpenid(preferences);
+ 
+-  // 1. 优先尝试 Web Push（浏览器 / PWA 场景）
++  let webPushOk = false;
++  let wechatOk = false;
++
++  // 1. 尝试 Web Push（浏览器 / PWA 场景）
+   if (subscription && pushEnabled) {
+     try {
+       await sendPushNotification(subscription, payload);
+       console.log(`[reminderSender] ${logPrefix} user=${userId} push sent to ${subscription.endpoint?.slice(0, 60)}...`);
+-      return { ok: true, channel: "web_push" };
++      webPushOk = true;
+     } catch (err) {
+       console.warn(`[reminderSender] ${logPrefix} user=${userId} push failed:`, err?.message || err);
+       if (err?.statusCode === 410 || err?.statusCode === 404) {
+@@ -87,21 +90,30 @@ async function trySendPush({ userId, preferences, payload, task, logPrefix }) {
+     }
+   }
+ 
+-  // 2. Web Push 不可用或失败时，尝试微信小程序订阅消息
++  // 2. 同时尝试微信小程序订阅消息（与 Web Push 独立，不互相阻塞）
+   if (openid && task) {
+     const type = payload.data?.type === "follow_up" ? "follow_up" : "reminder";
+     const wechatResult = await sendWechatSubscribeMessage(openid, task, type);
+     if (wechatResult.ok) {
+       console.log(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe sent`);
+-      return { ok: true, channel: "wechat_subscribe" };
+-    }
+-    if (wechatResult.reason === "user_rejected_or_no_quota") {
++      wechatOk = true;
++    } else if (wechatResult.reason === "user_rejected_or_no_quota") {
+       console.log(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe rejected/no quota`);
+     } else {
+       console.warn(`[reminderSender] ${logPrefix} user=${userId} wechat subscribe failed:`, wechatResult.reason);
+     }
+   }
+ 
++  // 任一渠道成功即视为推送成功
++  if (webPushOk || wechatOk) {
++    return {
++      ok: true,
++      channel: wechatOk ? "wechat_subscribe" : "web_push",
++      webPushOk,
++      wechatOk,
++    };
++  }
++
+   // 3. 兜底：应用内通知
+   const reason = !subscription && !openid
+     ? "no_push_subscription_or_openid"
+-- 
+2.39.5 (Apple Git-154)
+

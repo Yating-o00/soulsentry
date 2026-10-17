@@ -1,0 +1,455 @@
+import { prisma } from "../lib/prisma.js";
+import { trySendPush } from "./reminderSender.js";
+import { normalizeToGcj02, haversineMeters } from "../lib/geo.js";
+
+// 地点类型 → 相关约定分类（与 getSentinelGuard 保持一致）
+const CATEGORY_MAP = {
+  office: ["work"],
+  home: ["personal", "family", "health"],
+  gym: ["health"],
+  school: ["study"],
+  shopping: ["shopping"],
+  hospital: ["health"],
+  restaurant: ["personal"]
+};
+
+const PRIORITY_SCORE = { urgent: 40, high: 30, medium: 18, low: 8 };
+
+// 同一约定标记地点的顺路提醒冷却：30 分钟内不重复推送
+const TASK_GEO_COOLDOWN_MS = 30 * 60 * 1000;
+
+// POI 触发规则：POI 命中关键词 → 匹配约定关键词（取快递、超市购物等顺路场景）
+const POI_RULES = [
+  {
+    key: "parcel_locker",
+    poi_keywords: ["快递柜", "快递", "驿站", "自提点", "丰巢", "菜鸟"],
+    task_keywords: ["快递", "取件", "包裹", "自提"],
+    poi_label: "快递柜"
+  },
+  {
+    key: "grocery_store",
+    poi_keywords: ["超市", "便利", "菜市", "菜场", "生鲜", "水果店", "商场", "购物中心", "商店", "杂货"],
+    task_keywords: ["超市", "买东西", "买菜", "购物", "水果", "牛奶", "零食", "日用品", "蔬菜", "肉", "鸡蛋", "纸巾", "牙膏"],
+    poi_label: "超市/商店"
+  }
+];
+
+function getTaskExtraFields(task) {
+  if (task?.metadata && typeof task.metadata === "object") {
+    return task.metadata._extraFields || {};
+  }
+  return {};
+}
+
+function getTaskLocationReminder(task) {
+  return getTaskExtraFields(task).location_reminder || null;
+}
+
+function startOfLocalDay(d) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function endOfLocalDay(d) {
+  const x = new Date(d);
+  x.setHours(23, 59, 59, 999);
+  return x;
+}
+
+// 重要性（优先级）+ 紧迫度（截止时间/提醒时间）+ 难易度（低难度更易完成，加权鼓励推进）
+function scoreTask(task, now, todayStart, todayEnd) {
+  let score = PRIORITY_SCORE[String(task.priority || "medium").toLowerCase()] ?? 18;
+
+  if (task.dueAt) {
+    if (task.dueAt < now) score += 25; // 已过期
+    else if (task.dueAt <= todayEnd) score += 15; // 今天到期
+    else score += 5;
+  }
+  if (task.reminderTime) {
+    const rt = new Date(task.reminderTime);
+    if (rt >= todayStart && rt <= todayEnd) score += 8;
+    if (rt < now) score += 6;
+  }
+  const extra = getTaskExtraFields(task);
+  const difficulty = String(extra.difficulty || task.metadata?.difficulty || "").toLowerCase();
+  if (difficulty === "easy" || difficulty === "low") score += 4;
+  if (difficulty === "hard" || difficulty === "high") score -= 2;
+
+  return score;
+}
+
+// 过滤父约定已关闭（删除/完成）的子约定
+async function filterAliveParents(tasks) {
+  const parentIds = [...new Set(tasks.map((t) => t.parentTaskId).filter(Boolean))];
+  if (parentIds.length === 0) return tasks;
+  const parents = await prisma.task.findMany({ where: { id: { in: parentIds } } });
+  const alive = new Set(
+    parents.filter((p) => !p.deletedAt && p.status !== "DONE" && p.status !== "ARCHIVED").map((p) => p.id)
+  );
+  return tasks.filter((t) => !t.parentTaskId || alive.has(t.parentTaskId));
+}
+
+/**
+ * 到达地点后的 Top-N 相关约定：
+ * - 绑定了该地点（location_reminder 坐标/名称命中）的约定
+ * - 分类与地点类型相关的约定（办公场所→work 等）
+ * 按 重要性/紧迫度/难易度 打分排序取前 n。
+ */
+export async function rankTopTasksForLocation(userId, location, n = 3) {
+  const now = new Date();
+  const todayStart = startOfLocalDay(now);
+  const todayEnd = endOfLocalDay(now);
+
+  const active = await prisma.task.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      status: { in: ["TODO", "IN_PROGRESS"] }
+    },
+    take: 100
+  });
+  const alive = await filterAliveParents(active);
+
+  const relatedCategories = CATEGORY_MAP[location.locationType] || [];
+  // SavedLocation 坐标同样可能来自 web（wgs84）或小程序（gcj02），归一化后再比对
+  const locationCoords = normalizeToGcj02(location.latitude, location.longitude, location.coordType)
+    || { latitude: location.latitude, longitude: location.longitude };
+
+  const scored = alive
+    .map((task) => {
+      const reminder = getTaskLocationReminder(task);
+      let linked = false;
+      if (reminder?.enabled) {
+        if (reminder.location_name && reminder.location_name === location.name) linked = true;
+        const rCoords = normalizeToGcj02(reminder.latitude, reminder.longitude, reminder.coord_type);
+        if (rCoords) {
+          const d = haversineMeters(locationCoords, rCoords);
+          if (d <= Math.max(Number(reminder.radius || 200), location.radius)) linked = true;
+        }
+      }
+      const categoryHit = task.category && relatedCategories.includes(task.category);
+      if (!linked && !categoryHit) return null;
+      return { task, score: scoreTask(task, now, todayStart, todayEnd) + (linked ? 10 : 0) };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score);
+
+  // 兜底：该地点没命中任何相关约定时，退化为全局最值得做的 TopN——
+  // 到达已保存地点却一条都推不出，到达提醒就静默失效（用户视角即"没收到通知"）
+  if (scored.length === 0) {
+    return alive
+      .map((task) => ({ task, score: scoreTask(task, now, todayStart, todayEnd) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, n)
+      .map((s) => s.task);
+  }
+
+  return scored.slice(0, n).map((s) => s.task);
+}
+
+/**
+ * 到达地点：同一次停留只提醒一次。
+ * 跳过条件（满足其一即不推）：
+ * 1. 安静期（quietMinutes 内不重复）；
+ * 2. 已进入且之后未记录离开（lastEnteredAt 晚于 lastExitedAt），
+ *    且距上次推送不足 4h、距上次位置上报也不足 4h —— 说明人一直还在
+ *    （页面关闭期间无法记录 exit，用「4h 无上报」兜底判定离开过）。
+ * 离开后再次进入（有 exit 记录）或长时间缺席后回来 → 视为新一次到达，正常提醒。
+ * 返回 { pushed: boolean, topTasks, skippedReason? }；跳过时 topTasks 置空，调用方不弹守护卡。
+ */
+export async function maybeSendArrivalReminder(user, location, topTasks, lastReportAt = null) {
+  const now = new Date();
+  const quietMs = (location.quietMinutes ?? 30) * 60 * 1000;
+  const STAY_ABSENCE_MS = 4 * 3600 * 1000; // 4h 无上报视为中间离开过（页面关闭期间无 exit 的兜底）
+  const lastEnter = location.lastEnteredAt ? new Date(location.lastEnteredAt) : null;
+  if (lastEnter && !isNaN(lastEnter.getTime()) && now.getTime() - lastEnter.getTime() < quietMs) {
+    return { pushed: false, topTasks: [], skippedReason: "quiet_period" };
+  }
+
+  // 同一次停留只提醒一次
+  if (lastEnter && !isNaN(lastEnter.getTime())) {
+    const lastExit = location.lastExitedAt ? new Date(location.lastExitedAt) : null;
+    const noExitSinceEnter = !lastExit || isNaN(lastExit.getTime()) || lastEnter.getTime() > lastExit.getTime();
+    if (noExitSinceEnter) {
+      const sinceEnterMs = now.getTime() - lastEnter.getTime();
+      const sinceLastReportMs = lastReportAt ? now.getTime() - new Date(lastReportAt).getTime() : Infinity;
+      if (sinceEnterMs < STAY_ABSENCE_MS || sinceLastReportMs < STAY_ABSENCE_MS) {
+        return { pushed: false, topTasks: [], skippedReason: "same_stay_once" };
+      }
+    }
+  }
+
+  // 更新进入时间（无论是否有相关约定，都记录本次到达，安静期以此为锚）
+  await prisma.savedLocation.update({
+    where: { id: location.id },
+    data: { lastEnteredAt: now }
+  }).catch(() => {});
+
+  if (!topTasks.length) {
+    return { pushed: false, topTasks: [], skippedReason: "no_related_tasks" };
+  }
+
+  const listText = topTasks.map((t, i) => `${i + 1}. ${t.title}`).join("　");
+  const payload = {
+    title: `到了${location.name}，最值得处理的 ${topTasks.length} 件事`,
+    body: listText,
+    url: "/tasks",
+    tag: `arrival-${location.id}`,
+    requireInteraction: false,
+    vibrate: [200, 100, 200],
+    data: { type: "arrival_reminder", location_id: location.id, geo_action: "arrival", loc_key: location.id }
+  };
+
+  // 地理到达提醒不占每日主动提醒预算：它是「人到情境」的上下文触发而非主动催促，
+  // 频率已由地点安静期（quietMinutes）+ 任务级 4h 冷却 + 7 天静默兜底；
+  // 若混进预算，几个时间类重复约定（如每日吃药）就会把当天的到达推送额度吃光
+  const result = await trySendPush({
+    userId: user.id,
+    preferences: user.preferences,
+    payload,
+    task: topTasks[0],
+    logPrefix: `arrival-reminder location=${location.id}`,
+    budgetAware: false
+  });
+
+  return { pushed: result.ok, topTasks, inAppFallback: result.inAppFallback, skippedReason: result.ok ? null : "send_failed" };
+}
+
+function getPreferenceExtraFields(preferences) {
+  if (preferences?.metadata && typeof preferences.metadata === "object") {
+    return preferences.metadata._extraFields || {};
+  }
+  return {};
+}
+
+/**
+ * POI 情境提醒（如快递柜）：
+ * 按规则匹配约定关键词，命中则推送；每个规则 4 小时冷却（记录在 userPreference.metadata）。
+ */
+export async function maybeSendPoiReminder(user, { poiName, poiType }) {
+  const text = `${poiType || ""} ${poiName || ""}`;
+  const now = new Date();
+  const COOLDOWN_MS = 4 * 60 * 60 * 1000;
+
+  let preferences = user.preferences;
+  const extra = getPreferenceExtraFields(preferences);
+  const cooldowns = extra.poi_cooldowns || {};
+
+  for (const rule of POI_RULES) {
+    const poiHit = rule.poi_keywords.some((k) => text.includes(k));
+    if (!poiHit) continue;
+    const lastAt = cooldowns[rule.key] ? new Date(cooldowns[rule.key]) : null;
+    if (lastAt && !isNaN(lastAt.getTime()) && now.getTime() - lastAt.getTime() < COOLDOWN_MS) {
+      continue;
+    }
+
+    const active = await prisma.task.findMany({
+      where: {
+        userId: user.id,
+        deletedAt: null,
+        status: { in: ["TODO", "IN_PROGRESS"] }
+      },
+      take: 100
+    });
+    const alive = await filterAliveParents(active);
+    const matched = alive.filter((t) =>
+      rule.task_keywords.some((k) => (t.title || "").includes(k) || (t.description || "").includes(k))
+    );
+    if (!matched.length) continue;
+
+    const listText = matched.slice(0, 3).map((t, i) => `${i + 1}. ${t.title}`).join("　");
+    const payload = {
+      title: `附近有${rule.poi_label}，有 ${matched.length} 个约定可以顺手处理`,
+      body: listText,
+      url: "/tasks",
+      tag: `poi-${rule.key}`,
+      requireInteraction: false,
+      vibrate: [200, 100, 200],
+      data: { type: "poi_reminder", rule: rule.key }
+    };
+
+    await trySendPush({
+      userId: user.id,
+      preferences,
+      payload,
+      task: matched[0],
+      logPrefix: `poi-reminder rule=${rule.key}`,
+      budgetAware: false // 地理情境触发，不占每日主动提醒预算（同 arrival）
+    });
+
+    // 记录冷却时间
+    try {
+      const metadata = {
+        ...(preferences?.metadata && typeof preferences.metadata === "object" ? preferences.metadata : {}),
+        _extraFields: { ...extra, poi_cooldowns: { ...cooldowns, [rule.key]: now.toISOString() } }
+      };
+      preferences = await prisma.userPreference.upsert({
+        where: { userId: user.id },
+        update: { metadata },
+        create: { userId: user.id, locale: "zh-CN", timezone: "Asia/Shanghai", metadata }
+      });
+    } catch (e) {
+      console.warn("[contextReminder] failed to save poi cooldown:", e?.message || e);
+    }
+
+    return { pushed: true, rule: rule.key, matched: matched.length };
+  }
+
+  return { pushed: false };
+}
+
+/**
+ * 写地理守护偏好补丁（geo_inside 进出状态 / geo_cooldowns 冷却 / geo_silences 静默），
+ * 按 _extraFields 浅合并，避免多个写入方互相覆盖
+ */
+export async function patchGeoPreference(userId, patch) {
+  try {
+    const prefs = await prisma.userPreference.findUnique({ where: { userId } });
+    const meta = prefs?.metadata && typeof prefs.metadata === "object" ? prefs.metadata : {};
+    const extra = meta._extraFields && typeof meta._extraFields === "object" ? meta._extraFields : {};
+    const metadata = { ...meta, _extraFields: { ...extra, ...patch } };
+    await prisma.userPreference.upsert({
+      where: { userId },
+      update: { metadata },
+      create: { userId, locale: "zh-CN", timezone: "Asia/Shanghai", metadata }
+    });
+    return true;
+  } catch (e) {
+    console.warn("[contextReminder] patchGeoPreference failed:", e?.message || e);
+    return false;
+  }
+}
+
+/**
+ * 防骚扰检查：地点级 4 小时冷却 + 用户「不了」触发的 7 天静默期。
+ * locKey = SavedLocation.id（地点维度）或 `task:{taskId}`（任务维度）。
+ * 返回拦截原因（"cooldown" | "silenced"）或 null（可触发）。
+ */
+export function geoGuardCheck(extra, locKey) {
+  if (!locKey) return null;
+  const nowMs = Date.now();
+  const cd = extra?.geo_cooldowns?.[locKey];
+  if (cd && !isNaN(new Date(cd).getTime()) && new Date(cd).getTime() > nowMs) return "cooldown";
+  const sil = extra?.geo_silences?.[locKey];
+  if (sil && !isNaN(new Date(sil).getTime()) && new Date(sil).getTime() > nowMs) return "silenced";
+  return null;
+}
+
+/**
+ * 离开型触发：人离开约定绑定地点（出围栏且行进方向背离）时提醒。
+ * 「还来得及 / 此刻正合适」类事项的关键时机在离开而非到达
+ * （离开家提醒带伞、离开公司提醒给妈妈打电话）。每约定 30 分钟冷却。
+ */
+export async function maybeSendExitReminder(user, task, reminder, { locationName } = {}) {
+  const now = new Date();
+  const prefs = user.preferences;
+  const extra = getPreferenceExtraFields(prefs);
+  const cooldowns = extra.task_geo_cooldowns || {};
+  const lastAt = cooldowns[task.id] ? new Date(cooldowns[task.id]) : null;
+  if (lastAt && !isNaN(lastAt.getTime()) && now.getTime() - lastAt.getTime() < TASK_GEO_COOLDOWN_MS) {
+    return { pushed: false, skippedReason: "cooldown" };
+  }
+
+  const placeName = locationName || reminder.location_name || "刚才的地方";
+  const payload = {
+    title: `离开「${placeName}」了`,
+    body: `路上正合适：「${task.title}」现在处理吗？`,
+    url: "/tasks",
+    tag: `exit-${task.id}`,
+    requireInteraction: false,
+    vibrate: [150, 100, 200],
+    data: { type: "exit_reminder", task_id: task.id, geo_action: "exit", loc_key: `task:${task.id}` }
+  };
+
+  const result = await trySendPush({
+    userId: user.id,
+    preferences: prefs,
+    payload,
+    task,
+    logPrefix: `exit-reminder task=${task.id}`,
+    budgetAware: false // 地理情境触发，不占每日主动提醒预算（同 arrival）
+  });
+
+  if (result.ok || result.inAppFallback) {
+    await patchGeoPreference(user.id, {
+      task_geo_cooldowns: { ...cooldowns, [task.id]: now.toISOString() }
+    });
+  }
+
+  return { pushed: result.ok, inAppFallback: result.inAppFallback, skippedReason: result.ok ? null : "send_failed" };
+}
+
+/**
+ * 任务级「顺路/附近」提醒：用户移动进入约定标记地点（超市/快递点等）可提醒范围时推送。
+ * 每个约定 30 分钟冷却（记录在 userPreference.metadata._extraFields.task_geo_cooldowns），
+ * 避免在地点附近停留/徘徊时反复打扰。
+ *
+ * ahead=true：路过型提前量——行进方向前方、尚未到店，"提前一个路口"开口；
+ * arrived=true：目的地型——dwell 停留确认后，"你到了"才开口（防路过误触）。
+ */
+export async function maybeSendOnTheWayReminder(user, task, reminder, { distanceM, onTheWay, ahead = false, arrived = false } = {}) {
+  const now = new Date();
+  const prefs = user.preferences;
+  const extra = getPreferenceExtraFields(prefs);
+  const cooldowns = extra.task_geo_cooldowns || {};
+  const lastAt = cooldowns[task.id] ? new Date(cooldowns[task.id]) : null;
+  if (lastAt && !isNaN(lastAt.getTime()) && now.getTime() - lastAt.getTime() < TASK_GEO_COOLDOWN_MS) {
+    return { pushed: false, skippedReason: "cooldown" };
+  }
+
+  const placeName = reminder.location_name || "目标地点";
+  const title = arrived
+    ? `你到了「${placeName}」`
+    : ahead
+      ? `等下会路过「${placeName}」`
+      : `你${onTheWay ? "正路过" : "在"}「${placeName}」附近`;
+  const body = arrived
+    ? `「${task.title}」现在方便处理吗？`
+    : ahead
+      ? `提前一个路口提醒你：「${task.title}」可以顺路处理`
+      : `约定「${task.title}」可以顺手处理`;
+  const payload = {
+    title,
+    body,
+    url: "/tasks",
+    tag: `ontheway-${task.id}`,
+    requireInteraction: false,
+    vibrate: [200, 100, 200],
+    data: {
+      type: "ontheway_reminder",
+      task_id: task.id,
+      distance_m: Math.round(distanceM || 0),
+      geo_action: arrived ? "arrival" : (ahead ? "passby" : "nearby"),
+      loc_key: `task:${task.id}`
+    }
+  };
+
+  const result = await trySendPush({
+    userId: user.id,
+    preferences: prefs,
+    payload,
+    task,
+    logPrefix: `ontheway-reminder task=${task.id}`,
+    budgetAware: false // 地理情境触发，不占每日主动提醒预算（同 arrival）
+  });
+
+  // 只要投递出去（Web Push / 微信订阅消息 / 应用内兜底）就记冷却，避免在附近停留时反复打扰
+  if (result.ok || result.inAppFallback) {
+    try {
+      const metadata = {
+        ...(prefs?.metadata && typeof prefs.metadata === "object" ? prefs.metadata : {}),
+        _extraFields: { ...extra, task_geo_cooldowns: { ...cooldowns, [task.id]: now.toISOString() } }
+      };
+      await prisma.userPreference.upsert({
+        where: { userId: user.id },
+        update: { metadata },
+        create: { userId: user.id, locale: "zh-CN", timezone: "Asia/Shanghai", metadata }
+      });
+    } catch (e) {
+      console.warn("[contextReminder] failed to save task geo cooldown:", e?.message || e);
+    }
+  }
+
+  return { pushed: result.ok, inAppFallback: result.inAppFallback, skippedReason: result.ok ? null : "send_failed" };
+}

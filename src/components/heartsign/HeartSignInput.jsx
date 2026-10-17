@@ -1,0 +1,258 @@
+import React, { useState, useRef } from "react";
+import { Send, Plus, Paperclip, Link as LinkIcon, Image as ImageIcon, Mic, MicOff, X, Loader2, LayoutTemplate, Lock } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import { toast } from "sonner";
+import QuickTemplates from "./QuickTemplates";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
+import ChatPasteRecognizer from "./ChatPasteRecognizer";
+import { looksLikeChatLog } from "@/components/utils/processPastedContent";
+import { detectSensitive } from "./detectSensitive";
+
+export default function HeartSignInput({ onSend, onVaultTransfer }) {
+  const [text, setText] = useState("");
+  const [showChatRecognizer, setShowChatRecognizer] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const fileRef = useRef(null);
+  const imgRef = useRef(null);
+  const { isListening, toggle: toggleVoice } = useVoiceInput((transcript) => {
+    setText((prev) => (prev ? prev + transcript : transcript));
+  });
+
+  const detectUrlInText = (val) => {
+    const m = val.match(/https?:\/\/\S+/);
+    if (m && !sourceUrl) setSourceUrl(m[0]);
+  };
+
+  // 输入过程实时监测敏感信息（密码/证件号等），命中即提醒转入保险柜（发送时仍有最终拦截）
+  const sensitiveHit = text.trim() ? detectSensitive(text) : null;
+
+  // 一键转入保险柜：清空输入并把当前内容交给父组件走保险柜流程
+  const transferToVault = () => {
+    const t = text.trim();
+    if (!t) return;
+    setText('');
+    setShowUrlInput(false);
+    onVaultTransfer?.(t);
+  };
+
+  const handlePaste = (e) => {
+    const pasted = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+    const combined = (text + pasted).trim();
+    if (looksLikeChatLog(combined)) setShowChatRecognizer(true);
+  };
+
+  // 输入框高度上限随设备变化：手机紧凑、桌面更舒展
+  const heightCap = () => (window.innerWidth < 768 ? 200 : 380);
+
+  const autoResize = (el) => {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, heightCap()) + 'px';
+  };
+
+  const handleFile = async (e, kind = 'file') => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      for (const f of files) {
+        const { file_url } = await base44.integrations.Core.UploadFile({ file: f });
+        setAttachments((prev) => [...prev, {
+          file_url,
+          file_name: f.name,
+          file_type: kind === 'image' ? 'image' : (f.type || 'file'),
+          file_size: f.size
+        }]);
+      }
+    } catch (err) {
+      toast.error('上传失败：' + err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const submit = async () => {
+    const plain = text.trim();
+    if (!plain && !attachments.length && !sourceUrl) return;
+
+    let source_type = 'manual';
+    if (attachments.some(a => (a.file_type || '').startsWith('image'))) source_type = 'image';
+    else if (attachments.length) source_type = 'file';
+    else if (sourceUrl) source_type = 'web_link';
+
+    const payload = {
+      content: plain ? `<p>${plain.replace(/\n/g, '<br/>')}</p>` : (sourceUrl ? `<p><a href="${sourceUrl}">${sourceUrl}</a></p>` : '<p></p>'),
+      plain_text: plain || sourceUrl || '',
+      source_type,
+      source_url: sourceUrl || undefined,
+      attachments,
+      ai_status: 'pending',
+      color: 'white'
+    };
+
+    setText('');
+    setAttachments([]);
+    setSourceUrl('');
+    setShowUrlInput(false);
+
+    await onSend(payload);
+  };
+
+  const onKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  return (
+    <div className="bg-white border-t border-slate-200 p-3 md:p-4">
+      <div className="max-w-3xl mx-auto">
+        {/* 聊天记录智能识别条 */}
+        {showChatRecognizer && text.trim() && (
+          <ChatPasteRecognizer
+            text={text}
+            onDone={() => { setText(''); setShowChatRecognizer(false); }}
+            onDismiss={() => setShowChatRecognizer(false)}
+          />
+        )}
+
+        {/* 附件预览 */}
+        {(attachments.length > 0 || sourceUrl) && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {sourceUrl && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-700">
+                <LinkIcon className="w-3 h-3" />
+                <span className="truncate max-w-[240px]">{sourceUrl}</span>
+                <button onClick={() => setSourceUrl('')} className="hover:text-indigo-900"><X className="w-3 h-3" /></button>
+              </div>
+            )}
+            {attachments.map((a, i) => {
+              const isImg = (a.file_type || '').startsWith('image')
+                || /\.(png|jpe?g|gif|webp|avif|bmp)(\?|#|$)/i.test(a.file_url || '');
+              return isImg ? (
+                <div key={i} className="relative">
+                  <img src={a.file_url} alt={a.file_name || '图片'} className="h-16 w-16 object-cover rounded-lg border border-slate-200 bg-slate-50" />
+                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                    className="absolute -top-1.5 -right-1.5 bg-white border border-slate-200 rounded-full p-0.5 shadow-sm text-slate-500 hover:text-rose-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div key={i} className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700">
+                  <Paperclip className="w-3 h-3" />
+                  <span className="truncate max-w-[180px]">{a.file_name}</span>
+                  <button onClick={() => setAttachments(prev => prev.filter((_, idx) => idx !== i))} className="hover:text-rose-600"><X className="w-3 h-3" /></button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* URL 输入条 */}
+        {showUrlInput && (
+          <div className="mb-2 flex items-center gap-2">
+            <LinkIcon className="w-4 h-4 text-indigo-500" />
+            <input
+              type="url"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              placeholder="粘贴链接：https://..."
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-violet-400"
+              autoFocus
+            />
+            <button onClick={() => setShowUrlInput(false)} className="text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>
+          </div>
+        )}
+
+        {/* 快速模板悬浮 */}
+        {showTemplates && (
+          <div className="mb-2 flex justify-center">
+            <QuickTemplates onPick={(tpl) => { setText(prev => prev + tpl); setShowTemplates(false); }} />
+          </div>
+        )}
+
+        {/* 工具行：默认收起，点开「+」展开模板/附件/图片/链接/语音 */}
+        <div className="flex items-center gap-1 mb-2 text-slate-500">
+          <button
+            onClick={() => setToolsOpen(v => !v)}
+            className={`p-2 rounded-lg transition-transform ${toolsOpen ? 'rotate-45 bg-slate-100 text-[#384877]' : 'hover:bg-slate-100'}`}
+            title={toolsOpen ? '收起工具' : '更多输入方式'}
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          <div className="flex-1" />
+          {uploading && <span className="text-xs text-violet-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />上传中</span>}
+          <span className="hidden md:inline text-[11px] text-slate-400">Enter 发送 · Shift+Enter 换行</span>
+        </div>
+        {toolsOpen && (
+          <div className="mb-2 flex items-center gap-1 text-slate-500 animate-in fade-in slide-in-from-top-1 duration-200">
+            <button onClick={() => setShowTemplates(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="快速模板">
+              <LayoutTemplate className="w-4 h-4" />
+            </button>
+            <button onClick={() => fileRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="文件">
+              <Paperclip className="w-4 h-4" />
+            </button>
+            <button onClick={() => imgRef.current?.click()} className="p-2 hover:bg-slate-100 rounded-lg" title="图片">
+              <ImageIcon className="w-4 h-4" />
+            </button>
+            <button onClick={() => setShowUrlInput(v => !v)} className="p-2 hover:bg-slate-100 rounded-lg" title="链接">
+              <LinkIcon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={toggleVoice}
+              className={`p-2 rounded-lg transition-colors ${isListening ? 'bg-red-100 text-red-500 animate-pulse' : 'hover:bg-slate-100'}`}
+              title={isListening ? '点击停止' : '语音输入'}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+          </div>
+        )}
+
+        {/* 输入过程敏感监测提醒：非阻塞，直接发送仍会在提交时被拦截 */}
+        {sensitiveHit && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl border border-amber-200/70 bg-amber-50/80 px-3 py-2">
+            <Lock className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+            <span className="flex-1 min-w-0 text-[12px] text-amber-700 leading-snug">
+              检测到疑似敏感信息（{sensitiveHit.label}），建议转入保险柜 —— 加密保存，AI 不会阅读
+            </span>
+            <button
+              onClick={transferToVault}
+              className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-medium text-[#384877] border border-[#384877]/30 rounded-lg px-2.5 py-1 hover:bg-[#384877]/8 transition"
+            >
+              <Lock className="w-3 h-3" /> 转入保险柜
+            </button>
+          </div>
+        )}
+
+        {/* 输入框 */}
+        <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-2xl p-2 md:p-2.5 focus-within:border-violet-400 focus-within:ring-2 focus-within:ring-violet-100 transition">
+          <textarea
+            rows={1}
+            value={text}
+            onChange={(e) => { setText(e.target.value); detectUrlInText(e.target.value); autoResize(e.target); }}
+            onPaste={handlePaste}
+            onKeyDown={onKey}
+            placeholder="发给自己 —— 心情、链接、账目、灵感，丢进来就好"
+            className="flex-1 bg-transparent outline-none resize-none text-[15px] md:text-base text-slate-800 placeholder-slate-400 px-2 py-2 max-h-[200px] md:max-h-[380px] md:min-h-[220px]"
+          />
+          <button
+            onClick={submit}
+            disabled={uploading}
+            className="p-2.5 md:p-3 bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 disabled:opacity-50 text-white rounded-xl shadow-md transition hover:scale-105 active:scale-95"
+          >
+            <Send className="w-4 h-4 md:w-[18px] md:h-[18px]" />
+          </button>
+        </div>
+
+        <input ref={fileRef} type="file" hidden multiple onChange={(e) => handleFile(e, 'file')} />
+        <input ref={imgRef} type="file" hidden multiple accept="image/*" onChange={(e) => handleFile(e, 'image')} />
+      </div>
+    </div>
+  );
+}

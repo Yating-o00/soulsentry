@@ -1,0 +1,1144 @@
+import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+
+import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
+import { 
+  Check, Clock, MapPin, Repeat, MoreHorizontal, 
+  ShoppingBag, Zap, Navigation, Footprints,
+  Briefcase, Heart, Package, Sun, Moon, Sunrise, Sunset,
+  Droplets, Leaf, Flower, Coffee, Utensils,
+  Car, Store, Home, AlertCircle, Timer,
+  Sparkles, Lightbulb, CheckCircle2, Flag,
+  Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
+  Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen
+} from "lucide-react";
+import { toast } from "sonner";
+import { base44 } from "@/api/base44Client";
+import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import AITaskAssistant from "@/components/tasks/AITaskAssistant";
+import MilestoneTimeEditor from "@/components/tasks/MilestoneTimeEditor";
+import SnoozePopover from "@/components/tasks/SnoozePopover";
+import SubtaskContextBadges from "@/components/tasks/SubtaskContextBadges";
+import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
+import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
+import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
+import CheckinWidget from "@/components/checkins/CheckinWidget";
+import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
+import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
+
+export default function LifeTaskCard({ 
+  task, 
+  subtasks = [],
+  commentCount = 0,
+  onComplete, 
+  onEdit,
+  onShare,
+  onToggleSubtask,
+  onUpdateTask,
+  isSelectionMode = false,
+  isSelected = false,
+  selectedTaskIds = [],
+  onToggleSelection,
+  onViewTab,
+  onReparent,
+  onSettleKnowledge,
+  autoExec
+}) {
+  const isRecurringTask = task.repeat_rule && task.repeat_rule !== 'none';
+  // 打卡类约定：卡片唯一的圈就是打卡（CheckinWidget），不再渲染「完成」打勾圈
+  const isCheckinTask = task.category === 'checkin';
+  // 重复约定：完成 = 今天已打卡（done_today），约定状态保持活跃、系列继续
+  const serverDone = isRecurringTask ? !!task.done_today : task.status === 'completed';
+  const [completed, setCompleted] = useState(serverDone);
+  useEffect(() => {
+    setCompleted(isRecurringTask ? !!task.done_today : task.status === 'completed');
+  }, [task.done_today, task.status, isRecurringTask]);
+  const [expanded, setExpanded] = useState(false);
+  const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  // 自动执行区块：本地状态覆盖（验收后 done / 批准·重试后 running）与"我来接管"忽略标记
+  const [execStateOverride, setExecStateOverride] = useState(null);
+  const [execIgnored, setExecIgnored] = useState(false);
+  const [execBusy, setExecBusy] = useState(false);
+  const [showExecDetail, setShowExecDetail] = useState(false);
+  const queryClient = useQueryClient();
+  const execState = execStateOverride || autoExec?.state;
+
+  // 验收：确认产物，服务端会同步把关联约定标为完成
+  const handleExecAccept = async (e) => {
+    e?.stopPropagation();
+    if (!autoExec?.executionId || execBusy) return;
+    setExecBusy(true);
+    try {
+      await base44.entities.TaskExecution.update(autoExec.executionId, {
+        execution_status: "completed",
+        user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() }
+      });
+      setExecStateOverride('done');
+      toast.success("已验收，约定已完成");
+      // 约定状态已由服务端更新，刷新任务列表与执行单让卡片状态同步
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    } catch (err) {
+      toast.error("验收失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
+  // 有问题：只写反馈，不传 execution_status，约定保持待处理，执行单仍待验收
+  const handleExecFeedback = async (e) => {
+    e?.stopPropagation();
+    if (!autoExec?.executionId || execBusy) return;
+    setExecBusy(true);
+    try {
+      await base44.entities.TaskExecution.update(autoExec.executionId, {
+        user_feedback: { rating: 2, comment: "用户标记有问题", rated_at: new Date().toISOString() }
+      });
+      toast.success("已记录反馈，约定保留待处理");
+    } catch (err) {
+      toast.error("反馈失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
+  // 批准执行（confirm）/ 重试（manual）：复用 AutomationDetailDialog 的执行方式
+  const handleExecRun = async (e) => {
+    e?.stopPropagation();
+    if (!autoExec?.executionId || execBusy) return;
+    setExecBusy(true);
+    try {
+      const res = await base44.functions.invoke('executeAutomation', {
+        execution_id: autoExec.executionId,
+        phase: "execute"
+      });
+      if (res.data?.error) throw new Error(res.data.error);
+      setExecStateOverride('running');
+    } catch (err) {
+      toast.error("执行失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
+  // 让心栈先执行：尚无执行单时手动委托，创建执行单并异步执行
+  const handleExecDelegate = async (e) => {
+    e?.stopPropagation();
+    if (execBusy) return;
+    setExecBusy(true);
+    try {
+      const res = await base44.functions.invoke('delegateTaskAutomation', { task_id: task.id });
+      const data = res?.data;
+      if (data?.status === 'started' || data?.status === 'existing') {
+        toast.success("心栈开始执行，完成后可验收");
+        setExecStateOverride('running');
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      } else {
+        toast.error(data?.reason || "未识别到可自动执行的内容");
+      }
+    } catch (err) {
+      toast.error("委托失败：" + (err?.message || err));
+    } finally {
+      setExecBusy(false);
+    }
+  };
+
+  const [showAIAssistant, setShowAIAssistant] = useState(false);
+
+  const dragEnabled = !isSelectionMode && !!onReparent;
+
+  const handleDragStart = (e) => {
+    e.dataTransfer.setData('text/task-id', task.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!isDragOver) setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    if (isDragOver) setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    if (!dragEnabled) return;
+    e.preventDefault();
+    setIsDragOver(false);
+    const draggedId = e.dataTransfer.getData('text/task-id');
+    if (draggedId && draggedId !== task.id) {
+      onReparent(draggedId, task.id);
+    }
+  };
+
+  const handleComplete = (e) => {
+    e.stopPropagation();
+    setCompleted(!completed);
+    onComplete && onComplete(task, !completed);
+  };
+
+  // --- Helper Functions for UI Logic ---
+
+  // 1. Get Context Badges
+  const getContextBadges = () => {
+    const badges = [];
+    
+    // Location Badge
+    if (task.location_reminder?.enabled) {
+      badges.push({
+        label: task.location_reminder.trigger_on === 'enter' ? '到达触发' : '离开触发',
+        icon: <Navigation className="w-3 h-3" />,
+        className: "bg-green-100 text-green-700 border-green-200"
+      });
+    }
+
+    // Time/Habit Badges（按北京时间判断）
+    if (task.repeat_rule && task.repeat_rule !== 'none') {
+        const time = task.reminder_time ? parseAsShanghai(task.reminder_time) : getShanghaiNow();
+        const hour = time ? parseInt(toShanghaiTimeStr(time).split(':')[0], 10) : 9;
+        let label = '日常习惯';
+        let icon = <Repeat className="w-3 h-3" />;
+        let className = "bg-blue-100 text-blue-700 border-blue-200";
+
+        if (hour >= 5 && hour < 10) {
+            label = '晨间习惯';
+            icon = <Sun className="w-3 h-3" />;
+            className = "bg-orange-100 text-orange-700 border-orange-200";
+        } else if (hour >= 18 && hour < 23) {
+            label = '晚间惯例';
+            icon = <Moon className="w-3 h-3" />;
+            className = "bg-indigo-100 text-indigo-700 border-indigo-200";
+        }
+        
+        badges.push({ label, icon, className });
+    }
+
+    // Urgency/Deadline Badge（按北京时间判断；重复约定不显示——窗口结束不是超时，避免每天制造压力）
+    if (!isRecurringTask && task.end_time) {
+        const end = parseAsShanghai(task.end_time);
+        const now = getShanghaiNow();
+        const diffHours = end && now ? (end.getTime() - now.getTime()) / (1000 * 60 * 60) : 0;
+        
+        if (diffHours > 0 && diffHours < 24) {
+            badges.push({
+                label: '即将超时',
+                icon: <Timer className="w-3 h-3" />,
+                className: "bg-amber-100 text-amber-700 border-amber-200"
+            });
+        }
+    }
+
+    // Package/Delivery specific
+    if (task.title?.includes('快递') || task.title?.includes('包裹') || task.title?.includes('取件')) {
+        badges.push({
+            label: '待取件',
+            icon: <Package className="w-3 h-3" />,
+            className: "bg-purple-100 text-purple-700 border-purple-200"
+        });
+    }
+
+    return badges;
+  };
+
+  // 2. Get Dynamic Icon & Theme
+  const getTaskVisuals = () => {
+    const title = task.title || '';
+    const cat = task.category;
+    
+    let icon = <Zap className="w-6 h-6" />;
+    let bgGradient = "from-slate-100 to-slate-50";
+    let iconColor = "text-slate-600";
+    let emoji = null;
+
+    // Keyword matching for specific icons
+    if (/会议|开会|约见|见面/.test(title)) {
+        emoji = '🤝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+    } else if (/书|阅读|读|看书|图书/.test(title)) {
+        emoji = '📚'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+    } else if (/带|寄|快递|邮件|包裹|取件/.test(title)) {
+        emoji = '📦'; bgGradient = "from-purple-100 to-purple-50"; iconColor = "text-purple-600";
+    } else if (/油|超市|买|购物|商场/.test(title)) {
+        emoji = '🛒'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+    } else if (/花|植物|浇/.test(title)) {
+        emoji = '🌸'; bgGradient = "from-rose-100 to-rose-50"; iconColor = "text-rose-600";
+    } else if (/药|医院|体检|吃药/.test(title)) {
+        emoji = '💊'; bgGradient = "from-red-100 to-red-50"; iconColor = "text-red-600";
+    } else if (/咖啡|茶|喝水/.test(title)) {
+        emoji = '☕'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else if (/车|加油|驾/.test(title)) {
+        emoji = '🚗'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+    } else if (/跑步|运动|健身|锻炼|瑜伽/.test(title)) {
+        emoji = '🏃'; bgGradient = "from-emerald-100 to-emerald-50"; iconColor = "text-emerald-600";
+    } else if (/做饭|烹饪|煮|下厨|菜/.test(title)) {
+        emoji = '🍳'; bgGradient = "from-orange-100 to-orange-50"; iconColor = "text-orange-600";
+    } else if (/打扫|清洁|卫生|洗|整理/.test(title)) {
+        emoji = '🧹'; bgGradient = "from-teal-100 to-teal-50"; iconColor = "text-teal-600";
+    } else if (/旅行|出行|出发|机票|酒店|飞/.test(title)) {
+        emoji = '✈️'; bgGradient = "from-sky-100 to-sky-50"; iconColor = "text-sky-600";
+    } else if (/电影|看剧|追剧|视频/.test(title)) {
+        emoji = '🎬'; bgGradient = "from-violet-100 to-violet-50"; iconColor = "text-violet-600";
+    } else if (/音乐|听歌|弹琴|唱/.test(title)) {
+        emoji = '🎵'; bgGradient = "from-pink-100 to-pink-50"; iconColor = "text-pink-600";
+    } else if (/睡|休息|午休|早起/.test(title)) {
+        emoji = '😴'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+    } else if (/电话|打电话|联系|沟通|打给/.test(title)) {
+        emoji = '📞'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+    } else if (/写|笔记|日记|作业/.test(title)) {
+        emoji = '✍️'; bgGradient = "from-slate-100 to-slate-50"; iconColor = "text-slate-600";
+    } else if (/遛狗|宠物|猫|狗/.test(title)) {
+        emoji = '🐾'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else if (/报告|文档|PPT|方案|项目/.test(title)) {
+        emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+    } else if (/提醒|备忘/.test(title)) {
+        emoji = '🔔'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else if (cat === 'checkin') {
+        emoji = '👣'; bgGradient = "from-[#E7EDFB] to-[#F5F8FF]"; iconColor = "text-[#384877]";
+    } else if (cat === 'work') {
+        emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+    } else if (cat === 'study') {
+        emoji = '📖'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+    } else if (cat === 'health') {
+        emoji = '🌱'; bgGradient = "from-emerald-100 to-emerald-50"; iconColor = "text-emerald-600";
+    } else if (cat === 'family') {
+        emoji = '👨‍👩‍👧'; bgGradient = "from-rose-100 to-rose-50"; iconColor = "text-rose-600";
+    } else if (cat === 'shopping') {
+        emoji = '🛍️'; bgGradient = "from-purple-100 to-purple-50"; iconColor = "text-purple-600";
+    } else if (cat === 'finance') {
+        emoji = '💰'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+    } else {
+        emoji = '⚡'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+    }
+
+    return { icon, bgGradient, iconColor, emoji };
+  };
+
+  // 3. Get Time/Status Text（按北京时间判断）
+  const getTimeStatus = () => {
+    if (completed) return { text: '已完成', color: 'text-stone-400 font-medium' };
+
+    // 推迟优先：如果任务被推迟（snoozed），用 snooze_until / reminder_time 作为新参考时间
+    // 硬逾期只认 end_time/due_at；仅提醒时间过期的约定不标红（统一逾期语义，避免虚假逾期压力）
+    const isSnoozed = task.status === 'snoozed' || !!task.snooze_until;
+    const hasHardDeadline = !!(task.end_time || task.due_at);
+    const targetDateStr = isSnoozed
+      ? (task.snooze_until || task.reminder_time || task.end_time)
+      : hasHardDeadline
+        ? (task.end_time || task.due_at)
+        : task.reminder_time;
+    if (!targetDateStr) return { text: '', color: 'text-stone-300' };
+
+    const targetDate = parseAsShanghai(targetDateStr);
+    const now = getShanghaiNow();
+    if (!targetDate || !now) return { text: '', color: 'text-stone-300' };
+
+    const diffMs = targetDate.getTime() - now.getTime();
+    const absMs = Math.abs(diffMs);
+    const diffMinutes = Math.round(absMs / (1000 * 60));
+    const diffHours = Math.round(absMs / (1000 * 60 * 60));
+
+    // 按"日历日"差异（忽略时分秒），用于"剩X天 / 过期X天"
+    const targetDayStr = toShanghaiDateStr(targetDate);
+    const currentDayStr = toShanghaiDateStr(now);
+    const targetDay = new Date(`${targetDayStr}T00:00:00+08:00`);
+    const currentDay = new Date(`${currentDayStr}T00:00:00+08:00`);
+    const diffDays = Math.round((targetDay.getTime() - currentDay.getTime()) / (1000 * 60 * 60 * 24));
+
+    // 推迟后仍在未来 → 显示「已推迟·剩X」，动态反映距离新时间还差多久
+    if (isSnoozed && diffMs > 0) {
+      let remain;
+      if (diffMinutes < 60) remain = `${diffMinutes}分钟`;
+      else if (diffHours < 24) remain = `${diffHours}小时`;
+      else remain = `${diffDays}天`;
+      return { text: `已推迟·剩${remain}`, color: 'text-amber-600 font-medium' };
+    }
+
+    // 过期态：只显示距离时长，不显示"推迟后过期"前缀
+    if (diffMs < 0) {
+      let over;
+      if (diffMinutes < 60) over = `${diffMinutes}分钟`;
+      else if (diffHours < 24) over = `${diffHours}小时`;
+      else over = `${Math.abs(diffDays)}天`;
+      // 仅提醒时间已过（无明确截止）：soft 待处理，不标红施压
+      if (!isSnoozed && !hasHardDeadline) {
+        return { text: `提醒已过·${over}`, color: 'text-amber-600 font-medium' };
+      }
+      return { text: `已过期·${over}`, color: 'text-red-500 font-bold' };
+    }
+
+    // 未来时间：今天 / 明天 / 剩X天
+    if (isSameShanghaiDay(targetDateStr, now.toISOString())) {
+      if (diffMinutes < 60) return { text: `${diffMinutes}分钟后`, color: 'text-green-600 font-bold' };
+      if (diffHours < 24) return { text: `${diffHours}小时后`, color: 'text-green-600 font-bold' };
+      return { text: '今天', color: 'text-green-600 font-bold' };
+    }
+    if (diffDays === 1) return { text: '明天', color: 'text-stone-500 font-medium' };
+    if (diffDays <= 3) return { text: `剩${diffDays}天`, color: 'text-amber-500 font-bold' };
+
+    return { text: formatShanghai(targetDateStr, 'MM-dd'), color: 'text-stone-400' };
+  };
+
+  const badges = getContextBadges();
+  const visuals = getTaskVisuals();
+  const timeStatus = getTimeStatus();
+
+  return (
+    <div 
+      draggable={dragEnabled}
+      onDragStart={dragEnabled ? handleDragStart : undefined}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onClick={(e) => {
+        if (e.target.closest('button')) return;
+        if (isSelectionMode) {
+          e.stopPropagation();
+          onToggleSelection && onToggleSelection(task.id);
+        } else if (subtasks.length > 0) {
+          setExpanded(!expanded);
+        } else {
+          onEdit && onEdit();
+        }
+      }}
+      className={cn(
+        "group bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1",
+        dragEnabled && "cursor-grab active:cursor-grabbing",
+        completed && "opacity-60",
+        isCheckinTask && "border-[#c9d5ef]/80 bg-gradient-to-br from-[#f8faff] via-white to-white",
+        isSelected && "ring-2 ring-blue-500 bg-blue-50/10",
+        isDragOver && "ring-2 ring-[#384877] ring-offset-2 bg-[#eef2ff]/50 scale-[1.01]"
+      )}
+    >
+        {/* 拖拽悬停提示 */}
+        {isDragOver && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#384877]/5 backdrop-blur-[1px] pointer-events-none rounded-2xl">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#384877] text-white text-sm font-medium shadow-lg">
+              <CornerDownRight className="w-4 h-4" />
+              挂到「{task.title}」下
+            </div>
+          </div>
+        )}
+        {/* Selection Checkbox Overlay */}
+        {isSelectionMode && (
+             <div className="absolute top-4 left-4 z-30" onClick={(e) => e.stopPropagation()}>
+                <div 
+                    onClick={() => onToggleSelection && onToggleSelection(task.id)}
+                    className={cn(
+                        "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer",
+                        isSelected ? "bg-blue-500 border-blue-500" : "bg-white border-slate-300"
+                    )}
+                >
+                    {isSelected && <Check className="w-4 h-4 text-white" />}
+                </div>
+             </div>
+        )}
+
+        {/* Decorative Background Blob */}
+        <div className={cn(
+            "absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl -mr-20 -mt-20 opacity-40 pointer-events-none transition-colors duration-500",
+            task.category === 'work' ? "bg-blue-100" :
+            task.category === 'health' ? "bg-rose-100" :
+            task.category === 'family' ? "bg-purple-100" :
+            task.category === 'checkin' ? "bg-[#EEF2FF]" :
+            "bg-green-100"
+        )} />
+
+        <div className={cn("relative z-10", isSelectionMode && "pl-8")}>
+            
+            {/* 1. Top Context Row: Badges & Menu */}
+            <div className="flex items-start justify-between mb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Category Badge */}
+                    <span className={cn(
+                        "px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border",
+                        task.category === 'work' ? "bg-blue-50 text-blue-700 border-blue-100" :
+                        task.category === 'health' ? "bg-rose-50 text-rose-700 border-rose-100" :
+                        task.category === 'checkin' ? "bg-[#EEF2FF] text-[#384877] border-[#dbe3f7]" :
+                        "bg-stone-50 text-stone-600 border-stone-100"
+                    )}>
+                        {task.category === 'work' ? <Briefcase className="w-3 h-3" /> :
+                         task.category === 'health' ? <Heart className="w-3 h-3" /> :
+                         task.category === 'checkin' ? <Footprints className="w-3 h-3" /> :
+                         <Zap className="w-3 h-3" />}
+                        {task.category === 'work' ? '工作' : 
+                         task.category === 'health' ? '健康' :
+                         task.category === 'checkin' ? '打卡' : '生活'}
+                    </span>
+
+                    {/* 如约印章：打卡卡专属标识 */}
+                    {isCheckinTask && (
+                        <span
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-full border-2 border-[#384877]/25 border-double text-[#384877]/45 text-[10px] font-bold rotate-[-12deg] select-none"
+                            style={{ writingMode: "vertical-rl", letterSpacing: "0.15em" }}
+                            title="如约"
+                        >
+                            如约
+                        </span>
+                    )}
+
+                    {/* Dynamic Context Badges */}
+                    {badges.map((badge, idx) => (
+                        <span key={idx} className={cn(
+                            "px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border",
+                            badge.className
+                        )}>
+                            {badge.icon}
+                            {badge.label}
+                        </span>
+                    ))}
+                    {task.dependencies?.length > 0 && (
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("dependencies"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-amber-50 text-amber-600 border-amber-100 cursor-pointer hover:bg-amber-100 transition-colors">
+                            <Link2 className="w-3 h-3" />
+                            {task.dependencies.length}
+                        </span>
+                    )}
+                    {task.attachments?.length > 0 && (
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("attachments"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-purple-50 text-purple-600 border-purple-100 cursor-pointer hover:bg-purple-100 transition-colors">
+                            <Paperclip className="w-3 h-3" />
+                            {task.attachments.length}
+                        </span>
+                    )}
+                    {task.notes?.length > 0 && (
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("notes"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-teal-50 text-teal-600 border-teal-100 cursor-pointer hover:bg-teal-100 transition-colors">
+                            <StickyNote className="w-3 h-3" />
+                            {task.notes.length}
+                        </span>
+                    )}
+                    {commentCount > 0 && (
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("comments"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-blue-50 text-blue-600 border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors">
+                            <MessageSquare className="w-3 h-3" />
+                            {commentCount}
+                        </span>
+                    )}
+                    {(task.advance_reminders?.length > 0 || task.persistent_reminder) && (
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("reminders"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-orange-50 text-orange-600 border-orange-100 cursor-pointer hover:bg-orange-100 transition-colors">
+                            <Bell className="w-3 h-3" />
+                        </span>
+                    )}
+                </div>
+
+                {/* Dropdown Menu */}
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button 
+                            className="p-1.5 hover:bg-stone-100 rounded-lg text-stone-400 transition-colors"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare && onShare(); }}>
+                            <Share2 className="w-4 h-4 mr-2" /> 分享
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>
+                            <Edit className="w-4 h-4 mr-2" /> 编辑
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSettleKnowledge && onSettleKnowledge(task); }}>
+                            <BookOpen className="w-4 h-4 mr-2" /> 沉淀为知识
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowAttachDialog(true); }}>
+                            <CornerDownRight className="w-4 h-4 mr-2" /> 挂到其他约定下
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); /* onDelete */ }}>
+                            <Trash2 className="w-4 h-4 mr-2" /> 删除
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+
+            {/* 2. Main Content Row */}
+            <div className="flex gap-5 mb-4">
+                {/* Large Icon */}
+                <div className="flex-shrink-0 pt-1">
+                    <div className={cn(
+                        "w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-sm border border-white/50 bg-gradient-to-br",
+                        visuals.bgGradient
+                    )}>
+                        {visuals.emoji || visuals.icon}
+                    </div>
+                </div>
+
+                {/* Details */}
+                <div className="flex-1 min-w-0">
+                    <h3 className={cn(
+                        "text-base font-bold text-stone-800 mb-1.5 truncate leading-tight",
+                        completed && "line-through text-stone-400"
+                    )}>
+                        {task.title}
+                    </h3>
+                    
+                    <p className={cn(
+                        "text-sm text-stone-500 mb-3 leading-relaxed",
+                        task.category === 'work' ? "line-clamp-4" : "line-clamp-2"
+                    )}>
+                        {task.description || "暂无描述"}
+                    </p>
+
+                    {/* Work Task Expanded Metadata */}
+                    {task.category === 'work' && (
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            {/* Date Range */}
+                            {onUpdateTask ? (
+                                <MilestoneTimeEditor
+                                    task={task}
+                                    onSave={(patch) => onUpdateTask(task, patch)}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-50 hover:bg-stone-100 text-stone-600 text-xs border border-stone-100 hover:border-stone-200 transition-colors cursor-pointer"
+                                        title="点击调整时间"
+                                    >
+                                        <Clock className="w-3 h-3 text-stone-400" />
+                                        {task.reminder_time ? formatShanghai(task.reminder_time, 'MM月dd日 HH:mm') : '待定'}
+                                        {task.end_time && ` - ${formatShanghai(task.end_time, 'MM月dd日 HH:mm')}`}
+                                    </button>
+                                </MilestoneTimeEditor>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-50 text-stone-600 text-xs border border-stone-100">
+                                    <Clock className="w-3 h-3 text-stone-400" />
+                                    {task.reminder_time ? formatShanghai(task.reminder_time, 'MM月dd日 HH:mm') : '待定'}
+                                    {task.end_time && ` - ${formatShanghai(task.end_time, 'MM月dd日 HH:mm')}`}
+                                </span>
+                            )}
+
+                            {/* Recurrence */}
+                            {task.repeat_rule !== 'none' && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-xs border border-blue-100">
+                                    <Repeat className="w-3 h-3" />
+                                    {task.repeat_rule === 'daily' ? '每天' :
+                                     task.repeat_rule === 'weekly' ? '每周' :
+                                     task.repeat_rule === 'monthly' ? '每月' : '循环'}
+                                </span>
+                            )}
+
+                            {/* 重复约定今日已打卡 */}
+                            {isRecurringTask && completed && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-50 text-emerald-600 text-xs border border-emerald-100">
+                                    <Check className="w-3 h-3" />
+                                    今日已打卡
+                                </span>
+                            )}
+
+                            {/* Priority - 可点击调整 */}
+                            <PriorityQuickMenu task={task} onUpdateTask={onUpdateTask} />
+
+
+                            {/* AI Suggestion Badge */}
+                            {task.ai_analysis?.suggested_priority === 'urgent' && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-600 text-white text-xs border border-purple-600 shadow-sm shadow-purple-200">
+                                    <Sparkles className="w-3 h-3" />
+                                    建议: 紧急
+                                </span>
+                            )}
+
+                             {/* Advance Reminder */}
+                             {task.advance_reminders?.length > 0 && (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-50 text-cyan-600 text-xs border border-cyan-100">
+                                    <AlertCircle className="w-3 h-3" />
+                                    提前{task.advance_reminders.length}次
+                                </span>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Long-term horizon: progress + concise summary */}
+                    <LongTermProgressBar task={task} subtasks={subtasks} />
+
+                    {/* AI Assistant */}
+                    {showAIAssistant && (
+                        <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                            <AITaskAssistant
+                                task={task}
+                                autoAnalyze={true}
+                                onApplySuggestion={(type, data) => {
+                                    if (type === 'priority' && onEdit) {
+                                        onEdit({ ...task, priority: data });
+                                    }
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Long-horizon Plan Progress (周/月/季/年 约定) - Work tasks only, above status bar */}
+                    {task.category === 'work' && (
+                        <HorizonProgressBadge task={task} subtasks={subtasks} />
+                    )}
+
+                     {/* Detailed Context Info Line (Non-Work Tasks or Supplemental) */}
+                    {task.category !== 'work' && (
+                        <div className="flex flex-wrap items-center gap-4 text-xs">
+                             {/* Location or Time Detail (time is click-to-edit) */}
+                             {task.location_reminder?.enabled ? (
+                                <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
+                                    <MapPin className="w-3.5 h-3.5 text-stone-400" />
+                                    {task.location_reminder.location_name || "指定地点"}
+                                </span>
+                             ) : onUpdateTask ? (
+                                <MilestoneTimeEditor
+                                    task={task}
+                                    onSave={(patch) => onUpdateTask(task, patch)}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className={cn(
+                                            "flex items-center gap-1.5 px-2 py-0.5 rounded-md transition-colors cursor-pointer border",
+                                            task.tags?.includes('ai_suggested_time')
+                                                ? "text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200/60"
+                                                : "text-stone-600 bg-stone-50 hover:bg-stone-100 border-transparent hover:border-stone-200"
+                                        )}
+                                        title={task.tags?.includes('ai_suggested_time') ? "AI 建议时间，点击调整" : "点击调整时间"}
+                                    >
+                                        {task.tags?.includes('ai_suggested_time')
+                                            ? <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                                            : <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                        }
+                                        {(() => {
+                                            if (task.reminder_time && task.end_time) {
+                                                const start = parseAsShanghai(task.reminder_time);
+                                                const end = parseAsShanghai(task.end_time);
+                                                const sameDay = isSameShanghaiDay(task.reminder_time, task.end_time);
+                                                return sameDay
+                                                    ? `${formatShanghai(task.reminder_time, 'MM-dd HH:mm')} → ${formatShanghai(task.end_time, 'HH:mm')}`
+                                                    : `${formatShanghai(task.reminder_time, 'MM-dd HH:mm')} → ${formatShanghai(task.end_time, 'MM-dd HH:mm')}`;
+                                            }
+                                            if (task.end_time) return `截止 ${formatShanghai(task.end_time, 'MM-dd HH:mm')}`;
+                                            if (task.reminder_time) return formatShanghaiTime(task.reminder_time);
+                                            return '全天';
+                                        })()}
+                                        {task.tags?.includes('ai_suggested_time') && (
+                                            <span className="text-[10px] text-purple-500 font-medium">建议</span>
+                                        )}
+                                    </button>
+                                </MilestoneTimeEditor>
+                             ) : (
+                                <span className="flex items-center gap-1.5 text-stone-500 bg-stone-50 px-2 py-0.5 rounded-md">
+                                    <Clock className="w-3.5 h-3.5 text-stone-400" />
+                                    {task.reminder_time ? formatShanghaiTime(task.reminder_time) : '全天'}
+                                </span>
+                             )}
+                             
+                             {/* Route/Distance or Streak Info */}
+                             {task.location_reminder?.enabled ? (
+                                 <span className="flex items-center gap-1.5 text-green-600 font-medium">
+                                     <Navigation className="w-3.5 h-3.5" />
+                                     回家顺路
+                                 </span>
+                             ) : null}
+
+                             {/* Duration/Estimate */}
+                             {task.estimated_duration && (
+                                 <span className="flex items-center gap-1.5 text-stone-400">
+                                     <Timer className="w-3.5 h-3.5" />
+                                     预计{task.estimated_duration}分钟
+                                 </span>
+                             )}
+
+                             {/* Priority - 可点击调整（非工作类同样支持） */}
+                             <PriorityQuickMenu task={task} onUpdateTask={onUpdateTask} />
+                        </div>
+                    )}
+
+                    {/* Long-horizon Plan Progress (周/月/季/年 约定) - Non-work tasks: below time row */}
+                    {task.category !== 'work' && (
+                        <HorizonProgressBadge task={task} subtasks={subtasks} />
+                    )}
+                </div>
+
+                {/* Completion Check & Time：打卡卡唯一的圈即打卡；其余卡保持原「完成」打勾圈，互斥不并存 */}
+                <div className="flex flex-col items-center justify-start gap-1 min-w-[3.5rem]">
+                    {isCheckinTask ? (
+                        /* 打卡：同一个约定每做到一次点一次，累计次数与赴约记录 */
+                        <CheckinWidget task={task} completed={completed} />
+                    ) : (
+                        <button
+                            onClick={handleComplete}
+                            className={cn(
+                                "w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300 group relative",
+                                completed
+                                    ? "border-stone-200 bg-stone-50 text-stone-400"
+                                    : "border-stone-200 bg-white hover:border-green-500 hover:bg-green-50/30 text-stone-300 hover:text-green-600"
+                            )}
+                        >
+                             <Check className={cn(
+                                 "w-5 h-5 transition-all duration-300",
+                                 completed ? "opacity-100 scale-100" : "opacity-0 scale-50 group-hover:opacity-100 group-hover:scale-100"
+                             )} />
+                        </button>
+                    )}
+                    <span className={cn(
+                        "text-[10px] whitespace-nowrap text-center",
+                        timeStatus.color
+                    )}>
+                        {timeStatus.text}
+                    </span>
+                </div>
+            </div>
+
+            {/* 3. AI Smart Status Bar (Bottom) */}
+            {!completed && (
+                <div className={cn(
+                    "mt-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 transition-all duration-300 relative group/statusbar backdrop-blur-sm",
+                    task.location_reminder?.enabled ? "bg-gradient-to-r from-emerald-50/80 to-green-50/40 border border-emerald-100/70 hover:border-emerald-200" :
+                    (task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.length > 0) ?
+                        (task.category === 'work'
+                            ? "bg-gradient-to-r from-indigo-50/70 to-blue-50/30 border border-indigo-100/70 hover:border-indigo-200"
+                            : "bg-gradient-to-r from-purple-50/70 to-fuchsia-50/30 border border-purple-100/70 hover:border-purple-200") :
+                    "bg-gradient-to-r from-stone-50/80 to-stone-50/30 border border-stone-100 hover:border-stone-200"
+                )}>
+                    {/* Icon & Content Logic */}
+                    {(() => {
+                        if (task.location_reminder?.enabled) {
+                            return (
+                                <>
+                                    <div className="relative flex-shrink-0">
+                                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center shadow-sm shadow-emerald-500/20">
+                                            <Navigation className="w-4 h-4 text-white" />
+                                        </div>
+                                        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white animate-pulse" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-emerald-900 tracking-tight">地理围栏守护中</p>
+                                        <p className="text-[11px] text-emerald-700/80 truncate leading-relaxed">离开或到达目的地时自动提醒</p>
+                                    </div>
+                                </>
+                            );
+                        }
+                        
+                        // Check for AI Analysis
+                        const aiContent = task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.[0];
+                        if (aiContent) {
+                            const isWork = task.category === 'work';
+                            return (
+                                <>
+                                    <div className={cn(
+                                        "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm",
+                                        isWork
+                                            ? "bg-gradient-to-br from-indigo-400 to-blue-500 shadow-indigo-500/20"
+                                            : "bg-gradient-to-br from-purple-400 to-fuchsia-500 shadow-purple-500/20"
+                                    )}>
+                                        <Sparkles className="w-4 h-4 text-white" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={cn("text-xs font-semibold tracking-tight", isWork ? "text-indigo-900" : "text-purple-900")}>
+                                            灵魂哨兵守护中
+                                        </p>
+                                        <p className={cn("text-[11px] truncate leading-relaxed", isWork ? "text-indigo-700/80" : "text-purple-700/80")}>
+                                            {aiContent}
+                                        </p>
+                                    </div>
+                                </>
+                            );
+                        }
+
+                        // 检测顺路型/地点关联任务（路过、带、买、取、寄、加油等关键词）
+                        const title = task.title || '';
+                        const isOnTheWay = /路过|顺路|带.*回|带.*去|捎|买|取|寄|快递|加油|超市|花店|药店|便利店/.test(title);
+                        if (isOnTheWay) {
+                            return (
+                                <>
+                                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-300 to-green-400 flex items-center justify-center flex-shrink-0 shadow-sm shadow-emerald-500/20">
+                                        <Navigation className="w-4 h-4 text-white" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-semibold text-emerald-900 tracking-tight">顺路提醒已开启</p>
+                                        <p className="text-[11px] text-emerald-700/80 truncate leading-relaxed">
+                                            经过相关地点时会自动提醒你
+                                        </p>
+                                    </div>
+                                </>
+                            );
+                        }
+
+                        // Default: 展示基于历史数据的简短洞察，点击展开 AI 助手
+                        return (
+                            <button
+                                type="button"
+                                className="flex items-center gap-3 flex-1 text-left min-w-0 group"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpanded(true);
+                                    setShowAIAssistant(true);
+                                }}
+                            >
+                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-stone-200 to-stone-300 flex items-center justify-center flex-shrink-0">
+                                    <Lightbulb className="w-4 h-4 text-stone-600" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>
+                                    <TaskMemoryInsight task={task} compact enableAICall={false} />
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-stone-300 group-hover:text-stone-500 flex-shrink-0 transition-colors" />
+                            </button>
+                        );
+                    })()}
+
+                    {/* Right Action - Snooze */}
+                    <SnoozePopover
+                        onSnooze={(newTimeISO) => {
+                            onUpdateTask && onUpdateTask(task, {
+                                reminder_time: newTimeISO,
+                                status: 'snoozed',
+                                snooze_until: newTimeISO,
+                                snooze_count: (task.snooze_count || 0) + 1,
+                            });
+                        }}
+                    >
+                        <button
+                            className="flex items-center gap-1 text-[11px] font-medium text-stone-500 hover:text-stone-900 px-2.5 py-1.5 rounded-lg hover:bg-white/70 active:scale-95 transition-all whitespace-nowrap flex-shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <Clock className="w-3 h-3" />
+                            推迟
+                        </button>
+                    </SnoozePopover>
+                </div>
+            )}
+
+            {/* 3.5 智能执行入口：尚无执行单时，可手动让心栈先执行 */}
+            {!autoExec && !completed && !execIgnored && (
+                <div
+                    className="mt-3 rounded-2xl px-3.5 py-2.5 border border-dashed border-[#c7d2fe] bg-[#eef2ff]/40 flex items-center justify-between gap-3"
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Bot className="w-4 h-4 text-[#384877] flex-shrink-0" />
+                        <span className="text-xs font-semibold text-slate-800">智能执行</span>
+                    </div>
+                    <button
+                        type="button"
+                        className="text-[11px] font-medium text-[#384877] px-2.5 py-1 rounded-lg bg-white/80 hover:bg-white transition-all whitespace-nowrap flex-shrink-0"
+                        onClick={handleExecDelegate}
+                        disabled={execBusy}
+                    >
+                        让心栈先执行 →
+                    </button>
+                </div>
+            )}
+
+            {/* 4. Auto Execution Block（已预执行待验收 / 待批准 / 执行中 / 转人工）：点击可查看执行进展与内容 */}
+            {autoExec && !completed && !execIgnored && execState && execState !== 'done' && (
+                <div
+                    className="mt-3 rounded-2xl px-3.5 py-2.5 border border-dashed border-[#c7d2fe] bg-[#eef2ff]/40 hover:bg-[#eef2ff]/90 cursor-pointer transition-colors"
+                    onClick={(e) => { e.stopPropagation(); setShowExecDetail(true); }}
+                    title="点击查看执行进展与内容"
+                >
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <Bot className="w-4 h-4 text-[#384877] flex-shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800 truncate">
+                                智能执行 · {autoExec.label}
+                            </span>
+                            <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                                {execState === 'ready' && "已预执行，待验收"}
+                                {execState === 'confirm' && "待批准"}
+                                {execState === 'running' && "执行中…"}
+                                {execState === 'manual' && "已转人工"}
+                            </span>
+                        </div>
+                        {autoExec.trust != null && (
+                            <span className="text-[11px] text-slate-400 whitespace-nowrap">
+                                信任度 {autoExec.trust}% · {autoExec.trustLevel}
+                            </span>
+                        )}
+                    </div>
+
+                    {autoExec.previewTitle && (
+                        <p className="mt-1.5 text-[11px] text-slate-500 truncate leading-relaxed">
+                            {autoExec.previewTitle}
+                            {Array.isArray(autoExec.previewBody) && autoExec.previewBody.length > 0 && (() => {
+                                // previewBody 元素可能是 AI 生成的对象，归一化成文本再展示
+                                const first = autoExec.previewBody[0];
+                                const text = typeof first === "string"
+                                    ? first
+                                    : [first?.title, first?.detail || first?.text || first?.content].filter(Boolean).join("：");
+                                return text ? <span className="text-slate-400"> · {text}</span> : null;
+                            })()}
+                        </p>
+                    )}
+                    <p className="mt-1 text-right text-[11px] text-[#384877]/60">点击查看执行进展与内容 ›</p>
+
+                    <div className="mt-2 flex items-center justify-end gap-3">
+                        {execState === 'ready' && (
+                            <>
+                                <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}
+                                >
+                                    调整
+                                </button>
+                                <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={(e) => { e.stopPropagation(); setExecIgnored(true); }}
+                                >
+                                    我来接管
+                                </button>
+                                <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={handleExecFeedback}
+                                    disabled={execBusy}
+                                >
+                                    有问题
+                                </button>
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-[11px] font-medium text-white bg-[#384877] hover:bg-[#2d3a60] px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
+                                    onClick={handleExecAccept}
+                                    disabled={execBusy}
+                                >
+                                    {execBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                    验收，没问题
+                                </button>
+                            </>
+                        )}
+                        {execState === 'confirm' && (
+                            <button
+                                type="button"
+                                className="flex items-center gap-1 text-[11px] font-medium text-white bg-[#384877] hover:bg-[#2d3a60] px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
+                                onClick={handleExecRun}
+                                disabled={execBusy}
+                            >
+                                {execBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                批准执行
+                            </button>
+                        )}
+                        {execState === 'manual' && (
+                            <>
+                                <button
+                                    type="button"
+                                    className="text-[11px] font-medium text-slate-500 hover:text-slate-800 px-2 py-1 rounded-lg hover:bg-white/70 transition-all"
+                                    onClick={(e) => { e.stopPropagation(); setExecIgnored(true); }}
+                                >
+                                    我来接管
+                                </button>
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1 text-[11px] font-medium text-white bg-[#384877] hover:bg-[#2d3a60] px-3 py-1.5 rounded-lg transition-all disabled:opacity-60"
+                                    onClick={handleExecRun}
+                                    disabled={execBusy}
+                                >
+                                    {execBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                                    重试
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Subtasks Section — 默认直接在卡片上预览前 3 条，其余展开查看 */}
+            {subtasks.length > 0 && (
+              <div className="border-t border-stone-100 mt-3">
+                <div className="pt-3 space-y-2">
+                  {(expanded ? subtasks : subtasks.slice(0, 3)).map((subtask) => {
+                    const subSelected = isSelectionMode && Array.isArray(selectedTaskIds) && selectedTaskIds.includes(subtask.id);
+                    return (
+                    <div
+                      key={subtask.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (isSelectionMode) {
+                          onToggleSelection && onToggleSelection(subtask.id);
+                        } else {
+                          onToggleSubtask && onToggleSubtask(subtask);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
+                        subtask.status === 'completed' && !isSelectionMode && "opacity-60",
+                        subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
+                        isSelectionMode
+                          ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
+                          : (subtask.status === 'completed'
+                              ? "bg-green-500 border-green-500 text-white"
+                              : "border-stone-300 bg-white")
+                      )}>
+                        {isSelectionMode
+                          ? (subSelected && <Check className="w-3 h-3" />)
+                          : (subtask.status === 'completed' && <Check className="w-3 h-3" />)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className={cn(
+                          "text-sm block",
+                          subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
+                        )}>
+                          {subtask.title}
+                        </span>
+                        <SubtaskContextBadges subtask={subtask} />
+                      </div>
+                    </div>
+                    );
+                  })}
+                  {subtasks.length > 3 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpanded(!expanded);
+                      }}
+                      className="w-full flex items-center justify-center gap-1 text-xs text-stone-500 hover:text-stone-700 px-2 py-1 rounded-md hover:bg-stone-50 transition-colors"
+                    >
+                      <span>
+                        {expanded ? '收起子约定' : `展开全部 ${subtasks.length} 个子约定`}
+                        <span className="ml-1 text-stone-400">
+                          ({subtasks.filter(s => s.status === 'completed').length}/{subtasks.length})
+                        </span>
+                      </span>
+                      <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
+                    </button>
+                  )}
+                  {subtasks.length <= 3 && (
+                    <div className="text-xs text-stone-400 px-2 py-1">
+                      子约定 {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length}
+                    </div>
+                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit && onEdit();
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                  >
+                    查看详情
+                  </button>
+                </div>
+              </div>
+            )}
+        </div>
+
+        <div onClick={(e) => e.stopPropagation()}>
+          <AttachToParentDialog
+            task={task}
+            open={showAttachDialog}
+            onClose={() => setShowAttachDialog(false)}
+          />
+        </div>
+
+        {/* 自动执行详情：点击「智能执行」区块打开，查看执行进展与执行内容 */}
+        {autoExec?.executionId && (
+          <AutomationDetailDialog
+            execution={{ id: autoExec.executionId }}
+            open={showExecDetail}
+            onOpenChange={setShowExecDetail}
+          />
+        )}
+    </div>
+  );
+}

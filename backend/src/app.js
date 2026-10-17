@@ -1,0 +1,115 @@
+import path from "node:path";
+import cors from "cors";
+import express from "express";
+import "express-async-errors";
+import helmet from "helmet";
+import morgan from "morgan";
+import { env } from "./config/env.js";
+import { healthRouter } from "./routes/health.js";
+import { authRouter } from "./routes/auth.js";
+import { usersRouter } from "./routes/users.js";
+import { creditsRouter } from "./routes/credits.js";
+import { notificationsRouter } from "./routes/notifications.js";
+import { notificationRulesRouter } from "./routes/notificationRules.js";
+import { tasksRouter } from "./routes/tasks.js";
+import { checkinsRouter } from "./routes/checkins.js";
+import { notesRouter } from "./routes/notes.js";
+import { userPreferencesRouter } from "./routes/userPreferences.js";
+import { savedLocationsRouter } from "./routes/savedLocations.js";
+import { relationshipsRouter } from "./routes/relationships.js";
+import { userBehaviorsRouter } from "./routes/userBehaviors.js";
+import { memoryRecordsRouter } from "./routes/memoryRecords.js";
+import { knowledgeBasesRouter } from "./routes/knowledgeBases.js";
+import { externalFeedsRouter } from "./routes/externalFeeds.js";
+import { taskExecutionsRouter } from "./routes/taskExecutions.js";
+import { dailyPlansRouter } from "./routes/dailyPlans.js";
+import { weeklyPlansRouter } from "./routes/weeklyPlans.js";
+import { monthlyPlansRouter } from "./routes/monthlyPlans.js";
+import { commentsRouter } from "./routes/comments.js";
+import { noteCommentsRouter } from "./routes/noteComments.js";
+import { vaultRouter } from "./routes/vault.js";
+import { publicShareRouter } from "./routes/publicShare.js";
+import { publicConfigRouter } from "./routes/publicConfig.js";
+import { taskCompletionsRouter } from "./routes/taskCompletions.js";
+import { taskChangeLogsRouter } from "./routes/taskChangeLogs.js";
+import { uploadsRouter } from "./routes/uploads.js";
+import { functionsRouter } from "./routes/functions.js";
+import { weatherRouter } from "./routes/weather.js";
+import { chatRouter } from "./routes/chat.js";
+import { handleWechatNotify } from "./routes/wechatNotify.js";
+
+export const app = express();
+
+// 位于 nginx 反代之后：信任转发头，req.protocol 才能拿到 X-Forwarded-Proto（https）
+app.set("trust proxy", 1);
+
+app.use(helmet());
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = env.CORS_ORIGIN.split(",").map((item) => item.trim());
+    if (!origin || allowedOrigins.includes(origin) || origin.startsWith("https://servicewechat.com")) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true
+}));
+app.use(morgan("dev"));
+app.post("/api/wechat/notify", express.raw({ type: "application/json" }), handleWechatNotify);
+app.use(express.json({ limit: "2mb" }));
+
+app.get("/", (_req, res) => {
+  res.json({
+    service: "soulsentry-backend",
+    docs: "/api/health"
+  });
+});
+
+app.use("/api/health", healthRouter);
+app.use("/api/auth", authRouter);
+app.use("/api/users", usersRouter);
+app.use("/api/credits", creditsRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/notification-rules", notificationRulesRouter);
+app.use("/api/tasks", tasksRouter);
+app.use("/api/tasks", checkinsRouter);
+app.use("/api/notes", notesRouter);
+app.use("/api/user-preferences", userPreferencesRouter);
+app.use("/api/saved-locations", savedLocationsRouter);
+app.use("/api/relationships", relationshipsRouter);
+app.use("/api/user-behaviors", userBehaviorsRouter);
+app.use("/api/memory-records", memoryRecordsRouter);
+app.use("/api/knowledge-bases", knowledgeBasesRouter);
+app.use("/api/external-feeds", externalFeedsRouter);
+app.use("/api/task-executions", taskExecutionsRouter);
+app.use("/api/daily-plans", dailyPlansRouter);
+app.use("/api/weekly-plans", weeklyPlansRouter);
+app.use("/api/monthly-plans", monthlyPlansRouter);
+app.use("/api/comments", commentsRouter);
+app.use("/api/note-comments", noteCommentsRouter);
+app.use("/api/vault", vaultRouter);
+app.use("/api/public/share", publicShareRouter);
+app.use("/api/public/config", publicConfigRouter);
+app.use("/api/task-completions", taskCompletionsRouter);
+app.use("/api/task-change-logs", taskChangeLogsRouter);
+app.use("/api/uploads", uploadsRouter);
+app.use("/api/functions", functionsRouter);
+app.use("/api/weather", weatherRouter);
+app.use("/api/chat", chatRouter);
+
+// 上传的图片会被小程序/网页跨域嵌入展示：helmet 默认 CORP same-origin 会挡住 <Image> 加载，
+// 对 /uploads 静态资源显式放宽为 cross-origin
+app.use("/uploads", (req, res, next) => {
+  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+  next();
+});
+app.use("/uploads", express.static(path.resolve(process.cwd(), env.UPLOAD_DIR)));
+
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res.status(500).json({
+    error: "INTERNAL_SERVER_ERROR",
+    message: "服务端发生未处理异常"
+  });
+});

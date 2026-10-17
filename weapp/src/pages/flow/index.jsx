@@ -1,0 +1,5291 @@
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from "react";
+import Taro, { useDidShow, useDidHide } from "@tarojs/taro";
+import { View, Text, ScrollView, Input, Textarea, Image, Canvas } from "@tarojs/components";
+import { get, post, patch } from "@/utils/api";
+import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
+import { useShare } from "@/hooks/useShare";
+import { getToken, isDemoMode } from "@/utils/auth";
+import { ensureDemoSession } from "@/utils/demo";
+import { isRecurring, nextOccurrenceOf, recurringBadgeText } from "@/utils/recurrence";
+import RichText from "@/components/RichText";
+import FlowChatSheet from "@/components/FlowChatSheet";
+
+const THEME = {
+  primary: "#384877",
+  primaryLight: "#4a5d8f",
+  primaryFaint: "#d8dde9",
+  primaryMist: "#eef0f5",
+  water: "#5b82a0",
+  waterLight: "#7a9eb8",
+  waterFaint: "#d4e4f0",
+  waterMist: "#e8f0f5",
+  ink: "#1c1c1e",
+  inkSecondary: "#3a3a3c",
+  inkTertiary: "#63666e",
+  inkQuaternary: "#9ca0a8",
+  paper: "#fafbfb",
+  card: "#ffffff",
+  border: "#e8ecef",
+  done: "#a8d5a2",
+  doneBg: "#e8f5e6",
+  heart: "#e8a5a5",
+  heartDeep: "#c97b8a",
+  heartBg: "#fce8ec",
+  gold: "#d8b98a",
+  goldBg: "#f8f1e4"
+};
+
+const CATEGORY_LABEL = {
+  work: "工作",
+  personal: "个人",
+  health: "健康",
+  study: "学习",
+  family: "家庭",
+  shopping: "购物",
+  finance: "财务",
+  other: "其他"
+};
+
+const SPLIT_PRIORITY_LABEL = { urgent: "紧急", high: "高", medium: "中", low: "低" };
+
+const LOCATION_TYPE_LABEL = {
+  office: "工作",
+  home: "生活",
+  gym: "健康",
+  school: "学习",
+  shopping: "购物",
+  hospital: "健康",
+  restaurant: "生活",
+  other: "相关"
+};
+
+// haversine 距离（米）：上报速度/停留推断用
+function geoDistanceM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (v) => v * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const x = Math.sin(dLat / 2) ** 2
+    + Math.sin(dLon / 2) ** 2 * Math.cos(toRad(lat1)) * Math.cos(toRad(lat2));
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function toChinaYmd(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  const str = d.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
+  return str.replace(/\//g, "-");
+}
+
+function isToday(iso) {
+  return iso ? toChinaYmd(iso) === toChinaYmd(new Date()) : false;
+}
+
+function isDone(t) {
+  return ["completed", "done", "archived"].includes(t?.status);
+}
+
+function taskTime(t) {
+  // 重复约定以「下一次提醒时间」参与分组/排序，保证每天/每周都出现在今日到期里
+  if (isRecurring(t)) {
+    const next = nextOccurrenceOf(t);
+    if (next) return next.toISOString();
+  }
+  return t?.due_at || t?.end_time || t?.reminder_time;
+}
+
+function formatTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function getHour(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d.getHours();
+}
+
+function isOverdue(t) {
+  // 重复约定永远不算逾期，显示距下次提醒倒计时
+  if (isRecurring(t)) return false;
+  const tt = taskTime(t);
+  return tt && !isDone(t) && new Date(tt) < new Date();
+}
+
+// 到期时间徽标：重复约定显示「规则 · 倒计时」，普通约定显示时间或已逾期
+function dueBadgeText(t) {
+  if (isRecurring(t)) {
+    return recurringBadgeText(t) || "重复提醒";
+  }
+  return isOverdue(t) ? "已逾期" : formatTime(taskTime(t));
+}
+
+function chinaIso(ymd, time) {
+  // 后端 zod datetime() 默认不接受 +08:00 时区偏移，统一转 UTC ISO
+  const d = new Date(`${ymd}T${time}:00`);
+  if (isNaN(d.getTime())) return `${ymd}T${time}:00Z`;
+  return d.toISOString();
+}
+
+function tomorrowAt(time) {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return chinaIso(toChinaYmd(d), time);
+}
+
+function daysAgoYmd(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return toChinaYmd(d);
+}
+
+function isWithinYmdRange(iso, startYmd, endYmd) {
+  const ymd = toChinaYmd(iso);
+  return ymd >= startYmd && ymd <= endYmd;
+}
+
+function chinaHour(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.getHours();
+}
+
+function completionTime(t) {
+  return t?.completed_at || t?.updated_date || null;
+}
+
+function greetByHour() {
+  const h = new Date().getHours();
+  if (h < 9) return "早安";
+  if (h < 12) return "上午好";
+  if (h < 14) return "中午好";
+  if (h < 18) return "下午好";
+  return "晚上好";
+}
+
+function extractUrl(text) {
+  const m = String(text || "").match(/https?:\/\/\S+/i);
+  return m ? m[0] : null;
+}
+
+function AiBadge({ text = "AI 生成" }) {
+  return (
+    <View style={{ display: "flex", alignItems: "center" }}>
+      <View
+        style={{
+          padding: "2rpx 10rpx",
+          borderRadius: "8rpx",
+          background: "rgba(91,130,160,0.10)",
+          border: "1rpx solid rgba(91,130,160,0.20)"
+        }}
+      >
+        <Text style={{ fontSize: "18rpx", color: THEME.water, fontWeight: 500 }}>{text}</Text>
+      </View>
+    </View>
+  );
+}
+
+function isHeartNote(n) {
+  const tags = Array.isArray(n.tags) ? n.tags : [];
+  const text = String(n.plain_text || n.content || "");
+  return tags.includes("情绪") || tags.includes("心签") || (text.length < 120 && !extractUrl(text));
+}
+
+// 账本签：正文通常超过 120 字，isHeartNote 识别不到，需要单独判定以触发 AI 分析（明细核对+损友式吐槽）
+function isLedgerNote(n) {
+  return n.source_type === "ledger"
+    || Array.isArray(n.metadata?.ledger_entries)
+    || !!(n.metadata?.ai_analysis && n.metadata.ai_analysis.ledger);
+}
+
+// 账本卡以「分类」为准：只有账本签才允许渲染账本明细。
+// AI 分错（非账本签带着账本数据）时，卡片按普通心签呈现，账本明细不出现。
+function isLedgerCard(n) {
+  return n.source_type === "ledger" || n.metadata?.ai_analysis?.category === "账本";
+}
+function ledgerCardOf(n) {
+  return isLedgerCard(n) ? (n.metadata?.ai_analysis?.ledger || null) : null;
+}
+
+// 文本若由同一段内容连续重复多遍（识别模型抖动），只保留一遍
+function collapseRepeats(text) {
+  const t = String(text || "").trim();
+  if (!t) return t;
+  for (const k of [3, 2]) {
+    if (t.length % k === 0) {
+      const unit = t.slice(0, t.length / k);
+      if (unit.trim() && unit.repeat(k) === t) return unit.trim();
+    }
+  }
+  const lines = t.split("\n").map((l) => l.trim());
+  for (let c = 1; c <= Math.floor(lines.length / 2); c++) {
+    const head = lines.slice(0, c);
+    if (head.every((l) => !l)) continue;
+    let repeats = 1;
+    while (repeats * c < lines.length) {
+      const seg = lines.slice(repeats * c, (repeats + 1) * c);
+      if (seg.length < c || seg.some((l, i) => l !== head[i])) break;
+      repeats++;
+    }
+    if (repeats >= 2 && repeats * c === lines.length) return head.join("\n").trim();
+  }
+  return t;
+}
+
+function getLocationSafe() {
+  return new Promise((resolve) => {
+    Taro.getLocation({
+      type: "gcj02",
+      success: (res) => resolve({ latitude: res.latitude, longitude: res.longitude, coord_type: "gcj02" }),
+      fail: () => resolve(null)
+    });
+  });
+}
+
+const ACTIVITY_RULES = [
+  { keys: ["会", "议", "call", "zoom", "讨论", "对齐", "评审"], label: "会议" },
+  { keys: ["写", "稿", "文", "博客", "文档", "方案", "邮件"], label: "写作" },
+  { keys: ["学", "课", "书", "阅读", "练", "背单词"], label: "学习" },
+  { keys: ["运", "跑", "走", "瑜伽", "健身", "冥想"], label: "休息" },
+  { keys: ["购", "买", "菜", "快递"], label: "生活" }
+];
+
+const DEEP_KEYWORDS = ["写", "稿", "方案", "文档", "设计", "代码", "编程", "开发", "学习", "阅读", "深度", "专注", "备考", "论文", "报告", "策划"];
+const EVENT_KEYWORDS = ["会", "议", "call", "zoom", "讨论", "对齐", "评审", "约", "面", "试", "考", "飞", "机", "医", "院", "牙", "活", "动", "聚", "餐", "见", "客", "户"];
+const RELAX_KEYWORDS = ["休息", "放松", "娱乐", "短视频", "刷剧", "游戏", "睡觉", "午睡", "摸鱼", "躺", "听歌", "看电影", "追剧"];
+const HABIT_KEYWORDS = ["药", "维生素", "锻炼", "跑步", "瑜伽", "健身", "冥想", "阅读", "读书", "英语", "背单词", "早餐", "午餐", "晚餐", "喝水", "日记", "复盘", "早睡"];
+const FIXED_TIME_KEYWORDS = ["药", "维生素", "就医", "医院", "牙", "面试", "考试", "航班", "飞机", "约会", "聚餐", "课", "培训", "见面"];
+
+function titleHasAny(title, keywords) {
+  return keywords.some((k) => title.includes(k));
+}
+
+function isFixedTimeTask(t) {
+  return titleHasAny(String(t?.title || ""), FIXED_TIME_KEYWORDS);
+}
+
+function isWorkTask(t) {
+  const title = String(t?.title || "");
+  const category = String(t?.category || "");
+  return category === "work" || titleHasAny(title, ["工作", "项目", "客户", "方案", "报告", "邮件", "代码", "开发", "设计", "产品", "需求", "对齐", "评审"]);
+}
+
+function generateLocalHeartReply(text) {
+  const t = String(text || "");
+  if (/累|疲惫|困|倦|耗|乏|没精神|提不起劲/.test(t)) return "累了就歇一会儿，不用一直撑着。我会替你守着那些事，等你有力气了再动。";
+  if (/焦虑|烦|担心|紧张|压力|慌|不安|迷茫/.test(t)) return "焦虑写下来就变小了。不管发生什么，我先在这里陪你。";
+  if (/慢|放松|歇|空|静|停|躺平|摆烂|无所事事/.test(t)) return "慢下来是对的，河流不需要一直湍急。这一刻的空白也是节奏的一部分。";
+  if (/感谢|感恩|谢谢|温暖|幸福|满足|被爱/.test(t)) return "这份光亮我替你收好了。懂得感恩的心，本身就值得被温柔对待。";
+  if (/放弃|不想|没意思|做不到|太难了|无助|绝望/.test(t)) return "不想做也没关系，我们可以把它拆小一点，小到你能轻轻拿起的那一步。";
+  if (/开心|高兴|快乐|期待|兴奋|惊喜|幸运|小确幸/.test(t)) return "真好，替你记下这份开心。愿这样的时刻，像波纹一样多起来。";
+  if (/难过|伤心|哭|痛|委屈|孤独|失落|沮丧/.test(t)) return "难过的时候，允许自己待一会儿。不用急着好起来，我陪你。";
+  if (/生气|愤怒|不爽|讨厌|烦|火大|失望|不满/.test(t)) return "有情绪是正常的，它是在保护你。先深呼吸，这件事可以晚一点再处理。";
+  if (/爱|喜欢|想|念|陪伴|牵挂|珍惜|温柔/.test(t)) return "这份心意很珍贵。愿意表达柔软，本身就是一种勇敢。";
+  if (/工作|加班|项目| deadline| 截止日期|忙|赶/.test(t)) return "工作再急，也别忘了你也很重要。先喝口水，我们再一件一件来。";
+  if (/失眠|睡不着|熬夜|醒|梦/.test(t)) return " night's edges are soft. 如果睡不着，就别逼自己，闭眼躺着也是休息。";
+  if (/晨|早|起床|新的一天|开始/.test(t)) return "新的一天开始了，不用急着做得完美，先照顾好自己。";
+  if (/晚|夜|结束|下班|回家/.test(t)) return "今天到这里已经够了。剩下的，交给夜晚和你自己。";
+  if (/想清楚了|决定|选择|纠结/.test(t)) return "无论你怎么选，都是当下能做的最好决定。我支持你。";
+  return "听见了。它被好好收在这里，等你准备好再回来看。";
+}
+
+function extractHabitKey(title) {
+  const t = String(title || "");
+  for (const k of HABIT_KEYWORDS) {
+    if (t.includes(k)) return k;
+  }
+  return null;
+}
+
+function detectHabitHours(tasks) {
+  const done = tasks.filter((t) => isDone(t) && completionTime(t));
+  const counts = {};
+  done.forEach((t) => {
+    const h = chinaHour(completionTime(t));
+    if (h == null || h < 8 || h > 23) return;
+    const key = extractHabitKey(t.title) || t.category || "other";
+    counts[h] = counts[h] || {};
+    counts[h][key] = (counts[h][key] || 0) + 1;
+  });
+  const result = {};
+  Object.entries(counts).forEach(([h, map]) => {
+    const entries = Object.entries(map).sort((a, b) => b[1] - a[1]);
+    const top = entries[0];
+    if (top && top[1] >= 2) {
+      result[parseInt(h, 10)] = top[0];
+    }
+  });
+  return result;
+}
+
+function classifyHour(h, tasks, notes, habitMap) {
+  const hourTasks = tasks.filter((t) => {
+    const time = isDone(t) ? completionTime(t) : taskTime(t);
+    return getHour(time) === h;
+  });
+  const hourNotes = notes.filter((n) => getHour(n.created_date) === h);
+
+  let deepScore = 0;
+  let agreementScore = 0;
+  let relaxScore = 0;
+  let habitScore = 0;
+  let heartScore = 0;
+  let habitLabel = null;
+
+  hourTasks.forEach((t) => {
+    const title = String(t.title || "");
+    const pri = t.priority === "urgent" ? 3 : t.priority === "high" ? 2 : 1;
+
+    if (titleHasAny(title, EVENT_KEYWORDS)) {
+      agreementScore += 3 + pri * 0.3;
+    }
+    if (titleHasAny(title, RELAX_KEYWORDS)) {
+      relaxScore += 2;
+    }
+    if (titleHasAny(title, DEEP_KEYWORDS) || ["work", "study"].includes(t.category)) {
+      deepScore += pri;
+    }
+    if (!titleHasAny(title, EVENT_KEYWORDS) && !titleHasAny(title, RELAX_KEYWORDS)) {
+      deepScore += pri * 0.3;
+    }
+  });
+
+  hourNotes.forEach((n) => {
+    const text = String(n.plain_text || n.content || "");
+    const tags = Array.isArray(n.tags) ? n.tags : [];
+    if (isHeartNote(n)) {
+      heartScore += 2.2;
+    } else if (tags.some((tag) => ["休息", "娱乐", "放松"].includes(tag)) || titleHasAny(text, RELAX_KEYWORDS)) {
+      relaxScore += 1.5;
+    }
+  });
+
+  if (habitMap[h]) {
+    habitScore += 2.5;
+    habitLabel = habitMap[h];
+  }
+
+  const scores = [
+    { type: "deep", score: deepScore, label: "深流" },
+    { type: "agreement", score: agreementScore, label: "约定" },
+    { type: "heart", score: heartScore, label: "心签" },
+    { type: "habit", score: habitScore, label: habitLabel || "习惯" },
+    { type: "relax", score: relaxScore, label: "放松" }
+  ].sort((a, b) => b.score - a.score);
+
+  const winner = scores[0];
+  if (winner.score >= 1.2) {
+    return { type: winner.type, label: winner.label, scores };
+  }
+  return { type: "neutral", label: null, scores };
+}
+
+function buildHourSegments(tasks, notes) {
+  const hours = Array.from({ length: 16 }, (_, i) => i + 8);
+  const habitMap = detectHabitHours(tasks);
+  return hours.map((h) => {
+    const segment = classifyHour(h, tasks, notes, habitMap);
+    const hourTasks = tasks.filter((t) => {
+      const time = isDone(t) ? completionTime(t) : taskTime(t);
+      return getHour(time) === h;
+    });
+    const hourNotes = notes.filter((n) => getHour(n.created_date) === h);
+    const intensity = Math.min(1, (hourTasks.length + hourNotes.length * 0.5) / 3 + (segment.type === "deep" ? 0.2 : 0));
+    return { hour: h, ...segment, intensity, taskCount: hourTasks.length };
+  });
+}
+
+function inferHourActivity(hour, tasks, notes) {
+  const hourTasks = tasks.filter((t) => {
+    const time = isDone(t) ? t.completed_at || t.updated_date : taskTime(t);
+    return getHour(time) === hour;
+  });
+  const hourNotes = notes.filter((n) => getHour(n.created_date) === hour);
+  const scores = {};
+  hourTasks.forEach((t) => {
+    const title = String(t.title || "");
+    ACTIVITY_RULES.forEach((r) => {
+      if (r.keys.some((k) => title.includes(k))) {
+        scores[r.label] = (scores[r.label] || 0) + 2;
+      }
+    });
+    if (t.category) {
+      const label = CATEGORY_LABEL[t.category] || t.category;
+      scores[label] = (scores[label] || 0) + 1;
+    }
+  });
+  hourNotes.forEach((n) => {
+    if (isHeartNote(n)) scores["心签"] = (scores["心签"] || 0) + 1;
+  });
+  const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  return entries.length > 0 ? entries[0][0] : null;
+}
+
+// ===== 河流曲线 =====
+function buildFlowLine(tasks, notes) {
+  const segments = buildHourSegments(tasks, notes);
+
+  // 基础强度：结合约定数量与分段类型
+  const values = segments.map((s) => {
+    let base = s.taskCount * 0.35 + s.intensity * 0.4;
+    if (s.type === "deep") base += 0.35;
+    if (s.type === "agreement") base += 0.25;
+    if (s.type === "habit") base += 0.2;
+    if (s.type === "heart") base += 0.15;
+    if (s.type === "relax") base += 0.05;
+    return Math.min(1, base);
+  });
+  const maxValue = Math.max(...values, 0.3);
+
+  const points = segments.map((s, i) => ({
+    hour: s.hour,
+    value: values[i] / maxValue,
+    type: s.type,
+    label: s.label,
+    rawValue: values[i],
+    taskCount: s.taskCount
+  }));
+
+  // 深流区：连续 deep 或高强度工作段
+  let bestStart = null;
+  let bestLen = 0;
+  let curStart = null;
+  let curLen = 0;
+  points.forEach((p, i) => {
+    const isDeep = p.type === "deep" || (p.type === "neutral" && p.rawValue >= 0.7);
+    if (isDeep) {
+      if (curStart == null) {
+        curStart = i;
+        curLen = 1;
+      } else {
+        curLen += 1;
+      }
+    } else {
+      if (curLen > bestLen) {
+        bestLen = curLen;
+        bestStart = curStart;
+      }
+      curStart = null;
+      curLen = 0;
+    }
+  });
+  if (curLen > bestLen) {
+    bestLen = curLen;
+    bestStart = curStart;
+  }
+  const deep = bestLen >= 2 && bestStart != null ? { start: points[bestStart].hour, end: points[bestStart + bestLen - 1].hour } : null;
+
+  const markers = points
+    .filter((p) => p.type !== "neutral" && p.label)
+    .map((p) => ({ type: p.type, label: p.label, hour: p.hour }));
+
+  return {
+    points,
+    markers,
+    deep,
+    segments,
+    doneToday: tasks.filter((t) => isDone(t) && isToday(completionTime(t))).length
+  };
+}
+
+function findHistoricalDeepSlot(tasks) {
+  const completed = tasks.filter((t) => isDone(t) && completionTime(t));
+  const today = toChinaYmd(new Date());
+  const hourCounts = {};
+  completed
+    .filter((t) => isWithinYmdRange(completionTime(t), daysAgoYmd(13), today))
+    .forEach((t) => {
+      const h = chinaHour(completionTime(t));
+      if (h != null && h >= 8 && h <= 22) hourCounts[h] = (hourCounts[h] || 0) + 1;
+    });
+
+  const sorted = Object.entries(hourCounts).sort((a, b) => b[1] - a[1]);
+  if (!sorted.length || sorted[0][1] < 2) return null;
+
+  const center = parseInt(sorted[0][0], 10);
+  // 找中心小时前后连续的高产时段
+  let start = center;
+  let end = center;
+  while (start > 8 && (hourCounts[start - 1] || 0) >= 1) start -= 1;
+  while (end < 22 && (hourCounts[end + 1] || 0) >= 1) end += 1;
+  return { start, end, count: sorted[0][1] };
+}
+
+function hasEventAtHour(tasks, hour, ymd) {
+  return tasks.some((t) => {
+    if (isDone(t)) return false;
+    const tt = taskTime(t);
+    if (!tt) return false;
+    return toChinaYmd(tt) === ymd && getHour(tt) === hour && titleHasAny(String(t.title || ""), EVENT_KEYWORDS);
+  });
+}
+
+function buildRiverInsight(river, tasks, notes) {
+  const nowHour = new Date().getHours();
+  const now = new Date();
+  const segments = river?.segments || [];
+  const currentSegment = segments.find((s) => s.hour === nowHour);
+  const upcoming = segments.filter((s) => s.hour > nowHour);
+  const nextSegment = upcoming[0] || null;
+
+  // 下一个真实约定（按时间排序）
+  const nextScheduledTask = tasks
+    .filter((t) => !isDone(t) && isToday(taskTime(t)) && getHour(taskTime(t)) > nowHour)
+    .sort((a, b) => getHour(taskTime(a)) - getHour(taskTime(b)))[0];
+  const nextEventHour = nextScheduledTask ? getHour(taskTime(nextScheduledTask)) : null;
+
+  const topPending = tasks.filter((t) => !isDone(t)).sort((a, b) => dueWeight(b) - dueWeight(a))[0];
+  const histSlot = findHistoricalDeepSlot(tasks);
+  const officeHours = detectOfficeHours(tasks);
+
+  // 1. 即将到来的固定时间约定：只能准备，不能移动
+  if (nextEventHour != null && nextEventHour - nowHour <= 1 && isFixedTimeTask(nextScheduledTask)) {
+    const title = nextScheduledTask.title;
+    const mins = Math.max(5, (nextEventHour - nowHour) * 60);
+    const prep = titleHasAny(title, ["药", "维生素"])
+      ? "记得按时服用，这件事不能推迟。"
+      : titleHasAny(title, ["就医", "医院", "牙"])
+        ? "提前准备好资料，路上留足时间。"
+        : titleHasAny(title, ["面试", "考试"])
+          ? "现在适合做最后的浏览和准备。"
+          : "把这件事的材料再过一遍，时间到了我提醒你。";
+    return {
+      text: `${mins <= 30 ? "再过" : "约"}${mins}分钟有「${title}」。${prep}`,
+      actionText: "查看约定",
+      action: "go-task",
+      payload: { id: nextScheduledTask.id },
+      smartReason: "fixed_time"
+    };
+  }
+
+  // 2. 即将到来的可调整约定：建议在此前推进一件事
+  if (nextEventHour != null && nextEventHour - nowHour <= 1) {
+    const title = nextScheduledTask.title;
+    const mins = (nextEventHour - nowHour) * 60;
+    return {
+      text: `${mins <= 30 ? "再过" : "约"}${mins}分钟有「${title}」。现在不适合开新任务，把这件事的材料再过一遍就好。`,
+      actionText: "查看约定",
+      action: "go-task",
+      payload: { id: nextScheduledTask.id },
+      smartReason: "upcoming_agreement"
+    };
+  }
+
+  // 3. 当前习惯时间（且多为固定时间）：提醒去做，不打扰
+  if (currentSegment?.type === "habit") {
+    const habitTask = tasks.find((t) => !isDone(t) && isToday(taskTime(t)) && getHour(taskTime(t)) === nowHour && isFixedTimeTask(t));
+    if (habitTask) {
+      return {
+        text: `现在是${nowHour}:00，该做「${habitTask.title}」了。这是你的身体会记住的时间，我帮你守着。`,
+        actionText: "去完成",
+        action: "go-task",
+        payload: { id: habitTask.id },
+        smartReason: "habit_now"
+      };
+    }
+  }
+
+  // 4. 当前深流时段：推荐高优先级/专注型任务
+  if (river.deep && nowHour >= river.deep.start && nowHour <= river.deep.end) {
+    const candidates = tasks.filter((t) => !isDone(t));
+    const top = pickSmartTask(candidates, { nowHour, currentSegment, officeHours, mode: "deep" });
+    return {
+      text: `现在是你今天的深流时段。${top ? `「${top.title}」` : "那件最重要的事"}放在此刻做，阻力会小很多。`,
+      actionText: top ? "开始这件事" : "选一件开始",
+      action: top ? "go-task" : "pick",
+      payload: top ? { id: top.id } : null,
+      smartReason: "deep_now"
+    };
+  }
+
+  // 5. 当前办公习惯时段：推荐工作相关高优先级约定
+  if (officeHours && nowHour >= officeHours.start && nowHour <= officeHours.end) {
+    const candidates = tasks.filter((t) => !isDone(t));
+    const top = pickSmartTask(candidates, { nowHour, currentSegment, officeHours, mode: "work" });
+    if (top && isWorkTask(top)) {
+      return {
+        text: `这个时段你通常在工作。把「${top.title}」放在此刻推进，会顺着你的节奏走。`,
+        actionText: "开始这件事",
+        action: "go-task",
+        payload: { id: top.id },
+        smartReason: "office_hours"
+      };
+    }
+  }
+
+  // 6. 即将到来的习惯
+  const upcomingHabit = upcoming.find((s) => s.type === "habit" && s.hour - nowHour <= 1);
+  if (upcomingHabit) {
+    return {
+      text: `再过一会儿就是${upcomingHabit.hour}:00的「${upcomingHabit.label}」时间。我会提前帮你空出这个时段。`,
+      actionText: "知道了",
+      action: "note",
+      smartReason: "upcoming_habit"
+    };
+  }
+
+  // 7. 当前有放松/心签记录
+  if (currentSegment?.type === "relax" || currentSegment?.type === "heart") {
+    const top = tasks.filter((t) => !isDone(t)).sort((a, b) => dueWeight(b) - dueWeight(a))[0];
+    return {
+      text: "河流平缓，适合休息。想动时我帮你挑一件最小的事。",
+      actionText: top ? "挑一件最小的事" : "记一条",
+      action: top ? "go-task" : "note",
+      payload: top ? { id: top.id } : null,
+      smartReason: "relax_now"
+    };
+  }
+
+  // 8. 下一个时段是约定，建议在此之前完成一件事
+  if (nextSegment?.type === "agreement" && nextEventHour != null) {
+    const slotHours = nextEventHour - nowHour - 1;
+    const candidates = tasks.filter((t) => !isDone(t));
+    const top = pickSmartTask(candidates, { nowHour, currentSegment, officeHours, mode: "before_event" });
+    if (slotHours >= 1 && top) {
+      return {
+        text: `在${nextEventHour}:00的「${nextSegment.label || "约定"}」之前，你有约${slotHours}小时空档。先把「${top.title}」推进一点。`,
+        actionText: "现在推进",
+        action: "go-task",
+        payload: { id: top.id },
+        smartReason: "before_agreement"
+      };
+    }
+  }
+
+  // 9. 上午黄金时段
+  if (nowHour < 10) {
+    const candidates = tasks.filter((t) => !isDone(t));
+    const top = pickSmartTask(candidates, { nowHour, currentSegment, officeHours, mode: "morning" });
+    return {
+      text: "上午是大多数人最容易进入深流的时间。先选一件重要的事开始，我会替你守着。",
+      actionText: top ? "开始这件事" : "选一件开始",
+      action: top ? "go-task" : "pick",
+      payload: top ? { id: top.id } : null,
+      smartReason: "morning"
+    };
+  }
+
+  // 10. 历史深流规律 + 把重要任务移过去
+  if (histSlot && topPending) {
+    const tomorrowYmd = daysAgoYmd(-1);
+    const hasConflict = hasEventAtHour(tasks, histSlot.start, tomorrowYmd);
+    if (!hasConflict) {
+      const startLabel = `${histSlot.start}:00`;
+      const endLabel = `${histSlot.end + 1}:00`;
+      return {
+        text: `你最近 ${histSlot.count} 次深流都发生在 ${startLabel}–${endLabel}。明天上午目前没有冲突——把「${topPending.title}」放进这个时段，会更容易顺水推舟。`,
+        actionText: `把「${topPending.title.slice(0, 10)}」移过去`,
+        action: "move-to-slot",
+        payload: { hour: histSlot.start, taskId: topPending.id },
+        smartReason: "historical_deep"
+      };
+    }
+  }
+
+  // 11. 有已完成，继续顺水推
+  if (river.doneToday > 0) {
+    const top = tasks.filter((t) => !isDone(t)).sort((a, b) => dueWeight(b) - dueWeight(a))[0];
+    return {
+      text: `今天已完成 ${river.doneToday} 件事，${top ? `再顺水推一件「${top.title}」就好。` : "再顺水推一件就好。"}`,
+      actionText: top ? "现在推进" : "记一条",
+      action: top ? "go-task" : "note",
+      payload: top ? { id: top.id } : null,
+      smartReason: "keep_flow"
+    };
+  }
+
+  return {
+    text: "今天还没有波纹。记录或完成一件小事，它会自己展开。",
+    actionText: "记一条",
+    action: "note",
+    smartReason: "empty"
+  };
+}
+
+// 检测用户办公习惯时段（近 14 天完成记录最多的连续时段）
+function detectOfficeHours(tasks) {
+  const completed = tasks.filter((t) => isDone(t) && completionTime(t) && isWorkTask(t));
+  if (completed.length < 3) return null;
+
+  const today = toChinaYmd(new Date());
+  const hourCounts = {};
+  completed
+    .filter((t) => isWithinYmdRange(completionTime(t), daysAgoYmd(13), today))
+    .forEach((t) => {
+      const h = chinaHour(completionTime(t));
+      if (h != null && h >= 8 && h <= 22) hourCounts[h] = (hourCounts[h] || 0) + 1;
+    });
+
+  const sorted = Object.entries(hourCounts).sort((a, b) => b[1] - a[1]);
+  if (!sorted.length || sorted[0][1] < 2) return null;
+
+  const center = parseInt(sorted[0][0], 10);
+  let start = center;
+  let end = center;
+  while (start > 8 && (hourCounts[start - 1] || 0) >= 1) start -= 1;
+  while (end < 22 && (hourCounts[end + 1] || 0) >= 1) end += 1;
+
+  // 至少覆盖 3 小时才认为是办公时段
+  if (end - start + 1 < 3) return null;
+  return { start, end, count: sorted[0][1] };
+}
+
+// 智能挑选当下最适合的约定
+function pickSmartTask(candidates, context) {
+  const { nowHour, currentSegment, officeHours, mode, lastDoneCategory } = context || {};
+  if (!candidates || candidates.length === 0) return null;
+
+  let scored = candidates.map((t) => {
+    let score = dueWeight(t);
+    const title = String(t.title || "");
+    const category = String(t.category || "");
+
+    // 固定时间约定在未到时间前不推荐
+    if (isFixedTimeTask(t)) score -= 50;
+
+    // 深流模式：优先高优先级、专注型、工作/学习
+    if (mode === "deep") {
+      if (["urgent", "high"].includes(t.priority)) score += 20;
+      if (titleHasAny(title, DEEP_KEYWORDS)) score += 15;
+      if (["work", "study"].includes(category)) score += 10;
+      if (titleHasAny(title, RELAX_KEYWORDS)) score -= 30;
+    }
+
+    // 工作模式：优先工作相关
+    if (mode === "work" || (officeHours && nowHour >= officeHours.start && nowHour <= officeHours.end)) {
+      if (isWorkTask(t)) score += 25;
+      if (["urgent", "high"].includes(t.priority)) score += 10;
+      if (titleHasAny(title, RELAX_KEYWORDS)) score -= 20;
+    }
+
+    // 事件前模式：优先能在短时间内推进、不太费脑的事
+    if (mode === "before_event") {
+      if (["urgent", "high"].includes(t.priority)) score += 10;
+      if (titleHasAny(title, RELAX_KEYWORDS)) score -= 20;
+      if (titleHasAny(title, DEEP_KEYWORDS)) score -= 10;
+    }
+
+    // 早晨模式：优先重要不紧急、需要专注的事
+    if (mode === "morning") {
+      if (["urgent", "high"].includes(t.priority)) score += 15;
+      if (titleHasAny(title, DEEP_KEYWORDS)) score += 10;
+    }
+
+    // 习惯性接续：上一个完成同类，状态还在
+    if (lastDoneCategory && category === lastDoneCategory) score += 8;
+
+    return { task: t, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.task || null;
+}
+
+function buildRhythm(tasks) {
+  const today = toChinaYmd(new Date());
+  const last7Start = daysAgoYmd(6);
+  const prev7Start = daysAgoYmd(13);
+  const prev7End = daysAgoYmd(7);
+
+  const completed = tasks.filter((t) => isDone(t) && completionTime(t));
+  const last7 = completed.filter((t) => isWithinYmdRange(completionTime(t), last7Start, today));
+  const prev7 = completed.filter((t) => isWithinYmdRange(completionTime(t), prev7Start, prev7End));
+
+  const last7ByDay = {};
+  for (let i = 0; i < 7; i++) {
+    last7ByDay[daysAgoYmd(i)] = 0;
+  }
+  last7.forEach((t) => {
+    const ymd = toChinaYmd(completionTime(t));
+    if (last7ByDay[ymd] != null) last7ByDay[ymd] += 1;
+  });
+  const weekDays = Object.entries(last7ByDay)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([ymd, count]) => {
+      const label = `${parseInt(ymd.split("-")[1], 10)}/${parseInt(ymd.split("-")[2], 10)}`;
+      return { ymd, label, count };
+    });
+  const completed7 = last7.length;
+  const completedPrev7 = prev7.length;
+  const diff = completed7 - completedPrev7;
+  const restDays = weekDays.filter((d) => d.count === 0).length;
+
+  let streakDays = 0;
+  for (let i = 0; i < 14; i++) {
+    const ymd = daysAgoYmd(i);
+    if (last7ByDay[ymd] != null ? last7ByDay[ymd] > 0 : completed.some((t) => toChinaYmd(completionTime(t)) === ymd)) {
+      streakDays += 1;
+    } else {
+      break;
+    }
+  }
+
+  const hourCounts = {};
+  completed
+    .filter((t) => isWithinYmdRange(completionTime(t), daysAgoYmd(13), today))
+    .forEach((t) => {
+      const h = chinaHour(completionTime(t));
+      if (h != null) hourCounts[h] = (hourCounts[h] || 0) + 1;
+    });
+  const sortedHours = Object.entries(hourCounts).sort((a, b) => b[1] - a[1]);
+  const deepHour = sortedHours.length > 0 && sortedHours[0][1] >= 2 ? parseInt(sortedHours[0][0], 10) : null;
+
+  const lastWeekHour = {};
+  const prevWeekHour = {};
+  completed.forEach((t) => {
+    const ymd = toChinaYmd(completionTime(t));
+    const h = chinaHour(completionTime(t));
+    if (h == null) return;
+    if (isWithinYmdRange(completionTime(t), last7Start, today)) lastWeekHour[h] = (lastWeekHour[h] || 0) + 1;
+    else if (isWithinYmdRange(completionTime(t), prev7Start, prev7End)) prevWeekHour[h] = (prevWeekHour[h] || 0) + 1;
+  });
+  const deepPersisted = deepHour != null && (lastWeekHour[deepHour] || 0) >= 2 && (prevWeekHour[deepHour] || 0) >= 2;
+
+  let text = "";
+  let actionText = "";
+  let action = "";
+  let payload = null;
+
+  if (deepPersisted) {
+    text = `连续两周，${deepHour}:00–${deepHour + 1}:00 都是你最有节奏的时段。这不是偶然，是你的身体会记住的时间。`;
+    actionText = "把一件事放进这个时段";
+    action = "move-to-slot";
+    payload = { hour: deepHour };
+  } else if (deepHour != null && streakDays >= 2) {
+    text = `你这周 ${deepHour}:00–${deepHour + 1}:00 的能量最稳，${streakDays} 天都在这个时段有行动。把重要的事放进去，会更容易顺水推舟。`;
+    actionText = "保留这个时段";
+    action = "move-to-slot";
+    payload = { hour: deepHour };
+  } else if (completed7 === 0) {
+    text = "这周还没有新的波纹。没关系，河流也需要喘息。等你想动的时候，我会先帮你挑一件最小的事。";
+    actionText = "从最小一步开始";
+    action = "create-small";
+  } else if (restDays >= 3) {
+    text = `这周你有 ${restDays} 天没有行动。空白不是退步，是节奏的一部分。我们可以一起把下一件事拆得小一点。`;
+    actionText = "拆小一件事";
+    action = "split-next";
+  } else {
+    const diffText = diff > 0 ? `多 ${diff}` : diff < 0 ? `少 ${Math.abs(diff)}` : "持平";
+    text = `这周已完成 ${completed7} 件事，比上周${diffText}。节奏比连续更重要。`;
+    actionText = "看看本周河流";
+    action = "view-tasks";
+  }
+
+  return { text, actionText, action, payload, weekDays, completed7, completedPrev7, streakDays, deepHour, deepPersisted };
+}
+
+function dueWeight(t) {
+  let w = 0;
+  if (isOverdue(t)) w += 100;
+  if (t.priority === "urgent") w += 50;
+  else if (t.priority === "high") w += 30;
+  const tt = taskTime(t);
+  if (tt) {
+    const nowHour = new Date().getHours();
+    w += Math.max(0, 20 - Math.abs(new Date(tt).getHours() - nowHour));
+  }
+  return w;
+}
+
+function isTaskVisible(t) {
+  return t && !isDone(t) && t.status !== "cancelled" && !t.completed_at;
+}
+
+function buildContextCards(sentinel, assoc, tasks) {
+  const cards = [];
+
+  // 1. 地理情境感知
+  if (sentinel?.geo_context) {
+    const g = sentinel.geo_context;
+    const visible = (g.tasks || []).filter(isTaskVisible);
+    if (visible.length > 0) {
+      cards.push({ type: "geo", data: g, tasks: visible });
+    }
+  }
+
+  // 2. 遗忘拯救
+  if (sentinel?.forgetting_rescue?.primary) {
+    cards.push({ type: "forget", data: sentinel.forgetting_rescue });
+  }
+
+  // 3. 序贯推荐
+  if (assoc?.sequential_recommendation) {
+    const s = assoc.sequential_recommendation;
+    const suggestions = (s.suggestions || []).filter((su) => (su.tasks || []).some(isTaskVisible));
+    if (suggestions.length > 0) {
+      cards.push({ type: "sequential", data: s, suggestions });
+    }
+  }
+
+  // 4. 地点情境推荐
+  if (assoc?.location_pattern) {
+    const l = assoc.location_pattern;
+    const suggested = (l.suggested_tasks || []).filter(isTaskVisible);
+    if (suggested.length > 0 || (l.top_categories || []).length > 0) {
+      cards.push({ type: "location", data: l, suggested });
+    }
+  }
+
+  return cards;
+}
+
+// ===== 折线组件 =====
+const COL_W = 44;
+const CHART_H = 160;
+
+const SEGMENT_COLORS = {
+  deep: "#ffffff",
+  agreement: "#ffd6a5",
+  heart: "#e8a5a5",
+  habit: THEME.gold,
+  relax: "#c7a8c8",
+  neutral: "rgba(255,255,255,0.45)"
+};
+
+function LineSegment({ p1, p2 }) {
+  const x1 = (p1.hour - 8) * COL_W + COL_W / 2;
+  const y1 = (1 - p1.value) * CHART_H;
+  const x2 = (p2.hour - 8) * COL_W + COL_W / 2;
+  const y2 = (1 - p2.value) * CHART_H;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
+  const color = SEGMENT_COLORS[p1.type] || SEGMENT_COLORS.neutral;
+  return (
+    <View
+      style={{
+        position: "absolute",
+        left: `${x1}rpx`,
+        top: `${y1}rpx`,
+        width: `${len}rpx`,
+        height: "3rpx",
+        background: color,
+        transform: `rotate(${angle}deg)`,
+        transformOrigin: "0 50%",
+        zIndex: 1,
+        opacity: 0.9
+      }}
+    />
+  );
+}
+
+function FlowLineChart({ points, markers, deep }) {
+  const totalW = points.length * COL_W;
+  return (
+    <View style={{ width: `${totalW}rpx`, height: `${CHART_H}rpx`, position: "relative" }}>
+      {deep && (
+        <View
+          style={{
+            position: "absolute",
+            top: "4rpx",
+            bottom: "4rpx",
+            left: `${(deep.start - 8) * COL_W}rpx`,
+            width: `${(deep.end - deep.start + 1) * COL_W}rpx`,
+            background: "rgba(255,255,255,0.12)",
+            borderRadius: "12rpx",
+            zIndex: 0
+          }}
+        />
+      )}
+      {points.map((p, i) => (i < points.length - 1 ? <LineSegment key={`seg-${i}`} p1={p} p2={points[i + 1]} /> : null))}
+      {points.map((p) => {
+        const marker = markers.find((m) => m.hour === p.hour);
+        const left = (p.hour - 8) * COL_W + COL_W / 2 - 6;
+        const top = (1 - p.value) * CHART_H - 6;
+        const color = marker ? SEGMENT_COLORS[marker.type] || SEGMENT_COLORS.neutral : SEGMENT_COLORS[p.type] || SEGMENT_COLORS.neutral;
+        return (
+          <View key={p.hour} style={{ position: "absolute", left: `${left}rpx`, top: `${top}rpx`, zIndex: 2 }}>
+            <View
+              style={{
+                width: "14rpx",
+                height: "14rpx",
+                borderRadius: "50%",
+                background: color,
+                border: `2rpx solid ${p.type === "deep" ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.35)"}`
+              }}
+            />
+            {marker?.label && marker.type !== "deep" && (
+              <Text
+                style={{
+                  position: "absolute",
+                  top: p.value > 0.7 ? "28rpx" : "-32rpx",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  fontSize: "17rpx",
+                  color: "rgba(255,255,255,0.85)",
+                  whiteSpace: "nowrap",
+                  background: "rgba(0,0,0,0.25)",
+                  padding: "2rpx 8rpx",
+                  borderRadius: "8rpx"
+                }}
+              >
+                {marker.label}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function RiverCanvas({ points, deep, heartNotes }) {
+  const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    const draw = async () => {
+      const query = Taro.createSelectorQuery();
+      query
+        .select("#riverCanvas")
+        .fields({ node: true, size: true })
+        .exec((res) => {
+          const canvas = res[0]?.node;
+          if (!canvas) return;
+          const { width, height } = res[0];
+          const dpr = Taro.getSystemInfoSync().pixelRatio;
+          canvas.width = width * dpr;
+          canvas.height = height * dpr;
+          const ctx = canvas.getContext("2d");
+          ctx.scale(dpr, dpr);
+
+          const padLeft = 28;
+          const padRight = 28;
+          const padTop = 22;
+          const padBottom = 28;
+          const chartW = width - padLeft - padRight;
+          const chartH = height - padTop - padBottom;
+
+          const getX = (hour) => padLeft + ((hour - 8) / 15) * chartW;
+          const getY = (value) => padTop + (1 - value) * chartH;
+
+          ctx.clearRect(0, 0, width, height);
+
+          // 深流区高亮
+          if (deep) {
+            const x1 = getX(deep.start);
+            const x2 = getX(deep.end + 1);
+            const y = padTop - 6;
+            const w = x2 - x1;
+            const h = chartH + 12;
+            const r = 8;
+            ctx.fillStyle = "rgba(168,197,217,0.16)";
+            ctx.beginPath();
+            ctx.moveTo(x1 + r, y);
+            ctx.lineTo(x1 + w - r, y);
+            ctx.quadraticCurveTo(x1 + w, y, x1 + w, y + r);
+            ctx.lineTo(x1 + w, y + h - r);
+            ctx.quadraticCurveTo(x1 + w, y + h, x1 + w - r, y + h);
+            ctx.lineTo(x1 + r, y + h);
+            ctx.quadraticCurveTo(x1, y + h, x1, y + h - r);
+            ctx.lineTo(x1, y + r);
+            ctx.quadraticCurveTo(x1, y, x1 + r, y);
+            ctx.closePath();
+            ctx.fill();
+          }
+
+          // 网格时间标签
+          ctx.fillStyle = "rgba(255,255,255,0.35)";
+          ctx.font = "10px sans-serif";
+          ctx.textAlign = "center";
+          [8, 12, 16, 20, 23].forEach((h) => {
+            ctx.fillText(`${h}:00`, getX(h), height - 8);
+          });
+
+          if (points.length < 2) return;
+
+          const pts = points.map((p) => ({ x: getX(p.hour), y: getY(p.value) }));
+
+          // 状态曲线（平滑）
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[i - 1] || pts[i];
+            const p1 = pts[i];
+            const p2 = pts[i + 1];
+            const p3 = pts[i + 2] || p2;
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+          }
+          ctx.strokeStyle = "#a8c5d9";
+          ctx.lineWidth = 2.5;
+          ctx.lineCap = "round";
+          ctx.stroke();
+
+          // 心签锚点
+          heartNotes.forEach((n) => {
+            const h = getHour(n.created_date);
+            if (h == null || h < 8 || h > 23) return;
+            const p = points.find((pt) => pt.hour === h);
+            if (!p) return;
+            const x = getX(h);
+            const y = getY(p.value);
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = "#e8a5a5";
+            ctx.fill();
+          });
+
+          // 低谷标记
+          points.forEach((p) => {
+            if (p.value < 0.3 && (!deep || p.hour < deep.start || p.hour > deep.end)) {
+              ctx.beginPath();
+              ctx.arc(getX(p.hour), getY(p.value), 3, 0, Math.PI * 2);
+              ctx.fillStyle = "rgba(255,255,255,0.4)";
+              ctx.fill();
+            }
+          });
+
+          // 分段锚点：深流/心签/习惯/放松/约定
+          const typeColors = {
+            deep: "#ffffff",
+            agreement: "#ffd6a5",
+            heart: "#e8a5a5",
+            habit: "#d8b98a",
+            relax: "#c7a8c8",
+            neutral: "rgba(255,255,255,0.35)"
+          };
+          const typeLabels = {
+            agreement: "约定",
+            heart: "心签",
+            habit: "习惯",
+            relax: "放松"
+          };
+          points.forEach((p) => {
+            const x = getX(p.hour);
+            const y = getY(p.value);
+            const r = p.type === "deep" ? 5 : 4;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fillStyle = typeColors[p.type] || typeColors.neutral;
+            ctx.fill();
+            if (p.type !== "neutral" && p.type !== "deep") {
+              ctx.strokeStyle = "rgba(255,255,255,0.5)";
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+            if (typeLabels[p.type]) {
+              ctx.fillStyle = "rgba(255,255,255,0.85)";
+              ctx.font = "9px sans-serif";
+              ctx.textAlign = "center";
+              const labelY = p.value > 0.75 ? y + 16 : y - 10;
+              ctx.fillText(typeLabels[p.type], x, labelY);
+            }
+          });
+
+          // 当前时刻游标
+          const now = new Date();
+          const nowH = now.getHours() + now.getMinutes() / 60;
+          if (nowH >= 8 && nowH <= 23) {
+            const x = getX(nowH);
+            const p = points.find((pt) => pt.hour === Math.round(nowH));
+            const y = p ? getY(p.value) : getY(0.5);
+            ctx.beginPath();
+            ctx.setLineDash([3, 3]);
+            ctx.moveTo(x, padTop - 4);
+            ctx.lineTo(x, height - padBottom + 4);
+            ctx.strokeStyle = "rgba(255,255,255,0.5)";
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.fillStyle = "#fff";
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "9px sans-serif";
+            ctx.textAlign = "left";
+            ctx.fillText(`现在 ${pad(now.getHours())}:${pad(now.getMinutes())}`, x + 6, y - 6);
+          }
+        });
+    };
+    draw();
+  }, [points, deep, heartNotes]);
+
+  return (
+    <View ref={wrapRef} style={{ width: "100%", height: "200rpx" }}>
+      <Canvas
+        type="2d"
+        id="riverCanvas"
+        ref={canvasRef}
+        style={{ width: "100%", height: "100%" }}
+      />
+    </View>
+  );
+}
+
+// 底部输入栏独立成 memo 组件：输入文字只重渲染本组件，
+// 不再触发整页（大量板块 + 河流 Canvas）重渲染，避免每次按键产生大量 setData 导致键盘卡顿、吞点击。
+// 注意：不绑定受控 focus 属性，也不做 key+focus 重挂载——微信基础库在 input 聚焦期间
+// 收到 setData 会强制收起键盘，任何在输入中触发重渲染的聚焦 hack 都会打断连续打字。
+// 回调经父级 ref 转发：父组件每次渲染都会刷新 ref 内容，但传给本组件的 ref 对象
+// 引用不变，memo 的 props 比较只看 placeholder/busy，守护轮询等页面级 setState 不会牵连输入栏。
+const FlowComposer = memo(function FlowComposer({ placeholder, busy, callbacksRef }) {
+  const [text, setText] = useState("");
+
+  // 语音结果填入输入框（追加到已有内容后），不自动发送，用户可手动修改
+  const fillText = useCallback((t) => {
+    const spoken = String(t || "").trim();
+    if (!spoken) return;
+    setText((prev) => {
+      const base = prev.trim();
+      return base ? `${base}，${spoken}` : spoken;
+    });
+  }, []);
+
+  const voice = useVoiceRecognition({
+    onResult: fillText,
+    onError: (err) => Taro.showToast({ title: err || "语音识别失败", icon: "none" })
+  });
+
+  // 暴露 fillText 给父组件（语音弹层等入口的结果也填入输入框）
+  useEffect(() => {
+    if (!callbacksRef.current) callbacksRef.current = {};
+    callbacksRef.current.fillText = fillText;
+  }, [callbacksRef, fillText]);
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t || busy) return;
+    setText("");
+    callbacksRef.current?.onSend?.(t);
+  };
+
+  const inputEl = (
+    <Input
+      style={{ flex: 1, fontSize: "30rpx", color: THEME.ink, height: "64rpx" }}
+      placeholder={voice.recording ? "正在聆听…松开手指即可" : placeholder}
+      value={text}
+      onInput={(e) => setText(e.detail.value)}
+      onConfirm={submit}
+    />
+  );
+
+  return (
+    <View
+      style={{
+        paddingBottom: "env(safe-area-inset-bottom)",
+        background: "rgba(250,251,251,0.92)",
+        borderTop: "1rpx solid rgba(232,236,239,0.6)",
+        flexShrink: 0
+      }}
+    >
+      {/* 录音中的悬浮提示（微信/豆包同款交互：长按说话，松手填入） */}
+      {voice.recording && (
+        <View
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: "240rpx",
+            transform: "translateX(-50%)",
+            background: "rgba(28,28,30,0.86)",
+            borderRadius: "24rpx",
+            padding: "36rpx 48rpx",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            zIndex: 1200,
+            width: "420rpx"
+          }}
+        >
+          <Text style={{ fontSize: "72rpx", marginBottom: "16rpx" }}>🎙️</Text>
+          <Text style={{ fontSize: "30rpx", color: "#fff", fontWeight: 500 }}>正在聆听…</Text>
+          <Text style={{ fontSize: "22rpx", color: "rgba(255,255,255,0.65)", marginTop: "8rpx" }}>
+            {voice.hint || "松开手指，文字会填入输入框"}
+          </Text>
+        </View>
+      )}
+      <View style={{ padding: "16rpx 28rpx 12rpx" }}>
+        <View
+          onLongPress={voice.start}
+          onTouchEnd={voice.stop}
+          onTouchCancel={voice.stop}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            background: voice.recording ? THEME.heartBg : THEME.card,
+            borderRadius: "40rpx",
+            border: `1rpx solid ${voice.recording ? THEME.heart : THEME.border}`,
+            padding: "8rpx 8rpx 8rpx 24rpx",
+            boxShadow: "0 2rpx 8rpx rgba(0,0,0,0.04)"
+          }}
+        >
+          <View
+            onClick={() => callbacksRef.current?.onAttach?.()}
+            style={{
+              width: "56rpx",
+              height: "56rpx",
+              borderRadius: "50%",
+              background: THEME.primaryMist,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              marginRight: "12rpx",
+              marginLeft: "2rpx"
+            }}
+          >
+            <Text style={{ fontSize: "40rpx", color: THEME.primary, lineHeight: "48rpx" }}>＋</Text>
+          </View>
+          {inputEl}
+          <View
+            onClick={submit}
+            style={{
+              width: "64rpx",
+              height: "64rpx",
+              borderRadius: "50%",
+              background: text.trim() ? THEME.primary : THEME.border,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+              marginLeft: "12rpx"
+            }}
+          >
+            <Text style={{ fontSize: "32rpx", color: "#fff" }}>➤</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+});
+
+export default function Flow() {
+  useShare({ title: "心栈 SoulSentry · 从容地记住每一声心动", path: "pages/flow/index" });
+  const [tasks, setTasks] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [executions, setExecutions] = useState([]);
+  const [execActingId, setExecActingId] = useState(null);
+  const [reviewExec, setReviewExec] = useState(null); // 守护记录「环节查看/确认」弹层
+  const [showExecHistory, setShowExecHistory] = useState(false); // 守护记录-历史记录折叠
+  const [showActiveMore, setShowActiveMore] = useState(false); // 守护记录-其余进行中折叠
+  const [svScrollTop, setSvScrollTop] = useState(0); // 心流 ScrollView 滚动位置恢复（关弹层时不跳回页眉）
+  const svTopRef = useRef(0);
+  const execPollRef = useRef(null);
+  const execPollTicksRef = useRef(0);
+  const [sentinel, setSentinel] = useState(null);
+  const [assoc, setAssoc] = useState(null);
+  const [heartLoadingIds, setHeartLoadingIds] = useState(new Set());
+  const [loading, setLoading] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
+  const [imageDraft, setImageDraft] = useState(null); // { imageUrl, extractedText, contentType, suggestion }
+  const [imageDraftBusy, setImageDraftBusy] = useState(false);
+  const composerCallbacksRef = useRef({}); // 底部输入栏回调的最新引用，供 memo 后的 FlowComposer 读取
+  const [showAllDue, setShowAllDue] = useState(false);
+  const [showCompletedDue, setShowCompletedDue] = useState(false);
+  const [splitSheet, setSplitSheet] = useState(null); // { task, steps, busy, creating } AI 拆小事弹层
+  const [splitNewStepText, setSplitNewStepText] = useState(""); // 拆小结果「添加一步」输入
+  const [chatVisible, setChatVisible] = useState(false); // AI 对话弹层（输入改走对话确认后生成）
+  const [chatSeed, setChatSeed] = useState(""); // 打开对话弹层时的首条用户消息
+  const [selectedDueDate, setSelectedDueDate] = useState(toChinaYmd(new Date()));
+  const [briefing, setBriefing] = useState(null);
+  const [weather, setWeather] = useState(null); // 看板天气小标注 { current, today, notice, task_advice }
+  const [refreshing, setRefreshing] = useState(false);
+  const [focusTask, setFocusTask] = useState(null);
+  const [focusSeconds, setFocusSeconds] = useState(0);
+  const focusTimerRef = useRef(null);
+  const analyzingHeartIdsRef = useRef(new Set());
+  const analyzedHeartIdsRef = useRef(new Set());
+
+  useDidShow(() => {
+    (async () => {
+      await ensureDemoSession();
+      setIsGuest(!getToken() || isDemoMode());
+      loadAll();
+    })();
+  });
+
+  useDidHide(() => {
+    if (focusTimerRef.current) {
+      clearInterval(focusTimerRef.current);
+      focusTimerRef.current = null;
+    }
+  });
+
+  useDidHide(() => {
+    // 页面隐藏时不做特殊处理
+  });
+
+  // 带超时的 analyzeHeartSign 调用，10s 未返回即降级本地兜底
+  const runHeartAnalysis = useCallback((noteId, noteData, options = {}) => {
+    const text = String(noteData?.plain_text || noteData?.content || "").slice(0, 400);
+    if (analyzingHeartIdsRef.current.has(noteId) || analyzedHeartIdsRef.current.has(noteId)) {
+      console.log("[runHeartAnalysis] skip duplicated", noteId);
+      return Promise.resolve();
+    }
+
+    analyzingHeartIdsRef.current.add(noteId);
+    setHeartLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.add(noteId);
+      return next;
+    });
+
+    const requestPromise = post(
+      "/functions/analyzeHeartSign",
+      {
+        note_id: noteId,
+        note_data: {
+          plain_text: text,
+          content: noteData.content,
+          tags: noteData.tags
+        }
+      },
+      { silent: true }
+    );
+
+    const timeoutPromise = new Promise((_, reject) => {
+      // 后端 Kimi 回应上限 12s+计费，前端至少等 20s 再放弃，避免过早打落本地兜底
+      setTimeout(() => reject(new Error("AI 回应超时，已切换本地兜底")), 20000);
+    });
+
+    return Promise.race([requestPromise, timeoutPromise])
+      .then((data) => {
+        console.log("[runHeartAnalysis] success", noteId, data?.title);
+        // 只要后端返回了 ai_analysis，就统一写进 notes 状态，避免 heartInsights 与 metadata 双数据源导致跳动/重复
+        if (data?.ai_analysis) {
+          setNotes((prev) =>
+            prev.map((n2) =>
+              n2.id === noteId
+                ? {
+                    ...n2,
+                    title: data.title || n2.title,
+                    tags: data.tags || n2.tags,
+                    source_type: data.source_type || n2.source_type,
+                    metadata: { ...n2.metadata, ai_analysis: data.ai_analysis }
+                  }
+                : n2
+            )
+          );
+        }
+        if (!options.skipReload) {
+          loadAll();
+        }
+      })
+      .catch((err) => {
+        console.error("[runHeartAnalysis] failed", noteId, err);
+        // AI 失败时给一条本地兜底回应，只写进 metadata，不再维护 heartInsights 双缓存
+        const fallbackReply = generateLocalHeartReply(text);
+        setNotes((prev) =>
+          prev.map((n2) =>
+            n2.id === noteId
+              ? {
+                  ...n2,
+                  metadata: {
+                    ...n2.metadata,
+                    ai_analysis: {
+                      ...(n2.metadata?.ai_analysis || {}),
+                      emotional_response: fallbackReply,
+                      source: "local_fallback",
+                      analyzed_at: new Date().toISOString()
+                    }
+                  }
+                }
+              : n2
+          )
+        );
+        if (err?.message?.includes("KIMI_API_KEY") || err?.message?.includes("AI 服务尚未配置")) {
+          Taro.showToast({ title: "AI 服务未配置，心签回应为本地兜底", icon: "none" });
+        }
+      })
+      .finally(() => {
+        analyzingHeartIdsRef.current.delete(noteId);
+        analyzedHeartIdsRef.current.add(noteId);
+        setHeartLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(noteId);
+          return next;
+        });
+      });
+  }, []);
+
+  useEffect(() => {
+    // 为每条尚未生成 AI 回应的心签/账本签请求 analyzeHeartSign，每次最多 5 条，避免并发过多
+    const hearts = notes
+      .filter((n) => isHeartNote(n) || isLedgerNote(n))
+      .filter((n) => {
+        const ai = n.metadata?.ai_analysis;
+        return !ai?.emotional_response && n.ai_status !== "processing" && !analyzingHeartIdsRef.current.has(n.id) && !analyzedHeartIdsRef.current.has(n.id);
+      })
+      .slice(0, 5);
+    hearts.forEach((n) => {
+      runHeartAnalysis(n.id, { plain_text: n.plain_text, content: n.content, tags: n.tags });
+    });
+  }, [notes]);
+
+  const river = useMemo(() => buildFlowLine(tasks, notes), [tasks, notes]);
+  const riverInsight = useMemo(() => buildRiverInsight(river, tasks, notes), [river, tasks, notes]);
+  const rhythm = useMemo(() => buildRhythm(tasks), [tasks]);
+  const contextCards = useMemo(() => buildContextCards(sentinel, assoc, tasks), [sentinel, assoc, tasks]);
+  const guardianRecords = useMemo(() => {
+    return (executions || [])
+      .filter((e) => e.automation_type && e.automation_type !== "none")
+      .slice(0, 8);
+  }, [executions]);
+
+  // 守护记录执行轮询：有待执行/执行中的单子时每 3s 静默刷新，
+  // 后台执行完成后列表自动出现「查看并确认」，无需退出页面重进
+  useEffect(() => {
+    const hasActive = (executions || []).some((e) =>
+      ["pending", "parsing", "executing"].includes(e.execution_status)
+    );
+    if (hasActive && !execPollRef.current) {
+      execPollTicksRef.current = 0;
+      execPollRef.current = setInterval(() => {
+        execPollTicksRef.current += 1;
+        if (execPollTicksRef.current > 20) {
+          // 最长约 60s，避免无限轮询
+          clearInterval(execPollRef.current);
+          execPollRef.current = null;
+          return;
+        }
+        get("/task-executions", { limit: 20 }, { silent: true })
+          .then((list) => {
+            if (Array.isArray(list)) setExecutions(list);
+          })
+          .catch(() => {});
+      }, 3000);
+    } else if (!hasActive && execPollRef.current) {
+      clearInterval(execPollRef.current);
+      execPollRef.current = null;
+    }
+  }, [executions]);
+
+  useEffect(() => () => {
+    if (execPollRef.current) clearInterval(execPollRef.current);
+  }, []);
+
+  const loadWeather = async () => {
+    try {
+      const coords = await getLocationSafe();
+      const params = coords && typeof coords.latitude === "number"
+        ? { lat: coords.latitude, lon: coords.longitude }
+        : {};
+      const res = await get("/weather", params, { silent: true });
+      console.log("[weather] coords=", coords ? "yes" : "no", "resp=", res?.ok ? "ok" : (res?.reason || "null"));
+      if (res && res.ok) return res;
+      return null;
+    } catch (err) {
+      console.log("[weather] error:", err?.message || err);
+      return null;
+    }
+  };
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [tasksRes, notesRes, execRes, sentinelRes, assocRes, briefingRes, weatherRes] = await Promise.allSettled([
+        get("/tasks", { parent_task_id: "", limit: 200 }, { silent: true }),
+        get("/notes", { limit: 100 }, { silent: true }),
+        get("/task-executions", { limit: 20 }, { silent: true }),
+        loadSentinel(),
+        loadAssoc(),
+        post("/functions/generateDailyBriefing", {}, { silent: true }),
+        loadWeather()
+      ]);
+      const taskList = tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value) ? tasksRes.value : [];
+      const noteList = notesRes.status === "fulfilled" && Array.isArray(notesRes.value) ? notesRes.value : [];
+      const execList = execRes.status === "fulfilled" && Array.isArray(execRes.value) ? execRes.value : [];
+      const sentinelData = sentinelRes.status === "fulfilled" ? sentinelRes.value : null;
+      const assocData = assocRes.status === "fulfilled" ? assocRes.value : null;
+      const briefingData = briefingRes.status === "fulfilled" && briefingRes.value ? briefingRes.value : null;
+      const weatherData = weatherRes.status === "fulfilled" && weatherRes.value ? weatherRes.value : null;
+      setTasks(taskList);
+      setNotes(noteList);
+      setExecutions(execList);
+      setSentinel(sentinelData);
+      setAssoc(assocData);
+      setBriefing(briefingData);
+      setWeather(weatherData);
+      // 账本签新并入的明细：本次展示保留「新」标识，后台静默清除，下次加载不再高亮
+      noteList.forEach((n) => {
+        const ledger = n.metadata?.ai_analysis?.ledger;
+        if (!ledger?.items?.some((it) => it.is_new)) return;
+        const items = ledger.items.map((it) => {
+          const { is_new, added_at, ...rest } = it;
+          return rest;
+        });
+        const metadata = { ...n.metadata, ai_analysis: { ...n.metadata.ai_analysis, ledger: { ...ledger, items } } };
+        patch(`/notes/${n.id}`, { metadata }).catch(() => {});
+      });
+    } catch (_err) {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadAll();
+    setRefreshing(false);
+  };
+
+  const loadSentinel = async () => {
+    try {
+      const coords = await getLocationSafe();
+      // 顺带触发一次地理围栏到达检查：服务端命中地点/约定标记地点时推送顺路提醒。
+      // 附带速度/停留推断数据（dwell 三重确认输入），跨采样推断由服务端合并判定
+      if (coords && typeof coords.latitude === "number") {
+        const prevKey = "ss_last_geo_report";
+        let prev = null;
+        try { prev = Taro.getStorageSync(prevKey) || null; } catch (_e) { prev = null; }
+        let speedKmh = null;
+        let elapsedS = null;
+        if (prev && typeof prev.latitude === "number" && typeof prev.ts === "number") {
+          elapsedS = (Date.now() - prev.ts) / 1000;
+          const movedM = geoDistanceM(prev.latitude, prev.longitude, coords.latitude, coords.longitude);
+          if (elapsedS > 0) speedKmh = (movedM / 1000) / (elapsedS / 3600);
+        }
+        post("/functions/sentinelGeofenceTrigger", {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          coord_type: "gcj02",
+          prev_latitude: prev?.latitude,
+          prev_longitude: prev?.longitude,
+          speed_kmh: speedKmh,
+          elapsed_s: elapsedS
+        }, { silent: true }).then(() => {
+          try {
+            Taro.setStorageSync(prevKey, { latitude: coords.latitude, longitude: coords.longitude, ts: Date.now() });
+          } catch (_e) {}
+        }).catch(() => {});
+      }
+      return await post("/functions/getSentinelGuard", coords || {}, { silent: true });
+    } catch (_err) {
+      return null;
+    }
+  };
+
+  const loadAssoc = async () => {
+    try {
+      const coords = await getLocationSafe();
+      return await post("/functions/getAssociationRecommendations", coords || {}, { silent: true });
+    } catch (_err) {
+      return null;
+    }
+  };
+
+  const toggleTaskDone = async (task) => {
+    captureSvScroll(); // 先记录滚动位置，刷新后恢复，不跳回页眉
+    try {
+      await patch(`/tasks/${task.id}`, { status: isDone(task) ? "pending" : "completed" });
+      await loadAll();
+      const top = svTopRef.current;
+      // 等列表重渲染落定后再恢复，并二次校正，防止新渲染把位置重置回顶部
+      setTimeout(() => restoreSvScroll(top), 300);
+      setTimeout(() => restoreSvScroll(top), 800);
+    } catch (_err) {}
+  };
+
+  const rescheduleTask = async (task, time = "09:00") => {
+    try {
+      const next = tomorrowAt(time);
+      await patch(`/tasks/${task.id}`, { end_time: next, reminder_time: next });
+      Taro.showToast({ title: "已重新安排", icon: "success" });
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "安排失败", icon: "none" });
+    }
+  };
+
+  // 执行单产物预览：结果优先（草稿正文/纪要/账目等可验收的产物），
+  // 只有计划没有结果时才退回计划步骤（动作）占位；previewBody 是 AI 写入的结构，元素可能是对象
+  const execLineText = (item) => {
+    if (item == null) return "";
+    if (typeof item === "string") return item;
+    if (typeof item === "number" || typeof item === "boolean") return String(item);
+    if (typeof item === "object") {
+      const o = item;
+      const title = o.title || o.name || o.label || o.heading || o.step || "";
+      const detail = o.detail || o.text || o.content || o.body || o.desc || o.description || o.summary || "";
+      if (title && detail) return `${title}：${detail}`;
+      if (title || detail) return String(title || detail);
+      // 兜底：拼接所有叶子文本
+      return Object.values(o).map(execLineText).filter(Boolean).join(" · ");
+    }
+    return String(item);
+  };
+
+  // 执行单验收弹层的结构化排版：按类型拆成带小标题的区块，正文走 RichText（支持 Markdown 表格）
+  const execReviewBlocks = (e) => {
+    const plan = e.automation_plan || {};
+    const result = e.automation_result || {};
+    const data = result.data && typeof result.data === "object" ? result.data : {};
+    const blocks = [];
+    const add = (text, label) => {
+      const t = execLineText(text).trim();
+      if (t) blocks.push({ label, text: t });
+    };
+
+    switch (e.automation_type) {
+      case "email_draft":
+        add(data.to, "收件人");
+        add(data.cc, "抄送");
+        add(data.subject, "主题");
+        add(data.body, "正文");
+        break;
+      case "summary_note":
+        add(data.title, "标题");
+        add(data.content, "内容");
+        if (Array.isArray(data.key_points) && data.key_points.length) {
+          add(data.key_points.slice(0, 8).map((k) => `· ${execLineText(k)}`).join("\n"), "要点");
+        }
+        break;
+      case "web_research":
+        add(data.title, "标题");
+        add(data.executive_summary, "摘要");
+        if (Array.isArray(data.key_findings) && data.key_findings.length) {
+          add(
+            data.key_findings.slice(0, 6).map((k) => `· ${execLineText(typeof k === "string" ? k : k?.finding || k?.text || k?.title || "")}`).join("\n"),
+            "关键发现"
+          );
+        }
+        if (Array.isArray(data.recommendations) && data.recommendations.length) {
+          add(data.recommendations.slice(0, 4).map((r) => `→ ${execLineText(r)}`).join("\n"), "建议");
+        }
+        if (data.file_url) add(data.file_url, "附件");
+        break;
+      case "office_doc":
+      case "ppt_doc": {
+        add(data.title, "标题");
+        add(data.subtitle, "副标题");
+        const secs = (Array.isArray(data.sections) ? data.sections : []).slice(0, 8);
+        if (secs.length) {
+          add(
+            secs.map((s) => `· ${execLineText(s?.heading || s?.title || "")}${s?.body ? `\n${execLineText(s.body)}` : ""}`).join("\n"),
+            "章节"
+          );
+        }
+        const slides = (Array.isArray(data.slides) ? data.slides : []).slice(0, 10);
+        if (slides.length) {
+          add(
+            slides
+              .map((s, i) => `${i + 1}. ${execLineText(s?.title || "")}${s?.bullets ? `\n${(Array.isArray(s.bullets) ? s.bullets : [s.bullets]).map((b) => `· ${execLineText(b)}`).join("\n")}` : ""}`)
+              .join("\n"),
+            e.automation_type === "ppt_doc" ? "页面" : "内容"
+          );
+        }
+        if (data.file_url) add(data.file_url, "附件");
+        break;
+      }
+      case "calendar_event": {
+        add(data.title, "标题");
+        const meta = [
+          data.start_time ? `时间：${data.start_time}${data.end_time ? " ~ " + data.end_time : ""}` : "",
+          data.location ? `地点：${data.location}` : "",
+          Array.isArray(data.participants) && data.participants.length ? `参与人：${data.participants.map(execLineText).join("、")}` : ""
+        ].filter(Boolean).join("\n");
+        add(meta, "信息");
+        add(data.description, "说明");
+        break;
+      }
+      case "ledger_organize": {
+        const entries = (Array.isArray(data.entries) ? data.entries : []).slice(0, 15);
+        if (entries.length) {
+          const cols = ["date", "category", "item", "amount"];
+          const labels = { date: "日期", category: "分类", item: "项目", amount: "金额" };
+          const used = cols.filter((c) => entries.some((en) => en?.[c] != null && String(en[c]).trim()));
+          if (used.length) {
+            const esc = (v) => String(v ?? "").replace(/\|/g, "｜").replace(/\n/g, " ");
+            const md = [
+              `| ${used.map((c) => labels[c]).join(" | ")} |`,
+              `| ${used.map(() => "---").join(" | ")} |`,
+              ...entries.map((en) => `| ${used.map((c) => esc(en?.[c] ?? "")).join(" | ")} |`)
+            ].join("\n");
+            add(md, "明细");
+          }
+        }
+        if (data.stats && typeof data.stats === "object") {
+          add(`收入 ${data.stats.total_income ?? "-"} · 支出 ${data.stats.total_expense ?? "-"}`, "汇总");
+        }
+        break;
+      }
+      case "file_organize":
+        add(data.summary, "总结");
+        if (Array.isArray(result.diff) && result.diff.length) {
+          add(result.diff.slice(0, 10).map((d) => `· ${execLineText(d?.detail || d?.target || "")}`).join("\n"), "变更");
+        }
+        break;
+      default:
+        break;
+    }
+
+    // 兜底：该类型没有专属渲染时，平铺 data 的文本字段
+    if (!blocks.length) {
+      const texts = Object.values(data).filter((v) => typeof v === "string" && v.trim());
+      if (texts.length) add(texts.join("\n\n"), "执行结果");
+    }
+    // 最后兜底：没有结果产物时，用计划的自然语言摘要（标题+说明），不做步骤分解
+    if (!blocks.length) {
+      const planSummary = [plan.description, plan.title].map(execLineText).filter(Boolean).join("\n");
+      if (planSummary) add(planSummary, "计划");
+    }
+    return blocks;
+  };
+
+  // 记录心流 ScrollView 当前滚动位置
+  const captureSvScroll = () => {
+    Taro.createSelectorQuery()
+      .select("#flowScroll")
+      .fields({ scrollOffset: true })
+      .exec((res) => {
+        svTopRef.current = res?.[0]?.scrollTop || 0;
+      });
+  };
+
+  // 恢复心流 ScrollView 滚动位置：优先用 enhanced 节点 scrollTo（命令式直改，
+  // 不受受控 scroll-top 同值不生效的限制）；节点不可用时回退受控属性错位触发
+  const restoreSvScroll = (top) => {
+    if (!(top > 10)) return;
+    Taro.createSelectorQuery()
+      .select("#flowScroll")
+      .node()
+      .exec((res) => {
+        const node = res?.[0]?.node;
+        if (node && typeof node.scrollTo === "function") {
+          try {
+            node.scrollTo({ top, duration: 0 });
+            return;
+          } catch (_e) {}
+        }
+        setSvScrollTop(top + 1);
+        setTimeout(() => setSvScrollTop(top), 100);
+      });
+  };
+
+  // 关闭环节弹层并保持页面滚动位置（不跳回页眉）
+  const closeReviewModal = () => {
+    captureSvScroll();
+    setReviewExec(null);
+    setTimeout(() => {
+      if (svTopRef.current > 10) setSvScrollTop(svTopRef.current);
+    }, 120);
+  };
+
+  // 用户审核/验证通过后，自动打开下一条进行中的执行单（一轮接一轮）
+  const advanceToNextExec = (doneId) => {
+    const next = (executions || [])
+      .filter((e) => e.automation_type && e.automation_type !== "none")
+      .filter((e) => e.id !== doneId && !["completed", "cancelled", "parked"].includes(e.execution_status))
+      .sort((a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date))[0];
+    if (next) {
+      setReviewExec(next);
+      return;
+    }
+    closeReviewModal();
+  };
+
+  // 失败/排队中的执行单重新发起（plan → execute 重跑）
+  const retryExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`retry-${e.id}`);
+    try {
+      await post(`/task-executions/${e.id}/retry`);
+      Taro.showToast({ title: "已重新发起执行", icon: "success" });
+      advanceToNextExec(e.id);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "发起失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  // 排队中：优先执行（立即触发，等价于重跑相位）
+  const bumpExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`bump-${e.id}`);
+    try {
+      await post(`/task-executions/${e.id}/retry`);
+      Taro.showToast({ title: "已优先开始执行", icon: "success" });
+      advanceToNextExec(e.id);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "发起失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  // 排队中：缓缓放下（不取消，只是挪出守护队列，随时可以重试）
+  const parkExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`park-${e.id}`);
+    try {
+      await patch(`/task-executions/${e.id}`, { execution_status: "parked" });
+      Taro.showToast({ title: "已缓缓放下", icon: "success" });
+      closeReviewModal();
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "操作失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  const acceptExec = async (id) => {
+    if (execActingId) return;
+    setExecActingId(`accept-${id}`);
+    try {
+      // 验收：写结构化反馈，服务端同步把关联约定标为完成
+      await patch(`/task-executions/${id}`, {
+        execution_status: "completed",
+        user_feedback: { rating: 5, comment: "验收通过", rated_at: new Date().toISOString() }
+      });
+      Taro.showToast({ title: "已验收通过", icon: "success" });
+      advanceToNextExec(id);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "验收失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  // 有问题：只记录反馈，约定保持待处理，执行单仍待验收
+  const feedbackExec = async (e) => {
+    if (execActingId) return;
+    setExecActingId(`fb-${e.id}`);
+    try {
+      await patch(`/task-executions/${e.id}`, {
+        user_feedback: { rating: 2, comment: "用户标记有问题", rated_at: new Date().toISOString() }
+      });
+      Taro.showToast({ title: "已记录反馈", icon: "success" });
+      closeReviewModal();
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "操作失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  const approveExec = async (execItem) => {
+    if (execActingId || !execItem?.id) return;
+    setExecActingId(`approve-${execItem.id}`);
+    // 乐观置为「正在执行」，让用户立刻看到点击后的变化
+    setExecutions((prev) => prev.map((x) => (x.id === execItem.id ? { ...x, execution_status: "executing" } : x)));
+    try {
+      await post("/functions/executeAutomation", { execution_id: execItem.id, phase: "execute" });
+      Taro.showToast({ title: "已批准执行", icon: "success" });
+      advanceToNextExec(execItem.id);
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "批准失败，请检查网络", icon: "none" });
+      loadAll();
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  // 取消这次执行（仅「待批准」环节可干预；执行中由运行器推进，不中途打断以免状态错乱）
+  const cancelExec = async (e) => {
+    if (execActingId || !e?.id) return;
+    setExecActingId(`cancel-${e.id}`);
+    try {
+      await patch(`/task-executions/${e.id}`, { execution_status: "cancelled" });
+      Taro.showToast({ title: "已取消这次执行", icon: "success" });
+      closeReviewModal();
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "取消失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  const delegateExec = async (taskId) => {
+    if (execActingId || !taskId) return;
+    setExecActingId(`delegate-${taskId}`);
+    try {
+      await post("/functions/delegateTaskAutomation", { task_id: taskId });
+      Taro.showToast({ title: "已开始执行，稍后可在卡片查看结果", icon: "success" });
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "执行失败，请检查网络", icon: "none" });
+    } finally {
+      setExecActingId(null);
+    }
+  };
+
+  const letGoTask = async (task) => {
+    try {
+      await patch(`/tasks/${task.id}`, { status: "completed" });
+      Taro.showToast({ title: "已轻轻放下", icon: "success" });
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "操作失败", icon: "none" });
+    }
+  };
+
+  const moveToDeep = async (hour = null, targetId = null) => {
+    const target = targetId
+      ? tasks.find((t) => t.id === targetId)
+      : tasks.find((t) => !isDone(t) && ["urgent", "high"].includes(t.priority)) ||
+        tasks.find((t) => !isDone(t) && isToday(taskTime(t))) ||
+        tasks.find((t) => !isDone(t));
+    if (!target?.id) {
+      Taro.showToast({ title: "暂无可移动的约定", icon: "none" });
+      return;
+    }
+    const h = hour != null ? hour : river?.deep?.start || 9;
+    const time = `${pad(h)}:30`;
+    try {
+      await patch(`/tasks/${target.id}`, { end_time: tomorrowAt(time), reminder_time: tomorrowAt(time) });
+      Taro.showToast({ title: "已移入明天深流时段", icon: "success" });
+      loadAll();
+    } catch (_err) {
+      Taro.showToast({ title: "移动失败，请检查网络", icon: "none" });
+    }
+  };
+
+  const handleRhythmAction = () => {
+    if (!rhythm?.action) return;
+    if (rhythm.action === "move-to-slot") {
+      moveToDeep(rhythm.payload?.hour);
+    } else if (rhythm.action === "create-small") {
+      Taro.navigateTo({ url: "/pages/task-create/index?title=最小的一步" });
+    } else if (rhythm.action === "split-next") {
+      const candidates = splitCandidates();
+      if (candidates.length > 0) {
+        openSplitSheet(candidates[0], candidates);
+      } else {
+        Taro.navigateTo({ url: "/pages/tasks/index" });
+      }
+    } else if (rhythm.action === "view-tasks") {
+      Taro.navigateTo({ url: "/pages/tasks/index" });
+    }
+  };
+
+  // ===== AI 拆小事：理解约定内容，拆成可以分件完成的小事 =====
+  // 推荐评分：重要性(优先级) + 逾期 + 今日到期 + 内容复杂度(动作词/描述长度) + 遗忘周期(越久没动越优先)
+  const splitRecommendScore = (t) => {
+    let w = 0;
+    const tt = taskTime(t);
+    if (isOverdue(t)) w += 60;
+    if (t.priority === "urgent") w += 40;
+    else if (t.priority === "high") w += 25;
+    else if (t.priority === "medium") w += 10;
+    if (tt && isToday(tt)) w += 20;
+    const text = `${t.title || ""} ${t.description || ""}`;
+    const actionHits = (text.match(/然后|接着|随后|并|以及|先|再|、|，|,|。/g) || []).length;
+    w += Math.min(20, actionHits * 3);
+    if (String(t.description || "").length > 40) w += 10;
+    const idleMs = Date.now() - new Date(t.updated_date || t.created_date || Date.now()).getTime();
+    w += Math.min(25, Math.floor(Math.max(0, idleMs) / 86400000) * 3);
+    return w;
+  };
+
+  const splitCandidates = () =>
+    tasks
+      .filter((t) => !isDone(t) && t.status !== "cancelled")
+      .map((t) => ({ t, w: splitRecommendScore(t) }))
+      .sort((a, b) => b.w - a.w)
+      .map((x) => x.t)
+      .slice(0, 8);
+
+  // 打开弹层先进入预览态：只展示将要拆解的约定，等用户确认后再调 AI 拆解
+  const loadSplitFor = (task, candidates = [], candIndex = 0) => {
+    setSplitSheet({ task, steps: [], busy: false, creating: false, confirmed: false, candidates, candIndex });
+  };
+
+  const openSplitSheet = (task, candidates = []) => {
+    if (!task?.id || splitSheet) return;
+    loadSplitFor(task, candidates, 0);
+  };
+
+  // 用户确认"就拆这件"后才调用 AI 拆解
+  const confirmSplitTask = () => {
+    const sheet = splitSheet;
+    if (!sheet?.task?.id || sheet.busy || sheet.creating) return;
+    const task = sheet.task;
+    setSplitSheet((prev) => (prev && prev.task?.id === task.id ? { ...prev, busy: true, confirmed: true } : prev));
+    post(`/tasks/${task.id}/split`)
+      .then((res) => {
+        setSplitSheet((prev) =>
+          prev && prev.task?.id === task.id ? { ...prev, steps: res?.steps || [], busy: false } : prev
+        );
+      })
+      .catch(() => {
+        setSplitSheet((prev) => (prev && prev.task?.id === task.id ? null : prev));
+      });
+  };
+
+  // ===== 拆小结果编辑：改标题 / 删一步 / 加一步，确认时按用户确认版创建 =====
+  const updateSplitStep = (i, title) =>
+    setSplitSheet((prev) =>
+      prev ? { ...prev, steps: prev.steps.map((s, idx) => (idx === i ? { ...s, title } : s)) } : prev
+    );
+  const removeSplitStep = (i) =>
+    setSplitSheet((prev) => (prev ? { ...prev, steps: prev.steps.filter((_, idx) => idx !== i) } : prev));
+  const addSplitStep = () => {
+    const t = splitNewStepText.trim();
+    if (!t) return;
+    setSplitSheet((prev) => (prev ? { ...prev, steps: [...prev.steps, { title: t.slice(0, 60), minutes: null }] } : prev));
+    setSplitNewStepText("");
+  };
+  // 在指定一步的下方插入空白子约定，方便就地在该步之后继续补充
+  const insertSplitStep = (i) =>
+    setSplitSheet((prev) =>
+      prev
+        ? { ...prev, steps: [...prev.steps.slice(0, i + 1), { title: "", minutes: null }, ...prev.steps.slice(i + 1)] }
+        : prev
+    );
+  // 非空步数：确认按钮的 N 与禁用判断都以它为准
+  const validSplitCount = splitSheet
+    ? splitSheet.steps.filter((s) => (s.title || "").trim()).length
+    : 0;
+
+  // 用户觉得当前推荐的约定不合适，切换到候选列表中的下一件（仍停留在预览态）
+  const switchSplitCandidate = () => {
+    const sheet = splitSheet;
+    if (!sheet?.candidates?.length || sheet.busy || sheet.creating) return;
+    const nextIdx = (sheet.candIndex + 1) % sheet.candidates.length;
+    loadSplitFor(sheet.candidates[nextIdx], sheet.candidates, nextIdx);
+  };
+
+  const confirmSplit = async () => {
+    const sheet = splitSheet;
+    if (!sheet?.task?.id || sheet.creating) return;
+    // 按用户确认版创建：过滤空标题，全空则拒绝
+    const steps = (sheet.steps || [])
+      .map((s) => ({ ...s, title: String(s.title || "").trim() }))
+      .filter((s) => s.title);
+    if (steps.length === 0) {
+      Taro.showToast({ title: "请至少保留一步", icon: "none" });
+      return;
+    }
+    setSplitSheet({ ...sheet, creating: true, steps });
+    const parent = sheet.task;
+    const endTime = parent.end_time || parent.due_at || null;
+    const payload = steps.map((s) => ({
+      title: s.title.slice(0, 120),
+      parent_task_id: parent.id,
+      category: parent.category,
+      priority: parent.priority,
+      end_time: endTime
+    }));
+    try {
+      await post("/tasks/batch", payload);
+      Taro.showToast({ title: `已拆成 ${steps.length} 件小事`, icon: "success" });
+      setSplitSheet(null);
+      loadAll();
+    } catch (_err) {
+      setSplitSheet({ ...sheet, creating: false });
+    }
+  };
+
+  const goTask = (id) => {
+    Taro.navigateTo({ url: `/pages/task-detail/index?id=${id}` });
+  };
+
+  const startFocus = (task, minutes = 30) => {
+    if (focusTimerRef.current) clearInterval(focusTimerRef.current);
+    setFocusTask(task);
+    setFocusSeconds(minutes * 60);
+    focusTimerRef.current = setInterval(() => {
+      setFocusSeconds((s) => {
+        if (s <= 1) {
+          clearInterval(focusTimerRef.current);
+          focusTimerRef.current = null;
+          Taro.showToast({ title: "专注完成，已记入河流", icon: "success" });
+          setFocusTask(null);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  };
+
+  const stopFocus = () => {
+    if (focusTimerRef.current) {
+      clearInterval(focusTimerRef.current);
+      focusTimerRef.current = null;
+    }
+    setFocusTask(null);
+    setFocusSeconds(0);
+  };
+
+  const openWebview = async (url) => {
+    if (!url || !url.startsWith("http")) {
+      Taro.showToast({ title: "链接无效", icon: "none" });
+      return;
+    }
+    try {
+      await Taro.navigateTo({ url: `/pages/webview/index?url=${encodeURIComponent(url)}` });
+    } catch (_err) {
+      Taro.setClipboardData({ data: url });
+      Taro.showToast({ title: "链接已复制", icon: "success" });
+    }
+  };
+
+  // ===== 图片识别草稿 =====
+  const DRAFT_TYPES = [
+    { k: "task", l: "约定" },
+    { k: "note", l: "记录" },
+    { k: "heart", l: "心签" },
+    { k: "ledger", l: "账本" },
+    { k: "table", l: "表格" }
+  ];
+
+  const updateImageDraft = (updater) => {
+    setImageDraft((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev, suggestion: { ...(prev.suggestion || {}) } };
+      updater(next);
+      return next;
+    });
+  };
+
+  const confirmImageDraft = async () => {
+    if (!imageDraft || imageDraftBusy) return;
+    setImageDraftBusy(true);
+    try {
+      const { contentType, extractedText, imageUrl, suggestion } = imageDraft;
+      const s = suggestion || {};
+      const text = collapseRepeats((extractedText || "").trim() || String(s.content || "").trim());
+      if (contentType === "task") {
+        const category = s.category === "learning" ? "study" : s.category;
+        const priority = ["low", "medium", "high", "urgent"].includes(s.priority) ? s.priority : "medium";
+        const taskCategory = ["work", "health", "family", "personal", "shopping", "study", "finance", "other"].includes(category) ? category : "other";
+        const task = await post("/tasks", {
+          title: String(s.title || "").trim() || text.slice(0, 60) || "图片约定",
+          description: [s.description, text, imageUrl].filter(Boolean).join("\n"),
+          priority,
+          category: taskCategory,
+          end_time: s.date && s.time ? chinaIso(s.date, s.time) : undefined,
+          metadata: { image_url: imageUrl }
+        });
+        // 子约定创建为真正的子任务，列表/详情/编辑页才能一致展示
+        const subList = (Array.isArray(s.subtasks) ? s.subtasks : []).map((x) => String(x || "").trim()).filter(Boolean);
+        for (const st of subList) {
+          await post("/tasks", {
+            title: st.slice(0, 120),
+            parent_task_id: task.id,
+            priority,
+            category: taskCategory,
+            status: "pending"
+          }).catch(() => {});
+        }
+        Taro.showToast({ title: "约定已创建", icon: "success" });
+      } else if (contentType === "ledger") {
+        // 明细去重：识别草稿里同一 品名+金额 只保留一条（防御模型重复输出）
+        const seenKeys = new Set();
+        // 只保留「有名称且有正金额」的条目，避免 "1500×50%" 这类无金额算式混进明细
+        const entries = (Array.isArray(s.entries) ? s.entries : []).filter((en) => en && String(en.item || "").trim() && Number(en.amount) > 0).filter((en) => {
+          const key = `${String(en.item || "").trim()}|${Number(en.amount) || 0}`;
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
+          return true;
+        });
+        const lines = entries.map((en) => {
+          const parts = [String(en.item || "未命名").trim(), `¥${Number(en.amount) || 0}`];
+          if (en.category) parts.push(`（${en.category}）`);
+          if (en.note) parts.push(String(en.note));
+          return parts.join(" ");
+        });
+        const total = entries.reduce((sum, en) => sum + (Number(en.amount) || 0), 0);
+        const content = [collapseRepeats(String(s.summary || "").trim()), ...lines, `合计 ¥${total.toFixed(2)}`].filter(Boolean).join("\n");
+        // 同步生成账本结构（卡片账目区直接可读）， income/expense 标注优先沿用识别结果
+        const ledgerItems = entries.map((en) => ({
+          name: String(en.item || "一笔账").slice(0, 12),
+          category: String(en.category || "其他"),
+          amount: Math.abs(Number(en.amount) || 0),
+          type: /(income|收入)/.test(String(en.type || "")) ? "income" : "expense"
+        })).filter((i) => i.amount > 0);
+        const totalExpense = Math.round(ledgerItems.filter((i) => i.type === "expense").reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+        const totalIncome = Math.round(ledgerItems.filter((i) => i.type === "income").reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+        await post("/notes", {
+          title: "账本",
+          content,
+          plain_text: content,
+          source_type: "ledger",
+          tags: ["账本"],
+          metadata: {
+            image_url: imageUrl,
+            ledger_entries: entries,
+            ai_analysis: {
+              category: "账本",
+              response_tag: "理性补充",
+              analyzed_at: new Date().toISOString(),
+              source: "image_upload",
+              ledger: ledgerItems.length ? {
+                items: ledgerItems,
+                total_expense: totalExpense,
+                total_income: totalIncome,
+                balance: Math.round((totalIncome - totalExpense) * 100) / 100,
+                advice: ""
+              } : null
+            }
+          }
+        });
+        Taro.showToast({ title: "账已记下", icon: "success" });
+      } else if (contentType === "table") {
+        const columns = (Array.isArray(s.columns) ? s.columns : []).map((c) => String(c ?? "").trim());
+        const rows = (Array.isArray(s.rows) ? s.rows : []).map((r) => (Array.isArray(r) ? r.map((v) => String(v ?? "")) : []));
+        const marked = Array.isArray(s.marked) ? s.marked.map(Boolean) : [];
+        if (!columns.length || columns.every((c) => !c)) {
+          throw new Error("表格至少需要一列表头");
+        }
+        const esc = (v) => String(v ?? "").replace(/\|/g, "｜").replace(/\n/g, " ");
+        const md = [
+          `| ${columns.map(esc).join(" | ")} |`,
+          `| ${columns.map(() => "---").join(" | ")} |`,
+          ...rows.map((r, i) => {
+            const prefix = marked[i] ? "⭐ " : "";
+            return `| ${columns.map((_, ci) => esc(ci === 0 ? prefix + (r[ci] ?? "") : (r[ci] ?? ""))).join(" | ")} |`;
+          })
+        ].join("\n");
+        const content = [String(s.title || "").trim() || "表格", String(s.summary || "").trim(), md]
+          .filter(Boolean)
+          .join("\n\n");
+        await post("/notes", {
+          title: String(s.title || "").trim() || "表格",
+          content,
+          plain_text: content,
+          source_type: "table",
+          tags: ["表格"],
+          metadata: { image_url: imageUrl, table: { columns, rows, marked } }
+        });
+        Taro.showToast({ title: "表格已保存", icon: "success" });
+      } else if (contentType === "heart") {
+        // 心签含表格结构时保持表格格式，其余用识别文字
+        const hasTable = Array.isArray(s.columns) && s.columns.length > 0 && Array.isArray(s.rows);
+        let content;
+        if (hasTable) {
+          const columns = s.columns.map((c) => String(c ?? "").trim());
+          const rows = s.rows.map((r) => (Array.isArray(r) ? r.map((v) => String(v ?? "")) : []));
+          const marked = Array.isArray(s.marked) ? s.marked.map(Boolean) : [];
+          const esc = (v) => String(v ?? "").replace(/\|/g, "｜").replace(/\n/g, " ");
+          const md = [
+            `| ${columns.map(esc).join(" | ")} |`,
+            `| ${columns.map(() => "---").join(" | ")} |`,
+            ...rows.map((r, i) => {
+              const prefix = marked[i] ? "⭐ " : "";
+              return `| ${columns.map((_, ci) => esc(ci === 0 ? prefix + (r[ci] ?? "") : (r[ci] ?? ""))).join(" | ")} |`;
+            })
+          ].join("\n");
+          content = [text, md].filter(Boolean).join("\n\n");
+        } else {
+          content = text || "（来自图片的心签）";
+        }
+        const note = await post("/notes", {
+          title: String(s.title || "").trim() || "心签",
+          content,
+          plain_text: content,
+          source_type: "heart",
+          tags: Array.isArray(s.tags) && s.tags.length ? s.tags.map(String) : ["心签"],
+          metadata: { image_url: imageUrl }
+        });
+        Taro.showToast({ title: "心签已保存", icon: "success" });
+        if (note?.id) {
+          runHeartAnalysis(note.id, { plain_text: content, content, source_type: "heart" });
+        }
+      } else {
+        const content = [text, text ? "" : null, imageUrl].filter(Boolean).join("\n");
+        await post("/notes", {
+          title: String(s.title || "").trim() || "图片记录",
+          content,
+          plain_text: text,
+          tags: Array.isArray(s.tags) && s.tags.length ? s.tags.map(String) : ["外部信息", "图片"],
+          metadata: { image_url: imageUrl }
+        });
+        Taro.showToast({ title: "已记录", icon: "success" });
+      }
+      setImageDraft(null);
+      loadAll();
+    } catch (err) {
+      Taro.showToast({ title: err?.message || "生成失败", icon: "none" });
+    } finally {
+      setImageDraftBusy(false);
+    }
+  };
+
+  // 输入框发送不再直接落库：进入 AI 对话，由 AI 提取约定/心签/链接，用户确认后生成
+  const openChat = (text) => {
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
+    const t = String(text || "").trim();
+    if (!t) return;
+    setChatSeed(t);
+    setChatVisible(true);
+  };
+
+  const handleSend = (explicitText) => {
+    openChat(explicitText);
+  };
+
+  // 上传文件到服务端，返回 file_url
+  const uploadFileToServer = async (filePath) => {
+    const token = getToken();
+    const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+    const apiBase = rawApi.replace(/\/$/, "");
+    const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+    const uploadRes = await Taro.uploadFile({
+      url: uploadUrl,
+      filePath,
+      name: "file",
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 60000
+    });
+    const data = JSON.parse(uploadRes.data || "{}");
+    if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
+      throw new Error(data?.message || "上传失败");
+    }
+    return data.file_url;
+  };
+
+  // 拍照/相册图片：上传后走图片识别草稿
+  const pickAndAnalyzeImage = (sourceType) => {
+    Taro.chooseMedia({
+      count: 1,
+      mediaType: ["image"],
+      sourceType,
+      sizeType: ["compressed"],
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.tempFilePath) return;
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const fileUrl = await uploadFileToServer(file.tempFilePath);
+          Taro.showLoading({ title: "识别中" });
+          const draft = await post("/functions/analyzeImage", { file_url: fileUrl }, { silent: true, timeout: 120000 });
+          setImageDraft({
+            imageUrl: fileUrl,
+            extractedText: draft?.extracted_text || "",
+            contentType: ["task", "note", "heart", "ledger", "table"].includes(draft?.content_type) ? draft.content_type : "note",
+            suggestion: draft?.suggestion && typeof draft.suggestion === "object" ? draft.suggestion : {}
+          });
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "识别失败，请手动输入", icon: "none" });
+        } finally {
+          Taro.hideLoading();
+        }
+      },
+      fail: () => Taro.showToast({ title: "选择图片失败", icon: "none" })
+    });
+  };
+
+  // 上传文件（微信聊天记录等）：存入记录并附文件链接
+  const pickAndSaveFile = () => {
+    Taro.chooseMessageFile({
+      count: 1,
+      type: "all",
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.path) return;
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const fileUrl = await uploadFileToServer(file.path);
+          const name = file.name || "未命名文件";
+          await post("/notes", {
+            title: `📎 ${name}`.slice(0, 60),
+            content: `📎 文件：${name}\n${fileUrl}`,
+            plain_text: `📎 ${name}`,
+            tags: ["文件"]
+          });
+          Taro.showToast({ title: "文件已存入记录", icon: "success" });
+          loadAll();
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "上传失败", icon: "none" });
+        } finally {
+          Taro.hideLoading();
+        }
+      },
+      fail: () => {}
+    });
+  };
+
+  const handleAttach = () => {
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
+    Taro.showActionSheet({
+      itemList: ["拍照", "上传照片", "上传文件"],
+      success: (res) => {
+        if (res.tapIndex === 0) pickAndAnalyzeImage(["camera"]);
+        else if (res.tapIndex === 1) pickAndAnalyzeImage(["album"]);
+        else pickAndSaveFile();
+      },
+      fail: () => {}
+    });
+  };
+  // 每次页面渲染刷新回调引用，供 memo 化的 FlowComposer 通过 ref 读取最新实现
+  // 注意合并而非整体替换，保留 FlowComposer 注册进来的 fillText 等回调
+  composerCallbacksRef.current = { ...composerCallbacksRef.current, onSend: handleSend, onAttach: handleAttach };
+
+  const renderGuestBanner = () => {
+    if (!isGuest) return null;
+    return (
+      <View
+        onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+        style={{
+          margin: "0 24rpx 16rpx",
+          padding: "18rpx 24rpx",
+          borderRadius: "12rpx",
+          background: "#fff8e6",
+          border: "1rpx solid #f5d78e",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}
+      >
+        <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>游客模式 · 登录后查看你的专属数据</Text>
+        <Text style={{ fontSize: "24rpx", color: "#384877", fontWeight: 500 }}>去登录 →</Text>
+      </View>
+    );
+  };
+
+  const renderHeader = () => (
+    <View
+      style={{
+        padding: "24rpx 32rpx 16rpx",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between"
+      }}
+    >
+      <View style={{ display: "flex", alignItems: "center" }}>
+        <View
+          style={{
+            width: "52rpx",
+            height: "52rpx",
+            borderRadius: "50%",
+            background: `linear-gradient(135deg, ${THEME.primaryLight}, ${THEME.primary})`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: "18rpx"
+          }}
+        >
+          <Text style={{ fontSize: "26rpx", color: "#fff" }}>♡</Text>
+        </View>
+        <View>
+          <Text style={{ fontSize: "32rpx", fontWeight: 500, color: THEME.ink }}>心栈 · 流</Text>
+          <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "-4rpx" }}>
+            {greetByHour()}，今天也要善待自己
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderRiver = () => {
+    const points = river?.points || [];
+    const deep = river?.deep;
+    const nowHour = new Date().getHours();
+    const currentSegment = river?.segments?.find((s) => s.hour === nowHour);
+    const heartNotes = notes.filter((n) => isHeartNote(n) && isToday(n.created_date));
+
+    const headline = (() => {
+      if (deep && nowHour >= deep.start && nowHour <= deep.end) {
+        return `此刻你正站在 ${deep.start}:00–${deep.end + 1}:00 的深流里`;
+      }
+      if (currentSegment?.type === "agreement") {
+        return `${nowHour}:00 这里标记了一个「${currentSegment.label || "约定"}」`;
+      }
+      if (currentSegment?.type === "habit") {
+        return `${nowHour}:00 是你「${currentSegment.label || "习惯"}」的时间`;
+      }
+      if (currentSegment?.type === "relax") {
+        return `${nowHour}:00 的河流很平缓，适合喘口气`;
+      }
+      if (deep) {
+        return `${deep.start}:00 前后有一段 ${(deep.end - deep.start + 1) * 60} 分钟的深流`;
+      }
+      if (river?.doneToday) {
+        return `今天已完成 ${river.doneToday} 件，河流正在流动`;
+      }
+      return "今天还没有波纹";
+    })();
+
+    const sub = deep
+      ? "河流会随你的一天自动调整。"
+      : "记录或完成一件小事，心流就会开始。";
+
+    return (
+      <View style={{ padding: "8rpx 32rpx 18rpx" }}>
+        <View
+          style={{
+            borderRadius: "36rpx",
+            padding: "36rpx 28rpx 32rpx",
+            background: `linear-gradient(160deg, #2b3a4a 0%, ${THEME.primary} 60%, ${THEME.primaryLight} 100%)`,
+            boxShadow: "0 16rpx 48rpx rgba(56,72,119,0.18)",
+            position: "relative",
+            overflow: "hidden"
+          }}
+        >
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)", letterSpacing: "2rpx" }}>今天的河流</Text>
+            {weather?.current && (
+              <View
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "4rpx 14rpx",
+                  borderRadius: "999rpx",
+                  background: "rgba(255,255,255,0.12)"
+                }}
+              >
+                <Text style={{ fontSize: "20rpx", marginRight: "8rpx" }}>{weather.current.icon}</Text>
+                <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.75)" }}>
+                  {weather.current.text} {weather.current.temp}°
+                </Text>
+              </View>
+            )}
+          </View>
+          <Text
+            style={{
+              fontSize: "34rpx",
+              fontWeight: 300,
+              color: "#fff",
+              marginTop: "12rpx",
+              lineHeight: "52rpx",
+              wordBreak: "break-all"
+            }}
+          >
+            {headline}
+          </Text>
+          <Text
+            style={{
+              fontSize: "24rpx",
+              color: "rgba(255,255,255,0.55)",
+              marginTop: "6rpx",
+              lineHeight: "40rpx",
+              wordBreak: "break-all"
+            }}
+          >
+            {sub}
+          </Text>
+
+          {weather?.task_advice?.length > 0 && (
+            <View
+              style={{
+                marginTop: "14rpx",
+                padding: "12rpx 18rpx",
+                borderRadius: "12rpx",
+                background: "rgba(255,255,255,0.07)"
+              }}
+            >
+              {weather?.task_advice?.slice(0, 2).map((ta) => (
+                <Text
+                  key={ta.task_id}
+                  style={{
+                    fontSize: "22rpx",
+                    color: "rgba(255,255,255,0.7)",
+                    lineHeight: "36rpx",
+                    wordBreak: "break-all",
+                    display: "block"
+                  }}
+                >
+                  {ta.advice}
+                </Text>
+              ))}
+            </View>
+          )}
+
+          <View style={{ marginTop: "24rpx", height: "200rpx" }}>
+            <RiverCanvas points={points} deep={deep} heartNotes={heartNotes} />
+          </View>
+
+          <View style={{ display: "flex", marginTop: "12rpx", paddingHorizontal: "4rpx", flexWrap: "wrap" }}>
+            <View style={{ display: "flex", alignItems: "center", marginRight: "16rpx", marginBottom: "8rpx" }}>
+              <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: "#fff", marginRight: "6rpx" }} />
+              <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)" }}>深流</Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center", marginRight: "16rpx", marginBottom: "8rpx" }}>
+              <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: "#e8a5a5", marginRight: "6rpx" }} />
+              <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)" }}>心签</Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center", marginRight: "16rpx", marginBottom: "8rpx" }}>
+              <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: "#d8b98a", marginRight: "6rpx" }} />
+              <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)" }}>习惯</Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center", marginRight: "16rpx", marginBottom: "8rpx" }}>
+              <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: "#c7a8c8", marginRight: "6rpx" }} />
+              <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)" }}>放松</Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center", marginRight: "16rpx", marginBottom: "8rpx" }}>
+              <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: "#ffd6a5", marginRight: "6rpx" }} />
+              <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)" }}>约定</Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center", marginBottom: "8rpx" }}>
+              <View style={{ width: "16rpx", height: "8rpx", borderRadius: "4rpx", background: "rgba(168,197,217,0.3)", marginRight: "6rpx" }} />
+              <Text style={{ fontSize: "20rpx", color: "rgba(255,255,255,0.45)" }}>深流区</Text>
+            </View>
+          </View>
+
+          <View
+            style={{
+              marginTop: "22rpx",
+              padding: "20rpx 22rpx",
+              borderRadius: "16rpx",
+              background: "rgba(255,255,255,0.08)",
+              border: "1rpx solid rgba(255,255,255,0.1)"
+            }}
+          >
+            <Text style={{ fontSize: "24rpx", color: "rgba(255,255,255,0.8)", lineHeight: "42rpx", wordBreak: "break-all" }}>{riverInsight.text}</Text>
+            <View
+              onClick={() => {
+                if (riverInsight.action === "move-to-deep") {
+                  moveToDeep();
+                } else if (riverInsight.action === "move-to-slot") {
+                  moveToDeep(riverInsight.payload?.hour, riverInsight.payload?.taskId);
+                } else if (riverInsight.action === "pick") {
+                  Taro.navigateTo({ url: "/pages/tasks/index" });
+                } else if (riverInsight.action === "go-task" && riverInsight.payload?.id) {
+                  goTask(riverInsight.payload.id);
+                }
+              }}
+              style={{
+                marginTop: "14rpx",
+                alignSelf: "flex-start",
+                padding: "12rpx 22rpx",
+                borderRadius: "12rpx",
+                background: "rgba(255,255,255,0.92)"
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", fontWeight: 500, color: THEME.primary }}>{riverInsight.actionText}</Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderNow = () => {
+    const todayYmd = toChinaYmd(new Date());
+    const isTodaySelected = selectedDueDate === todayYmd;
+    const dueList = tasks
+      .filter((t) => {
+        const tt = taskTime(t);
+        return tt && toChinaYmd(tt) === selectedDueDate;
+      })
+      .sort((a, b) => dueWeight(b) - dueWeight(a));
+
+    const shiftDueDate = (days) => {
+      const [y, m, d] = selectedDueDate.split("-").map(Number);
+      const date = new Date(y, m - 1, d);
+      date.setDate(date.getDate() + days);
+      setSelectedDueDate(toChinaYmd(date));
+    };
+
+    const dateLabel = (() => {
+      if (isTodaySelected) return "今天";
+      const [y, m, d] = selectedDueDate.split("-").map(Number);
+      const today = new Date();
+      const selected = new Date(y, m - 1, d);
+      const diff = Math.round((selected - today) / (1000 * 60 * 60 * 24));
+      if (diff === -1) return "昨天";
+      if (diff === 1) return "明天";
+      return `${m}月${d}日`;
+    })();
+
+    const cardStyle = {
+      background: THEME.card,
+      borderRadius: "28rpx",
+      border: `1rpx solid ${THEME.waterFaint}`,
+      padding: "28rpx",
+      boxShadow: "0 4rpx 16rpx rgba(56,72,119,0.06)"
+    };
+
+    if (dueList.length === 0) {
+      return (
+        <View style={{ padding: "18rpx 32rpx 6rpx" }}>
+          <View style={cardStyle}>
+            <View
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "20rpx"
+              }}
+            >
+              <View style={{ display: "flex", alignItems: "center" }}>
+                <View
+                  style={{
+                    width: "6rpx",
+                    height: "28rpx",
+                    borderRadius: "4rpx",
+                    background: THEME.primaryLight,
+                    marginRight: "16rpx"
+                  }}
+                />
+                <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>
+                  {isTodaySelected ? "今日到期" : "当日约定"}
+                </Text>
+              </View>
+              <View style={{ display: "flex", alignItems: "center" }}>
+                <Text
+                  style={{ fontSize: "24rpx", color: THEME.primary, padding: "8rpx" }}
+                  onClick={() => shiftDueDate(-1)}
+                >
+                  ‹
+                </Text>
+                <Text style={{ fontSize: "24rpx", color: THEME.inkSecondary, marginHorizontal: "12rpx", minWidth: "80rpx", textAlign: "center" }}>
+                  {dateLabel}
+                </Text>
+                <Text
+                  style={{ fontSize: "24rpx", color: THEME.primary, padding: "8rpx" }}
+                  onClick={() => shiftDueDate(1)}
+                >
+                  ›
+                </Text>
+              </View>
+            </View>
+            <Text style={{ fontSize: "26rpx", color: THEME.inkQuaternary, lineHeight: "44rpx" }}>
+              {"这一天没有约定。"}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    const top = dueList[0];
+    const rest = dueList.slice(1);
+
+    return (
+      <View style={{ padding: "18rpx 32rpx 6rpx" }}>
+        <View style={cardStyle}>
+          <View
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "20rpx"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <View
+                style={{
+                  width: "6rpx",
+                  height: "28rpx",
+                  borderRadius: "4rpx",
+                  background: THEME.primaryLight,
+                  marginRight: "16rpx"
+                }}
+              />
+              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>
+                {isTodaySelected ? "今日到期" : "当日约定"}
+              </Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <Text
+                style={{ fontSize: "24rpx", color: THEME.primary, padding: "8rpx" }}
+                onClick={() => shiftDueDate(-1)}
+              >
+                ‹
+              </Text>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkSecondary, marginHorizontal: "12rpx", minWidth: "80rpx", textAlign: "center" }}>
+                {dateLabel}
+              </Text>
+              <Text
+                style={{ fontSize: "24rpx", color: THEME.primary, padding: "8rpx" }}
+                onClick={() => shiftDueDate(1)}
+              >
+                ›
+              </Text>
+            </View>
+          </View>
+
+          <View
+            onClick={() => goTask(top.id)}
+            style={{
+              background: THEME.paper,
+              borderRadius: "20rpx",
+              padding: "22rpx",
+              borderLeft: `6rpx solid ${isOverdue(top) ? THEME.heart : THEME.primary}`,
+              marginBottom: "16rpx"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "8rpx" }}>
+              <Text
+                style={{
+                  fontSize: "30rpx",
+                  fontWeight: 500,
+                  color: THEME.ink,
+                  flex: 1,
+                  lineHeight: "46rpx",
+                  marginRight: "16rpx",
+                  wordBreak: "break-all"
+                }}
+              >
+                {top.title}
+              </Text>
+              {isDone(top) && (
+                <Text style={{ fontSize: "22rpx", color: THEME.done, flexShrink: 0 }}>已完成</Text>
+              )}
+            </View>
+            <View style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+              <View
+                style={{
+                  padding: "4rpx 12rpx",
+                  borderRadius: "8rpx",
+                  background: isOverdue(top) ? THEME.heartBg : THEME.primaryMist,
+                  marginRight: "12rpx",
+                  marginBottom: "6rpx"
+                }}
+              >
+                <Text style={{ fontSize: "20rpx", color: isOverdue(top) ? THEME.heartDeep : THEME.primary }}>
+                  {isOverdue(top) ? "已逾期" : isRecurring(top) ? recurringBadgeText(top) : formatTime(taskTime(top))}
+                </Text>
+              </View>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginBottom: "6rpx" }}>
+                {CATEGORY_LABEL[top.category] || top.category || "其他"}
+              </Text>
+              {top.reminder_time && (
+                <View
+                  style={{
+                    padding: "2rpx 10rpx",
+                    borderRadius: "8rpx",
+                    background: THEME.primaryMist,
+                    marginLeft: "10rpx",
+                    marginBottom: "6rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "18rpx", color: THEME.primary }}>已设提醒</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          <View style={{ display: "flex", flexWrap: "wrap" }}>
+            <View
+              onClick={() => toggleTaskDone(top)}
+              style={{
+                padding: "10rpx 18rpx",
+                borderRadius: "10rpx",
+                background: THEME.doneBg,
+                marginRight: "12rpx",
+                marginBottom: "10rpx"
+              }}
+            >
+              <Text style={{ fontSize: "22rpx", color: "#4a8a5e" }}>{isDone(top) ? "恢复" : "✓ 已完成"}</Text>
+            </View>
+            {!isFixedTimeTask(top) && (
+              <View
+                onClick={() => rescheduleTask(top, "21:00")}
+                style={{
+                  padding: "10rpx 18rpx",
+                  borderRadius: "10rpx",
+                  background: THEME.paper,
+                  border: `1rpx solid ${THEME.border}`,
+                  marginRight: "12rpx",
+                  marginBottom: "10rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>稍后</Text>
+              </View>
+            )}
+            <View
+              onClick={() => goTask(top.id)}
+              style={{
+                padding: "10rpx 18rpx",
+                borderRadius: "10rpx",
+                background: THEME.paper,
+                border: `1rpx solid ${THEME.border}`,
+                marginBottom: "10rpx"
+              }}
+            >
+              <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>查看</Text>
+            </View>
+          </View>
+
+          {rest.length > 0 && (
+            <View
+              onClick={() => setShowAllDue((v) => !v)}
+              style={{
+                marginTop: "12rpx",
+                paddingTop: "16rpx",
+                borderTop: `1rpx dashed ${THEME.border}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between"
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary }}>
+                {showAllDue ? "收起其他约定" : `还有 ${rest.length} 件约定`}
+              </Text>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary }}>{showAllDue ? "▲" : "▼"}</Text>
+            </View>
+          )}
+
+          {showAllDue &&
+            rest.map((t) => (
+              <View
+                key={t.id}
+                onClick={() => goTask(t.id)}
+                style={{
+                  marginTop: "14rpx",
+                  padding: "18rpx",
+                  borderRadius: "16rpx",
+                  background: THEME.paper,
+                  borderLeft: `6rpx solid ${isOverdue(t) ? THEME.heart : THEME.border}`
+                }}
+              >
+                <View style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "6rpx" }}>
+                  <Text
+                    style={{
+                      fontSize: "28rpx",
+                      color: isDone(t) ? THEME.inkQuaternary : THEME.ink,
+                      flex: 1,
+                      lineHeight: "44rpx",
+                      marginRight: "12rpx",
+                      wordBreak: "break-all",
+                      textDecoration: isDone(t) ? "line-through" : "none"
+                    }}
+                  >
+                    {t.title}
+                  </Text>
+                  {isDone(t) && <Text style={{ fontSize: "20rpx", color: THEME.done, flexShrink: 0 }}>已完成</Text>}
+                </View>
+                <View style={{ display: "flex", alignItems: "center", flexWrap: "wrap" }}>
+                  <View
+                    style={{
+                      padding: "2rpx 10rpx",
+                      borderRadius: "8rpx",
+                      background: isOverdue(t) ? THEME.heartBg : THEME.primaryMist,
+                      marginRight: "10rpx",
+                      marginBottom: "4rpx"
+                    }}
+                  >
+                    <Text style={{ fontSize: "18rpx", color: isOverdue(t) ? THEME.heartDeep : THEME.primary }}>
+                      {dueBadgeText(t)}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginBottom: "4rpx" }}>
+                    {CATEGORY_LABEL[t.category] || t.category || "其他"}
+                  </Text>
+                </View>
+              </View>
+            ))}
+        </View>
+      </View>
+    );
+  };
+
+  const renderVision = () => {
+    if (!briefing?.long_term_narrative) return null;
+    const stats = briefing.task_stats || {};
+    return (
+      <View style={{ padding: "18rpx 32rpx 6rpx" }}>
+        <View
+          style={{
+            borderRadius: "28rpx",
+            padding: "28rpx",
+            background: THEME.card,
+            border: `1rpx solid ${THEME.primaryFaint}`,
+            boxShadow: "0 4rpx 16rpx rgba(56,72,119,0.06)"
+          }}
+        >
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16rpx" }}>
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <View
+                style={{
+                  width: "44rpx",
+                  height: "44rpx",
+                  borderRadius: "12rpx",
+                  background: `linear-gradient(135deg, ${THEME.primaryLight}, ${THEME.primary})`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginRight: "14rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: "#fff" }}>◐</Text>
+              </View>
+              <View>
+                <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink }}>远见与思考</Text>
+                <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "-2rpx" }}>Long-Term</Text>
+              </View>
+              <AiBadge text="AI 生成" />
+            </View>
+            <View
+              onClick={loadAll}
+              style={{
+                padding: "8rpx 16rpx",
+                borderRadius: "20rpx",
+                background: THEME.primaryMist
+              }}
+            >
+              <Text style={{ fontSize: "20rpx", color: THEME.primary }}>⟳ 刷新</Text>
+            </View>
+          </View>
+
+          <Text
+            style={{
+              fontSize: "26rpx",
+              color: THEME.inkSecondary,
+              lineHeight: "46rpx",
+              marginBottom: "16rpx",
+              wordBreak: "break-all"
+            }}
+          >
+            {briefing.long_term_narrative}
+          </Text>
+
+          {briefing.mindful_tip && (
+            <View
+              style={{
+                padding: "14rpx 18rpx",
+                borderRadius: "14rpx",
+                background: THEME.paper,
+                border: `1rpx dashed ${THEME.border}`,
+                marginBottom: "16rpx"
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: "24rpx",
+                  color: THEME.inkTertiary,
+                  fontStyle: "italic",
+                  lineHeight: "40rpx",
+                  wordBreak: "break-all"
+                }}
+              >
+                “{briefing.mindful_tip}”
+              </Text>
+            </View>
+          )}
+
+          <View style={{ display: "flex", flexWrap: "wrap" }}>
+            {stats.active != null && (
+              <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.primaryMist, marginRight: "10rpx", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "20rpx", color: THEME.primary }}>活跃 {stats.active}</Text>
+              </View>
+            )}
+            {stats.urgent > 0 && (
+              <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.heartBg, marginRight: "10rpx", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "20rpx", color: THEME.heartDeep }}>紧急 {stats.urgent}</Text>
+              </View>
+            )}
+            {stats.overdue > 0 && (
+              <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.goldBg, marginRight: "10rpx", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "20rpx", color: "#a8875a" }}>逾期 {stats.overdue}</Text>
+              </View>
+            )}
+            {stats.today_due > 0 && (
+              <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: "#e8f1f8", marginRight: "10rpx", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "20rpx", color: "#6b9dc7" }}>今日到期 {stats.today_due}</Text>
+              </View>
+            )}
+            {stats.recent_completed != null && (
+              <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.doneBg, marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "20rpx", color: "#4a8a5e" }}>已完成 {stats.recent_completed}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderRhythm = () => {
+    if (!rhythm?.text) return null;
+    const maxCount = Math.max(...rhythm.weekDays.map((d) => d.count), 1);
+    return (
+      <View style={{ padding: "18rpx 32rpx 6rpx" }}>
+        <View
+          style={{
+            borderRadius: "28rpx",
+            padding: "28rpx",
+            background: `linear-gradient(135deg, ${THEME.primary} 0%, ${THEME.primaryLight} 100%)`,
+            boxShadow: "0 12rpx 36rpx rgba(56,72,119,0.14)"
+          }}
+        >
+          <View style={{ display: "flex", alignItems: "center", marginBottom: "16rpx" }}>
+            <Text style={{ fontSize: "30rpx", marginRight: "12rpx" }}>🌊</Text>
+            <Text style={{ fontSize: "28rpx", fontWeight: 500, color: "#fff" }}>本周节奏</Text>
+          </View>
+          <Text
+            style={{
+              fontSize: "26rpx",
+              color: "rgba(255,255,255,0.85)",
+              lineHeight: "44rpx",
+              marginBottom: "18rpx",
+              wordBreak: "break-all"
+            }}
+          >
+            {rhythm.text}
+          </Text>
+
+          <View style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: "18rpx" }}>
+            {rhythm.weekDays.map((d) => (
+              <View key={d.ymd} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
+                <View
+                  style={{
+                    width: "20rpx",
+                    borderRadius: "6rpx",
+                    height: `${Math.max(8, (d.count / maxCount) * 64)}rpx`,
+                    background: d.count > 0 ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.18)",
+                    marginBottom: "8rpx"
+                  }}
+                />
+                <Text style={{ fontSize: "18rpx", color: "rgba(255,255,255,0.55)" }}>{d.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View
+            onClick={handleRhythmAction}
+            style={{
+              alignSelf: "flex-start",
+              padding: "12rpx 24rpx",
+              borderRadius: "12rpx",
+              background: "rgba(255,255,255,0.92)"
+            }}
+          >
+            <Text style={{ fontSize: "24rpx", fontWeight: 500, color: THEME.primary }}>{rhythm.actionText}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderDueTasks = () => {
+    const dueToday = tasks
+      .filter((t) => !isDone(t) && isToday(taskTime(t)))
+      .sort((a, b) => dueWeight(b) - dueWeight(a));
+    const completedToday = tasks.filter((t) => isDone(t) && isToday(taskTime(t)));
+    if (dueToday.length === 0 && completedToday.length === 0) return null;
+
+    const activeDisplay = showAllDue ? dueToday : dueToday.slice(0, 3);
+
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>今日到期</Text>
+          </View>
+          {dueToday.length > 3 && (
+            <Text style={{ fontSize: "22rpx", color: THEME.primary }} onClick={() => setShowAllDue((v) => !v)}>
+              {showAllDue ? "收起" : "查看更多"}
+            </Text>
+          )}
+        </View>
+
+        {activeDisplay.map((t) => (
+          <View
+            key={t.id}
+            style={{
+              background: THEME.card,
+              borderRadius: "24rpx",
+              border: `1rpx solid ${THEME.border}`,
+              borderLeft: `6rpx solid ${isOverdue(t) ? THEME.heart : THEME.primary}`,
+              padding: "24rpx",
+              marginBottom: "16rpx",
+              boxShadow: "0 2rpx 10rpx rgba(0,0,0,0.03)"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center", marginBottom: "6rpx" }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={{ fontSize: "30rpx", color: THEME.ink }}>{t.title}</Text>
+              </View>
+              <Text style={{ fontSize: "26rpx", color: THEME.inkQuaternary, marginLeft: "12rpx" }} onClick={() => goTask(t.id)}>
+                ›
+              </Text>
+            </View>
+            <View style={{ display: "flex", alignItems: "center", marginBottom: "18rpx" }}>
+              <View
+                style={{
+                  padding: "4rpx 12rpx",
+                  borderRadius: "8rpx",
+                  background: isOverdue(t) ? THEME.heartBg : THEME.primaryMist,
+                  marginRight: "12rpx"
+                }}
+              >
+                <Text style={{ fontSize: "20rpx", color: isOverdue(t) ? THEME.heartDeep : THEME.primary }}>
+                  {dueBadgeText(t)}
+                </Text>
+              </View>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{CATEGORY_LABEL[t.category] || t.category || "其他"}</Text>
+              {t.reminder_time && (
+                <View
+                  style={{
+                    padding: "2rpx 10rpx",
+                    borderRadius: "8rpx",
+                    background: THEME.primaryMist,
+                    marginLeft: "10rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "18rpx", color: THEME.primary }}>已设提醒</Text>
+                </View>
+              )}
+            </View>
+            <View style={{ display: "flex", flexWrap: "wrap" }}>
+              <View
+                onClick={() => toggleTaskDone(t)}
+                style={{
+                  padding: "10rpx 18rpx",
+                  borderRadius: "10rpx",
+                  background: THEME.doneBg,
+                  marginRight: "12rpx",
+                  marginBottom: "10rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: "#4a8a5e" }}>✓ 已完成</Text>
+              </View>
+              <View
+                onClick={() => rescheduleTask(t, "21:00")}
+                style={{
+                  padding: "10rpx 18rpx",
+                  borderRadius: "10rpx",
+                  background: THEME.paper,
+                  border: `1rpx solid ${THEME.border}`,
+                  marginRight: "12rpx",
+                  marginBottom: "10rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>稍后</Text>
+              </View>
+              <View
+                onClick={() => openSplitSheet(t)}
+                style={{
+                  padding: "10rpx 18rpx",
+                  borderRadius: "10rpx",
+                  background: THEME.paper,
+                  border: `1rpx solid ${THEME.border}`,
+                  marginRight: "12rpx",
+                  marginBottom: "10rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>拆小</Text>
+              </View>
+              <View
+                onClick={() => letGoTask(t)}
+                style={{
+                  padding: "10rpx 18rpx",
+                  borderRadius: "10rpx",
+                  background: THEME.paper,
+                  border: `1rpx solid ${THEME.border}`,
+                  marginBottom: "10rpx"
+                }}
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary }}>轻轻放下</Text>
+              </View>
+            </View>
+          </View>
+        ))}
+
+        {completedToday.length > 0 && (
+          <View style={{ marginTop: "8rpx" }}>
+            <View
+              onClick={() => setShowCompletedDue((v) => !v)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "18rpx 24rpx",
+                background: THEME.paper,
+                borderRadius: "16rpx",
+                border: `1rpx solid ${THEME.border}`
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary }}>已完成约定（{completedToday.length}）</Text>
+              <Text style={{ fontSize: "24rpx", color: THEME.inkQuaternary }}>{showCompletedDue ? "▲" : "▼"}</Text>
+            </View>
+            {showCompletedDue && (
+              <View style={{ marginTop: "12rpx" }}>
+                {completedToday.map((t) => (
+                  <View
+                    key={t.id}
+                    style={{
+                      background: THEME.card,
+                      borderRadius: "20rpx",
+                      border: `1rpx solid ${THEME.border}`,
+                      padding: "20rpx",
+                      marginBottom: "12rpx",
+                      opacity: 0.7
+                    }}
+                  >
+                    <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary, textDecoration: "line-through" }}>{t.title}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderContext = () => {
+    const PRIORITY_TEXT = { urgent: "紧急", high: "高", medium: "中", low: "低", default: "中" };
+    const PRIORITY_COLOR = { urgent: "#e15d5d", high: "#e07b39", medium: "#384877", low: "#8e8e93", default: "#384877" };
+    const PRIORITY_BG = { urgent: "#fde8e8", high: "#fff4e6", medium: "#eef0f5", low: "#f2f2f2", default: "#eef0f5" };
+    const fmtTime = (iso) => {
+      if (!iso) return "";
+      const s = String(iso);
+      return s.includes("T") ? s.slice(11, 16) : s.slice(0, 5);
+    };
+
+    const renderEmpty = () => (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
+          <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>时空感知守护</Text>
+        </View>
+        <View style={{ background: "#f8f9fb", borderRadius: "24rpx", border: `1rpx dashed ${THEME.border}`, padding: "40rpx 24rpx", alignItems: "center" }}>
+          <Text style={{ fontSize: "40rpx", marginBottom: "12rpx" }}>✦</Text>
+          <Text style={{ fontSize: "28rpx", fontWeight: 500, color: THEME.ink, marginBottom: "8rpx" }}>一切安好</Text>
+          <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, marginBottom: "20rpx" }}>没有检测到需要守护的情境事件</Text>
+          <View onClick={loadAll} style={{ padding: "10rpx 24rpx", borderRadius: "10rpx", background: THEME.card, border: `1rpx solid ${THEME.border}` }}>
+            <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary }}>重新分析</Text>
+          </View>
+        </View>
+      </View>
+    );
+
+    if (contextCards.length === 0) return renderEmpty();
+
+    const CardShell = ({ children, borderColor, headerBg, icon, title, subtitle, tag, tagColor, tagBg }) => (
+      <View style={{ background: THEME.card, borderRadius: "24rpx", border: `2rpx solid ${borderColor}`, overflow: "hidden", marginBottom: "16rpx", boxShadow: "0 2rpx 10rpx rgba(0,0,0,0.03)" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "22rpx 24rpx 18rpx", background: headerBg }}>
+          <View style={{ display: "flex", alignItems: "center", flex: 1, marginRight: "12rpx" }}>
+            <Text style={{ fontSize: "32rpx", marginRight: "14rpx" }}>{icon}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: "28rpx", fontWeight: 600, color: THEME.ink }}>{title}</Text>
+              {subtitle && <Text style={{ fontSize: "20rpx", color: THEME.inkTertiary, marginTop: "4rpx" }}>{subtitle}</Text>}
+            </View>
+          </View>
+          {tag && (
+            <View style={{ padding: "4rpx 12rpx", borderRadius: "100rpx", background: tagBg, flexShrink: 0 }}>
+              <Text style={{ fontSize: "18rpx", color: tagColor, fontWeight: 500 }}>{tag}</Text>
+            </View>
+          )}
+        </View>
+        <View style={{ padding: "22rpx 24rpx" }}>{children}</View>
+      </View>
+    );
+
+    const ActionBtn = ({ label, primary, onClick, color, bg, border }) => (
+      <View
+        onClick={onClick}
+        style={{
+          padding: "10rpx 18rpx",
+          borderRadius: "10rpx",
+          background: primary ? (bg || THEME.primaryMist) : THEME.card,
+          border: `1rpx solid ${primary ? (bg || THEME.primaryMist) : (border || THEME.border)}`,
+          marginRight: "12rpx",
+          marginBottom: "10rpx"
+        }}
+      >
+        <Text style={{ fontSize: "22rpx", color: primary ? (color || THEME.primary) : THEME.inkTertiary, fontWeight: primary ? 500 : 400 }}>{label}</Text>
+      </View>
+    );
+
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
+          <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>时空感知守护</Text>
+        </View>
+        {contextCards.map((c, i) => {
+          if (c.type === "geo") {
+            const g = c.data;
+            const eventLabel = g.event === "enter" ? `进入${g.location_name}附近` : `离开${g.location_name}附近`;
+            const first = c.tasks[0];
+            return (
+              <CardShell
+                key={i}
+                icon="📍"
+                title="地理情境感知"
+                subtitle={`${eventLabel} · 刚刚`}
+                tag="高优先级"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
+              >
+                <View style={{ background: "#eef0f5", borderRadius: "16rpx", padding: "18rpx" }}>
+                  <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink, lineHeight: "44rpx" }}>
+                    您已到达{g.location_name}附近（{g.distance}米）
+                  </Text>
+                  <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginTop: "8rpx" }}>今日待办：</Text>
+                  {c.tasks.map((t) => (
+                    <View key={t.id} style={{ display: "flex", alignItems: "flex-start", marginTop: "12rpx" }}>
+                      <View
+                        style={{
+                          width: "12rpx",
+                          height: "12rpx",
+                          borderRadius: "50%",
+                          background: PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.default,
+                          marginTop: "10rpx",
+                          marginRight: "12rpx",
+                          flexShrink: 0
+                        }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: "24rpx", color: THEME.inkSecondary, lineHeight: "40rpx" }}>
+                          {fmtTime(t.time) ? `${fmtTime(t.time)} ` : ""}{t.title}
+                        </Text>
+                        {t.overdue && <Text style={{ fontSize: "20rpx", color: "#e15d5d" }}>（已超时）</Text>}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+                <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
+                  <ActionBtn primary label="查看详情" onClick={() => goTask(first.id)} bg="#d8dde9" color="#384877" />
+                  <ActionBtn label="稍后" onClick={() => Taro.showToast({ title: "已稍后提醒", icon: "none" })} />
+                </View>
+              </CardShell>
+            );
+          }
+
+          if (c.type === "forget") {
+            const f = c.data.primary;
+            const others = c.data.others || [];
+            const silent = c.data.silent_notes || [];
+            return (
+              <CardShell
+                key={i}
+                icon="💭"
+                title="遗忘拯救"
+                subtitle="基于遗忘曲线预警"
+                tag="智能干预"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
+              >
+                <View style={{ background: "#eef0f5", borderRadius: "16rpx", padding: "18rpx" }}>
+                  <View style={{ display: "flex", alignItems: "flex-start" }}>
+                    <View
+                      style={{
+                        width: "34rpx",
+                        height: "34rpx",
+                        borderRadius: "50%",
+                        background: "#4a5d8f",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: "12rpx",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Text style={{ fontSize: "22rpx", fontWeight: 700, color: "#fff" }}>!</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.ink, lineHeight: "44rpx" }}>
+                        您{f.days}天前提到的"{f.title}"还未完成
+                      </Text>
+                      <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginTop: "6rpx" }}>
+                        超过{f.days}天未完成遗忘率高达{f.forget_rate}%
+                      </Text>
+                    </View>
+                  </View>
+                  {f.context && (
+                    <View style={{ marginTop: "16rpx", padding: "14rpx", background: THEME.card, borderRadius: "12rpx", border: "1rpx solid #d8dde9" }}>
+                      <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginBottom: "4rpx" }}>上下文：</Text>
+                      <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary, lineHeight: "40rpx" }}>
+                        {f.context}
+                        {f.overdue_days > 0 && <Text style={{ color: "#e15d5d" }}>，已逾期{f.overdue_days}天。</Text>}
+                      </Text>
+                    </View>
+                  )}
+                  {(others.length > 0 || silent.length > 0) && (
+                    <View style={{ marginTop: "16rpx", paddingTop: "14rpx", borderTop: "1rpx solid #d8dde9" }}>
+                      {others.map((t) => (
+                        <View key={t.id} style={{ display: "flex", alignItems: "center", marginBottom: "8rpx" }}>
+                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#4a5d8f", marginRight: "10rpx" }} />
+                          <Text style={{ flex: 1, fontSize: "22rpx", color: THEME.inkTertiary }} numberOfLines={1}>
+                            {t.title}
+                          </Text>
+                          <Text style={{ fontSize: "20rpx", color: "#4a5d8f" }}>{t.days}天</Text>
+                        </View>
+                      ))}
+                      {silent.map((n) => (
+                        <View key={n.id} style={{ display: "flex", alignItems: "center", marginBottom: "8rpx" }}>
+                          <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: "#5b82a0", marginRight: "10rpx" }} />
+                          <Text style={{ flex: 1, fontSize: "22rpx", color: THEME.inkTertiary }} numberOfLines={1}>
+                            心签 · {n.title}
+                          </Text>
+                          <Text style={{ fontSize: "20rpx", color: "#5b82a0" }}>{n.days}天</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+                <View style={{ display: "flex", flexWrap: "wrap", marginTop: "16rpx" }}>
+                  <ActionBtn primary label="立即处理" onClick={() => goTask(f.id)} bg="#d8dde9" color="#384877" />
+                  <ActionBtn label="延后" onClick={() => rescheduleTask({ id: f.id, title: f.title }, "09:00")} />
+                  <ActionBtn label="轻轻放下" onClick={() => letGoTask({ id: f.id, title: f.title })} />
+                </View>
+              </CardShell>
+            );
+          }
+
+          if (c.type === "sequential") {
+            const s = c.data;
+            return (
+              <CardShell
+                key={i}
+                icon="🔗"
+                title="关联规则推荐"
+                subtitle="从你的历史中学到的隐藏逻辑"
+                tag="决策前置"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginBottom: "16rpx" }}>
+                  完成「{s.trigger_task?.title || "上一件事"}」后，你通常会接着处理…
+                </Text>
+                {c.suggestions.map((su, idx) => (
+                  <View key={idx} style={{ background: "#f6f7fa", borderRadius: "16rpx", padding: "18rpx", marginBottom: "14rpx", border: "1rpx solid #d8dde9" }}>
+                    <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12rpx" }}>
+                      <View style={{ display: "flex", alignItems: "center" }}>
+                        <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary, fontWeight: 500 }}>{su.from_label}</Text>
+                        <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginHorizontal: "8rpx" }}>→</Text>
+                        <Text style={{ fontSize: "22rpx", color: "#384877", fontWeight: 500 }}>{su.to_label}</Text>
+                      </View>
+                      <Text style={{ fontSize: "18rpx", color: THEME.inkQuaternary }}>
+                        置信度 <Text style={{ color: "#384877", fontWeight: 500 }}>{su.confidence}%</Text> · {su.support}次共现
+                      </Text>
+                    </View>
+                    {su.tasks.filter(isTaskVisible).map((t) => (
+                      <View
+                        key={t.id}
+                        onClick={() => goTask(t.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          background: THEME.card,
+                          borderRadius: "10rpx",
+                          padding: "14rpx",
+                          marginBottom: "10rpx",
+                          border: "1rpx solid #d8dde9"
+                        }}
+                      >
+                        <Text style={{ flex: 1, fontSize: "24rpx", color: THEME.inkSecondary }} numberOfLines={1}>
+                          {t.title}
+                        </Text>
+                        <View
+                          style={{
+                            padding: "2rpx 10rpx",
+                            borderRadius: "8rpx",
+                            background: PRIORITY_BG[t.priority] || PRIORITY_BG.default,
+                            border: `1rpx solid ${PRIORITY_BG[t.priority] || PRIORITY_BG.default}`
+                          }}
+                        >
+                          <Text style={{ fontSize: "18rpx", color: PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.default }}>
+                            {PRIORITY_TEXT[t.priority] || PRIORITY_TEXT.default}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </CardShell>
+            );
+          }
+
+          if (c.type === "location") {
+            const l = c.data;
+            return (
+              <CardShell
+                key={i}
+                icon="🌿"
+                title="地点情境推荐"
+                subtitle={`你在 ${l.icon || ""} ${l.location_name}（约${l.distance}m）附近`}
+                tag="决策前置"
+                borderColor="#d8dde9"
+                headerBg="#eef0f5"
+                tagColor="#384877"
+                tagBg="#d8dde9"
+              >
+                <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, marginBottom: "12rpx" }}>你在这里经常会做：</Text>
+                <View style={{ display: "flex", flexWrap: "wrap", marginBottom: "16rpx" }}>
+                  {(l.top_categories || []).map((cat) => (
+                    <View
+                      key={cat.category}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "6rpx 14rpx",
+                        borderRadius: "100rpx",
+                        background: "#d8dde9",
+                        border: "1rpx solid #d8dde9",
+                        marginRight: "10rpx",
+                        marginBottom: "10rpx"
+                      }}
+                    >
+                      <Text style={{ fontSize: "18rpx", color: "#384877", marginRight: "4rpx" }}>✦</Text>
+                      <Text style={{ fontSize: "20rpx", color: "#384877" }}>
+                        {cat.label} ×{cat.count}
+                      </Text>
+                    </View>
+                  ))}
+                  {(l.top_titles || []).slice(0, 2).map((t, idx) => (
+                    <View
+                      key={idx}
+                      style={{
+                        padding: "6rpx 14rpx",
+                        borderRadius: "100rpx",
+                        background: "#f8fafc",
+                        border: "1rpx solid #e2e8f0",
+                        marginRight: "10rpx",
+                        marginBottom: "10rpx"
+                      }}
+                    >
+                      <Text style={{ fontSize: "20rpx", color: THEME.inkTertiary }} numberOfLines={1}>
+                        常做「{t.title.length > 12 ? t.title.slice(0, 12) + "…" : t.title}」
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+                {c.suggested.length > 0 ? (
+                  <>
+                    <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginBottom: "10rpx" }}>现在就能处理：</Text>
+                    {c.suggested.map((t) => (
+                      <View
+                        key={t.id}
+                        onClick={() => goTask(t.id)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          background: THEME.card,
+                          borderRadius: "10rpx",
+                          padding: "14rpx",
+                          marginBottom: "10rpx",
+                          border: "1rpx solid #d8dde9"
+                        }}
+                      >
+                        <View style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                          <View style={{ padding: "2rpx 8rpx", borderRadius: "6rpx", background: "#d8dde9", marginRight: "10rpx" }}>
+                            <Text style={{ fontSize: "18rpx", color: "#384877" }}>{t.category_label || CATEGORY_LABEL[t.category] || "其他"}</Text>
+                          </View>
+                          <Text style={{ flex: 1, fontSize: "24rpx", color: THEME.inkSecondary }} numberOfLines={1}>
+                            {t.title}
+                          </Text>
+                        </View>
+                        <View
+                          style={{
+                            padding: "2rpx 10rpx",
+                            borderRadius: "8rpx",
+                            background: PRIORITY_BG[t.priority] || PRIORITY_BG.default,
+                            border: `1rpx solid ${PRIORITY_BG[t.priority] || PRIORITY_BG.default}`
+                          }}
+                        >
+                          <Text style={{ fontSize: "18rpx", color: PRIORITY_COLOR[t.priority] || PRIORITY_COLOR.default }}>
+                            {PRIORITY_TEXT[t.priority] || PRIORITY_TEXT.default}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </>
+                ) : (
+                  <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>暂无匹配的待办。</Text>
+                )}
+              </CardShell>
+            );
+          }
+
+          return null;
+        })}
+      </View>
+    );
+  };
+
+  const renderRecords = () => {
+    const all = notes
+      .filter((n) => isToday(n.created_date))
+      .map((n) => {
+        const text = String(n.plain_text || n.content || "");
+        const url = extractUrl(text);
+        let type = "heart";
+        if (n.source_type === "external_feed") type = "external";
+        else if (url) type = "link";
+        else if ((n.tags || []).includes("图片") || /\.(png|jpg|jpeg|gif|webp)\b/i.test(text)) type = "image";
+        return { ...n, text, url, type };
+      })
+      .sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+
+    const list = all.filter((n) => n.type !== "external");
+    const externalList = all.filter((n) => n.type === "external");
+
+    if (list.length === 0 && externalList.length === 0) return null;
+
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
+          <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+          <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>今日记录</Text>
+        </View>
+        {list.map((item) => (
+          <View
+            key={item.id}
+            style={{
+              background: THEME.card,
+              borderRadius: "24rpx",
+              border: `1rpx solid ${THEME.border}`,
+              padding: "24rpx",
+              marginBottom: "16rpx",
+              boxShadow: "0 2rpx 10rpx rgba(0,0,0,0.03)"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
+              <Text
+                style={{
+                  fontSize: "22rpx",
+                  fontWeight: 500,
+                  color:
+                    item.type === "heart" ? THEME.heartDeep : item.type === "image" ? THEME.primary : THEME.primaryLight,
+                  marginRight: "12rpx"
+                }}
+              >
+                {item.type === "heart"
+                  ? isLedgerCard(item)
+                    ? "🧾 账本"
+                    : `♡ ${item.title || "心签"}`
+                  : item.type === "image" ? "🖼 图片" : "🔗 链接"}
+              </Text>
+              <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{formatTime(item.created_date)}</Text>
+            </View>
+
+            {item.type === "heart" ? (
+              <Text
+                style={{
+                  fontSize: "28rpx",
+                  fontStyle: "italic",
+                  fontWeight: 300,
+                  color: THEME.inkSecondary,
+                  lineHeight: "48rpx",
+                  wordBreak: "break-all"
+                }}
+              >
+                {item.text.slice(0, 200)}
+              </Text>
+            ) : item.type === "image" ? (
+              <Image
+                src={item.url || item.text}
+                mode="aspectFill"
+                style={{ width: "100%", height: "320rpx", borderRadius: "16rpx", background: THEME.primaryFaint }}
+                onClick={() => Taro.previewImage({ urls: [item.url || item.text] })}
+              />
+            ) : (
+              <Text style={{ fontSize: "28rpx", color: THEME.inkSecondary, lineHeight: "48rpx", wordBreak: "break-all" }}>{item.title || item.text.slice(0, 80)}</Text>
+            )}
+
+            {item.type === "heart" && (() => {
+              const ledger = ledgerCardOf(item);
+              const ledgerItems = Array.isArray(ledger?.items) ? ledger.items : [];
+              if (!ledger && heartLoadingIds.has(item.id)) {
+                return (
+                  <View style={{ marginTop: "16rpx", padding: "16rpx 18rpx", borderRadius: "14rpx", background: THEME.heartBg, display: "flex" }}>
+                    <Text style={{ fontSize: "24rpx", color: "#c97b8a" }}>✨ 心栈正在整理…</Text>
+                  </View>
+                );
+              }
+              if (ledgerItems.length > 0) {
+                return (
+                  <View style={{ marginTop: "16rpx", padding: "16rpx 18rpx", borderRadius: "14rpx", background: THEME.heartBg }}>
+                    <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10rpx" }}>
+                      <Text style={{ fontSize: "20rpx", color: "#c97b8a", fontWeight: 500 }}>🧾 账本</Text>
+                      <View style={{ display: "flex", gap: "16rpx" }}>
+                        {!!ledger.total_income && (
+                          <Text style={{ fontSize: "22rpx", color: "#4f8a7a" }}>收入 ¥{ledger.total_income}</Text>
+                        )}
+                        {!!ledger.total_expense && (
+                          <Text style={{ fontSize: "22rpx", color: "#b07d4f" }}>支出 ¥{ledger.total_expense}</Text>
+                        )}
+                      </View>
+                    </View>
+                    {ledgerItems.slice(0, 20).map((it, idx) => (
+                      <View key={idx} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4rpx" }}>
+                        <View style={{ display: "flex", alignItems: "center", flex: 1, marginRight: "12rpx" }}>
+                          <Text style={{ fontSize: "22rpx", color: THEME.inkSecondary }} numberOfLines={1}>{it.item || it.name || "支出"}</Text>
+                          {!!it.is_new && (
+                            <Text
+                              style={{
+                                fontSize: "16rpx",
+                                color: "#a08452",
+                                background: "#f7efe4",
+                                borderRadius: "6rpx",
+                                padding: "0 8rpx",
+                                marginLeft: "10rpx",
+                                flexShrink: 0
+                              }}
+                            >
+                              新
+                            </Text>
+                          )}
+                        </View>
+                        <Text style={{ fontSize: "22rpx", color: it.type === "income" ? "#4f8a7a" : "#b07d4f", flexShrink: 0 }}>
+                          {it.type === "income" ? "+" : "-"}¥{it.amount}
+                        </Text>
+                      </View>
+                    ))}
+                    {!!ledger.advice && (
+                      <Text style={{ marginTop: "10rpx", fontSize: "22rpx", color: "#9a5f6e", lineHeight: "36rpx", wordBreak: "break-all" }}>
+                        {ledger.advice}
+                      </Text>
+                    )}
+                  </View>
+                );
+              }
+              return (
+              <View
+                style={{
+                  marginTop: "16rpx",
+                  padding: "16rpx 18rpx",
+                  borderRadius: "14rpx",
+                  background: THEME.heartBg,
+                  display: "flex"
+                }}
+              >
+                <View
+                  style={{
+                    width: "32rpx",
+                    height: "32rpx",
+                    borderRadius: "50%",
+                    background: `linear-gradient(135deg, ${THEME.primaryLight}, ${THEME.primary})`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "14rpx",
+                    flexShrink: 0,
+                    marginTop: "4rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "18rpx", color: "#fff" }}>♡</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "6rpx" }}>
+                    <Text style={{ fontSize: "20rpx", color: "#c97b8a", fontWeight: 500 }}>AI 回应</Text>
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: "24rpx",
+                      color: heartLoadingIds.has(item.id) ? "#c97b8a" : "#9a5f6e",
+                      lineHeight: "40rpx",
+                      wordBreak: "break-all"
+                    }}
+                  >
+                    {heartLoadingIds.has(item.id)
+                      ? "AI 正在回应…"
+                      : item.metadata?.ai_analysis?.emotional_response || generateLocalHeartReply(item.text)}
+                  </Text>
+                </View>
+              </View>
+              );
+            })()}
+
+            {item.type === "link" && item.url && (
+              <View
+                onClick={() => openWebview(item.url)}
+                style={{
+                  marginTop: "16rpx",
+                  padding: "14rpx 18rpx",
+                  borderRadius: "12rpx",
+                  background: THEME.primaryMist
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: THEME.primary }}>一键跳转链接 ›</Text>
+              </View>
+            )}
+          </View>
+        ))}
+
+        {externalList.length > 0 && (
+          <View style={{ marginTop: "8rpx" }}>
+            <View style={{ display: "flex", alignItems: "center", marginBottom: "20rpx" }}>
+              <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+              <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>外部信息</Text>
+            </View>
+            {externalList.map((item) => (
+              <View
+                key={item.id}
+                onClick={() => item.url && openWebview(item.url)}
+                style={{
+                  background: THEME.primaryMist,
+                  borderRadius: "24rpx",
+                  border: `1rpx solid ${THEME.primaryFaint}`,
+                  padding: "24rpx",
+                  marginBottom: "16rpx"
+                }}
+              >
+                <View style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
+                  <Text style={{ fontSize: "22rpx", fontWeight: 500, color: THEME.primary, marginRight: "12rpx" }}>
+                    ◈ {item.title || "外部信息"}
+                  </Text>
+                  <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>{formatTime(item.created_date)}</Text>
+                </View>
+                <Text style={{ fontSize: "26rpx", color: THEME.inkSecondary, lineHeight: "44rpx", wordBreak: "break-all" }}>
+                  {item.text.slice(0, 120)}
+                </Text>
+                {item.url && (
+                  <View
+                    onClick={() => openWebview(item.url)}
+                    style={{
+                      marginTop: "16rpx",
+                      padding: "14rpx 18rpx",
+                      borderRadius: "12rpx",
+                      background: THEME.card
+                    }}
+                  >
+                    <Text style={{ fontSize: "24rpx", color: THEME.primary }}>查看来源 ›</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderGuardian = () => {
+    // 最近一条没有执行单的未完成约定 → 智能执行入口
+    const delegatedTask = tasks
+      .filter((t) => !isDone(t) && t.id && !(executions || []).some((e) => e.task_id === t.id))
+      .sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0))[0];
+
+    if (guardianRecords.length === 0 && !delegatedTask) return null;
+
+    // 状态标签：柔和的 tinted pill，与产品暖色调一致
+    const STATUS_META = {
+      waiting_acceptance: { label: "待验收", color: "#a8875a", bg: "#f6efe3" },
+      waiting_confirm: { label: "待批准", color: THEME.heartDeep, bg: THEME.heartBg },
+      running: { label: "执行中", color: THEME.primary, bg: THEME.primaryMist },
+      executing: { label: "执行中", color: THEME.primary, bg: THEME.primaryMist },
+      pending: { label: "排队中", color: THEME.primary, bg: THEME.primaryMist },
+      parsing: { label: "解析中", color: THEME.primary, bg: THEME.primaryMist },
+      plan: { label: "已计划", color: THEME.primary, bg: THEME.primaryMist },
+      completed: { label: "已完成", color: "#7a9a7e", bg: "#eaf4ea" },
+      failed: { label: "未成功", color: "#c0564f", bg: "#f9eaea" },
+      cancelled: { label: "已取消", color: THEME.inkQuaternary, bg: "#f2f3f5" },
+      parked: { label: "已放下", color: THEME.inkQuaternary, bg: "#f2f3f5" }
+    };
+
+    const EXEC_TYPE_ICON = {
+      email_draft: "✉️",
+      web_research: "🌐",
+      ppt_doc: "📊",
+      office_doc: "📄",
+      summary_note: "📝",
+      ledger_organize: "📒",
+      file_organize: "🗂️",
+      calendar_event: "📅"
+    };
+    const EXEC_TYPE_LABEL = {
+      email_draft: "邮件草稿",
+      web_research: "联网调研",
+      ppt_doc: "演示稿",
+      office_doc: "办公文档",
+      summary_note: "笔记总结",
+      ledger_organize: "整理账本",
+      file_organize: "文件整理",
+      calendar_event: "日程创建"
+    };
+
+    // 真实执行内容摘要：优先产物预览，其次产物标题/主题，再次计划标题
+    const execWhatLine = (e) => {
+      const plan = e.automation_plan || {};
+      const result = e.automation_result || {};
+      const data = result.data && typeof result.data === "object" ? result.data : {};
+      if (typeof result.preview === "string" && result.preview.trim()) {
+        return result.preview.trim().replace(/\s+/g, " ").slice(0, 48);
+      }
+      const t = data.subject || data.title || plan.title || plan.description || "";
+      return String(t || "").replace(/\s+/g, " ").trim().slice(0, 48);
+    };
+
+    // 每个环节的查看入口：未完成可逐环节查看并干预，已完成可点开回顾
+    const openExec = (e) => setReviewExec(e);
+    const actionLabel = (status) =>
+      status === "waiting_acceptance"
+        ? "查看并确认"
+        : status === "waiting_confirm"
+          ? "查看计划"
+          : status === "failed"
+            ? "再试一次"
+            : status === "pending"
+              ? "调整优先"
+              : ["executing", "parsing", "running", "plan"].includes(status)
+                ? "查看进度"
+                : "查看";
+
+    const acting = execActingId != null;
+
+    // 按时间倒序；未完成的留在主列表，已完成/已取消的进入历史折叠
+    const sortedRecords = [...guardianRecords].sort(
+      (a, b) => new Date(b.updated_date || b.created_date) - new Date(a.updated_date || a.created_date)
+    );
+    const isActiveRecord = (e) => !["completed", "cancelled", "parked"].includes(e.execution_status);
+    const activeRecords = sortedRecords.filter(isActiveRecord);
+    const historyRecords = sortedRecords.filter((e) => !isActiveRecord(e));
+    const recentActive = activeRecords.slice(0, 4);
+    const foldedActive = activeRecords.slice(4);
+
+    const cardShell = { background: THEME.card, borderRadius: "24rpx", border: `1rpx solid ${THEME.border}`, boxShadow: "0 2rpx 14rpx rgba(30,42,64,0.04)" };
+
+    const recordRow = (e) => {
+      const meta = STATUS_META[e.execution_status] || STATUS_META.running;
+      const what = execWhatLine(e);
+      const isDoneRecord = !isActiveRecord(e);
+      return (
+        <View
+          key={e.id}
+          onClick={() => openExec(e)}
+          style={{ display: "flex", alignItems: "center", padding: "20rpx 0", opacity: isDoneRecord ? 0.62 : 1 }}
+        >
+          <View
+            style={{
+              width: "68rpx",
+              height: "68rpx",
+              borderRadius: "18rpx",
+              background: THEME.waterMist,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "20rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "32rpx" }}>{EXEC_TYPE_ICON[e.automation_type] || "🤖"}</Text>
+          </View>
+          <View style={{ flex: 1, marginRight: "20rpx", minWidth: 0 }}>
+            <Text style={{ fontSize: "27rpx", fontWeight: 500, color: isDoneRecord ? THEME.inkTertiary : THEME.ink, lineHeight: "40rpx" }} numberOfLines={1}>
+              {e.task_title}
+            </Text>
+            <Text style={{ fontSize: "21rpx", color: THEME.inkQuaternary, marginTop: "2rpx" }} numberOfLines={1}>
+              {EXEC_TYPE_LABEL[e.automation_type] || "自动执行"}
+              {what ? ` · ${what}` : ""}
+              {` · ${formatTime(e.completed_at || e.updated_date || e.created_date)}`}
+            </Text>
+          </View>
+          <View style={{ flexShrink: 0, alignItems: "flex-end" }}>
+            <View style={{ padding: "3rpx 14rpx", borderRadius: "100rpx", background: meta.bg }}>
+              <Text style={{ fontSize: "19rpx", color: meta.color }}>{meta.label}</Text>
+            </View>
+            <View
+              style={{
+                marginTop: "10rpx",
+                padding: "7rpx 20rpx",
+                borderRadius: "100rpx",
+                border: `1rpx solid ${THEME.primary}`,
+                opacity: acting ? 0.5 : 1
+              }}
+            >
+              <Text style={{ fontSize: "22rpx", color: THEME.primary }}>{actionLabel(e.execution_status)}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    };
+
+    return (
+      <View style={{ padding: "18rpx 32rpx" }}>
+        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16rpx" }}>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <View style={{ width: "6rpx", height: "28rpx", borderRadius: "4rpx", background: THEME.primaryLight, marginRight: "16rpx" }} />
+            <Text style={{ fontSize: "26rpx", fontWeight: 500, color: THEME.inkTertiary }}>守护记录</Text>
+          </View>
+          {activeRecords.length > 0 && (
+            <View style={{ display: "flex", alignItems: "center" }}>
+              <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: THEME.water, marginRight: "8rpx" }} />
+              <Text style={{ fontSize: "22rpx", color: THEME.water }}>守护中 · {activeRecords.length}</Text>
+            </View>
+          )}
+        </View>
+
+        {recentActive.length > 0 && (
+          <View style={{ ...cardShell, padding: "4rpx 24rpx" }}>
+            {recentActive.map((e) => recordRow(e))}
+          </View>
+        )}
+
+        {foldedActive.length > 0 && (
+          <View
+            onClick={() => setShowActiveMore((v) => !v)}
+            style={{ alignSelf: "center", marginTop: "18rpx", padding: "10rpx 30rpx", borderRadius: "100rpx", background: THEME.card, border: `1rpx solid ${THEME.border}` }}
+          >
+            <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>
+              {showActiveMore ? "收起 ⌃" : `其余进行中 ${foldedActive.length} 条 ⌄`}
+            </Text>
+          </View>
+        )}
+
+        {showActiveMore && foldedActive.length > 0 && (
+          <View style={{ ...cardShell, marginTop: "14rpx", padding: "4rpx 24rpx" }}>
+            {foldedActive.map((e) => recordRow(e))}
+          </View>
+        )}
+
+        {historyRecords.length > 0 && (
+          <View
+            onClick={() => setShowExecHistory((v) => !v)}
+            style={{ alignSelf: "center", marginTop: "18rpx", padding: "10rpx 30rpx", borderRadius: "100rpx", background: THEME.card, border: `1rpx solid ${THEME.border}` }}
+          >
+            <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary }}>
+              {showExecHistory ? "收起 ⌃" : `历史记录 ${historyRecords.length} 条 ⌄`}
+            </Text>
+          </View>
+        )}
+
+        {showExecHistory && historyRecords.length > 0 && (
+          <View style={{ ...cardShell, marginTop: "14rpx", padding: "4rpx 24rpx" }}>
+            {historyRecords.map((e) => recordRow(e))}
+          </View>
+        )}
+
+        {delegatedTask && (
+          <View
+            style={{
+              marginTop: "16rpx",
+              display: "flex",
+              alignItems: "center",
+              background: THEME.waterMist,
+              borderRadius: "24rpx",
+              border: "1rpx solid rgba(91,130,160,0.14)",
+              padding: "22rpx 24rpx"
+            }}
+          >
+            <Text style={{ fontSize: "28rpx", color: THEME.water, marginRight: "14rpx" }}>✦</Text>
+            <Text style={{ flex: 1, fontSize: "26rpx", color: THEME.inkSecondary, marginRight: "20rpx" }} numberOfLines={1}>
+              {delegatedTask.title}
+            </Text>
+            <View
+              onClick={() => delegateExec(delegatedTask.id)}
+              style={{ padding: "10rpx 24rpx", borderRadius: "100rpx", background: THEME.primary, opacity: acting ? 0.5 : 1, flexShrink: 0 }}
+            >
+              <Text style={{ fontSize: "22rpx", color: "#fff" }}>让心栈先执行</Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+
+  const renderAiDisclaimer = () => (
+    <View style={{ padding: "24rpx 32rpx 40rpx" }}>
+      <View
+        style={{
+          padding: "18rpx 22rpx",
+          borderRadius: "14rpx",
+          background: "rgba(91,130,160,0.06)",
+          border: "1rpx solid rgba(91,130,160,0.12)",
+          display: "flex",
+          alignItems: "center"
+        }}
+      >
+        <View
+          style={{
+            width: "28rpx",
+            height: "28rpx",
+            borderRadius: "50%",
+            background: THEME.water,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginRight: "14rpx",
+            flexShrink: 0
+          }}
+        >
+          <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+        </View>
+        <Text style={{ fontSize: "22rpx", color: THEME.inkTertiary, lineHeight: "38rpx" }}>
+          部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderBottomBar = () => (
+    <>
+      <FlowComposer
+        placeholder="此刻想记下什么？直接输入或长按语音"
+        busy={false}
+        callbacksRef={composerCallbacksRef}
+      />
+
+
+
+      {imageDraft && (() => {
+        const s = imageDraft.suggestion || {};
+        const apiOrigin = (process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api").replace(/\/api\/?$/, "");
+        const absUrl = `${apiOrigin}${imageDraft.imageUrl}`;
+        const draftType = imageDraft.contentType;
+        const subtasks = Array.isArray(s.subtasks) ? s.subtasks : [];
+        const entries = Array.isArray(s.entries) ? s.entries : [];
+        const fieldLabel = { fontSize: "24rpx", color: THEME.inkTertiary, margin: "20rpx 0 10rpx" };
+        const fieldInput = {
+          background: THEME.paper,
+          border: `1rpx solid ${THEME.border}`,
+          borderRadius: "12rpx",
+          padding: "14rpx 20rpx",
+          fontSize: "26rpx",
+          color: THEME.ink
+        };
+        return (
+          <View
+            style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.5)",
+              zIndex: 210,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            onClick={() => setImageDraft(null)}
+          >
+            <View
+              style={{
+                width: "660rpx",
+                maxHeight: "84vh",
+                background: THEME.card,
+                borderRadius: "28rpx",
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden"
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <View
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "28rpx 32rpx 16rpx"
+                }}
+              >
+                <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink }}>识别草稿</Text>
+                <Text
+                  style={{ fontSize: "40rpx", color: THEME.inkQuaternary, padding: "0 8rpx" }}
+                  onClick={() => setImageDraft(null)}
+                >
+                  ×
+                </Text>
+              </View>
+              <ScrollView scrollY style={{ maxHeight: "62vh" }} showScrollbar={false}>
+                <View style={{ padding: "0 32rpx" }}>
+                  <Image
+                    src={absUrl}
+                    mode="aspectFill"
+                    onClick={() => Taro.previewImage({ urls: [absUrl] })}
+                    style={{ width: "140rpx", height: "140rpx", borderRadius: "16rpx", background: THEME.paper }}
+                  />
+                  <Text style={fieldLabel}>识别出的文字（可编辑）</Text>
+                  <Textarea
+                    value={imageDraft.extractedText}
+                    maxlength={4000}
+                    onInput={(e) =>
+                      setImageDraft((prev) => (prev ? { ...prev, extractedText: e.detail.value } : prev))
+                    }
+                    style={{ ...fieldInput, height: "200rpx", width: "100%", boxSizing: "border-box" }}
+                  />
+                  <Text style={fieldLabel}>生成类型</Text>
+                  <View style={{ display: "flex", flexDirection: "row", flexWrap: "wrap" }}>
+                    {DRAFT_TYPES.map((t) => (
+                      <View
+                        key={t.k}
+                        onClick={() => setImageDraft((prev) => (prev ? { ...prev, contentType: t.k } : prev))}
+                        style={{
+                          padding: "10rpx 28rpx",
+                          borderRadius: "100rpx",
+                          marginRight: "16rpx",
+                          marginBottom: "12rpx",
+                          background: draftType === t.k ? THEME.water : THEME.paper,
+                          border: `1rpx solid ${draftType === t.k ? THEME.water : THEME.border}`
+                        }}
+                      >
+                        <Text style={{ fontSize: "26rpx", color: draftType === t.k ? "#fff" : THEME.inkSecondary }}>
+                          {t.l}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {draftType === "task" && (
+                    <>
+                      <Text style={fieldLabel}>标题</Text>
+                      <Input
+                        value={String(s.title || "")}
+                        placeholder="要做什么"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.title = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                      <View style={{ display: "flex", flexDirection: "row" }}>
+                        <View style={{ flex: 3, marginRight: "16rpx" }}>
+                          <Text style={fieldLabel}>日期</Text>
+                          <Input
+                            value={String(s.date || "")}
+                            placeholder="YYYY-MM-DD"
+                            onInput={(e) => updateImageDraft((n) => { n.suggestion.date = e.detail.value; })}
+                            style={fieldInput}
+                          />
+                        </View>
+                        <View style={{ flex: 2 }}>
+                          <Text style={fieldLabel}>时间</Text>
+                          <Input
+                            value={String(s.time || "")}
+                            placeholder="HH:mm"
+                            onInput={(e) => updateImageDraft((n) => { n.suggestion.time = e.detail.value; })}
+                            style={fieldInput}
+                          />
+                        </View>
+                      </View>
+                      <Text style={fieldLabel}>备注</Text>
+                      <Input
+                        value={String(s.description || "")}
+                        placeholder="补充说明"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.description = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                      <Text style={fieldLabel}>子约定</Text>
+                      {subtasks.map((st, i) => (
+                        <View key={i} style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "12rpx" }}>
+                          <Input
+                            value={String(st || "")}
+                            placeholder={`子约定 ${i + 1}`}
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.subtasks || [])];
+                                arr[i] = e.detail.value;
+                                n.suggestion.subtasks = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 1, marginRight: "12rpx" }}
+                          />
+                          <Text
+                            style={{ fontSize: "36rpx", color: THEME.inkQuaternary, padding: "0 10rpx" }}
+                            onClick={() =>
+                              updateImageDraft((n) => {
+                                n.suggestion.subtasks = (n.suggestion.subtasks || []).filter((_, idx) => idx !== i);
+                              })
+                            }
+                          >
+                            ×
+                          </Text>
+                        </View>
+                      ))}
+                      <Text
+                        style={{ fontSize: "26rpx", color: THEME.water, padding: "6rpx 0 16rpx" }}
+                        onClick={() =>
+                          updateImageDraft((n) => {
+                            n.suggestion.subtasks = [...(n.suggestion.subtasks || []), ""];
+                          })
+                        }
+                      >
+                        + 添加子约定
+                      </Text>
+                    </>
+                  )}
+
+                  {draftType === "ledger" && (
+                    <>
+                      <Text style={fieldLabel}>账本说明</Text>
+                      <Input
+                        value={String(s.summary || "")}
+                        placeholder="例如：3月12日超市采购"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.summary = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                      <Text style={fieldLabel}>明细条目</Text>
+                      {entries.map((en, i) => (
+                        <View key={i} style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "12rpx" }}>
+                          <Input
+                            value={String(en?.item || "")}
+                            placeholder="品名"
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.entries || [])];
+                                arr[i] = { ...(arr[i] || {}), item: e.detail.value };
+                                n.suggestion.entries = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 2, marginRight: "10rpx" }}
+                          />
+                          <Input
+                            value={String(en?.category || "")}
+                            placeholder="分类"
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.entries || [])];
+                                arr[i] = { ...(arr[i] || {}), category: e.detail.value };
+                                n.suggestion.entries = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 1.2, marginRight: "10rpx" }}
+                          />
+                          <Input
+                            value={en?.amount != null ? String(en.amount) : ""}
+                            type="digit"
+                            placeholder="金额"
+                            onInput={(e) =>
+                              updateImageDraft((n) => {
+                                const arr = [...(n.suggestion.entries || [])];
+                                arr[i] = { ...(arr[i] || {}), amount: e.detail.value };
+                                n.suggestion.entries = arr;
+                              })
+                            }
+                            style={{ ...fieldInput, flex: 1 }}
+                          />
+                          <Text
+                            style={{ fontSize: "36rpx", color: THEME.inkQuaternary, padding: "0 6rpx 0 10rpx" }}
+                            onClick={() =>
+                              updateImageDraft((n) => {
+                                n.suggestion.entries = (n.suggestion.entries || []).filter((_, idx) => idx !== i);
+                              })
+                            }
+                          >
+                            ×
+                          </Text>
+                        </View>
+                      ))}
+                      <Text
+                        style={{ fontSize: "26rpx", color: THEME.water, padding: "6rpx 0 4rpx" }}
+                        onClick={() =>
+                          updateImageDraft((n) => {
+                            n.suggestion.entries = [...(n.suggestion.entries || []), { item: "", category: "", amount: "" }];
+                          })
+                        }
+                      >
+                        + 加一行
+                      </Text>
+                      <Text style={{ ...fieldLabel, marginBottom: "16rpx" }}>
+                        合计 ¥
+                        {entries.reduce((sum, en) => sum + (Number(en?.amount) || 0), 0).toFixed(2)}
+                      </Text>
+                    </>
+                  )}
+
+                  {draftType === "table" && (() => {
+                    const cols = Array.isArray(s.columns) ? s.columns.map(String) : [];
+                    const rows = Array.isArray(s.rows) ? s.rows : [];
+                    const marked = Array.isArray(s.marked) ? s.marked.map(Boolean) : [];
+                    const cellInput = {
+                      ...fieldInput,
+                      flex: 1,
+                      minWidth: "140rpx",
+                      padding: "10rpx 14rpx",
+                      fontSize: "24rpx",
+                      marginRight: "8rpx"
+                    };
+                    return (
+                      <>
+                        <Text style={fieldLabel}>表格标题</Text>
+                        <Input
+                          value={String(s.title || "")}
+                          placeholder="例如：3月超市采购小票"
+                          onInput={(e) => updateImageDraft((n) => { n.suggestion.title = e.detail.value; })}
+                          style={fieldInput}
+                        />
+                        <Text style={fieldLabel}>说明（可选）</Text>
+                        <Input
+                          value={String(s.summary || "")}
+                          placeholder="一句话说明这张表"
+                          onInput={(e) => updateImageDraft((n) => { n.suggestion.summary = e.detail.value; })}
+                          style={fieldInput}
+                        />
+                        <Text style={fieldLabel}>表格（点单元格可修改，⭐ 标记重点行）</Text>
+                        <ScrollView scrollX showScrollbar={false} style={{ width: "100%" }}>
+                          <View style={{ minWidth: "100%" }}>
+                            <View style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "10rpx" }}>
+                              <View style={{ width: "56rpx", flexShrink: 0 }} />
+                              {cols.map((c, ci) => (
+                                <Input
+                                  key={ci}
+                                  value={c}
+                                  placeholder={`列${ci + 1}`}
+                                  onInput={(e) =>
+                                    updateImageDraft((n) => {
+                                      const arr = [...(n.suggestion.columns || [])];
+                                      arr[ci] = e.detail.value;
+                                      n.suggestion.columns = arr;
+                                    })
+                                  }
+                                  style={{ ...cellInput, background: THEME.waterMist, borderColor: THEME.waterFaint, fontWeight: 500 }}
+                                />
+                              ))}
+                              <Text
+                                style={{ fontSize: "26rpx", color: THEME.water, padding: "0 10rpx", flexShrink: 0 }}
+                                onClick={() =>
+                                  updateImageDraft((n) => {
+                                    const arr = [...(n.suggestion.columns || []), `列${(n.suggestion.columns || []).length + 1}`];
+                                    n.suggestion.columns = arr;
+                                    n.suggestion.rows = (n.suggestion.rows || []).map((r) => [...(Array.isArray(r) ? r : []), ""]);
+                                  })
+                                }
+                              >
+                                +列
+                              </Text>
+                            </View>
+                            {rows.map((r, ri) => (
+                              <View key={ri} style={{ display: "flex", flexDirection: "row", alignItems: "center", marginBottom: "10rpx" }}>
+                                <View
+                                  style={{ width: "56rpx", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                  onClick={() =>
+                                    updateImageDraft((n) => {
+                                      const m = [...(Array.isArray(n.suggestion.marked) ? n.suggestion.marked : [])];
+                                      while (m.length <= ri) m.push(false);
+                                      m[ri] = !m[ri];
+                                      n.suggestion.marked = m;
+                                    })
+                                  }
+                                >
+                                  <Text style={{ fontSize: "30rpx", color: marked[ri] ? "#e6b93f" : THEME.inkQuaternary }}>
+                                    {marked[ri] ? "★" : "☆"}
+                                  </Text>
+                                </View>
+                                {cols.map((_, ci) => (
+                                  <Input
+                                    key={ci}
+                                    value={Array.isArray(r) ? String(r[ci] ?? "") : ""}
+                                    onInput={(e) =>
+                                      updateImageDraft((n) => {
+                                        const arr = (n.suggestion.rows || []).map((row) => [...(Array.isArray(row) ? row : [])]);
+                                        while ((arr[ri] || []).length < cols.length) arr[ri].push("");
+                                        arr[ri][ci] = e.detail.value;
+                                        n.suggestion.rows = arr;
+                                      })
+                                    }
+                                    style={{
+                                      ...cellInput,
+                                      background: marked[ri] ? "#fdf6e3" : THEME.paper,
+                                      borderColor: marked[ri] ? "#ecd9a0" : THEME.border
+                                    }}
+                                  />
+                                ))}
+                                <Text
+                                  style={{ fontSize: "36rpx", color: THEME.inkQuaternary, padding: "0 10rpx", flexShrink: 0 }}
+                                  onClick={() =>
+                                    updateImageDraft((n) => {
+                                      n.suggestion.rows = (n.suggestion.rows || []).filter((_, idx) => idx !== ri);
+                                      n.suggestion.marked = (n.suggestion.marked || []).filter((_, idx) => idx !== ri);
+                                    })
+                                  }
+                                >
+                                  ×
+                                </Text>
+                              </View>
+                            ))}
+                            <Text
+                              style={{ fontSize: "26rpx", color: THEME.water, padding: "6rpx 0 16rpx" }}
+                              onClick={() =>
+                                updateImageDraft((n) => {
+                                  n.suggestion.rows = [...(n.suggestion.rows || []), cols.map(() => "")];
+                                })
+                              }
+                            >
+                              + 加一行
+                            </Text>
+                          </View>
+                        </ScrollView>
+                      </>
+                    );
+                  })()}
+
+                  {(draftType === "note" || draftType === "heart") && (
+                    <>
+                      <Text style={fieldLabel}>标题（可选）</Text>
+                      <Input
+                        value={String(s.title || "")}
+                        placeholder="给这条内容起个名字"
+                        onInput={(e) => updateImageDraft((n) => { n.suggestion.title = e.detail.value; })}
+                        style={fieldInput}
+                      />
+                    </>
+                  )}
+                  <View style={{ height: "20rpx" }} />
+                </View>
+              </ScrollView>
+              <View
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  padding: "20rpx 32rpx",
+                  paddingBottom: "calc(20rpx + env(safe-area-inset-bottom))",
+                  borderTop: `1rpx solid ${THEME.border}`
+                }}
+              >
+                <View
+                  onClick={() => setImageDraft(null)}
+                  style={{
+                    flex: 1,
+                    padding: "18rpx 0",
+                    borderRadius: "100rpx",
+                    background: THEME.paper,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginRight: "20rpx"
+                  }}
+                >
+                  <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>取消</Text>
+                </View>
+                <View
+                  onClick={confirmImageDraft}
+                  style={{
+                    flex: 2,
+                    padding: "18rpx 0",
+                    borderRadius: "100rpx",
+                    background: imageDraftBusy ? THEME.waterFaint : THEME.water,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "28rpx", color: "#fff", fontWeight: 500 }}>
+                    {imageDraftBusy ? "生成中…" : "确认生成"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        );
+      })()}
+    </>
+  );
+
+  return (
+    <View style={{ height: "100vh", background: THEME.paper, display: "flex", flexDirection: "column" }}>
+      {renderHeader()}
+      {renderGuestBanner()}
+      <ScrollView
+        id="flowScroll"
+        scrollY
+        style={{ flex: 1, minHeight: 0 }}
+        scrollTop={svScrollTop}
+        refresherEnabled
+        refresherTriggered={refreshing}
+        onRefresherRefresh={onRefresh}
+        enhanced
+        showScrollbar={false}
+        scrollWithAnimation
+        bounces={false}
+      >
+        <View style={{ paddingBottom: "200rpx" }}>
+          {loading && tasks.length === 0 ? (
+            <View style={{ padding: "60rpx", textAlign: "center" }}>
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>河流正在汇聚…</Text>
+            </View>
+          ) : (
+            <>
+              {renderRiver()}
+              {renderNow()}
+              {renderContext()}
+              {renderRecords()}
+              {renderGuardian()}
+              {renderVision()}
+              {renderRhythm()}
+              {renderAiDisclaimer()}
+            </>
+          )}
+        </View>
+      </ScrollView>
+      {renderBottomBar()}
+
+      <FlowChatSheet
+        visible={chatVisible}
+        seedText={chatSeed}
+        onClose={() => setChatVisible(false)}
+        onCreated={loadAll}
+      />
+
+      {splitSheet ? (
+        <View
+          style={{
+            position: "fixed",
+            top: "22%",
+            left: "40rpx",
+            right: "40rpx",
+            zIndex: 999,
+            background: THEME.card,
+            borderRadius: "32rpx",
+            maxHeight: "72vh",
+            padding: "40rpx 36rpx",
+            boxShadow: "0 12rpx 48rpx rgba(0,0,0,0.22)"
+          }}
+        >
+          <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink, marginBottom: "10rpx" }}>把约定拆小</Text>
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <Text style={{ flex: 1, fontSize: "28rpx", fontWeight: 500, color: THEME.ink, lineHeight: "42rpx", marginRight: "16rpx" }} numberOfLines={2}>
+              {splitSheet.task.title}
+            </Text>
+            {splitSheet.candidates?.length > 1 && (
+              <Text onClick={switchSplitCandidate} style={{ fontSize: "24rpx", color: THEME.primary, flexShrink: 0, padding: "6rpx 2rpx" }}>
+                换一件 ›
+              </Text>
+            )}
+          </View>
+          <View style={{ display: "flex", alignItems: "center", marginTop: "10rpx", marginBottom: "20rpx" }}>
+            <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.primaryMist, marginRight: "12rpx" }}>
+              <Text style={{ fontSize: "20rpx", color: THEME.primary }}>{CATEGORY_LABEL[splitSheet.task.category] || "其他"}</Text>
+            </View>
+            <View style={{ padding: "4rpx 12rpx", borderRadius: "8rpx", background: THEME.primaryMist, marginRight: "12rpx" }}>
+              <Text style={{ fontSize: "20rpx", color: THEME.primary }}>{SPLIT_PRIORITY_LABEL[splitSheet.task.priority] || "中"}</Text>
+            </View>
+            <Text style={{ fontSize: "20rpx", color: isOverdue(splitSheet.task) ? THEME.heartDeep : THEME.inkQuaternary }}>
+              {isOverdue(splitSheet.task) ? "已逾期" : isRecurring(splitSheet.task) ? recurringBadgeText(splitSheet.task) : taskTime(splitSheet.task) ? formatTime(taskTime(splitSheet.task)) : "未定时"}
+            </Text>
+          </View>
+          {!!splitSheet.task.description && (
+            <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "38rpx", marginBottom: "20rpx" }} numberOfLines={2}>
+              {splitSheet.task.description}
+            </Text>
+          )}
+
+          {splitSheet.busy ? (
+            <View style={{ padding: "60rpx 0", alignItems: "center" }}>
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>AI 正在理解这件约定…</Text>
+            </View>
+          ) : !splitSheet.confirmed ? (
+            <View style={{ padding: "40rpx 0", alignItems: "center" }}>
+              <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, lineHeight: "42rpx", textAlign: "center" }}>
+                确认后，AI 会理解这件约定的内容，把它拆成一件件可以分步完成的小事
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              scrollY
+              showScrollbar={false}
+              style={{ height: `${Math.min(36, splitSheet.steps.length * 6 + 2)}vh`, maxHeight: "38vh" }}
+            >
+              {splitSheet.steps.map((s, i) => (
+                <View
+                  key={`split-step-${i}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    background: THEME.paper,
+                    border: `1rpx solid ${THEME.border}`,
+                    borderRadius: "16rpx",
+                    padding: "16rpx 20rpx",
+                    marginBottom: "10rpx"
+                  }}
+                >
+                  <View
+                    style={{
+                      width: "40rpx",
+                      height: "40rpx",
+                      borderRadius: "20rpx",
+                      background: THEME.primaryMist,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginRight: "18rpx",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Text style={{ fontSize: "22rpx", color: THEME.primary, fontWeight: 600 }}>{i + 1}</Text>
+                  </View>
+                  <Input
+                    style={{ flex: 1, fontSize: "27rpx", color: THEME.ink, lineHeight: "40rpx", minWidth: 0 }}
+                    placeholder="要做什么"
+                    placeholderStyle={{ color: THEME.inkQuaternary }}
+                    value={s.title}
+                    onInput={(e) => updateSplitStep(i, e.detail.value)}
+                  />
+                  {!!s.minutes && (
+                    <View
+                      style={{
+                        padding: "4rpx 12rpx",
+                        borderRadius: "100rpx",
+                        background: THEME.goldBg,
+                        marginLeft: "14rpx",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Text style={{ fontSize: "20rpx", color: THEME.gold }}>约{s.minutes}分钟</Text>
+                    </View>
+                  )}
+                  <View
+                    onClick={() => insertSplitStep(i)}
+                    style={{
+                      width: "44rpx",
+                      height: "44rpx",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginLeft: "8rpx",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Text style={{ color: THEME.primary, fontSize: "30rpx", lineHeight: "30rpx" }}>＋</Text>
+                  </View>
+                  <View
+                    onClick={() => removeSplitStep(i)}
+                    style={{
+                      width: "44rpx",
+                      height: "44rpx",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginLeft: "8rpx",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Text style={{ color: "#e53935", fontSize: "34rpx", lineHeight: "34rpx" }}>×</Text>
+                  </View>
+                </View>
+              ))}
+              <View
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  background: THEME.paper,
+                  border: `1rpx dashed ${THEME.border}`,
+                  borderRadius: "16rpx",
+                  padding: "10rpx 20rpx",
+                  marginBottom: "10rpx"
+                }}
+              >
+                <Input
+                  style={{ flex: 1, fontSize: "26rpx", color: THEME.ink, minWidth: 0 }}
+                  placeholder="添加一步"
+                  placeholderStyle={{ color: THEME.inkQuaternary }}
+                  value={splitNewStepText}
+                  onInput={(e) => setSplitNewStepText(e.detail.value)}
+                />
+                <View
+                  onClick={addSplitStep}
+                  style={{
+                    padding: "8rpx 20rpx",
+                    borderRadius: "100rpx",
+                    background: THEME.primaryMist,
+                    marginLeft: "14rpx",
+                    flexShrink: 0
+                  }}
+                >
+                  <Text style={{ fontSize: "22rpx", color: THEME.primary }}>＋ 添加</Text>
+                </View>
+              </View>
+            </ScrollView>
+          )}
+
+          {!splitSheet.busy && !!splitSheet.confirmed && (
+            <Text style={{ fontSize: "20rpx", color: THEME.inkQuaternary, marginTop: "10rpx" }}>
+              可修改或增删每一步，点 ＋ 可在该步下面补充一件小事，确认后将按你确认的版本作为子约定创建
+            </Text>
+          )}
+
+          <View style={{ display: "flex", marginTop: "30rpx" }}>
+            <View
+              onClick={() => !splitSheet.creating && setSplitSheet(null)}
+              style={{
+                width: "31%",
+                padding: "18rpx 0",
+                borderRadius: "14rpx",
+                background: THEME.paper,
+                alignItems: "center",
+                marginRight: "3%"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", color: THEME.inkTertiary }}>再想想</Text>
+            </View>
+            <View
+              onClick={
+                splitSheet.busy || (splitSheet.confirmed && validSplitCount === 0)
+                  ? undefined
+                  : splitSheet.confirmed
+                    ? confirmSplit
+                    : confirmSplitTask
+              }
+              style={{
+                width: "66%",
+                padding: "18rpx 0",
+                borderRadius: "14rpx",
+                background:
+                  splitSheet.busy || splitSheet.creating || (splitSheet.confirmed && validSplitCount === 0)
+                    ? THEME.primaryFaint
+                    : THEME.primary,
+                alignItems: "center"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", fontWeight: 500, color: "#fff" }}>
+                {splitSheet.creating
+                  ? "正在拆分…"
+                  : splitSheet.busy
+                    ? "拆解中…"
+                    : splitSheet.confirmed
+                      ? validSplitCount > 0
+                        ? `确认拆成 ${validSplitCount} 件`
+                        : "请至少保留一步"
+                      : "就拆这件"}
+              </Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+
+      {/* 守护记录 · 查看并确认：展示执行产物，确认后约定完成 */}
+      {reviewExec && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center"
+          }}
+          onClick={() => setReviewExec(null)}
+        >
+          <View
+            style={{
+              width: "620rpx",
+              maxHeight: "80vh",
+              background: THEME.card,
+              borderRadius: "32rpx",
+              padding: "40rpx 36rpx",
+              display: "flex",
+              flexDirection: "column"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text style={{ fontSize: "32rpx", fontWeight: 600, color: THEME.ink }} numberOfLines={2}>
+              {reviewExec.task_title}
+            </Text>
+            <Text style={{ fontSize: "22rpx", color: THEME.inkQuaternary, marginTop: "8rpx", marginBottom: "24rpx" }}>
+              {reviewExec.execution_status === "waiting_acceptance"
+                ? "守护执行 · 已完成，等你验收"
+                : reviewExec.execution_status === "waiting_confirm"
+                  ? "守护执行 · 已有计划，等你批准"
+                  : reviewExec.execution_status === "completed"
+                    ? "守护执行 · 已完成"
+                    : reviewExec.execution_status === "failed"
+                      ? "守护执行 · 未成功，可以再试一次"
+                      : reviewExec.execution_status === "pending"
+                        ? "守护执行 · 排队中"
+                        : reviewExec.execution_status === "cancelled"
+                          ? "守护执行 · 已取消"
+                          : reviewExec.execution_status === "parked"
+                            ? "守护执行 · 已缓缓放下"
+                            : "守护执行 · 正在进行"}
+            </Text>
+            {reviewExec.execution_status === "failed" && reviewExec.error_message ? (
+              <View
+                style={{
+                  borderLeft: "4rpx solid #c0564f",
+                  background: "rgba(192,86,79,0.06)",
+                  padding: "14rpx 20rpx",
+                  borderRadius: "0 10rpx 10rpx 0",
+                  marginBottom: "20rpx"
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: "#c0564f", lineHeight: "40rpx" }}>
+                  {String(reviewExec.error_message).slice(0, 120)}
+                </Text>
+              </View>
+            ) : null}
+            <ScrollView scrollY style={{ maxHeight: "46vh" }} showScrollbar={false}>
+              {typeof reviewExec.automation_result?.preview === "string" && reviewExec.automation_result.preview.trim() ? (
+                <View
+                  style={{
+                    borderLeft: `4rpx solid ${THEME.waterLight}`,
+                    background: "rgba(91,130,160,0.06)",
+                    padding: "14rpx 20rpx",
+                    borderRadius: "0 10rpx 10rpx 0"
+                  }}
+                >
+                  <Text style={{ fontSize: "24rpx", color: THEME.inkTertiary, lineHeight: "40rpx" }}>
+                    {reviewExec.automation_result.preview.trim()}
+                  </Text>
+                </View>
+              ) : null}
+              {execReviewBlocks(reviewExec).length === 0 ? (
+                <Text style={{ fontSize: "26rpx", color: THEME.inkTertiary, lineHeight: "44rpx" }}>
+                  执行已完成，暂无详细产物。
+                </Text>
+              ) : (
+                execReviewBlocks(reviewExec).map((b, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      marginTop:
+                        i === 0 && !(typeof reviewExec.automation_result?.preview === "string" && reviewExec.automation_result.preview.trim())
+                          ? 0
+                          : "22rpx"
+                    }}
+                  >
+                    {b.label ? (
+                      <Text style={{ fontSize: "22rpx", color: THEME.water, fontWeight: 500, letterSpacing: "2rpx" }}>
+                        {b.label}
+                      </Text>
+                    ) : null}
+                    <View
+                      style={{
+                        marginTop: b.label ? "8rpx" : 0,
+                        background: THEME.paper,
+                        border: `1rpx solid ${THEME.border}`,
+                        borderRadius: "12rpx",
+                        padding: "18rpx 20rpx"
+                      }}
+                    >
+                      <RichText
+                        text={b.text}
+                        textStyle={{ fontSize: "26rpx", color: THEME.ink, lineHeight: "44rpx" }}
+                      />
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <View style={{ display: "flex", gap: "16rpx", marginTop: "28rpx" }}>
+              {reviewExec.execution_status === "waiting_acceptance" && (
+                <>
+                  <View
+                    onClick={() => !execActingId && acceptExec(reviewExec.id)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.primary,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: "#fff" }}>验收，没问题</Text>
+                  </View>
+                  <View
+                    onClick={() => !execActingId && feedbackExec(reviewExec)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.paper,
+                      border: `1rpx solid ${THEME.border}`,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>有问题</Text>
+                  </View>
+                </>
+              )}
+              {reviewExec.execution_status === "waiting_confirm" && (
+                <>
+                  <View
+                    onClick={() => !execActingId && approveExec(reviewExec)}
+                    style={{
+                      flex: 2,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.primary,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: "#fff" }}>批准执行</Text>
+                  </View>
+                  <View
+                    onClick={() => !execActingId && cancelExec(reviewExec)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.paper,
+                      border: `1rpx solid ${THEME.border}`,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>取消计划</Text>
+                  </View>
+                </>
+              )}
+              {reviewExec.execution_status === "failed" && (
+                <View
+                  onClick={() => !execActingId && retryExec(reviewExec)}
+                  style={{
+                    flex: 1,
+                    padding: "20rpx 0",
+                    borderRadius: "12rpx",
+                    background: THEME.primary,
+                    textAlign: "center",
+                    opacity: execActingId ? 0.5 : 1
+                  }}
+                >
+                  <Text style={{ fontSize: "27rpx", color: "#fff" }}>再试一次</Text>
+                </View>
+              )}
+              {reviewExec.execution_status === "pending" && (
+                <>
+                  <View
+                    onClick={() => !execActingId && bumpExec(reviewExec)}
+                    style={{
+                      flex: 2,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.primary,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: "#fff" }}>优先执行</Text>
+                  </View>
+                  <View
+                    onClick={() => !execActingId && parkExec(reviewExec)}
+                    style={{
+                      flex: 1,
+                      padding: "20rpx 0",
+                      borderRadius: "12rpx",
+                      background: THEME.paper,
+                      border: `1rpx solid ${THEME.border}`,
+                      textAlign: "center",
+                      opacity: execActingId ? 0.5 : 1
+                    }}
+                  >
+                    <Text style={{ fontSize: "27rpx", color: THEME.inkTertiary }}>缓缓放下</Text>
+                  </View>
+                </>
+              )}
+              {!["waiting_acceptance", "waiting_confirm", "failed", "pending"].includes(reviewExec.execution_status) && (
+                <View
+                  onClick={closeReviewModal}
+                  style={{
+                    flex: 1,
+                    padding: "20rpx 0",
+                    borderRadius: "12rpx",
+                    background: THEME.primaryMist,
+                    textAlign: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "27rpx", color: THEME.primary }}>知道了</Text>
+                </View>
+              )}
+            </View>
+            <View onClick={closeReviewModal} style={{ marginTop: "20rpx", padding: "12rpx 0", textAlign: "center" }}>
+              <Text style={{ fontSize: "26rpx", color: THEME.inkQuaternary }}>我再想想</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+    </View>
+  );
+}

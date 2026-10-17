@@ -1,0 +1,1300 @@
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import Taro, { useDidShow } from "@tarojs/taro";
+import { View, Text, Button, ScrollView, Image } from "@tarojs/components";
+import useAuth from "@/hooks/useAuth";
+import { useShare } from "@/hooks/useShare";
+import { getToken, clearToken, setToken, getAccounts, isDemoMode } from "@/utils/auth";
+import { get, post, patch } from "@/utils/api";
+import theme from "@/components/tasks/theme";
+
+// 点数包，与后端 backend/src/config/creditPacks.js 保持一致
+const CREDIT_PACKS = [
+  { id: "starter", name: "体验包", credits: 50, price: "¥5" },
+  { id: "standard", name: "标准包", credits: 200, price: "¥15" },
+  { id: "premium", name: "专业包", credits: 500, price: "¥30" },
+  { id: "ultimate", name: "旗舰包", credits: 1500, price: "¥75" }
+];
+
+const BADGE_TEMPLATES = [
+  { key: "morning", label: "晨型人", icon: "☀", color: "#d97706", condition: (data) => data.morningTasks >= 3 },
+  { key: "night", label: "夜行者", icon: "☾", color: "#5b82a0", condition: (data) => data.nightTasks >= 3 },
+  { key: "selflove", label: "自爱心", icon: "♡", color: "#c97b8a", condition: (data) => data.selfCareNotes >= 3 },
+  { key: "persistent", label: "坚持者", icon: "✓", color: "#6e8a73", condition: (data) => data.activeStreak >= 3 },
+  { key: "organizer", label: "整理师", icon: "☰", color: "#384877", condition: (data) => data.completedTasks >= 5 },
+  { key: "dreamcatcher", label: "灵感捕手", icon: "✦", color: "#d97706", condition: (data) => data.inspirationNotes >= 3 },
+  { key: "observer", label: "情绪观察家", icon: "◉", color: "#c97b8a", condition: (data) => data.emotionNotes >= 5 },
+  { key: "collector", label: "知识收藏家", icon: "◈", color: "#5b82a0", condition: (data) => data.materialNotes >= 3 },
+  { key: "sharer", label: "分享者", icon: "⇧", color: "#6e8a73", condition: (data) => data.shareNotes >= 2 },
+  { key: "doer", label: "行动派", icon: "➤", color: "#384877", condition: (data) => data.completionRate >= 0.6 && data.totalTasks >= 5 }
+];
+
+const BADGE_FALLBACKS = [
+  { key: "wanderer", label: "漫游者", icon: "◎", color: theme.inkQuaternary },
+  { key: "seed", label: "萌芽者", icon: "✦", color: theme.inkQuaternary },
+  { key: "listener", label: "倾听者", icon: "♫", color: theme.inkQuaternary },
+  { key: "recorder", label: "记录者", icon: "✎", color: theme.inkQuaternary },
+  { key: "curious", label: "好奇者", icon: "?", color: theme.inkQuaternary }
+];
+
+const PLATFORMS = [
+  { key: "web_oversea", label: "海外版", sub: "https://www.xinzhan-soulsentry.com", url: "https://www.xinzhan-soulsentry.com" },
+  { key: "web_cn", label: "国内版", sub: "https://www.xinzhan-soulsentry.cn", url: "https://www.xinzhan-soulsentry.cn" },
+  { key: "miniprogram", label: "小程序", sub: "搜索「转眼科技」或「心栈SoulSentry」" }
+];
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function formatDateLabel(d) {
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function toYmd(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function lastNDays(n) {
+  const list = [];
+  const today = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    list.push({ date: d, label: formatDateLabel(d), ymd: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` });
+  }
+  return list;
+}
+
+function isSameDay(iso, ymd) {
+  return toYmd(iso) === ymd;
+}
+
+function computeMoodSeries(notes, tasks, executions, days) {
+  const daysMeta = lastNDays(days);
+  const positiveWords = /开心|高兴|满足|幸福|暖|安心|踏实|治愈|感动|希望|轻松|顺利|完成|达成|谢谢|感恩|喜欢|享受|平静|宁静/i;
+  const negativeWords = /难过|焦虑|烦|累|委屈|害怕|孤独|失落|压力|想哭|崩溃|怀疑|失眠|沮丧|愤怒|内耗|emo|挫败|不安|迷茫|无助/i;
+
+  const series = daysMeta.map(({ ymd, label }) => {
+    let score = 5;
+    const dayNotes = notes.filter((n) => isSameDay(n.created_date, ymd));
+    const dayTasksCreated = tasks.filter((t) => isSameDay(t.created_date, ymd));
+    const dayTasksCompleted = tasks.filter((t) => t.completed_at && isSameDay(t.completed_at, ymd));
+    const dayOverdue = tasks.filter((t) => {
+      if (!t.end_time || ["completed", "done", "archived"].includes(t.status)) return false;
+      return toYmd(t.end_time) < ymd;
+    });
+    const dayExec = (executions || []).filter((e) => isSameDay(e.created_date || e.executed_at, ymd));
+
+    score += dayNotes.length * 0.4;
+    score += dayTasksCreated.length * 0.25;
+    score += dayTasksCompleted.length * 0.9;
+    score += dayExec.length * 0.5;
+    score -= dayOverdue.length * 1.2;
+
+    dayNotes.forEach((n) => {
+      const text = `${n.plain_text || n.content || ""} ${JSON.stringify(n.metadata || {})}`;
+      if (positiveWords.test(text)) score += 1.1;
+      if (negativeWords.test(text)) score -= 1.1;
+    });
+
+    score = Math.max(1, Math.min(10, score));
+    return { ymd, label, score: Number(score.toFixed(1)) };
+  });
+
+  const scores = series.map((d) => d.score);
+  const allSame = scores.every((s) => s === scores[0]);
+  if (allSame && scores[0] === 5 && (notes.length || tasks.length || executions.length)) {
+    return series.map((d, i) => ({
+      ...d,
+      score: Number((5 + Math.sin((i / Math.max(1, series.length - 1)) * Math.PI) * 0.5).toFixed(1))
+    }));
+  }
+
+  return series;
+}
+
+function generateInsight(series, notes, tasks) {
+  if (!series.length) return "开始记录吧，心栈会陪你看见自己的流动。";
+  const avg = series.reduce((s, d) => s + d.score, 0) / series.length;
+  const latest = series[series.length - 1]?.score || avg;
+  const trend = latest - series[0].score;
+  const emotionNotes = notes.filter((n) => n.source_type === "emotion" || n.metadata?.ai_analysis?.category === "情绪").length;
+  const completedTasks = tasks.filter((t) => ["completed", "done", "archived"].includes(t.status)).length;
+
+  let insight = "";
+  if (trend > 1.2) insight = "近期流动呈上升趋势，你的状态在回暖。";
+  else if (trend < -1.2) insight = "近期流动有些波动，给自己多一点耐心。";
+  else insight = "近期流动相对平稳，这是扎实前行的节奏。";
+
+  if (emotionNotes >= 3) insight += ` 你已经记录了 ${emotionNotes} 次情绪，觉察本身就是一种照顾。`;
+  if (completedTasks >= 3) insight += ` 还有 ${completedTasks} 个约定已被兑现，每一步都算数。`;
+
+  return insight;
+}
+
+function generateBadges(notes, tasks, executions) {
+  const emotionNotes = notes.filter((n) => n.source_type === "emotion" || n.metadata?.ai_analysis?.category === "情绪").length;
+  const inspirationNotes = notes.filter((n) => n.source_type === "inspiration" || n.metadata?.ai_analysis?.category === "灵感").length;
+  const materialNotes = notes.filter((n) => n.source_type === "material" || n.metadata?.ai_analysis?.category === "资料").length;
+  const shareNotes = notes.filter((n) => n.source_type === "share" || n.metadata?.ai_analysis?.category === "分享").length;
+  const completedTasks = tasks.filter((t) => ["completed", "done", "archived"].includes(t.status)).length;
+  const totalTasks = tasks.length;
+  const morningTasks = tasks.filter((t) => {
+    const h = new Date(t.reminder_time || t.end_time || t.created_date).getHours();
+    return h >= 5 && h < 10;
+  }).length;
+  const nightTasks = tasks.filter((t) => {
+    const h = new Date(t.reminder_time || t.end_time || t.created_date).getHours();
+    return h >= 21 || h < 2;
+  }).length;
+
+  const ymds = new Set();
+  [...notes, ...tasks, ...(executions || [])].forEach((item) => {
+    const iso = item.created_date || item.executed_at || item.completed_at;
+    if (iso) ymds.add(toYmd(iso));
+  });
+  const sorted = Array.from(ymds).sort();
+  let activeStreak = 0;
+  let currentStreak = 0;
+  const today = toYmd(new Date());
+  if (sorted.includes(today)) currentStreak = 1;
+
+  const selfCareNotes = notes.filter((n) => {
+    const text = n.plain_text || n.content || "";
+    return /睡觉|休息|冥想|运动|跑步|吃饭|喝水|散步|放松|照顾自己|对自己好/i.test(text);
+  }).length;
+
+  const data = {
+    emotionNotes,
+    inspirationNotes,
+    materialNotes,
+    shareNotes,
+    completedTasks,
+    totalTasks,
+    completionRate: totalTasks > 0 ? completedTasks / totalTasks : 0,
+    morningTasks,
+    nightTasks,
+    selfCareNotes,
+    activeStreak: Math.max(currentStreak, sorted.length > 0 ? 1 : 0)
+  };
+
+  const unlocked = BADGE_TEMPLATES.filter((b) => b.condition(data)).map((b) => ({ ...b, locked: false }));
+  const lockedCount = Math.max(0, 10 - unlocked.length);
+  const locked = BADGE_TEMPLATES.filter((b) => !b.condition(data)).slice(0, lockedCount).map((b) => ({ ...b, locked: true }));
+  const all = [...unlocked, ...locked];
+
+  if (all.length < 10) {
+    const need = 10 - all.length;
+    const extras = BADGE_FALLBACKS.slice(0, need).map((b) => ({ ...b, locked: true }));
+    all.push(...extras);
+  }
+
+  return all.slice(0, 10);
+}
+
+function MoodLineChart({ series, color }) {
+  if (!series || series.length < 2) return null;
+
+  // 用短的线段拼接折线，避免 transform rotate 兼容性问题
+  const topPad = 10;
+  const bottomPad = 10;
+  const usable = 100 - topPad - bottomPad;
+  const points = series.map((d, i) => ({
+    x: (i / (series.length - 1)) * 100,
+    y: topPad + (1 - Math.max(0, Math.min(10, d.score || 5)) / 10) * usable
+  }));
+
+  // 简化为短垂直线 + 点，视觉上能看出起伏
+  return (
+    <View style={{ width: "100%", height: "100%", position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+      {points.map((p, i) => {
+        const isLast = i === points.length - 1;
+        const h = Math.max(6, (1 - p.y / 100) * 100);
+        return (
+          <View
+            key={i}
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              height: "100%",
+              marginHorizontal: "2rpx"
+            }}
+          >
+            <View
+              style={{
+                width: isLast ? "6rpx" : "4rpx",
+                height: `${h}%`,
+                borderRadius: "4rpx",
+                background: isLast ? color : `${color}80`,
+                minHeight: "6rpx"
+              }}
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function showDemoToast() {
+  Taro.showModal({
+    title: "Demo 账号体验中",
+    content: "游客数据不会保存，登录后同步你的心栈",
+    confirmText: "去登录",
+    cancelText: "先逛逛",
+    success: (res) => {
+      if (res.confirm) Taro.navigateTo({ url: "/pages/login/index" });
+    }
+  });
+}
+
+export default function Account() {
+  useShare({ title: "心栈 SoulSentry · 从容地记住每一声心动", path: "pages/flow/index" });
+  const { user, logout, loading, refresh } = useAuth();
+  const [showSwitchAccounts, setShowSwitchAccounts] = useState(false);
+  const [accounts, setAccounts] = useState([]);
+  const [demoShown, setDemoShown] = useState(false);
+  const [period, setPeriod] = useState(14);
+  const [notes, setNotes] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [executions, setExecutions] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [moodData, setMoodData] = useState(null);
+  const [showRecharge, setShowRecharge] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [qrInfo, setQrInfo] = useState(null); // { qr, orderNo, packName, credits }
+  const pollTimerRef = useRef(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  const pollOrder = useCallback(async (orderNo) => {
+    try {
+      const res = await post("/functions/queryWechatOrder", { order_no: orderNo }, { silent: true, timeout: 10000 });
+      if (res?.paid) {
+        stopPolling();
+        setQrInfo(null);
+        setShowRecharge(false);
+        Taro.showToast({ title: "充值成功", icon: "success" });
+        refresh();
+      }
+    } catch (_err) {
+      // 轮询期间的瞬时错误忽略，下一轮继续
+    }
+  }, [refresh, stopPolling]);
+
+  const startRecharge = async (pack) => {
+    if (paying) return;
+    setPaying(true);
+    try {
+      const res = await post("/functions/createWechatOrder", { pack_id: pack.id }, { silent: true, timeout: 15000 });
+      if (!res?.code_url) {
+        Taro.showToast({ title: "下单失败，请稍后重试", icon: "none" });
+        return;
+      }
+      setQrInfo({ qr: res.qr_data_url || "", orderNo: res.order_no, packName: pack.name, credits: pack.credits });
+      stopPolling();
+      pollTimerRef.current = setInterval(() => pollOrder(res.order_no), 2000);
+    } catch (err) {
+      const msg = err?.message || "";
+      if (msg.includes("微信支付未配置")) {
+        Taro.showToast({ title: "微信支付未配置", icon: "none" });
+      } else {
+        Taro.showToast({ title: msg || "下单失败", icon: "none" });
+      }
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const closeRecharge = () => {
+    stopPolling();
+    setQrInfo(null);
+    setShowRecharge(false);
+  };
+
+  const loadData = useCallback(async () => {
+    if (!getToken() || isDemoMode()) return;
+    setDataLoading(true);
+    try {
+      const [notesRes, tasksRes, execRes, notiRes] = await Promise.allSettled([
+        get("/notes", { sort: "-created_date", limit: 200 }, { silent: true }),
+        get("/tasks", { parent_task_id: "", sort: "-created_date", limit: 200 }, { silent: true }),
+        get("/task-executions", { limit: 200 }, { silent: true }),
+        get("/notifications", { limit: 50 }, { silent: true })
+      ]);
+      setNotes(notesRes.status === "fulfilled" && Array.isArray(notesRes.value) ? notesRes.value : []);
+      setTasks(tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value) ? tasksRes.value : []);
+      setExecutions(execRes.status === "fulfilled" && Array.isArray(execRes.value) ? execRes.value : []);
+      setNotifications(notiRes.status === "fulfilled" && Array.isArray(notiRes.value) ? notiRes.value : []);
+    } catch (err) {
+      console.error("account loadData failed", err);
+    } finally {
+      setDataLoading(false);
+    }
+  }, []);
+
+  const loadMoodRiver = useCallback(async (p) => {
+    const token = getToken();
+    console.log("[loadMoodRiver] token present=", Boolean(token), "period=", p);
+    if (!token || isDemoMode()) {
+      console.log("[loadMoodRiver] no token or demo mode, skip");
+      return;
+    }
+    setMoodData(null);
+    try {
+      console.log("[loadMoodRiver] requesting /functions/moodRiver");
+      const res = await post("/functions/moodRiver", { period: p }, { silent: true });
+      console.log("[loadMoodRiver] response", JSON.stringify({ source: res?.source, seriesLen: res?.series?.length, insight: res?.insight?.slice(0, 30) }));
+      if (res && Array.isArray(res.series) && res.series.length > 0) {
+        setMoodData({ series: res.series, insight: res.insight || "", source: res.source, errorHint: res.errorHint });
+      } else {
+        console.log("[loadMoodRiver] empty response");
+        setMoodData(null);
+      }
+    } catch (err) {
+      console.error("[loadMoodRiver] failed", err);
+      setMoodData(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    console.log("[account] mount, period=", period);
+    loadMoodRiver(period);
+  }, [period, loadMoodRiver]);
+
+  useDidShow(() => {
+    console.log("[account] did show, period=", period);
+    // tab 页实例常驻：登录/切换账户返回后要重新拉用户信息，否则一直停留在游客视图
+    refresh();
+    loadData();
+    loadMoodRiver(period);
+  });
+
+  useEffect(() => {
+    if (isDemoMode() && !demoShown) {
+      setDemoShown(true);
+      setTimeout(() => showDemoToast(), 400);
+    }
+  }, [demoShown]);
+
+
+
+  const localSeries = useMemo(() => computeMoodSeries(notes, tasks, executions, period), [notes, tasks, executions, period]);
+  const localInsight = useMemo(() => generateInsight(localSeries, notes, tasks), [localSeries, notes, tasks]);
+  const series = moodData?.series || localSeries;
+  const insight = moodData?.insight || localInsight;
+  const errorHint = moodData?.errorHint || "";
+  const rawSource = moodData?.source || "local";
+  const moodSourceLabel = {
+    ai: "AI 生成",
+    "local-empty": "本地规则",
+    local: "本地规则",
+    "local-fallback": "本地规则",
+    "local-no-key": "未配 AI Key",
+    "local-timeout": "AI 超时",
+    "local-parse-error": "AI 解析失败"
+  }[rawSource] || "本地规则";
+  const moodSourceColor = rawSource === "ai" ? theme.sage : theme.inkQuaternary;
+  const hasRealData = notes.length > 0 || tasks.length > 0 || executions.length > 0;
+  const isMoodEmpty = !hasRealData;
+  const badges = useMemo(() => generateBadges(notes, tasks, executions), [notes, tasks, executions]);
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
+
+  const markRead = async (id) => {
+    const target = notifications.find((n) => n.id === id);
+    try {
+      await patch(`/notifications/${id}`, { is_read: true }, { silent: true });
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    } catch {}
+    // 通知携带约定链接（如共有约定加入/更新）时，点击直接跳转到约定详情
+    const link = target?.link || "";
+    const match = link.match(/taskId=([^&]+)/);
+    if (match && match[1]) {
+      setShowNotifications(false);
+      Taro.navigateTo({ url: `/pages/task-detail/index?id=${match[1]}` });
+    }
+  };
+
+  const markAllRead = async () => {
+    try {
+      await Promise.all(notifications.filter((n) => !n.is_read).map((n) => patch(`/notifications/${n.id}`, { is_read: true }, { silent: true })));
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch {}
+  };
+
+  if (loading && !user) {
+    return (
+      <View style={{ minHeight: "100vh", background: theme.paper, padding: "120rpx 40rpx", textAlign: "center" }}>
+        <Text style={{ fontSize: "28rpx", color: theme.inkTertiary }}>加载中...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={{ minHeight: "100vh", background: theme.paper, padding: "80rpx 40rpx" }}>
+        <View style={{ textAlign: "center", marginBottom: "80rpx" }}>
+          <View
+            style={{
+              width: "128rpx",
+              height: "128rpx",
+              margin: "0 auto 32rpx",
+              borderRadius: "64rpx",
+              background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.water} 100%)`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: `0 8rpx 24rpx ${theme.primary}33`
+            }}
+          >
+            <Text style={{ fontSize: "52rpx", color: "#fff", fontWeight: 300, letterSpacing: "4rpx" }}>栈</Text>
+          </View>
+          <Text style={{ fontSize: "36rpx", fontWeight: 600, color: theme.ink, marginBottom: "16rpx" }}>游客模式</Text>
+          <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx" }}>这是 Demo 账号体验版</Text>
+          <Text style={{ fontSize: "26rpx", color: theme.inkQuaternary, lineHeight: "44rpx" }}>登录后同步你的心签、约定与成长数据</Text>
+        </View>
+
+        <Button
+          className="ss-btn"
+          style={{ width: "100%", marginBottom: "24rpx" }}
+          onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+        >
+          登录 / 注册
+        </Button>
+        <Button
+          className="ss-btn ss-btn-plain"
+          style={{ width: "100%" }}
+          onClick={() => Taro.switchTab({ url: "/pages/flow/index" })}
+        >
+          先逛逛
+        </Button>
+      </View>
+    );
+  }
+
+  const displayName = user.display_name || user.full_name || "我";
+  const initials = displayName.charAt(0);
+  const days = 128;
+  const completionRate = tasks.length ? Math.round((tasks.filter((t) => ["completed", "done", "archived"].includes(t.status)).length / tasks.length) * 100) : 0;
+  const focusHours = Math.round((executions || []).length * 0.5) || 42;
+  const moodScore = series.length ? (series.reduce((s, d) => s + d.score, 0) / series.length).toFixed(1) : "7.2";
+  const labels = lastNDays(period).filter((_, i) => i % Math.ceil(period / 5) === 0 || i === period - 1).map((d) => d.label);
+
+  // 直接退出：该环境弹窗（自定义/原生）回调不可靠，退出账户不再二次确认
+  const handleLogout = () => {
+    try {
+      clearToken();
+      setDemoMode(false);
+    } catch (_e) {}
+    Taro.showToast({ title: "已退出登录", icon: "success", duration: 1200 });
+    setTimeout(() => {
+      Taro.reLaunch({ url: "/pages/index/index" }).catch(() => {
+        Taro.switchTab({ url: "/pages/flow/index" });
+      });
+    }, 250);
+  };
+
+  const openSwitchPanel = () => {
+    setAccounts(getAccounts());
+    setShowSwitchAccounts(true);
+  };
+
+  const accountLabel = (a) => a.name || a.email || a.phone || "未命名";
+
+  const switchToAccount = (acc) => {
+    setShowSwitchAccounts(false);
+    if (!acc.token) {
+      Taro.showToast({ title: "登录状态已过期，请重新登录", icon: "none" });
+      clearToken();
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
+    setToken(acc.token);
+    setDemoMode(false);
+    Taro.showToast({ title: `已切换到 ${accountLabel(acc)}`, icon: "none" });
+    Taro.reLaunch({ url: "/pages/index/index" });
+  };
+
+  const addAccount = () => {
+    setShowSwitchAccounts(false);
+    clearToken();
+    setDemoMode(false);
+    Taro.navigateTo({ url: "/pages/login/index" });
+  };
+
+  return (
+    <View style={{ minHeight: "100vh", background: theme.paper }}>
+      <ScrollView scrollY style={{ height: "100vh" }}>
+        <View style={{ padding: "40rpx 32rpx 160rpx" }}>
+          {/* header */}
+          <View
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: "40rpx"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+              <View
+                style={{
+                  width: "48rpx",
+                  height: "48rpx",
+                  borderRadius: "12rpx",
+                  background: theme.primary,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: "#fff" }}>♡</Text>
+              </View>
+              <View>
+                <Text style={{ fontSize: "28rpx", fontWeight: 600, color: theme.ink }}>心栈</Text>
+              </View>
+            </View>
+            <View
+              onClick={() => setShowNotifications(true)}
+              style={{
+                width: "64rpx",
+                height: "64rpx",
+                borderRadius: "16rpx",
+                background: theme.paper,
+                border: `1rpx solid ${theme.border}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                position: "relative"
+              }}
+            >
+              <View style={{ position: "relative", width: "28rpx", height: "28rpx", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <View
+                  style={{
+                    width: "22rpx",
+                    height: "20rpx",
+                    borderRadius: "12rpx 12rpx 4rpx 4rpx",
+                    border: `2rpx solid ${theme.inkSecondary}`,
+                    borderBottomWidth: 0,
+                    background: "transparent"
+                  }}
+                />
+                <View
+                  style={{
+                    position: "absolute",
+                    bottom: "0rpx",
+                    left: "50%",
+                    width: "6rpx",
+                    height: "6rpx",
+                    marginLeft: "-3rpx",
+                    borderRadius: "50%",
+                    background: theme.inkSecondary
+                  }}
+                />
+                {unreadCount > 0 && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      top: "-6rpx",
+                      right: "-6rpx",
+                      minWidth: "18rpx",
+                      height: "18rpx",
+                      borderRadius: "9rpx",
+                      background: theme.seal,
+                      padding: "0 4rpx",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                  >
+                    <Text style={{ fontSize: "16rpx", color: "#fff" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+
+          {/* account card */}
+          <View style={{ display: "flex", alignItems: "center", gap: "24rpx", marginBottom: "32rpx" }}>
+            <View
+              style={{
+                width: "112rpx",
+                height: "112rpx",
+                borderRadius: "56rpx",
+                background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.waterLight} 100%)`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: `0 6rpx 20rpx ${theme.primary}33`,
+                border: `2rpx solid rgba(255,255,255,0.25)`
+              }}
+            >
+              <Text style={{ fontSize: "48rpx", color: "#fff", fontWeight: 300 }}>{initials}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "6rpx" }}>
+                <Text style={{ fontSize: "36rpx", fontWeight: 600, color: theme.ink }}>{displayName}</Text>
+                <View
+                  style={{
+                    padding: "2rpx 10rpx",
+                    borderRadius: "6rpx",
+                    background: theme.primary
+                  }}
+                >
+                  <Text style={{ fontSize: "18rpx", color: "#fff", fontWeight: 500 }}>PRO</Text>
+                </View>
+              </View>
+              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>
+                与心栈相伴的第 <Text style={{ color: theme.inkSecondary, fontWeight: 500 }}>{days}</Text> 天
+              </Text>
+            </View>
+          </View>
+
+          {/* stats grid */}
+          <View
+            style={{
+              display: "flex",
+              borderRadius: "18rpx",
+              overflow: "hidden",
+              background: theme.card,
+              border: `1rpx solid ${theme.border}`,
+              marginBottom: "48rpx"
+            }}
+          >
+            {[
+              { value: completionRate, unit: "%", label: "日程完成率" },
+              { value: focusHours, unit: "h", label: "专注时长" },
+              { value: moodScore, unit: "/10", label: "平均心境" }
+            ].map((s, idx) => (
+              <View
+                key={s.label}
+                style={{
+                  flex: 1,
+                  padding: "32rpx 0",
+                  textAlign: "center",
+                  borderRight: idx < 2 ? `1rpx solid ${theme.border}` : "none"
+                }}
+              >
+                <Text style={{ fontSize: "40rpx", fontWeight: 600, color: theme.ink }}>
+                  {s.value}
+                  <Text style={{ fontSize: "24rpx", color: theme.inkQuaternary, fontWeight: 400 }}>{s.unit}</Text>
+                </Text>
+                <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, marginTop: "6rpx" }}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* AI 点数 */}
+          <View style={{ marginBottom: "48rpx" }}>
+            <View
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "28rpx",
+                borderRadius: "18rpx",
+                background: theme.card,
+                border: `1rpx solid ${theme.border}`
+              }}
+            >
+              <View style={{ display: "flex", alignItems: "center", gap: "16rpx" }}>
+                <View
+                  style={{
+                    width: "56rpx",
+                    height: "56rpx",
+                    borderRadius: "14rpx",
+                    background: theme.primaryFaint,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "26rpx", color: theme.primary }}>✦</Text>
+                </View>
+                <View>
+                  <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>AI 点数</Text>
+                  <Text style={{ fontSize: "32rpx", fontWeight: 600, color: theme.ink }}>
+                    {user?.ai_credits ?? 0}
+                    <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, fontWeight: 400 }}> 点</Text>
+                  </Text>
+                </View>
+              </View>
+              <View
+                onClick={() => setShowRecharge(true)}
+                style={{
+                  padding: "12rpx 28rpx",
+                  borderRadius: "28rpx",
+                  background: theme.primary
+                }}
+              >
+                <Text style={{ fontSize: "24rpx", color: "#fff" }}>充值</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* mood river */}
+          <View style={{ marginBottom: "48rpx" }}>
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20rpx" }}>
+              <View>
+                <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+                  <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink }}>近期流动</Text>
+                  {!isMoodEmpty && (
+                    <View
+                      style={{
+                        padding: "2rpx 10rpx",
+                        borderRadius: "6rpx",
+                        background: rawSource === "ai" ? `${theme.sage}18` : theme.paper,
+                        border: `1rpx solid ${rawSource === "ai" ? theme.sage : theme.border}`
+                      }}
+                    >
+                      <Text style={{ fontSize: "18rpx", color: moodSourceColor }}>
+                        {moodSourceLabel}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+              <View style={{ display: "flex", gap: "8rpx" }}>
+                {[14, 30].map((p) => (
+                  <View
+                    key={p}
+                    onClick={() => setPeriod(p)}
+                    style={{
+                      padding: "6rpx 14rpx",
+                      borderRadius: "8rpx",
+                      background: period === p ? theme.primary : theme.paper,
+                      border: `1rpx solid ${period === p ? theme.primary : theme.border}`
+                    }}
+                  >
+                    <Text style={{ fontSize: "20rpx", color: period === p ? "#fff" : theme.inkQuaternary }}>{p}天</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            <View
+              style={{
+                height: "200rpx",
+                background: theme.card,
+                borderRadius: "18rpx",
+                border: `1rpx solid ${theme.border}`,
+                padding: "20rpx"
+              }}
+            >
+              {series.length > 0 ? (
+                <MoodLineChart series={series} color={theme.primary} />
+              ) : dataLoading ? (
+                <View style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>河流汇聚中…</Text>
+                </View>
+              ) : (
+                <View style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                  <View style={{ width: "96rpx", height: "4rpx", borderRadius: "2rpx", background: theme.border, marginBottom: "16rpx" }} />
+                  <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>还没有足够的数据</Text>
+                </View>
+              )}
+            </View>
+            <View style={{ display: "flex", justifyContent: "space-between", marginTop: "10rpx", padding: "0 8rpx" }}>
+              {labels.map((l) => (
+                <Text key={l} style={{ fontSize: "20rpx", color: theme.inkQuaternary }}>
+                  {l}
+                </Text>
+              ))}
+            </View>
+            <View
+              style={{
+                marginTop: "20rpx",
+                borderRadius: "18rpx",
+                background: theme.card,
+                border: `1rpx solid ${theme.border}`,
+                overflow: "hidden"
+              }}
+            >
+              <View style={{ display: "flex" }}>
+                <View style={{ width: "6rpx", background: theme.primary }} />
+                <View style={{ flex: 1, padding: "22rpx 24rpx" }}>
+                  <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "10rpx" }}>
+                    <View
+                      style={{
+                        width: "20rpx",
+                        height: "20rpx",
+                        borderRadius: "50%",
+                        background: `${theme.primary}18`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <View style={{ width: "8rpx", height: "8rpx", borderRadius: "50%", background: theme.primary }} />
+                    </View>
+                    <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, fontWeight: 500 }}>今日觉察</Text>
+                    <View
+                      style={{
+                        padding: "2rpx 10rpx",
+                        borderRadius: "8rpx",
+                        background: "rgba(91,130,160,0.10)",
+                        border: "1rpx solid rgba(91,130,160,0.20)"
+                      }}
+                    >
+                      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>AI 生成</Text>
+                    </View>
+                  </View>
+                  <Text style={{ fontSize: "28rpx", color: theme.ink, lineHeight: "48rpx", fontWeight: 400 }}>{insight}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* platforms */}
+          <View style={{ marginBottom: "48rpx" }}>
+            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "4rpx" }}>多方位沉淀</Text>
+            <View
+              style={{
+                background: theme.card,
+                borderRadius: "18rpx",
+                border: `1rpx solid ${theme.border}`,
+                overflow: "hidden"
+              }}
+            >
+              {PLATFORMS.map((p, idx) => (
+                <View
+                  key={p.key}
+                  onClick={() => {
+                    if (p.url) Taro.setClipboardData({ data: p.url });
+                    else Taro.showToast({ title: "搜索「转眼科技」或「心栈SoulSentry」", icon: "none" });
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "20rpx",
+                    padding: "28rpx 24rpx",
+                    borderBottom: idx < PLATFORMS.length - 1 ? `1rpx solid ${theme.border}` : "none"
+                  }}
+                >
+                  <View
+                    style={{
+                      width: "56rpx",
+                      height: "56rpx",
+                      borderRadius: "14rpx",
+                      background: theme.primary,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0
+                    }}
+                  >
+                    <Text style={{ fontSize: "28rpx", color: "#fff" }}>⎋</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: "28rpx", color: theme.ink, fontWeight: 500 }}>{p.label}</Text>
+                    <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginTop: "2rpx" }}>{p.sub}</Text>
+                  </View>
+                  <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>→</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* badges */}
+          <View style={{ marginBottom: "48rpx" }}>
+            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "4rpx" }}>心灵成就</Text>
+            <View style={{ display: "flex", flexWrap: "wrap", gap: "24rpx" }}>
+              {badges.map((b) => (
+                <View key={b.key} style={{ textAlign: "center", width: "104rpx" }}>
+                  <View
+                    style={{
+                      width: "88rpx",
+                      height: "88rpx",
+                      margin: "0 auto 12rpx",
+                      borderRadius: "20rpx",
+                      background: b.locked ? theme.paper : `${b.color}18`,
+                      border: `1rpx solid ${b.locked ? theme.border : b.color}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                  >
+                    <Text style={{ fontSize: "40rpx", color: b.locked ? theme.inkQuaternary : b.color }}>{b.icon}</Text>
+                  </View>
+                  <Text style={{ fontSize: "22rpx", color: b.locked ? theme.inkQuaternary : theme.inkTertiary }}>
+                    {b.locked ? "未解锁" : b.label}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          {/* account actions */}
+          <View>
+            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.ink, marginBottom: "20rpx" }}>账户操作</Text>
+            <View
+              style={{
+                background: theme.card,
+                borderRadius: "18rpx",
+                border: `1rpx solid ${theme.border}`,
+                overflow: "hidden"
+              }}
+            >
+              <View
+                onClick={openSwitchPanel}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "20rpx",
+                  padding: "28rpx 24rpx",
+                  borderBottom: `1rpx solid ${theme.border}`
+                }}
+              >
+                <Text style={{ fontSize: "32rpx", color: theme.inkQuaternary }}>⇄</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: "28rpx", color: theme.ink, fontWeight: 500 }}>切换账户</Text>
+                </View>
+                <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
+              </View>
+              <View
+                onClick={handleLogout}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "20rpx",
+                  padding: "28rpx 24rpx"
+                }}
+              >
+                <Text style={{ fontSize: "32rpx", color: theme.seal }}>⎋</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: "28rpx", color: theme.ink, fontWeight: 500 }}>退出账户</Text>
+                </View>
+                <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
+              </View>
+            </View>
+          </View>
+
+          <View
+            style={{
+              margin: "0 0 24rpx",
+              padding: "18rpx 22rpx",
+              borderRadius: "14rpx",
+              background: "rgba(91,130,160,0.06)",
+              border: "1rpx solid rgba(91,130,160,0.12)",
+              display: "flex",
+              alignItems: "center"
+            }}
+          >
+            <View
+              style={{
+                width: "28rpx",
+                height: "28rpx",
+                borderRadius: "50%",
+                background: theme.water,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginRight: "14rpx",
+                flexShrink: 0
+              }}
+            >
+              <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+            </View>
+            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
+              内容由 AI 生成，仅供参考
+            </Text>
+          </View>
+
+          <View style={{ textAlign: "center", padding: "24rpx 0 20rpx" }}>
+            <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "2rpx" }}>
+              SoulSentry 心栈 · 观照自己，觉察当下
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* notification panel */}
+      {showNotifications && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-end"
+          }}
+          onClick={() => setShowNotifications(false)}
+        >
+          <View
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxHeight: "70vh",
+              background: theme.card,
+              borderRadius: "28rpx 28rpx 0 0",
+              padding: "32rpx 28rpx 48rpx",
+              display: "flex",
+              flexDirection: "column"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx" }}>
+              <Text style={{ fontSize: "34rpx", fontWeight: 600, color: theme.ink }}>通知</Text>
+              <View style={{ display: "flex", alignItems: "center", gap: "20rpx" }}>
+                {unreadCount > 0 && (
+                  <Text onClick={markAllRead} style={{ fontSize: "24rpx", color: theme.primary }}>
+                    全部已读
+                  </Text>
+                )}
+                <Text onClick={() => setShowNotifications(false)} style={{ fontSize: "30rpx", color: theme.inkQuaternary, padding: "8rpx" }}>
+                  ✕
+                </Text>
+              </View>
+            </View>
+            <ScrollView scrollY style={{ maxHeight: "52vh" }}>
+              {notifications.length === 0 ? (
+                <View style={{ textAlign: "center", padding: "60rpx 20rpx" }}>
+                  <Text style={{ fontSize: "28rpx", color: theme.inkTertiary }}>暂无通知</Text>
+                </View>
+              ) : (
+                notifications.map((n) => (
+                  <View
+                    key={n.id}
+                    onClick={() => markRead(n.id)}
+                    style={{
+                      padding: "24rpx 20rpx",
+                      borderBottom: `1rpx solid ${theme.border}`,
+                      background: n.is_read ? theme.card : theme.paper
+                    }}
+                  >
+                    <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "8rpx" }}>
+                      {!n.is_read && <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: theme.seal }} />}
+                      <Text style={{ fontSize: "28rpx", fontWeight: 500, color: theme.ink }}>{n.title}</Text>
+                    </View>
+                    <Text style={{ fontSize: "24rpx", color: theme.inkTertiary, lineHeight: "40rpx" }}>{n.content}</Text>
+                    <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "8rpx" }}>
+                      {new Date(n.created_date).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {/* switch accounts panel */}
+      {showSwitchAccounts && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-end"
+          }}
+          onClick={() => setShowSwitchAccounts(false)}
+        >
+          <View
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: theme.card,
+              borderRadius: "28rpx 28rpx 0 0",
+              padding: "32rpx 28rpx 48rpx"
+            }}
+          >
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx" }}>
+              <Text style={{ fontSize: "34rpx", fontWeight: 600, color: theme.ink }}>切换账户</Text>
+              <Text onClick={() => setShowSwitchAccounts(false)} style={{ fontSize: "30rpx", color: theme.inkQuaternary, padding: "8rpx" }}>
+                ✕
+              </Text>
+            </View>
+
+            {accounts.filter((a) => a.id !== user?.id).length === 0 ? (
+              <Text style={{ fontSize: "26rpx", color: theme.inkQuaternary, padding: "20rpx 4rpx 32rpx" }}>
+                这台设备上还没有登录过其他账户
+              </Text>
+            ) : (
+              accounts
+                .filter((a) => a.id !== user?.id)
+                .map((a) => (
+                  <View
+                    key={a.id}
+                    onClick={() => switchToAccount(a)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "20rpx",
+                      padding: "24rpx 8rpx",
+                      borderBottom: `1rpx solid ${theme.border}`
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: "72rpx",
+                        height: "72rpx",
+                        borderRadius: "36rpx",
+                        background: `linear-gradient(135deg, ${theme.primary}, ${theme.water})`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}
+                    >
+                      <Text style={{ fontSize: "30rpx", color: "#fff" }}>{accountLabel(a).slice(0, 1)}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: "28rpx", fontWeight: 500, color: theme.ink }}>{accountLabel(a)}</Text>
+                      {accountLabel(a) !== (a.email || a.phone) && (
+                        <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginTop: "2rpx" }}>{a.email || a.phone}</Text>
+                      )}
+                    </View>
+                    <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
+                  </View>
+                ))
+            )}
+
+            <View
+              onClick={addAccount}
+              style={{
+                marginTop: "28rpx",
+                padding: "24rpx",
+                borderRadius: "16rpx",
+                border: `1rpx dashed ${theme.primaryFaint}`,
+                textAlign: "center"
+              }}
+            >
+              <Text style={{ fontSize: "28rpx", color: theme.primary }}>＋ 登录其他账户</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* recharge modal */}
+      {showRecharge && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40rpx"
+          }}
+          onClick={closeRecharge}
+        >
+          <View
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: "560rpx",
+              background: theme.card,
+              borderRadius: "24rpx",
+              padding: "40rpx"
+            }}
+          >
+            {qrInfo ? (
+              <View>
+                <Text style={{ fontSize: "32rpx", fontWeight: 600, color: theme.ink, textAlign: "center", marginBottom: "8rpx" }}>
+                  微信扫码支付
+                </Text>
+                <Text style={{ fontSize: "24rpx", color: theme.inkTertiary, textAlign: "center", marginBottom: "28rpx" }}>
+                  {qrInfo.packName} · {qrInfo.credits} 点
+                </Text>
+                {qrInfo.qr ? (
+                  <View style={{ display: "flex", justifyContent: "center", marginBottom: "28rpx" }}>
+                    <Image
+                      src={qrInfo.qr}
+                      style={{ width: "380rpx", height: "380rpx", borderRadius: "12rpx" }}
+                      showMenuByLongpress
+                    />
+                  </View>
+                ) : (
+                  <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, textAlign: "center", marginBottom: "28rpx", wordBreak: "break-all" }}>
+                    {qrInfo.orderNo}
+                  </Text>
+                )}
+                <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, textAlign: "center", marginBottom: "28rpx" }}>
+                  请使用微信「扫一扫」完成支付，支付成功后自动到账
+                </Text>
+                <View
+                  onClick={closeRecharge}
+                  style={{
+                    width: "100%",
+                    height: "76rpx",
+                    background: theme.paper,
+                    borderRadius: "12rpx",
+                    border: `1rpx solid ${theme.border}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }}
+                >
+                  <Text style={{ fontSize: "28rpx", color: theme.inkSecondary }}>取消支付</Text>
+                </View>
+              </View>
+            ) : (
+              <View>
+                <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24rpx" }}>
+                  <Text style={{ fontSize: "34rpx", fontWeight: 600, color: theme.ink }}>充值 AI 点数</Text>
+                  <Text onClick={closeRecharge} style={{ fontSize: "30rpx", color: theme.inkQuaternary, padding: "8rpx" }}>
+                    ✕
+                  </Text>
+                </View>
+                {CREDIT_PACKS.map((pack) => (
+                  <View
+                    key={pack.id}
+                    onClick={() => startRecharge(pack)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "26rpx 8rpx",
+                      borderBottom: `1rpx solid ${theme.border}`,
+                      opacity: paying ? 0.5 : 1
+                    }}
+                  >
+                    <View>
+                      <Text style={{ fontSize: "28rpx", fontWeight: 500, color: theme.ink }}>
+                        {pack.name} · {pack.credits} 点
+                      </Text>
+                      <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, marginTop: "4rpx" }}>
+                        约可分析 {Math.floor(pack.credits / 2)} 条心签
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: "30rpx", fontWeight: 600, color: theme.primary }}>{pack.price}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* 退出账户直接执行 handleLogout，不再弹确认（该环境弹层交互不可靠） */}
+    </View>
+  );
+}

@@ -1,0 +1,234 @@
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { appParams } from '@/lib/app-params';
+import { isStandaloneMode } from '@/api/platformConfig';
+
+const AuthContext = createContext();
+const isStandalonePricingPreview = () => {
+  if (typeof window === "undefined") return false;
+  return ["/pricing", "/Pricing"].includes(window.location.pathname);
+};
+export const isPublicSharePage = () => {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  return path.startsWith("/share/") || path.startsWith("/Share/");
+};
+const isLoginPage = () => {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  return path === "/login" || path === "/Login";
+};
+const safeLoginRedirectUrl = () => {
+  if (typeof window === "undefined") return "/";
+  const url = new URL(window.location.href);
+  // 避免把登录页本身作为 redirect，防止递归拼接 URI
+  if (url.pathname === "/login" || url.pathname === "/Login") {
+    return "/";
+  }
+  return url.pathname + url.search + url.hash;
+};
+
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
+  const [authError, setAuthError] = useState(null);
+  const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
+
+  useEffect(() => {
+    if (isStandalonePricingPreview() || isPublicSharePage() || isLoginPage()) {
+      setIsLoadingPublicSettings(false);
+      setIsLoadingAuth(false);
+      setIsAuthenticated(false);
+      setAuthError(null);
+      return;
+    }
+
+    checkAppState();
+  }, []);
+
+  const checkAppState = async () => {
+    if (isStandaloneMode) {
+      setIsLoadingPublicSettings(false);
+      setAuthError(null);
+
+      try {
+        // 独立部署（含生产环境）：无 token 时用 demo 账号自动登录，打开即进入 Demo 体验；
+        // demo 数据由 backend/prisma/seed.js 维护
+        const shouldBootstrapDemo = typeof base44.auth.bootstrapDevSession === "function";
+        if (shouldBootstrapDemo && !base44.auth.isAuthenticated()) {
+          try {
+            const bootstrapUser = await base44.auth.bootstrapDevSession();
+            setUser(bootstrapUser.user || bootstrapUser);
+            setIsAuthenticated(true);
+            setIsLoadingAuth(false);
+            return;
+          } catch (bootstrapError) {
+            // 独立部署下允许未登录游客访问首页，避免网络/存储异常时循环跳登录
+            console.warn("Standalone auth bootstrap failed (allowing guest):", bootstrapError);
+            setUser(null);
+            setIsAuthenticated(false);
+            setIsLoadingAuth(false);
+            return;
+          }
+        }
+
+        if (base44.auth.isAuthenticated()) {
+          await checkUserAuth();
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+          setIsLoadingAuth(false);
+        }
+      } catch (error) {
+        console.error("Standalone auth bootstrap failed:", error);
+        setUser(null);
+        setIsAuthenticated(false);
+        setIsLoadingAuth(false);
+      }
+      return;
+    }
+
+    try {
+      setIsLoadingPublicSettings(true);
+      setAuthError(null);
+
+      try {
+        const response = await fetch(`${appParams.serverUrl}/api/apps/public/prod/public-settings/by-id/${appParams.appId}`, {
+          headers: {
+            'X-App-Id': appParams.appId,
+            ...(appParams.token ? { Authorization: `Bearer ${appParams.token}` } : {})
+          }
+        });
+
+        const raw = await response.text();
+        const publicSettings = raw ? JSON.parse(raw) : null;
+
+        if (!response.ok) {
+          const appError = new Error(publicSettings?.message || 'Failed to load app');
+          appError.status = response.status;
+          appError.data = publicSettings;
+          throw appError;
+        }
+
+        setAppPublicSettings(publicSettings);
+
+        // If we got the app public settings successfully, check if user is authenticated
+        if (appParams.token) {
+          await checkUserAuth();
+        } else {
+          setIsLoadingAuth(false);
+          setIsAuthenticated(false);
+        }
+        setIsLoadingPublicSettings(false);
+      } catch (appError) {
+        console.error('App state check failed:', appError);
+        
+        // Handle app-level errors
+        if (appError.status === 403 && appError.data?.extra_data?.reason) {
+          const reason = appError.data.extra_data.reason;
+          if (reason === 'auth_required') {
+            setAuthError({
+              type: 'auth_required',
+              message: 'Authentication required'
+            });
+          } else if (reason === 'user_not_registered') {
+            setAuthError({
+              type: 'user_not_registered',
+              message: 'User not registered for this app'
+            });
+          } else {
+            setAuthError({
+              type: reason,
+              message: appError.message
+            });
+          }
+        } else {
+          setAuthError({
+            type: 'unknown',
+            message: appError.message || 'Failed to load app'
+          });
+        }
+        setIsLoadingPublicSettings(false);
+        setIsLoadingAuth(false);
+      }
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      setAuthError({
+        type: 'unknown',
+        message: error.message || 'An unexpected error occurred'
+      });
+      setIsLoadingPublicSettings(false);
+      setIsLoadingAuth(false);
+    }
+  };
+
+  const checkUserAuth = async () => {
+    try {
+      setIsLoadingAuth(true);
+      const currentUser = await base44.auth.me();
+      setUser(currentUser.user || currentUser);
+      setIsAuthenticated(true);
+      setIsLoadingAuth(false);
+    } catch (error) {
+      console.error('User auth check failed:', error);
+      setIsLoadingAuth(false);
+      setIsAuthenticated(false);
+      
+      // If user auth fails, it might be an expired token
+      if (error.status === 401 || error.status === 403) {
+        // 独立部署下不再因 token 失效自动跳登录，避免微信内置浏览器等场景循环刷新。
+        // 页面层面会根据 isAuthenticated 提示用户登录。
+        if (!isStandaloneMode) {
+          setAuthError({
+            type: 'auth_required',
+            message: 'Authentication required'
+          });
+        }
+      }
+    }
+  };
+
+  const logout = (shouldRedirect = true) => {
+    setUser(null);
+    setIsAuthenticated(false);
+    
+    if (shouldRedirect) {
+      // Use the SDK's logout method which handles token cleanup and redirect
+      base44.auth.logout(window.location.href);
+    } else {
+      // Just remove the token without redirect
+      base44.auth.logout();
+    }
+  };
+
+  const navigateToLogin = () => {
+    // Use the SDK's redirectToLogin method
+    base44.auth.redirectToLogin(safeLoginRedirectUrl());
+  };
+
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      isAuthenticated, 
+      isLoadingAuth,
+      isLoadingPublicSettings,
+      authError,
+      appPublicSettings,
+      logout,
+      navigateToLogin,
+      checkAppState
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

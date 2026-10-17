@@ -1,0 +1,237 @@
+{
+  "name": "TaskExecution",
+  "type": "object",
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "task_title": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "promise",
+        "task",
+        "note"
+      ],
+      "default": "task"
+    },
+    "execution_status": {
+      "type": "string",
+      "enum": [
+        "parsing",
+        "pending",
+        "executing",
+        "completed",
+        "failed",
+        "cancelled",
+        "waiting_confirm"
+      ],
+      "default": "parsing"
+    },
+    "original_input": {
+      "type": "string"
+    },
+    "ai_parsed_result": {
+      "type": "object",
+      "properties": {
+        "intent": {
+          "type": "string"
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "time_expression": {
+          "type": "string"
+        },
+        "priority": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "scene": {
+          "type": "string"
+        },
+        "attached_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "file_name": {
+                "type": "string"
+              },
+              "file_url": {
+                "type": "string"
+              },
+              "file_size": {
+                "type": "number"
+              },
+              "file_type": {
+                "type": "string"
+              }
+            }
+          },
+          "default": []
+        }
+      }
+    },
+    "execution_steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "completed",
+              "failed"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "default": []
+    },
+    "error_message": {
+      "type": "string"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "automation_type": {
+      "type": "string",
+      "enum": [
+        "none",
+        "email_draft",
+        "file_organize",
+        "web_research",
+        "office_doc",
+        "calendar_event",
+        "summary_note",
+        "ledger_organize"
+      ],
+      "default": "none"
+    },
+    "automation_plan": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "risk_warning": {
+          "type": "string"
+        },
+        "estimated_duration": {
+          "type": "string"
+        }
+      }
+    },
+    "automation_result": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "preview": {
+          "type": "string"
+        },
+        "data": {
+          "type": "object"
+        },
+        "diff": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "create",
+                  "move",
+                  "delete",
+                  "update"
+                ]
+              },
+              "target": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "requires_approval": {
+      "type": "boolean",
+      "default": false
+    },
+    "user_feedback": {
+      "type": "object",
+      "properties": {
+        "rating": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "comment": {
+          "type": "string"
+        },
+        "rated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "required": [
+    "task_title",
+    "execution_status"
+  ],
+  "rls": {
+    "read": {
+      "created_by_id": "{{user.id}}"
+    },
+    "write": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

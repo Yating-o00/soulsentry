@@ -1,0 +1,665 @@
+import { invokeKimiText } from "../lib/kimi.js";
+import { chargeAICredits, usageCost } from "./aiCredits.js";
+import { startStandaloneBrowserExecution } from "./autoAutomation.js";
+import { respondToAgent } from "./browserAgent.js";
+import { analyzeImage } from "./analyzeImage.js";
+
+// 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
+// AI 负责理解意图（立约定 / 记心签 / 存链接 / 网页办事 / 闲聊），
+// 信息足够时输出 extracted 提案，由用户确认后客户端再落库。
+// Kimi 不可用时走本地规则兜底，保证对话永远能继续。
+// 「网页办事」走内嵌浏览器 Agent：goal 交给 Agent 即时执行，
+// 过程与结果回落到对话里（执行单同时进守护记录）。
+
+const CATEGORIES = ["work", "personal", "health", "study", "family", "shopping", "finance", "other"];
+const PRIORITIES = ["high", "medium", "low"];
+const PRESSURE_WORDS = /必须|赶紧|马上做|再不|来不及了|惩罚|后果|你已经/;
+const URL_RE = /https?:\/\/[^\s"'，。）)]+/i;
+
+function chinaNow() {
+  const cn = new Date(Date.now() + 8 * 3600 * 1000);
+  return {
+    date: cn.toISOString().slice(0, 10),
+    dateTime: cn.toISOString().slice(0, 16).replace("T", " ")
+  };
+}
+
+function trim(s, n) {
+  const t = String(s || "").trim();
+  return t.length > n ? t.slice(0, n) : t;
+}
+
+function sanitizeExtracted(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const type = raw.type;
+  if (type === "task") {
+    const title = trim(raw.title, 60);
+    if (!title) return null;
+    let dueAt = null;
+    if (raw.due_at) {
+      const d = new Date(raw.due_at);
+      if (!isNaN(d.getTime())) dueAt = d.toISOString();
+    }
+    return {
+      type: "task",
+      title,
+      description: trim(raw.description, 300) || null,
+      category: CATEGORIES.includes(raw.category) ? raw.category : "personal",
+      priority: PRIORITIES.includes(raw.priority) ? raw.priority : "medium",
+      due_at: dueAt
+    };
+  }
+  if (type === "heart") {
+    const content = trim(raw.content, 500);
+    if (!content) return null;
+    const heartCategory = HEART_CATEGORIES.includes(raw.heart_category) ? raw.heart_category : null;
+    return heartCategory ? { type: "heart", content, heart_category: heartCategory } : { type: "heart", content };
+  }
+  if (type === "link") {
+    const text = trim(raw.text, 500);
+    if (!text || !URL_RE.test(text)) return null;
+    return { type: "link", text };
+  }
+  return null;
+}
+
+// 本地兜底：Kimi 不可用时的规则理解
+
+// 用户否定当前提案：收起提案，温柔引导 TA 说出要改什么
+const REJECT_RE = /不对|不是这个?|错了|再聊聊|先不要|重来|重新说/;
+
+// 类型变更（纠正分类）：心签↔约定。STRONG 信号足以独立成立，WEAK 需结合当前提案
+const TO_TASK_STRONG = /(?:不对|错了|不是|不算|别当|不当)[，,、\s]*(?:这|那|它)?\s*是\s*(?:个|条)?\s*约定|(?:心签|心情|情绪|感悟)[^，。,.]{0,8}约定|(?:改成|变成|存成|当成|转为|换成|应该是|其实是|算是)\s*约定|(?:不是|不算|别当|不当)\s*(?:心签|心情|情绪|感悟)/;
+const TO_TASK_WEAK = /(?:这|那|它)?\s*是\s*(?:个|条)?\s*约定/;
+const TO_HEART_STRONG = /(?:不对|错了|不是|不算|别当|不当)[，,、\s]*(?:这|那|它)?\s*是\s*(?:个|条)?\s*(?:心签|心情|情绪|感悟)|约定[^，。,.]{0,8}(?:心签|心情|情绪|感悟)|(?:改成|变成|存成|当成|转为|换成|应该是|其实是|算是)\s*(?:心签|心情|情绪|感悟)|(?:不是|不算|别当|不当)\s*约定/;
+const TO_HEART_WEAK = /(?:这|那|它)\s*是\s*(?:个|条)?\s*(?:心签|心情|情绪|感悟)/;
+
+// 心签六类子类型（与 analyzeHeartSign 的 HEARTSIGN_TYPE_ZH 一致）
+const HEART_CATEGORIES = ["emotion", "inspiration", "material", "memo", "share", "ledger"];
+const HEART_CATEGORY_ZH = { emotion: "情绪", inspiration: "灵感", material: "资料", memo: "备忘", share: "分享", ledger: "账本" };
+// 子类型纠正：「这是账本签」「改成灵感」「记成备忘」等
+const HEART_SUB_SWITCH_RE = /(?:改成|变成|存成|当成|记成|记为|转为|换成|归为|归类为|应该是|其实是|算是|这是|那是|它是)\s*(?:一)?(账本|记账|备忘|灵感|情绪|心情|资料|知识|参考|分享)\s*签?/;
+function detectHeartSubSwitch(text) {
+  const m = String(text || "").match(HEART_SUB_SWITCH_RE);
+  if (!m) return null;
+  const w = m[1];
+  if (/账本|记账/.test(w)) return "ledger";
+  if (/备忘/.test(w)) return "memo";
+  if (/灵感/.test(w)) return "inspiration";
+  if (/情绪|心情/.test(w)) return "emotion";
+  if (/资料|知识|参考/.test(w)) return "material";
+  if (/分享/.test(w)) return "share";
+  return null;
+}
+
+// 显式「立约定」指令：设为约定 / 立个约定 / 转成约定 等
+const TASK_DIRECTIVE_RE = /(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/;
+// 周期性提醒时刻：每天下午3点 / 每晚11点半 / 每天8:30
+const DAILY_TIME_RE = /(?:每天|每日|每晚|每夜|天天)\s*(?:(上午|中午|下午|晚上|早上|清晨|凌晨)\s*)?(\d{1,2})(?:\s*[点:：]\s*(\d{1,2})?|\s*半)?/;
+// 每周X（可选时刻，未给时刻时按惯例取 9:00）
+const WEEKLY_DAY_RE = /每(?:个|一)?(?:周|星期|礼拜)([一二三四五六日天])(?![一二三四五六日天])/;
+// 期限：一周内 / 3天内 / 两周内完成
+const WITHIN_RE = /([一二两三四五六七八九十\d]+)\s*(?:个)?\s*(周|星期|礼拜|天|日|月)\s*(?:之?内|以?前|前)/;
+
+const CN_NUM = { 一: 1, 两: 2, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+function parseCnAmount(raw) {
+  const s = String(raw || "");
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  if (s === "十") return 10;
+  let m = s.match(/^十([一二三四五六七八九])$/);
+  if (m) return 10 + CN_NUM[m[1]];
+  m = s.match(/^([一二两三四五六九])十([一二三四五六七八九])?$/);
+  if (m) return CN_NUM[m[1]] * 10 + (m[2] ? CN_NUM[m[2]] : 0);
+  return CN_NUM[s] ?? null;
+}
+
+// 「现在就去网页办事」识别（排除"以后再提醒"的约定类表述）
+const LATER_REMIND_RE = /提醒我|记得|别忘了|以后再|到时(候)?再/;
+const NOW_BROWSE_RE = /(?:帮我|给我|麻烦|请问|帮).{0,12}(?:查|搜|看|找|订|预约)|(?:查|搜)一下?(?:天气|资料|信息|价格|股价|机票|火车票|高铁|余票|快递|物流|酒店|路线|成绩|排名)|订(?:机票|火车票|高铁票|酒店|门票|外卖)|点外卖|天气怎么(?:样|的)|气温/;
+const BROWSE_URL_INTENT_RE = /打开|帮我|查|搜|填|预约|订|报名|提交|看看|找|下载|登录/;
+
+function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
+  const t = String(lastUserText || "").trim();
+  if (!t) return null;
+
+  // —— 类型变更：用户纠正分类（"不对，这是约定"/"不是心签"/"改成心签"），优先于普通否定 ——
+  if (lastExtracted?.type === "heart" && (TO_TASK_STRONG.test(t) || TO_TASK_WEAK.test(t))) {
+    const content = String(lastExtracted.content || "").trim();
+    const title = content.replace(/[。！!？?~～\s]+$/, "").slice(0, 60) || "新约定";
+    return { type: "task", title, description: content || title, category: "personal", priority: "medium", due_at: null };
+  }
+  if (lastExtracted?.type === "task" && (TO_HEART_STRONG.test(t) || TO_HEART_WEAK.test(t))) {
+    const content = String(lastExtracted.description || lastExtracted.title || "").trim();
+    if (content) return { type: "heart", content: content.slice(0, 500) };
+  }
+  // 提案刚被收起（上一轮点了"不对，再聊聊"）：纠正信号仍允许从对话历史里捞回原内容改类型
+  if (!lastExtracted && (TO_TASK_STRONG.test(t) || TO_TASK_WEAK.test(t))) {
+    for (const prev of recentUserTexts) {
+      const cand = String(prev || "").trim();
+      if (!cand || cand === t) continue;
+      if (REJECT_RE.test(cand) || TO_TASK_STRONG.test(cand) || TO_HEART_STRONG.test(cand)) continue;
+      const title = cand.replace(/[。！!？?~～\s]+$/, "").slice(0, 60);
+      return { type: "task", title, description: cand.slice(0, 300), category: "personal", priority: "medium", due_at: null };
+    }
+  }
+  if (!lastExtracted && (TO_HEART_STRONG.test(t) || TO_HEART_WEAK.test(t))) {
+    for (const prev of recentUserTexts) {
+      const cand = String(prev || "").trim();
+      if (!cand || cand === t) continue;
+      if (REJECT_RE.test(cand) || TO_TASK_STRONG.test(cand) || TO_HEART_STRONG.test(cand)) continue;
+      return { type: "heart", content: cand.slice(0, 500) };
+    }
+  }
+  // —— 心签子类型纠正：「这是账本签」「改成灵感」→ 换分类，回应口吻跟着换 ——
+  const subSwitch = detectHeartSubSwitch(t);
+  if (subSwitch && lastExtracted?.type === "heart") {
+    return { type: "heart", content: lastExtracted.content, heart_category: subSwitch };
+  }
+  if (subSwitch && !lastExtracted) {
+    for (const prev of recentUserTexts) {
+      const cand = String(prev || "").trim();
+      if (!cand || cand === t) continue;
+      if (REJECT_RE.test(cand) || TO_TASK_STRONG.test(cand) || TO_HEART_STRONG.test(cand)) continue;
+      return { type: "heart", content: cand.slice(0, 500), heart_category: subSwitch };
+    }
+  }
+
+  // 否定提案：返回 null 收起卡片，由 fallbackReply 引导用户说清要改什么
+  if (REJECT_RE.test(t) && lastExtracted) return "__reject__";
+
+  const urlMatch = t.match(URL_RE);
+  const notLater = !LATER_REMIND_RE.test(t);
+  // 网址 + 办事意图 → 直接派浏览器小助手（不再只立约定等确认）
+  if (urlMatch && notLater && BROWSE_URL_INTENT_RE.test(t)) return { agent_goal: t };
+  // 口语办事诉求 → 直接派浏览器小助手
+  if (notLater && t.length <= 120 && NOW_BROWSE_RE.test(t)) return { agent_goal: t };
+
+  if (urlMatch) return { type: "link", text: t };
+
+  // 简化版时间解析：只覆盖最常见的口语时间
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const toIso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+  let due = null;
+  let titleSource = t;
+
+  const minMatch = t.match(/(\d+)\s*分钟后/);
+  const hourMatch = t.match(/(\d+)\s*小时后/);
+  const tonightMatch = t.match(/(?:今天下午|今晚)\s*(\d{1,2})(?:点|:|：)?(?:30|半)?/);
+  const tomorrowMatch = t.match(/明天(?:上午|中午|下午|晚上)?\s*(\d{1,2})(?:点|:|：)?(?:30|半)?/);
+  if (minMatch) {
+    const d = new Date(now.getTime() + parseInt(minMatch[1], 10) * 60000);
+    due = toIso(d);
+  } else if (/半小时后/.test(t)) {
+    due = toIso(new Date(now.getTime() + 30 * 60000));
+  } else if (hourMatch) {
+    due = toIso(new Date(now.getTime() + parseInt(hourMatch[1], 10) * 3600000));
+  } else if (tonightMatch) {
+    const d = new Date();
+    d.setHours(parseInt(tonightMatch[1], 10), /半|30/.test(t) ? 30 : 0, 0, 0);
+    if (d <= now) d.setDate(d.getDate() + 1);
+    due = toIso(d);
+  } else if (tomorrowMatch) {
+    let h = parseInt(tomorrowMatch[1], 10);
+    if ((t.includes("下午") || t.includes("晚上")) && h < 12) h += 12;
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(h, /半|30/.test(t) ? 30 : 0, 0, 0);
+    due = toIso(d);
+  }
+
+  if (due) {
+    const cleaned = t
+      .replace(/提醒我?/, "")
+      .replace(/(明天|今天|今晚|下午|上午|晚上|中午)?\s*\d{1,2}\s*(点|:|：)?(半|30|分)?\s*(后)?/, "")
+      .replace(/[，。,.!\s]+$/, "")
+      .replace(/^(?:明天|今天|后天|今晚|明早|本周|下周)+/, "")
+      .replace(/^(?:半小时后|\d+\s*(?:个)?小时[以之]?后|\d+\s*分钟[以之]?后)/, "")
+      .trim();
+    const title = cleaned ? cleaned.slice(0, 60) : t.slice(0, 60);
+    return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: due };
+  }
+
+  // —— 显式立约定 / 周期提醒 / 期限完成（如"设为约定，一周内完成，每天下午3点提醒"）——
+  const hasTaskDirective = TASK_DIRECTIVE_RE.test(t);
+  const dailyMatch = t.match(DAILY_TIME_RE);
+  const weeklyDayMatch = t.match(WEEKLY_DAY_RE);
+  const withinMatch = t.match(WITHIN_RE);
+  if (hasTaskDirective || dailyMatch || withinMatch || (weeklyDayMatch && /提醒|叫我|唤/.test(t))) {
+    const now0 = new Date();
+    let remindAt = null;
+    let endAt = null;
+
+    if (dailyMatch) {
+      let h = parseInt(dailyMatch[2], 10);
+      const period = dailyMatch[1] || "";
+      if ((period === "下午" || period === "晚上") && h < 12) h += 12;
+      let mi = dailyMatch[3] ? parseInt(dailyMatch[3], 10) : 0;
+      if (/半\s*$/.test(dailyMatch[0])) mi = 30;
+      if (h >= 0 && h <= 23) {
+        const d = new Date();
+        d.setHours(h, mi >= 0 && mi <= 59 ? mi : 0, 0, 0);
+        if (d <= now0) d.setDate(d.getDate() + 1);
+        remindAt = d;
+      }
+    } else if (weeklyDayMatch && /提醒|叫我|唤/.test(t)) {
+      const target = { 日: 0, 天: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6 }[weeklyDayMatch[1]];
+      if (target !== undefined) {
+        const d = new Date();
+        d.setHours(9, 0, 0, 0);
+        let delta = (target - d.getDay() + 7) % 7;
+        if (delta === 0 && d <= now0) delta = 7;
+        d.setDate(d.getDate() + delta);
+        remindAt = d;
+      }
+    }
+
+    if (withinMatch) {
+      const n = parseCnAmount(withinMatch[1]);
+      if (n) {
+        const d = new Date();
+        const unit = withinMatch[2];
+        if (unit === "月") d.setMonth(d.getMonth() + n);
+        else if (unit === "周" || unit === "星期" || unit === "礼拜") d.setDate(d.getDate() + n * 7);
+        else d.setDate(d.getDate() + n);
+        d.setHours(18, 0, 0, 0);
+        endAt = d;
+      }
+    }
+
+    // reminder_time 语义优先（客户端把 due_at 当提醒时间落库；
+    // "每天/每周"的重复语义会由创建接口从原话里自动识别成 repeat_rule）
+    const pick = remindAt && endAt ? (remindAt <= endAt ? remindAt : endAt) : (remindAt || endAt);
+    const due0 = pick ? toIso(pick) : null;
+
+    // title：剥掉指令词/时间描述后的剩余；纯指令句（内容只剩时间描述）取对话里上一条用户消息
+    const stripped = t
+      .replace(/(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/g, "")
+      .replace(/提醒我?/g, "")
+      .replace(/每天[^，。,.]{0,12}?(?:提醒|叫我|唤)/g, "")
+      .replace(/每周[^，。,.]{0,12}?(?:提醒|叫我|唤)/g, "")
+      .replace(/[一二两三四五六七八九十\d]+\s*(?:个)?\s*(?:周|星期|礼拜|天|日|月)\s*(?:之?内|以?前|前)[^，。,.]{0,8}/g, "")
+      .replace(/[，。,.；;！!？?\s]+/g, " ")
+      .trim();
+    const isDirectiveOnly = hasTaskDirective && !t
+      .replace(/(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/g, "")
+      .replace(/提醒我?/g, "")
+      .replace(/每天[^，。,.]{0,6}?\d{1,2}\s*[点:：]?\s*(?:\d{1,2}|半)?/g, "")
+      .replace(/每周[^，。,.]{0,8}?\d{0,2}\s*[点:：]?\s*(?:\d{1,2}|半)?/g, "")
+      .replace(/[一二两三四五六七八九十\d]+\s*(?:个)?\s*(?:周|星期|礼拜|天|日|月)\s*(?:之?内|以?前|前)[^，。,.]{0,8}/g, "")
+      .replace(/[，。,.；;！!？?\s]+/g, "")
+      .trim();
+    let title = "";
+    if (isDirectiveOnly) {
+      for (const prev of recentUserTexts) {
+        const cand = String(prev || "").trim();
+        if (!cand || cand === t) continue;
+        if (TASK_DIRECTIVE_RE.test(cand)) continue;
+        title = cand.slice(0, 60);
+        break;
+      }
+    }
+    if (!title) title = stripped.slice(0, 60);
+    if (!title) title = t.replace(/^(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定[，,]?\s*/, "").slice(0, 60) || "新约定";
+    return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: due0 };
+  }
+
+  // —— 连续对话分次补信息：「在下午3点的时候提醒我」把时间补进上轮的约定提案 ——
+  const REMIND_VERB_RE = /提醒我?|叫我|唤我|喊我/;
+  const BARE_TIME_RE = /(?:在|于|到)?\s*(上午|中午|下午|晚上|早上|清晨|凌晨)?\s*(\d{1,2})\s*[点:：]\s*(\d{1,2})?\s*(?:的时候|左右|前后|过后)?/;
+  const bareTimeMatch = REMIND_VERB_RE.test(t) ? t.match(BARE_TIME_RE) : null;
+  if (bareTimeMatch) {
+    let h = parseInt(bareTimeMatch[2], 10);
+    const period = bareTimeMatch[1] || "";
+    if ((period === "下午" || period === "晚上") && h < 12) h += 12;
+    // 裸数字时刻 1-6 点按生活惯例指下午（"3点提醒我"很少指凌晨）
+    if (!period && h >= 1 && h <= 6) h += 12;
+    if (h >= 0 && h <= 23) {
+      const mi = bareTimeMatch[3] ? parseInt(bareTimeMatch[3], 10) : 0;
+      const d = new Date();
+      d.setHours(h, mi >= 0 && mi <= 59 ? mi : 0, 0, 0);
+      if (d <= new Date()) d.setDate(d.getDate() + 1);
+      const rest = t.replace(bareTimeMatch[0], "").replace(REMIND_VERB_RE, "").replace(/[，。,.；;！!？?\s]+/g, " ").trim();
+      // 这句只剩时刻（用户在给上一条提案补时间）：合并进上轮提案
+      if (!rest && lastExtracted?.type === "task") {
+        return { ...lastExtracted, due_at: toIso(d) };
+      }
+      const cleaned = rest.replace(/^在/, "").replace(/(?:的时候|左右|前后|过后)$/, "").slice(0, 60)
+        || t.replace(REMIND_VERB_RE, "").replace(/^在/, "").replace(/(?:的时候|左右|前后|过后)$/, "").slice(0, 60)
+        || "新约定";
+      return { type: "task", title: cleaned, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: toIso(d) };
+    }
+  }
+
+  // —— 条件从句：「在我深度工作的时候提醒我」先收下约定，等用户补时间 ——
+  const clauseMatch = t.match(/(?:当|在|等)?我?([^，。,.]{2,20}?)(?:的时候|之时|时|之后|以后|后)\s*提醒我/);
+  if (clauseMatch && !BARE_TIME_RE.test(t)) {
+    const title = clauseMatch[1].replace(/^(?:我|你|咱)/, "").trim().slice(0, 60) || t.slice(0, 60);
+    return { type: "task", title, description: t.slice(0, 300), category: "personal", priority: "medium", due_at: null };
+  }
+
+  // 情绪/感悟 → 心签；其余也先收进记录，避免对话走进死胡同
+  const isHeart = t.length <= 200
+    && /[情绪心累烦焦虑难过开心感谢温暖幸福孤独迷茫害怕担心感动感慨突然觉]/.test(t);
+  if (isHeart && lastExtracted?.type !== "heart") return { type: "heart", content: t.slice(0, 500) };
+
+  return lastExtracted || null;
+}
+
+function fallbackReply(userText, extracted, lastExtracted) {
+  const t = String(userText || "").trim();
+  if (extracted === "__reject__") {
+    return "好，先不急着定～你想改哪一部分？时间、内容，还是它其实不是约定，告诉我就好。";
+  }
+  if (!extracted) {
+    return "我在听～你可以再说一点点：比如想什么时候做这件事，或者这只是当下的一点心情，我都会替你收好。";
+  }
+  // 分类被用户改掉了：回复跟着换，不再沿用原类型的话术
+  if (extracted.type === "task" && lastExtracted?.type === "heart") {
+    return `好，那就不当心签，改成约定了「${extracted.title}」。你看看下面的小卡片，没问题就点确认～`;
+  }
+  if (extracted.type === "heart" && lastExtracted?.type === "task") {
+    return "好，那它不当约定催你，我把它收进心签里。点下面的确认就存好～";
+  }
+  if (extracted.type === "task" && (!lastExtracted || lastExtracted.title !== extracted.title)) {
+    if (!extracted.due_at && /https?:\/\//.test(extracted.description || "")) {
+      return `好，我记下了「${extracted.title}」。确认后我会派浏览器小助手替你打开网页一步步办好，进度在守护记录里随时看～`;
+    }
+    return extracted.due_at
+      ? `好，我记下了「${extracted.title}」。时间我也算好了，你看一眼下面的小卡片，没问题就点确认～`
+      : `好，我记下了「${extracted.title}」。大概想定在什么时候？告诉我，我把它排进去～`;
+  }
+  // 同一提案把时间补上了（用户分轮给信息：先立约定，后补时刻）
+  if (extracted.type === "task" && lastExtracted?.type === "task" && !lastExtracted.due_at && extracted.due_at) {
+    return "好，我把时间补上了，你看一眼下面的小卡片，没问题就点确认～";
+  }
+  if (extracted.type === "heart") {
+    // 子类型被用户改掉了：回应口吻跟着换（账本损友式/灵感推落地/备忘极简…）
+    if (extracted.heart_category && lastExtracted?.type === "heart" && extracted.heart_category !== lastExtracted.heart_category) {
+      const SWITCH_COPY = {
+        ledger: "行，这笔交给我记账～点确认，我把账理清，再附赠一句损友式点评。",
+        inspiration: "这个念头值得留下！点确认存成灵感签，我再帮你推一把，想想它最能落在哪个瞬间。",
+        memo: "收到，存成备忘。点确认就记好，不啰嗦～",
+        material: "好，存成资料签。点确认，我再给你补点有用的上下文。",
+        share: "谢谢你愿意分享～点确认存好，这条我用心收着。",
+        emotion: "好，那这句按情绪签陪你。点下面的确认就存好～"
+      };
+      return SWITCH_COPY[extracted.heart_category] || SWITCH_COPY.emotion;
+    }
+    return "这句话我替你收进心签里了。点下面的确认就存好，以后随时可以翻出来看看～";
+  }
+  if (extracted.type === "link") {
+    return "这个链接我帮你存进记录。点下面的确认就存好～";
+  }
+  return "我在听，你继续说～";
+}
+
+// ===== Kimi 对话 =====
+
+const RESPONSE_SCHEMA = {
+  type: "object",
+  properties: {
+    reply: { type: "string", description: "对用户说的话，1-3 句，温柔自然口语" },
+    agent_goal: {
+      type: ["string", "null"],
+      description: "用户想让 Agent 现在就去网页上办的事（查实时信息/订票/网页查询办理等），原样保留诉求；不需要时为 null"
+    },
+    extracted: {
+      type: ["object", "null"],
+      description: "从对话中提取的待确认内容；信息不足或纯聊天时为 null",
+      properties: {
+        type: { type: "string", enum: ["task", "heart", "link"] },
+        title: { type: "string" },
+        description: { type: "string" },
+        content: { type: "string" },
+        text: { type: "string" },
+        category: { type: "string", enum: CATEGORIES },
+        heart_category: { type: "string", enum: ["emotion", "inspiration", "material", "memo", "share", "ledger"], description: "心签子类型（情绪/灵感/资料/备忘/分享/账本）；用户纠正心签分类时更新为目标类型，平时可省略" },
+        priority: { type: "string", enum: PRIORITIES },
+        due_at: { type: "string", description: "ISO8601 带 +08:00 时区，如 2026-09-24T15:00:00+08:00" }
+      }
+    }
+  },
+  required: ["reply", "agent_goal", "extracted"]
+};
+
+function buildMessagesBlock(messages) {
+  return messages
+    .slice(-12)
+    .map((m) => `${m.role === "user" ? "用户" : "SoulSentry"}：${trim(m.content, 500)}`)
+    .join("\n");
+}
+
+async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "" }) {
+  const now = chinaNow();
+  const extractedCtx = lastExtracted
+    ? `（你上一轮提出的待确认提案如下，用户可能正在对它做修改：${JSON.stringify(lastExtracted)}）`
+    : "";
+
+  const prompt = `现在是中国时间 ${now.date} ${now.dateTime.slice(11)}。以下是用户与 SoulSentry 的对话${extractedCtx}：
+
+${buildMessagesBlock(messages)}${attachmentCtx}
+
+请按系统要求返回 JSON。`;
+
+  const resultAndUsage = await invokeKimiText({
+    prompt,
+    systemPrompt: `你是 SoulSentry「心栈」，一个温柔、克制、值得信赖的陪伴式记录助手。用户通过和你聊天的方式，把心里想记的东西告诉你。
+
+你的任务是从对话中理解用户想做什么，并在信息足够时给出待确认的结构化提案（extracted）：
+- type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。
+- type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
+- type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
+- type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
+- 纯聊天或信息还不足：extracted 为 null。
+
+agent_goal（网页办事，即时执行）：用户想让你"现在就去网上办一件事"——查实时信息（天气/股价/快递/余票）、打开网页搜索查询、订机票/火车票/酒店、网页填写/预约/比价等。把用户的原始诉求原样填进 agent_goal（含完整网址），extracted 保持 null（同一件事不要两边都放）。回复时告诉用户：浏览器小助手已经出发去办了，过程和结果会直接回到对话里，遇到需要你拍板的地方会 pause 下来问你。若这件事里另有"需要用户日后参与/值得记住"的部分（如出行安排、约定），再单独用 extracted 立约定。
+
+重要：你所在的 SoulSentry 已经具备浏览器自动执行能力，不要再说"我没办法打开网页/搜索"，这类请求请填 agent_goal。
+
+术语约定（必须严格遵守）：用户想记下的"要在未来做的事/提醒"一律称为「约定」。回复里绝对不要说「待办」「任务」「待办事项」「todo」「日程」「提醒事项」，统一说「约定」；「心签」「链接」的说法保持不变。举例：说"这个约定我记下了"，不要说"这个待办我记下了"。
+
+对话原则：
+1. 信息不足时不要硬猜：只问一个最关键的补充问题（通常是时间），语气像朋友，不像表单。
+2. 信息足够时：extracted 给出完整提案，reply 里用一两句话温柔复述你要记下什么，提醒用户点确认即可生成，不要催促。
+3. 用户修改提案时，更新 extracted；用户说"就这些/对了/确认"时保持 extracted 不变。
+4. 用户否定当前提案（比如说"不对""我想改一下"）时：extracted 输出 null，先温柔地问清楚 TA 想改哪一部分（时间、内容，还是这其实不是约定/心签），不要立刻重复同一个提案。
+5. 永远温柔从容：不评判、不催促、不制造焦虑；用户想闲聊就好好陪聊。
+6. reply ≤80字，自然口语，像微信聊天，不要用列表和 markdown。
+7. 严格返回 JSON，不要输出其他内容。`,
+    responseJsonSchema: RESPONSE_SCHEMA,
+    temperature: 0.7,
+    maxTokens: 800,
+    withUsage: true
+  });
+
+  const { data: result, usage } = resultAndUsage;
+  if (!result || typeof result !== "object" || typeof result.reply !== "string") {
+    throw new Error("invalid chat response");
+  }
+  if (PRESSURE_WORDS.test(result.reply)) {
+    throw new Error("reply failed tone check");
+  }
+  const agentGoal = trim(result.agent_goal, 200) || null;
+  // 同一件事不要重复：agent_goal 已覆盖的请求，不再出同名约定提案
+  const extracted = agentGoal && result.extracted?.type === "task"
+    ? null
+    : sanitizeExtracted(result.extracted);
+  return {
+    reply: trim(result.reply, 120),
+    agentGoal,
+    extracted,
+    usage
+  };
+}
+
+/**
+ * 对话入口：messages 为完整对话历史（客户端持有），lastExtracted 为当前待确认提案。
+ * agentExecutionId：对话中挂着浏览器小助手会话时，用户消息直接转发给 Agent。
+ * 返回 { reply, extracted, agentGoal?, agent?, source }；任何情况下都给出可继续的对话。
+ */
+export async function runFlowChat({ messages, lastExtracted = null, userId = null, prisma = null, agentExecutionId = null, attachments = [] }) {
+  // 附件上下文：图片走视觉识别（本地读文件转 base64，无需公网 URL），文件列名称类型
+  let attachmentCtx = "";
+  if (Array.isArray(attachments) && attachments.length) {
+    const parts = [];
+    for (const a of attachments.slice(0, 3)) {
+      const name = String(a?.name || "附件").slice(0, 80);
+      const type = String(a?.type || "");
+      if (type.startsWith("image/") && a?.url) {
+        try {
+          const r = await analyzeImage({ fileUrl: a.url });
+          const desc = [r?.extracted_text, r?.suggestion].filter(Boolean).join("；").slice(0, 600);
+          parts.push(`图片「${name}」的内容：${desc || "（未能识别内容）"}`);
+        } catch {
+          parts.push(`图片「${name}」（内容未能识别）`);
+        }
+      } else {
+        parts.push(`文件「${name}」（${type || "未知类型"}）`);
+      }
+    }
+    if (parts.length) attachmentCtx = `\n\n用户随本条消息附上了：\n- ${parts.join("\n- ")}`;
+  }
+
+  const safeMessages = Array.isArray(messages)
+    ? messages
+        .filter((m) => m && typeof m.content === "string" && ["user", "assistant"].includes(m.role))
+        .slice(-30)
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 500) }))
+    : [];
+
+  const lastUser = [...safeMessages].reverse().find((m) => m.role === "user");
+  // Agent 转发用未截断的原始用户消息（长文案/详细补充说明不被 500 字截断）
+  const lastUserRaw = Array.isArray(messages)
+    ? [...messages].reverse().find((m) => m && m.role === "user" && typeof m.content === "string")
+    : null;
+
+  // —— 浏览器小助手会话进行中：用户消息直接转发给 Agent ——
+  if (agentExecutionId && lastUser) {
+    try {
+      const owned = await prisma?.taskExecution?.findFirst({
+        where: { id: agentExecutionId, userId, automationType: "browser_task" },
+        select: { id: true, executionStatus: true }
+      });
+      if (!owned) {
+        return { reply: "小助手刚才的会话已经收尾了，结果在守护记录里可以看～还想办点什么吗？", extracted: null, agent: null, source: "agent" };
+      }
+      if (owned.executionStatus === "failed" || owned.executionStatus === "completed") {
+        return { reply: "小助手的会话已经收尾了，过程和结果在守护记录里可以看～想继续的话点「再试一次」，或者跟我说新的需求哦", extracted: null, agent: null, source: "agent" };
+      }
+      const resp = await respondToAgent(agentExecutionId, { text: (String(lastUserRaw?.content || lastUser?.content || "").slice(0, 1500) + attachmentCtx).slice(0, 2000) });
+      if (!resp.ok) {
+        return { reply: "小助手还在操作网页，等它问你或者出结果哦～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
+      }
+      return { reply: "收到，我转达给小助手了，它继续帮你办～", extracted: null, agent: { executionId: agentExecutionId, status: "running" }, source: "agent" };
+    } catch (err) {
+      console.warn("[flowChat] 转发小助手失败:", err?.message || err);
+      return { reply: "小助手那边好像断线了，结果可以在守护记录里看，也可以稍后再让我帮你办～", extracted: null, agent: null, source: "agent" };
+    }
+  }
+
+  // —— AI 点数预检：对话是用户主动触发的 AI 调用，余额不足时不消耗 AI、直接温柔提示充值 ——
+  if (userId && prisma) {
+    const creditUser = await prisma.user.findUnique({ where: { id: userId }, select: { aiCredits: true } });
+    const balance = creditUser?.aiCredits ?? 0;
+    if (balance < 1) {
+      return {
+        reply: "AI 点数用完啦。去「我的 → AI 点数」充一点，随时回来继续聊～",
+        extracted: null,
+        insufficientCredits: true,
+        balance,
+        source: "credits"
+      };
+    }
+  }
+
+  try {
+    if (!safeMessages.length || !lastUser) throw new Error("empty messages");
+    const out = await Promise.race([
+      chatWithKimi({ messages: safeMessages, lastExtracted, attachmentCtx }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000))
+    ]);
+
+    // AI 调用成功：按真实 token 用量结算（1 点/1000 token，最少 1 点）；余额竞态只记警告不阻断
+    if (userId && prisma && out.usage) {
+      try {
+        const { cost, billableTokens } = usageCost(out.usage);
+        await chargeAICredits({
+          userId,
+          cost,
+          feature: "flow_chat",
+          description: `心流对话（${Math.round(billableTokens)} tokens）`
+        });
+      } catch (chargeErr) {
+        if (chargeErr?.code === "INSUFFICIENT_CREDITS") {
+          console.warn(`[flowChat] 结算时余额不足（余额 ${chargeErr.balance}），本次放行`);
+        } else {
+          console.error("[flowChat] 扣点失败:", chargeErr?.message || chargeErr);
+        }
+      }
+    }
+
+    // —— Kimi 判断需要即时网页办事：启动浏览器小助手 ——
+    let agent = null;
+    if (out.agentGoal && userId && prisma) {
+      try {
+        const started = await startStandaloneBrowserExecution({ goal: out.agentGoal, userId, prisma });
+        if (started.status === "started") {
+          agent = { executionId: started.executionId, status: "running" };
+        } else {
+          out.reply = `${out.reply}（小助手暂时没能出发：${started.reason}）`;
+        }
+      } catch (startErr) {
+        console.warn("[flowChat] 启动小助手失败:", startErr?.message || startErr);
+        out.reply = `${out.reply}（小助手暂时没能出发，稍后再试试？）`;
+      }
+    }
+    return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
+  } catch (err) {
+    console.warn("[flowChat] Kimi chat failed, fallback:", err?.message || err);
+    // "设为约定"这类指令常指代上文：把最近的用户消息倒序传给兜底，供标题提取
+    const recentUserTexts = safeMessages
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .reverse();
+    const raw = fallbackExtract(lastUser?.content, lastExtracted, recentUserTexts);
+
+    // 兜底识别出"现在就去网页办事"：直接启动浏览器小助手
+    if (raw && raw.agent_goal && userId && prisma) {
+      try {
+        const started = await startStandaloneBrowserExecution({ goal: raw.agent_goal, userId, prisma });
+        if (started.status === "started") {
+          return {
+            reply: "好，我让浏览器小助手去帮你办这件事，过程和结果马上回到这里～",
+            extracted: null,
+            agentGoal: raw.agent_goal,
+            agent: { executionId: started.executionId, status: "running" },
+            source: "fallback"
+          };
+        }
+        return {
+          reply: `好，这件事我可以派小助手去网页上办，不过${started.reason}，先帮你记在这里？`,
+          extracted: null,
+          agentGoal: raw.agent_goal,
+          agent: null,
+          source: "fallback"
+        };
+      } catch (startErr) {
+        console.warn("[flowChat] 兜底启动小助手失败:", startErr?.message || startErr);
+        return {
+          reply: "好，这件事我可以派小助手去网页上办，不过它刚才没出发成功，稍后再跟我说一次好吗？",
+          extracted: null,
+          agent: null,
+          source: "fallback"
+        };
+      }
+    }
+
+    const extracted = raw && raw !== "__reject__" ? sanitizeExtracted(raw) : null;
+    return {
+      reply: fallbackReply(lastUser?.content, raw === "__reject__" ? "__reject__" : extracted, lastExtracted),
+      extracted,
+      source: "fallback"
+    };
+  }
+}

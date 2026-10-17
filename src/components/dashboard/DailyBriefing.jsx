@@ -1,0 +1,165 @@
+import React, { useEffect, useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, Sun, Compass, Coffee, RefreshCw, Moon, CloudSun } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+export default function DailyBriefing() {
+    const [briefing, setBriefing] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    const [refreshing, setRefreshing] = useState(false);
+
+    const fetchBriefing = async (force = false) => {
+        const today = new Date().toDateString();
+        const cacheKey = `daily_briefing_v2_${today}`;
+
+        // Clear old v1 caches
+        try {
+            const oldKey = `daily_briefing_${today}`;
+            localStorage.removeItem(oldKey);
+        } catch (_error) {
+            void _error;
+        }
+
+        if (!force) {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                try {
+                    setBriefing(JSON.parse(cached));
+                    setLoading(false);
+                    return;
+                } catch (_error) {
+                    void _error;
+                }
+            }
+        }
+
+        if (force) setRefreshing(true);
+        setLoading(true);
+        try {
+            const { data } = await base44.functions.invoke("generateDailyBriefing");
+            setBriefing(data);
+            localStorage.setItem(cacheKey, JSON.stringify(data));
+        } catch (error) {
+            console.error("Failed to fetch briefing", error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchBriefing();
+    }, []);
+
+    const getTimeIcon = () => {
+        const hour = new Date().getHours();
+        if (hour < 12) return Sun;
+        if (hour < 18) return CloudSun;
+        return Moon;
+    };
+
+    const TimeIcon = getTimeIcon();
+
+    if (loading) {
+        return (
+            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm mb-8">
+                <div className="flex items-center gap-3 mb-4">
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                    <Skeleton className="h-6 w-48" />
+                </div>
+                <div className="grid md:grid-cols-2 gap-6">
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                </div>
+            </div>
+        );
+    }
+
+    if (!briefing) return null;
+
+    return (
+        <>
+        <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-br from-white to-slate-50/50 rounded-2xl md:rounded-3xl p-4 md:p-8 border border-slate-100 shadow-sm mb-4 md:mb-8 relative overflow-hidden group hover:shadow-md transition-shadow duration-500"
+        >
+            {/* Decorative Background */}
+            <div className="absolute top-0 right-0 w-96 h-96 bg-[#384877]/[0.05] rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+
+            <div className="relative z-10">
+                <div className="flex justify-between items-start mb-5 md:mb-8">
+                    <div className="flex items-center gap-3 md:gap-4 min-w-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[#384877] flex items-center justify-center text-white shadow-lg shadow-[#384877]/25 shrink-0">
+                            <TimeIcon className="w-5 h-5 md:w-6 md:h-6" />
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="text-base md:text-xl font-bold text-slate-800 tracking-tight truncate">{briefing.title || briefing.greeting}</h2>
+                            <p className="text-[10px] md:text-xs text-slate-500 flex items-center gap-1.5 mt-0.5 md:mt-1 font-medium">
+                                <Sparkles className="w-3 h-3 text-[#384877]" />
+                                AI 每日简报
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onClick={() => fetchBriefing(true)}
+                        disabled={refreshing}
+                        className="p-2.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-[#384877] transition-all duration-300 disabled:opacity-50"
+                        title="基于最新任务数据重新生成"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4 md:gap-8 lg:gap-12">
+                    {/* Short Term */}
+                    <div className="space-y-2 md:space-y-4">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1 md:p-1.5 bg-blue-50 rounded-lg">
+                                <Coffee className="w-3.5 h-3.5 md:w-4 md:h-4 text-[#384877]" />
+                            </div>
+                            <h3 className="font-bold text-xs md:text-sm text-[#384877] uppercase tracking-wider">今日专注 · Short-Term</h3>
+                        </div>
+                        <p className="text-slate-600 leading-relaxed text-sm md:text-[15px] font-normal">
+                            {briefing.short_term_narrative}
+                        </p>
+                    </div>
+
+                    {/* Long Term */}
+                    <div className="space-y-2 md:space-y-4 border-t md:border-t-0 md:border-l pt-3 md:pt-0 border-slate-100 md:pl-8 lg:pl-12">
+                        <div className="flex items-center gap-2">
+                            <div className="p-1 md:p-1.5 bg-indigo-50 rounded-lg">
+                                <Compass className="w-3.5 h-3.5 md:w-4 md:h-4 text-indigo-600" />
+                            </div>
+                            <h3 className="font-bold text-xs md:text-sm text-indigo-600 uppercase tracking-wider">远见与思考 · Long-Term</h3>
+                        </div>
+                        <p className="text-slate-600 leading-relaxed text-sm md:text-[15px] font-normal">
+                            {briefing.long_term_narrative}
+                        </p>
+                    </div>
+                </div>
+
+                {briefing.mindful_tip && (
+                    <div className="mt-4 md:mt-8 pt-4 md:pt-6 border-t border-slate-100/60 flex flex-col items-center gap-3">
+                        <div className="inline-flex items-center gap-2 text-slate-500 text-xs md:text-sm italic bg-white px-3 md:px-5 py-2 md:py-2.5 rounded-full border border-slate-100 shadow-sm max-w-full">
+                            <Sparkles className="w-3 h-3 md:w-3.5 md:h-3.5 text-[#384877] shrink-0" />
+                            <span className="truncate">"{briefing.mindful_tip}"</span>
+                        </div>
+                        {briefing.task_stats && (
+                            <div className="flex items-center gap-3 text-[10px] md:text-xs text-slate-400">
+                                <span>活跃 {briefing.task_stats.active}</span>
+                                {briefing.task_stats.urgent > 0 && <span className="text-rose-400">紧急 {briefing.task_stats.urgent}</span>}
+                                {briefing.task_stats.overdue > 0 && <span className="text-rose-500">逾期 {briefing.task_stats.overdue}</span>}
+                                {briefing.task_stats.today_due > 0 && <span className="text-blue-400">今日到期 {briefing.task_stats.today_due}</span>}
+                                <span className="text-emerald-400">已完成 {briefing.task_stats.recent_completed}</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </motion.div>
+        </>
+    );
+}

@@ -1,0 +1,110 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../lib/prisma.js";
+import { requireAuth } from "../middleware/auth.js";
+import { rejectIfRisky } from "../services/contentSecurity.js";
+import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js";
+
+export const commentsRouter = Router();
+
+const commentSchema = z.object({
+  task_id: z.string().min(1),
+  content: z.string().min(1).max(5000),
+  mentions: z.array(z.string()).optional()
+});
+
+commentsRouter.use(requireAuth);
+
+function parseSort(sort = "-created_date") {
+  const value = String(sort || "-created_date");
+  const order = value.startsWith("-") ? "desc" : "asc";
+  const key = value.replace(/^[-+]/, "");
+  const mapping = {
+    created_date: "createdAt",
+    updated_date: "updatedAt"
+  };
+  return { [mapping[key] || "createdAt"]: order };
+}
+
+function serializeComment(comment) {
+  const visitorLabel = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
+  return {
+    id: comment.id,
+    task_id: comment.taskId,
+    content: comment.content,
+    mentions: comment.mentions || [],
+    created_by: comment.user?.email || "",
+    created_by_id: comment.userId,
+    visitor_token: comment.visitorToken,
+    visitor_name: comment.visitorName,
+    visitor_label: visitorLabel,
+    created_date: comment.createdAt,
+    updated_date: comment.updatedAt
+  };
+}
+
+commentsRouter.get("/", async (req, res) => {
+  const limit = Math.min(Number(req.query.limit || 100), 300);
+  const where = {};
+  if (req.query.task_id) {
+    // 共有约定：创建者/成员可读，无权限按不存在处理
+    const result = await assertTaskAccess(req, res, String(req.query.task_id));
+    if (!result) return;
+    where.taskId = String(req.query.task_id);
+  }
+  const comments = await prisma.comment.findMany({
+    where,
+    orderBy: parseSort(req.query.sort),
+    take: Number.isFinite(limit) ? limit : 100,
+    include: { user: true }
+  });
+  return res.json(comments.map(serializeComment));
+});
+
+commentsRouter.post("/", async (req, res) => {
+  const payload = commentSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  // 内容安全：评论内容需通过 msgSecCheck
+  if (await rejectIfRisky(res, payload.data.content, req.user.id)) return;
+
+  // 共有约定：创建者/成员可评论
+  const result = await assertTaskAccess(req, res, payload.data.task_id);
+  if (!result) return;
+
+  const comment = await prisma.comment.create({
+    data: {
+      userId: req.user.id,
+      taskId: payload.data.task_id,
+      content: payload.data.content,
+      mentions: payload.data.mentions || []
+    },
+    include: { user: true }
+  });
+
+  await notifyTaskParties(result.task, req.user, {
+    type: "shared_task_comment",
+    title: "共有约定有新评论",
+    body: `${req.user.displayName || req.user.email || "对方"} 评论了「${result.task.title}」：${payload.data.content.slice(0, 60)}`
+  });
+
+  return res.status(201).json(serializeComment(comment));
+});
+
+commentsRouter.delete("/:id", async (req, res) => {
+  const existing = await prisma.comment.findFirst({
+    where: {
+      id: req.params.id,
+      userId: req.user.id
+    }
+  });
+
+  if (!existing) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "评论不存在" });
+  }
+
+  await prisma.comment.delete({ where: { id: existing.id } });
+  return res.status(204).send();
+});

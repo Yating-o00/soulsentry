@@ -1,0 +1,1515 @@
+import React, { useState, useEffect as ReactUseEffect } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Plus, 
+  X, 
+  Upload, 
+  FileText, 
+  Image as ImageIcon,
+  Download,
+  Trash2,
+  CheckCircle2,
+  Circle,
+  StickyNote,
+  History, 
+  Clock, 
+  Repeat, 
+  Volume2, 
+  Bell,
+  Sparkles,
+  Loader2,
+  Languages,
+  MapPin
+} from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import RecurrenceEditor from "./RecurrenceEditor";
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { motion, AnimatePresence } from "framer-motion";
+import { Checkbox } from "@/components/ui/checkbox";
+import { toast } from "sonner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import TaskComments from "./TaskComments";
+import AITaskEnhancer from "./AITaskEnhancer";
+import TaskChangeHistory from "./TaskChangeHistory";
+import TaskDependencySelector from "./TaskDependencySelector";
+import QuickAlertButton from "./QuickAlertButton";
+import TaskReviseDialog from "./TaskReviseDialog";
+import TaskRevisionTimeline from "./TaskRevisionTimeline";
+import { GitBranch } from "lucide-react";
+
+function CommentCount({ taskId }) {
+  const { data: comments = [] } = useQuery({
+    queryKey: ['comments', taskId],
+    queryFn: () => base44.entities.Comment.filter({ task_id: taskId }, '-created_date'),
+    enabled: !!taskId,
+    initialData: [],
+  });
+  return comments.length > 0 ? <span className="ml-1">({comments.length})</span> : null;
+}
+import { Link as LinkIcon, BrainCircuit } from "lucide-react";
+import ReminderStrategyEditor from "./ReminderStrategyEditor";
+import LocationReminderSettings from "@/components/notifications/LocationReminderSettings";
+import ReactMarkdown from "react-markdown";
+import { useTaskOperations } from "@/components/hooks/useTaskOperations";
+import { invokeAI } from "@/components/utils/aiHelper";
+
+export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
+  const [uploading, setUploading] = useState(false);
+  const [newSubtask, setNewSubtask] = useState("");
+  const [newNote, setNewNote] = useState("");
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [insertParentId, setInsertParentId] = useState(null); // 子约定行内「＋」：新从属小约定挂载到的子约定 id
+  const [insertText, setInsertText] = useState("");
+  const [editingChild, setEditingChild] = useState(null); // 从属小约定行内改名：{ id, title }
+  const [editingChildText, setEditingChildText] = useState("");
+  const [isAddingNote, setIsAddingNote] = useState(false);
+  const [showRecurrenceEditor, setShowRecurrenceEditor] = useState(false);
+  const [isGeneratingSubtasks, setIsGeneratingSubtasks] = useState(false);
+  const [showRegeneratePrompt, setShowRegeneratePrompt] = useState(false);
+  const [originalContent, setOriginalContent] = useState({ title: "", description: "" });
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [showReviseDialog, setShowReviseDialog] = useState(false);
+  const [revisingSubtask, setRevisingSubtask] = useState(null);
+  const queryClient = useQueryClient();
+
+  // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
+  const { data: task = initialTaskData } = useQuery({
+    queryKey: ['task', initialTaskData?.id],
+    queryFn: async () => {
+        const res = await base44.entities.Task.filter({ id: initialTaskData.id });
+        return res[0];
+    },
+    enabled: !!initialTaskData?.id && open,
+    initialData: initialTaskData,
+  });
+
+  // Track original content to detect changes
+  React.useEffect(() => {
+    if (task && open) {
+      setOriginalContent({ 
+        title: task.title, 
+        description: task.description || "" 
+      });
+    }
+  }, [task?.id, open]);
+
+  const { data: subtasks = [] } = useQuery({
+    queryKey: ['subtasks', task?.id],
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
+    enabled: !!task?.id,
+    initialData: [],
+  });
+
+  // 二级从属小约定：每个子约定各自的下一层；queryKey 与详情页子约定 tab 一致，缓存/失效都能复用
+  const childQueries = useQueries({
+    queries: subtasks.map((s) => ({
+      queryKey: ['subtasks', s.id],
+      queryFn: () => base44.entities.Task.filter({ parent_task_id: s.id }),
+      enabled: !!s?.id,
+    })),
+  });
+  const childMap = React.useMemo(() => {
+    const map = {};
+    subtasks.forEach((s, i) => {
+      map[s.id] = (childQueries[i]?.data || []).filter((c) => !c.deleted_at);
+    });
+    return map;
+  }, [subtasks, childQueries]);
+
+  // Calculate target language for button label
+  const targetLangLabel = React.useMemo(() => {
+      if (!task) return "翻译";
+      const allText = (task.title || "") + (task.description || "");
+      if (!allText.trim()) return "翻译";
+      
+      const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
+      const nonWhitespace = allText.replace(/\s/g, "").length || 1;
+      // Use same threshold as translateTask logic
+      const isChinese = chineseChars > nonWhitespace * 0.3; 
+      
+      return isChinese ? "翻译为英文" : "翻译为中文";
+  }, [task?.title, task?.description]);
+
+  const { translateTask } = useTaskOperations();
+
+  const updateTaskMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
+    onSuccess: (updatedTask, { data }) => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['task', task?.id] });
+      queryClient.invalidateQueries({ queryKey: ['task-change-logs', task?.id] });
+      queryClient.invalidateQueries({ queryKey: ['task-completions', task?.id] });
+      
+      // Check if title or description changed and we have subtasks
+      if ((data.title || data.description) && subtasks.length > 0) {
+        const titleChanged = data.title && data.title !== originalContent.title;
+        const descChanged = data.description !== undefined && data.description !== originalContent.description;
+        
+        if (titleChanged || descChanged) {
+          setShowRegeneratePrompt(true);
+          setTimeout(() => setShowRegeneratePrompt(false), 8000);
+        }
+      }
+    },
+  });
+
+  const createSubtaskMutation = useMutation({
+    mutationFn: (data) => base44.entities.Task.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      setNewSubtask("");
+    },
+  });
+
+  // 子约定删除=软删除（进回收站，可恢复），不走硬删除
+  const deleteSubtaskMutation = useMutation({
+    mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success("子约定已删除，可在回收站恢复");
+    },
+    onError: () => {
+      toast.error("删除子约定失败");
+    },
+  });
+
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const buildFallbackSubtasks = () => {
+    const text = `${task.title || ""} ${task.description || ""}`;
+    if (text.includes("深圳") || text.includes("航班") || text.includes("行李") || text.includes("出行")) {
+      return [
+        { title: "确认航班时间与出发安排", priority: "high" },
+        { title: "整理证件和随身物品", priority: "high" },
+        { title: "收拾行李并检查遗漏", priority: "medium" }
+      ];
+    }
+
+    return [
+      { title: "梳理完成这项约定所需的关键步骤", priority: "medium" },
+      { title: "准备执行所需资料或物品", priority: "medium" },
+      { title: "执行后检查结果并补充收尾", priority: "medium" }
+    ];
+  };
+
+  const handleAutoGenerateSubtasks = async () => {
+    if (!task.title && !task.description) {
+      toast.error("请先填写约定内容");
+      return;
+    }
+
+    setIsGeneratingSubtasks(true);
+    try {
+      let res = await invokeAI({
+        prompt: `根据以下约定信息，生成3-5个合理的子约定步骤。
+
+约定标题：${task.title}
+约定描述：${task.description || "无"}
+类别：${task.category}
+优先级：${task.priority}
+
+请生成具体、可执行的子约定，每个子约定应该是完成主约定的一个关键步骤。
+返回JSON数组，每个子约定包含 title 和 priority。`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            subtasks: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
+                },
+                required: ["title", "priority"]
+              }
+            }
+          },
+          required: ["subtasks"]
+        }
+      });
+
+      if (!res?.subtasks?.length) {
+        res = await invokeAI({
+          prompt: `请把下面的约定强制拆分成至少3个可以直接执行的子约定。不要解释，只返回 JSON。
+
+约定标题：${task.title}
+约定描述：${task.description || "无"}
+
+要求：
+1. 子约定必须具体、可执行。
+2. 每个子约定一句话。
+3. 适合个人待办管理场景。
+4. 优先级只能是 low / medium / high / urgent。`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              subtasks: {
+                type: "array",
+                minItems: 3,
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    priority: { type: "string", enum: ["low", "medium", "high", "urgent"] }
+                  },
+                  required: ["title", "priority"]
+                }
+              }
+            },
+            required: ["subtasks"]
+          }
+        });
+      }
+
+      const finalSubtasks = Array.isArray(res?.subtasks) && res.subtasks.length > 0
+        ? res.subtasks
+        : buildFallbackSubtasks();
+
+      if (finalSubtasks.length > 0) {
+        for (const st of finalSubtasks) {
+          await createSubtaskMutation.mutateAsync({
+            title: st.title,
+            description: "",
+            priority: st.priority,
+            category: task.category,
+            status: "pending",
+            parent_task_id: task.id,
+            reminder_time: task.reminder_time,
+            end_time: task.end_time
+          });
+        }
+        toast.success(`已生成 ${finalSubtasks.length} 个子约定`);
+      } else {
+        toast.message("AI 未生成可用子约定，请尝试补充更具体的约定描述");
+      }
+    } catch (error) {
+      console.error("AI生成子约定失败:", error);
+      const errorMsg = error?.message || error?.toString() || "未知错误";
+      toast.error(`生成失败: ${errorMsg}`);
+    } finally {
+      setIsGeneratingSubtasks(false);
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    setUploading(true);
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        return {
+          file_url,
+          file_name: file.name,
+          file_size: file.size,
+          file_type: file.type,
+          uploaded_at: new Date().toISOString(),
+        };
+      });
+
+      const newAttachments = await Promise.all(uploadPromises);
+      const currentAttachments = task.attachments || [];
+
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: {
+          attachments: [...currentAttachments, ...newAttachments]
+        }
+      });
+
+      toast.success("文件上传成功");
+    } catch (error) {
+      const message = error?.data?.message || error?.message || "文件上传失败";
+      toast.error(message);
+    }
+    setUploading(false);
+  };
+
+  // 从剪贴板事件中提取图片/文件并作为附件上传
+  const handlePasteUpload = async (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === "file") {
+        const f = items[i].getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length === 0) return; // 没有文件则保持默认（粘贴文字）
+
+    e.preventDefault();
+    setUploading(true);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (file) => {
+          const { file_url } = await base44.integrations.Core.UploadFile({ file });
+          return {
+            file_url,
+            file_name: file.name || `粘贴图片_${Date.now()}.png`,
+            file_size: file.size,
+            file_type: file.type,
+            uploaded_at: new Date().toISOString(),
+          };
+        })
+      );
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: { attachments: [...(task.attachments || []), ...uploaded] },
+      });
+      toast.success("已粘贴并上传附件");
+    } catch (err) {
+      const message = err?.data?.message || err?.message || "粘贴上传失败";
+      toast.error(message);
+    }
+    setUploading(false);
+  };
+
+  const handleRemoveAttachment = async (index) => {
+    const updatedAttachments = task.attachments.filter((_, i) => i !== index);
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: { attachments: updatedAttachments }
+    });
+  };
+
+  const handleAddSubtask = async () => {
+    if (!newSubtask.trim() || isAddingSubtask) return;
+
+    setIsAddingSubtask(true);
+    try {
+      await createSubtaskMutation.mutateAsync({
+        title: newSubtask,
+        parent_task_id: task.id,
+        reminder_time: task.reminder_time,
+        end_time: task.end_time,
+        category: task.category,
+        priority: task.priority,
+        status: "pending",
+      });
+    } finally {
+      setIsAddingSubtask(false);
+    }
+  };
+
+  // 子约定行内「＋」：在指定子约定卡片内展开输入，确认后立即创建为它的从属小约定（真挂载到该子约定下）
+  const startInsertSubtask = (id) => {
+    setInsertParentId(id);
+    setInsertText("");
+  };
+  const cancelInsertSubtask = () => {
+    setInsertParentId(null);
+    setInsertText("");
+  };
+  const handleInsertSubtask = async () => {
+    const title = insertText.trim();
+    if (!title || isAddingSubtask) return;
+    setIsAddingSubtask(true);
+    try {
+      await createSubtaskMutation.mutateAsync({
+        title,
+        parent_task_id: insertParentId || task.id,
+        reminder_time: task.reminder_time,
+        end_time: task.end_time,
+        category: task.category,
+        priority: task.priority,
+        status: "pending",
+      });
+      cancelInsertSubtask();
+    } finally {
+      setIsAddingSubtask(false);
+    }
+  };
+
+  // 从属小约定行内改名：点标题进入编辑，回车/失焦保存，Esc 取消
+  const startEditChild = (child) => {
+    setEditingChild({ id: child.id, title: child.title || "" });
+    setEditingChildText(child.title || "");
+  };
+  const cancelEditChild = () => {
+    setEditingChild(null);
+    setEditingChildText("");
+  };
+  const saveEditChild = async () => {
+    if (!editingChild) return;
+    const title = editingChildText.trim();
+    if (!title || title === editingChild.title) {
+      cancelEditChild();
+      return;
+    }
+    try {
+      await updateTaskMutation.mutateAsync({ id: editingChild.id, data: { title } });
+      cancelEditChild();
+    } catch (_e) {}
+  };
+
+  const handleToggleSubtask = async (subtask) => {
+    const newStatus = subtask.status === "completed" ? "pending" : "completed";
+    await updateTaskMutation.mutateAsync({
+      id: subtask.id,
+      data: { 
+        status: newStatus,
+        completed_at: newStatus === "completed" ? new Date().toISOString() : null
+      }
+    });
+
+    // Update parent task progress
+    const total = subtasks.length;
+    const completed = subtasks.filter(s => 
+      s.id === subtask.id ? newStatus === "completed" : s.status === "completed"
+    ).length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: { progress }
+    });
+  };
+
+  const handleEnhanceApply = async (enhancements) => {
+    // Update task fields
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: {
+        description: enhancements.description,
+        category: enhancements.category,
+        priority: enhancements.priority,
+        tags: enhancements.tags
+      }
+    });
+
+    // Create subtasks
+    if (enhancements.subtasks && enhancements.subtasks.length > 0) {
+      for (const st of enhancements.subtasks) {
+        // Handle both string and object formats from AITaskEnhancer
+        const title = typeof st === 'object' ? (st.title || "新子约定") : String(st || "新子约定");
+        const priority = (typeof st === 'object' && st.priority) ? st.priority : enhancements.priority;
+        const category = (typeof st === 'object' && st.category) ? st.category : enhancements.category;
+        
+        // Calculate reminder time if specific time is provided
+        let reminderTime = task.reminder_time;
+        if (typeof st === 'object' && st.time && task.reminder_time) {
+            try {
+                const date = new Date(task.reminder_time);
+                const [h, m] = st.time.split(':');
+                date.setHours(parseInt(h), parseInt(m), 0);
+                reminderTime = date.toISOString();
+            } catch (e) {
+                console.error("Error setting subtask time", e);
+            }
+        }
+
+        await createSubtaskMutation.mutateAsync({
+          title,
+          parent_task_id: task.id,
+          reminder_time: reminderTime,
+          end_time: task.end_time,
+          category,
+          priority,
+          status: "pending",
+        });
+      }
+    }
+    
+    toast.success("AI 优化已应用");
+  };
+
+  const handleAddNote = async () => {
+    if (!newNote.trim() || isAddingNote) return;
+
+    setIsAddingNote(true);
+    try {
+      const currentNotes = task.notes || [];
+      const newNoteObj = {
+        content: newNote,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: {
+          notes: [...currentNotes, newNoteObj]
+        }
+      });
+
+      setNewNote("");
+    } finally {
+      setIsAddingNote(false);
+    }
+  };
+
+    const handleUpdateDependencies = async (newDependencyIds) => {
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: {
+          dependencies: newDependencyIds
+        }
+      });
+
+      toast.success("依赖已更新");
+    };
+
+    const handleDeleteNote = async (index) => {
+    const updatedNotes = task.notes.filter((_, i) => i !== index);
+    await updateTaskMutation.mutateAsync({
+      id: task.id,
+      data: { notes: updatedNotes }
+    });
+  };
+
+  if (!task) return null;
+
+  const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
+  const totalSubtasks = subtasks.length;
+
+  const handleTranslate = async () => {
+    if (isTranslating) return;
+    setIsTranslating(true);
+    try {
+        await translateTask(task, subtasks);
+    } finally {
+        setIsTranslating(false);
+    }
+  };
+
+  const handleAIAnalysis = async () => {
+      setIsAnalyzing(true);
+      try {
+          // Prepare context
+          const subtaskStatus = subtasks.map(s => `- ${s.title}: ${s.status}`).join('\n');
+          
+          // Filter media attachments for multimodal analysis
+          const mediaAttachments = (task.attachments || [])
+            .filter(att => att.file_type?.startsWith('image/') || att.file_type?.startsWith('video/'))
+            .map(att => att.file_url);
+
+          const context = `
+            Task: ${task.title}
+            Description: ${task.description || "None"}
+            Priority: ${task.priority}
+            Status: ${task.status}
+            Progress: ${task.progress}%
+            Subtasks:
+            ${subtaskStatus}
+          `;
+
+          const res = await invokeAI({
+              prompt: `基于提供的上下文和附件（图片/视频），分析此约定的状态、风险和依赖关系。
+              
+              Context:
+              ${context}
+              
+              Tasks:
+              1. 视觉分析（如果有媒体附件）：从附件中识别关键信息、阻碍因素或上下文。
+              2. 状态摘要：结合文本和视觉见解生成简短摘要（2-3句）。强调任何进度的视觉证据或问题。
+              3. 潜在风险：例如停滞的子约定、视觉缺陷、高优先级但进度低等。
+              4. 关键依赖：从文本或视觉推断的先决条件。
+              5. 可行的建议。
+              6. 建议优先级：基于截止日期、风险和状态，建议优先级（low/medium/high/urgent）并提供理由。
+              7. 风险评估：评估约定风险等级（low/medium/high/critical）。
+              8. 时间建议：基于约定性质，建议最佳执行时间段（start/end）及理由。
+              
+              STRICT REQUIREMENT: All generated text content MUST be in SIMPLIFIED CHINESE (简体中文). Do NOT use English for descriptions, summaries, reasons, or suggestions. Even if the input is English, the output MUST be Chinese.
+              
+              Return ONLY JSON. Time format: ISO 8601.`,
+              file_urls: mediaAttachments.length > 0 ? mediaAttachments : undefined,
+              response_json_schema: {
+                  type: "object",
+                  properties: {
+                      status_summary: { type: "string" },
+                      risks: { type: "array", items: { type: "string" } },
+                      risk_level: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                      key_dependencies: { type: "array", items: { type: "string" } },
+                      suggestions: { type: "array", items: { type: "string" } },
+                      suggested_priority: { type: "string", enum: ["low", "medium", "high", "urgent"] },
+                      priority_reasoning: { type: "string" },
+                      recommended_execution_start: { type: "string", format: "date-time" },
+                      recommended_execution_end: { type: "string", format: "date-time" },
+                      time_reasoning: { type: "string" }
+                  },
+                  required: ["status_summary", "risks", "suggested_priority", "risk_level"]
+              }
+          });
+
+          if (res) {
+              await updateTaskMutation.mutateAsync({
+                  id: task.id,
+                  data: { ai_analysis: res }
+              });
+              toast.success("AI 分析完成");
+          }
+      } catch (e) {
+          console.error(e);
+          toast.error("AI 分析失败");
+      } finally {
+          setIsAnalyzing(false);
+      }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) onClose();
+    }}>
+      <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-2xl bg-white">
+        <DialogHeader className="flex flex-col md:flex-row md:items-start md:justify-between space-y-3 md:space-y-0 px-5 md:px-6 pt-5 pb-4 shrink-0 bg-white z-10">
+          <div className="flex items-start gap-3 flex-1 pr-8">
+            <button
+              type="button"
+              onClick={() => {
+                const isDone = task.status === 'completed';
+                updateTaskMutation.mutate({
+                  id: task.id,
+                  data: {
+                    status: isDone ? 'pending' : 'completed',
+                    completed_at: isDone ? null : new Date().toISOString(),
+                    progress: isDone ? (task.progress || 0) : 100,
+                  }
+                });
+                if (!isDone) toast.success('已标记为完成 🎉');
+              }}
+              title={task.status === 'completed' ? '标记为未完成' : '标记为完成'}
+              className={`mt-1 flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
+                task.status === 'completed'
+                  ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200 hover:bg-green-600'
+                  : 'bg-white border-slate-300 hover:border-[#384877] hover:bg-[#eef0fa]'
+              }`}
+            >
+              {task.status === 'completed' && <CheckCircle2 className="w-5 h-5" strokeWidth={2.5} />}
+            </button>
+            <DialogTitle className={`text-lg md:text-[22px] font-bold tracking-tight line-clamp-2 leading-snug flex-1 transition-colors ${
+              task.status === 'completed' ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'
+            }`}>
+              {task.title}
+            </DialogTitle>
+          </div>
+          <div className="flex items-center gap-2 md:absolute md:right-12 md:top-5">
+             <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowReviseDialog(true)}
+                className="h-9 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 gap-1.5"
+                title="新一轮更新"
+             >
+                <GitBranch className="w-4 h-4" />
+                <span className="hidden md:inline text-xs font-medium">新一轮</span>
+             </Button>
+             <QuickAlertButton task={task} />
+             <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleTranslate}
+                disabled={isTranslating}
+                className="h-9 w-9 p-0 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500"
+                title={targetLangLabel}
+             >
+                {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
+             </Button>
+             <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleAIAnalysis}
+                disabled={isAnalyzing}
+                className="h-9 w-9 p-0 rounded-lg bg-[#eef0fa] hover:bg-[#e0e4f3] text-[#384877]"
+                title="AI 分析"
+             >
+                {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+             </Button>
+          </div>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 md:px-6 pb-6 space-y-5 bg-white">
+          <AITaskEnhancer 
+            taskTitle={task.title} 
+            currentDescription={task.description} 
+            onApply={handleEnhanceApply} 
+          />
+
+
+          {/* Progress */}
+          {totalSubtasks > 0 && (
+            <div className="space-y-2.5 pt-1">
+              <div className="flex justify-between items-baseline">
+                <span className="text-sm text-slate-500">完成进度</span>
+                <span className="font-semibold text-slate-900 text-sm">
+                  {completedSubtasks}/{totalSubtasks} <span className="text-slate-500 font-normal">子约定</span>
+                </span>
+              </div>
+              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#384877] to-[#6366f1] rounded-full transition-all duration-500"
+                  style={{ width: `${task.progress || 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {task.description && (
+            <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100">
+              <ReactMarkdown 
+                className="prose prose-sm max-w-none text-[15px] text-slate-900 leading-relaxed
+                  prose-headings:text-slate-900 prose-headings:font-semibold prose-headings:mb-2 prose-headings:mt-3 first:prose-headings:mt-0
+                  prose-p:my-2 prose-p:leading-relaxed first:prose-p:mt-0 last:prose-p:mb-0
+                  prose-ul:my-2 prose-ul:list-disc prose-ul:pl-5 prose-ul:space-y-1
+                  prose-ol:my-2 prose-ol:list-decimal prose-ol:pl-5 prose-ol:space-y-1
+                  prose-li:text-slate-900 prose-li:leading-relaxed
+                  prose-strong:text-slate-900 prose-strong:font-semibold
+                  prose-em:text-slate-700 prose-em:italic
+                  prose-code:bg-slate-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:text-slate-800 prose-code:font-mono
+                  prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-pre:p-3 prose-pre:rounded-lg prose-pre:overflow-x-auto
+                  prose-blockquote:border-l-4 prose-blockquote:border-blue-600 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:text-slate-600
+                  prose-hr:border-slate-200 prose-hr:my-4
+                  prose-a:text-blue-600 prose-a:underline prose-a:font-medium hover:prose-a:text-blue-800"
+              >
+                {task.description}
+              </ReactMarkdown>
+            </div>
+          )}
+
+          <Tabs defaultValue={initialTab || "subtasks"} key={initialTab || "subtasks"} className="w-full">
+            <TabsList className="flex w-full overflow-x-auto justify-start gap-1 p-0 bg-transparent h-auto scrollbar-hide border-b border-slate-100 rounded-none">
+              <TabsTrigger value="subtasks" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                子约定 ({totalSubtasks})
+              </TabsTrigger>
+              <TabsTrigger value="dependencies" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                依赖 ({task.dependencies?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="attachments" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                附件 ({task.attachments?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="notes" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                笔记 ({task.notes?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="revisions" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+                <GitBranch className="w-3.5 h-3.5" />
+                版本 ({(task.revisions?.length || 0) + 1})
+              </TabsTrigger>
+              <TabsTrigger value="comments" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+                评论 <CommentCount taskId={task.id} />
+              </TabsTrigger>
+              <TabsTrigger value="reminders" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                提醒
+              </TabsTrigger>
+              <TabsTrigger value="history" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+                <History className="w-3.5 h-3.5" />
+                历史
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="pt-4">
+
+              {/* Reminders Tab */}
+              <TabsContent value="reminders" className="space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                      {/* Sound & Persistence */}
+                      <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                              <Bell className="w-4 h-4 text-slate-500" />
+                              基础设置
+                          </h4>
+                          
+                          <div className="space-y-3">
+                              <div className="space-y-1">
+                                  <Label className="text-xs text-slate-500">提醒音效</Label>
+                                  <Select 
+                                      value={task.notification_sound || "default"} 
+                                      onValueChange={(val) => updateTaskMutation.mutate({ id: task.id, data: { notification_sound: val } })}
+                                  >
+                                      <SelectTrigger className="bg-white">
+                                          <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                          <SelectItem value="default">默认</SelectItem>
+                                          <SelectItem value="gentle">轻柔</SelectItem>
+                                          <SelectItem value="urgent">紧急</SelectItem>
+                                          <SelectItem value="chime">铃声</SelectItem>
+                                          <SelectItem value="bells">钟声</SelectItem>
+                                          <SelectItem value="none">静音</SelectItem>
+                                      </SelectContent>
+                                  </Select>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-2">
+                                  <div className="space-y-0.5">
+                                      <Label className="text-sm">持续提醒</Label>
+                                      <p className="text-[10px] text-slate-500">过期后持续响铃直到完成</p>
+                                  </div>
+                                  <Switch 
+                                      checked={task.persistent_reminder || false}
+                                      onCheckedChange={(checked) => updateTaskMutation.mutate({ id: task.id, data: { persistent_reminder: checked } })}
+                                  />
+                              </div>
+
+                              {task.persistent_reminder && (
+                                  <div className="space-y-1">
+                                      <Label className="text-xs text-slate-500">提醒间隔 (分钟)</Label>
+                                      <Input 
+                                          type="number" 
+                                          min="1"
+                                          value={task.notification_interval || 15}
+                                          onChange={(e) => updateTaskMutation.mutate({ id: task.id, data: { notification_interval: parseInt(e.target.value) || 15 } })}
+                                          className="bg-white"
+                                      />
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+
+                      {/* Recurrence & Advance */}
+                      <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                           <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-slate-500" />
+                              时间规则
+                          </h4>
+
+                          {/* Recurrence */}
+                          <div className="bg-white p-3 rounded-lg border border-slate-200">
+                              <div className="flex justify-between items-center mb-2">
+                                  <span className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                      <Repeat className="w-3.5 h-3.5 text-blue-500" />
+                                      重复规则
+                                  </span>
+                                  <Button 
+                                      variant="ghost" 
+                                      size="sm" 
+                                      onClick={() => setShowRecurrenceEditor(true)}
+                                      className="h-6 text-xs text-blue-600 hover:text-blue-700"
+                                  >
+                                      编辑
+                                  </Button>
+                              </div>
+                              <p className="text-xs text-slate-500">
+                                  {task.repeat_rule === 'none' ? '不重复' : 
+                                   task.repeat_rule === 'custom' ? '自定义重复' : 
+                                   {daily: '每天', weekly: '每周', monthly: '每月'}[task.repeat_rule]}
+                              </p>
+                          </div>
+
+                          {/* Advance Reminders */}
+                          <div className="space-y-2">
+                              <Label className="text-xs text-slate-500">提前提醒 (分钟)</Label>
+                              <div className="flex flex-wrap gap-2">
+                                  {(task.advance_reminders || []).map((min, idx) => (
+                                      <Badge key={idx} variant="secondary" className="bg-white border border-slate-200 text-slate-600 gap-1 hover:bg-red-50 hover:text-red-600 hover:border-red-200 cursor-pointer group" onClick={() => {
+                                          const newMins = task.advance_reminders.filter(m => m !== min);
+                                          updateTaskMutation.mutate({ id: task.id, data: { advance_reminders: newMins } });
+                                      }}>
+                                          {min < 60 ? `${min}m` : `${min/60}h`}
+                                          <X className="w-3 h-3 opacity-0 group-hover:opacity-100" />
+                                      </Badge>
+                                  ))}
+                                  <Popover>
+                                      <PopoverTrigger asChild>
+                                          <Button variant="outline" size="sm" className="h-6 text-xs px-2 border-dashed bg-white">
+                                              <Plus className="w-3 h-3 mr-1" /> 添加
+                                          </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-40 p-2">
+                                          <div className="grid grid-cols-2 gap-2">
+                                              {[15, 30, 60, 120].map(m => (
+                                                  <Button 
+                                                      key={m} 
+                                                      variant="ghost" 
+                                                      size="sm" 
+                                                      className="text-xs justify-start"
+                                                      onClick={() => {
+                                                          const current = task.advance_reminders || [];
+                                                          if (!current.includes(m)) {
+                                                              updateTaskMutation.mutate({ id: task.id, data: { advance_reminders: [...current, m].sort((a,b) => a-b) } });
+                                                          }
+                                                      }}
+                                                  >
+                                                      {m < 60 ? `${m}分钟` : `${m/60}小时`}
+                                                  </Button>
+                                              ))}
+                                          </div>
+                                      </PopoverContent>
+                                  </Popover>
+                              </div>
+                          </div>
+                      </div>
+
+                      {/* Location Reminder：用户主动为约定标记地点（超市/快递点等），路过时顺路提醒 */}
+                      <div className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-100 md:col-span-2">
+                          <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                              <MapPin className="w-4 h-4 text-slate-500" />
+                              地点提醒
+                          </h4>
+                          <LocationReminderSettings
+                              taskDefaults={task}
+                              onUpdate={(updates) => updateTaskMutation.mutate({
+                                  id: task.id,
+                                  data: updates
+                              })}
+                          />
+                      </div>
+                  </div>
+              </TabsContent>
+
+              {/* AI Strategy Tab */}
+              <TabsContent value="strategy" className="space-y-4">
+                  <ReminderStrategyEditor 
+                      task={task} 
+                      onUpdate={(updates) => updateTaskMutation.mutate({
+                          id: task.id,
+                          data: updates
+                      })}
+                  />
+              </TabsContent>
+
+              {/* Dependencies Tab */}
+              <TabsContent value="dependencies" className="space-y-4">
+                <TaskDependencySelector 
+                    currentTask={task}
+                    selectedDependencyIds={task.dependencies || []}
+                    onUpdate={handleUpdateDependencies}
+                />
+              </TabsContent>
+
+              {/* Subtasks Tab */}
+            <TabsContent value="subtasks" className="space-y-4">
+              <AnimatePresence>
+                {showRegeneratePrompt && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <Alert className="bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+                      <Sparkles className="h-4 w-4 text-purple-600" />
+                      <AlertDescription className="flex items-center justify-between gap-2">
+                        <span className="text-sm text-slate-700">
+                          检测到约定内容已更改，是否需要重新生成子约定？
+                        </span>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowRegeneratePrompt(false)}
+                            className="h-7 text-xs"
+                          >
+                            忽略
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setShowRegeneratePrompt(false);
+                              handleAutoGenerateSubtasks();
+                            }}
+                            className="h-7 text-xs bg-purple-600 hover:bg-purple-700"
+                          >
+                            重新生成
+                          </Button>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-slate-900">子约定管理</h3>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleAutoGenerateSubtasks}
+                  disabled={isGeneratingSubtasks}
+                  className="border-[#d6dcf0] bg-[#f0f3fb] hover:bg-[#e4e9f7] text-[#384877] h-9 rounded-xl font-medium"
+                >
+                  {isGeneratingSubtasks ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                      AI 生成子约定
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              <div className="flex gap-2 mb-4">
+                <Input
+                  placeholder="添加子约定..."
+                  value={newSubtask}
+                  onChange={(e) => setNewSubtask(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddSubtask()}
+                  className="flex-1 h-11 rounded-xl border-slate-200 bg-slate-50/50 focus-visible:bg-white"
+                />
+                <Button
+                  onClick={handleAddSubtask}
+                  disabled={!newSubtask.trim() || isAddingSubtask}
+                  className="bg-slate-200 hover:bg-slate-300 text-slate-600 hover:text-slate-700 rounded-xl h-11 px-5 font-medium"
+                >
+                  {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : "添加"}
+                </Button>
+              </div>
+
+              <div className="space-y-2.5">
+                <AnimatePresence mode="popLayout">
+                  {subtasks.map((subtask) => (
+                    <motion.div
+                      key={subtask.id}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -100 }}
+                      className={`flex flex-col p-3.5 rounded-xl border transition-all hover:shadow-sm ${
+                        subtask.status === "completed"
+                          ? "bg-slate-50 border-slate-200"
+                          : "bg-white border-[#d6dcf0] hover:border-[#384877]/40"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={subtask.status === "completed"}
+                            onCheckedChange={() => handleToggleSubtask(subtask)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="h-5 w-5"
+                          />
+                        </div>
+                        <span
+                          className={`flex-1 text-[15px] ${
+                            subtask.status === "completed"
+                              ? "line-through text-slate-400"
+                              : "text-slate-900"
+                          }`}
+                        >
+                          {subtask.title}
+                        </span>
+                        {subtask.revisions?.length > 0 && (
+                          <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">
+                            <GitBranch className="w-3 h-3" />
+                            v{subtask.revisions.length + 1}
+                          </span>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => startInsertSubtask(subtask.id)}
+                          title="为这一步添加从属子约定"
+                          className="h-8 w-8 hover:bg-[#384877]/10 hover:text-[#384877]"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setRevisingSubtask(subtask)}
+                          title="新一轮更新"
+                          className="h-8 w-8 hover:bg-amber-100 hover:text-amber-600"
+                        >
+                          <GitBranch className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteSubtaskMutation.mutate(subtask.id)}
+                          className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {insertParentId === subtask.id && (
+                        <div className="flex items-center gap-2 mt-2.5 pl-8">
+                          <Input
+                            autoFocus
+                            value={insertText}
+                            onChange={(e) => setInsertText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") handleInsertSubtask();
+                              if (e.key === "Escape") cancelInsertSubtask();
+                            }}
+                            onBlur={cancelInsertSubtask}
+                            placeholder="给这一步补充一件从属小事"
+                            className="flex-1 h-9 text-sm bg-white"
+                          />
+                          <Button
+                            size="sm"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={handleInsertSubtask}
+                            disabled={!insertText.trim() || isAddingSubtask}
+                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white px-4 h-9"
+                          >
+                            {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : "添加"}
+                          </Button>
+                        </div>
+                      )}
+                      {childMap[subtask.id]?.length > 0 && (
+                        <div className="mt-2 ml-8 space-y-1.5">
+                          {childMap[subtask.id].map((child) => (
+                            <div
+                              key={child.id}
+                              className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${
+                                child.status === "completed"
+                                  ? "bg-slate-50 border-slate-100"
+                                  : "bg-[#f7f8fd] border-[#e3e8f5]"
+                              }`}
+                            >
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <Checkbox
+                                  checked={child.status === "completed"}
+                                  onCheckedChange={() => handleToggleSubtask(child)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-4 w-4"
+                                />
+                              </div>
+                              {editingChild?.id === child.id ? (
+                                <Input
+                                  autoFocus
+                                  value={editingChildText}
+                                  onChange={(e) => setEditingChildText(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") saveEditChild();
+                                    if (e.key === "Escape") cancelEditChild();
+                                  }}
+                                  onBlur={saveEditChild}
+                                  className="flex-1 h-7 text-[13px] px-1"
+                                />
+                              ) : (
+                                <span
+                                  onClick={() => startEditChild(child)}
+                                  title="点击修改"
+                                  className={`flex-1 text-[13px] cursor-text ${
+                                    child.status === "completed" ? "line-through text-slate-400" : "text-slate-700"
+                                  }`}
+                                >
+                                  {child.title}
+                                </span>
+                              )}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => deleteSubtaskMutation.mutate(child.id)}
+                                className="h-7 w-7 hover:bg-red-100 hover:text-red-600"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {subtasks.length === 0 && (
+                  <div className="text-center py-8 text-slate-400">
+                    <Circle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>暂无子约定</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Attachments Tab */}
+            <TabsContent value="attachments" className="space-y-4">
+              <div>
+                <input
+                  type="file"
+                  multiple
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label htmlFor="file-upload">
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="w-full border-2 border-dashed hover:border-purple-400 hover:bg-purple-50"
+                    disabled={uploading}
+                  >
+                    <div className="cursor-pointer">
+                      <Upload className="w-4 h-4 mr-2" />
+                      {uploading ? "上传中..." : "上传文件"}
+                    </div>
+                  </Button>
+                </label>
+
+                {/* 粘贴区域：聚焦后直接 Ctrl/Cmd+V 粘贴截图或文件 */}
+                <div
+                  tabIndex={0}
+                  onPaste={handlePasteUpload}
+                  className="mt-2 w-full rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 focus:border-purple-400 focus:bg-purple-50 outline-none transition-colors py-3 text-center text-xs text-slate-400 cursor-text"
+                >
+                  点击此处后按 Ctrl/Cmd + V 直接粘贴图片或截图
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <AnimatePresence mode="popLayout">
+                  {task.attachments?.map((attachment, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -100 }}
+                      className="flex items-center gap-3 p-3 bg-white rounded-lg border-2 border-slate-200 hover:border-purple-300 transition-all"
+                    >
+                      {attachment.file_type?.startsWith('image/') ? (
+                        <ImageIcon className="w-8 h-8 text-blue-500" />
+                      ) : (
+                        <FileText className="w-8 h-8 text-slate-500" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-800 truncate">
+                          {attachment.file_name}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {(attachment.file_size / 1024).toFixed(2)} KB • 
+                          {format(new Date(attachment.uploaded_at), " yyyy-MM-dd", { locale: zhCN })}
+                        </p>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        asChild
+                        className="h-8 w-8"
+                      >
+                        <a href={attachment.file_url} target="_blank" rel="noopener noreferrer">
+                          <Download className="h-4 w-4" />
+                        </a>
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleRemoveAttachment(index)}
+                        className="h-8 w-8 hover:bg-red-100 hover:text-red-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {(!task.attachments || task.attachments.length === 0) && (
+                  <div className="text-center py-8 text-slate-400">
+                    <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>暂无附件</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Notes Tab */}
+            <TabsContent value="notes" className="space-y-4">
+              <div className="flex gap-2">
+                <Textarea
+                  placeholder="添加笔记...（可直接粘贴文字，或粘贴图片自动存为附件）"
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  onPaste={handlePasteUpload}
+                  className="flex-1 min-h-[80px]"
+                />
+              </div>
+              <Button
+                onClick={handleAddNote}
+                disabled={!newNote.trim() || isAddingNote}
+                className="w-full bg-slate-700 hover:bg-slate-800 rounded-[10px]"
+              >
+                {isAddingNote ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 mr-2" />
+                )}
+                {isAddingNote ? "添加中..." : "添加笔记"}
+              </Button>
+
+              <div className="space-y-3">
+                <AnimatePresence mode="popLayout">
+                  {task.notes?.map((note, index) => (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, x: -100 }}
+                      className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4 relative group"
+                    >
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => handleDeleteNote(index)}
+                        className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 hover:text-red-600"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                      <div className="flex items-start gap-2 mb-2">
+                        <StickyNote className="w-4 h-4 text-amber-600 flex-shrink-0 mt-1" />
+                        <p className="text-sm text-slate-600 pr-8">
+                          {format(new Date(note.created_at), "yyyy-MM-dd HH:mm", { locale: zhCN })}
+                        </p>
+                      </div>
+                      <p className="text-slate-800 whitespace-pre-wrap">{note.content}</p>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {(!task.notes || task.notes.length === 0) && (
+                  <div className="text-center py-8 text-slate-400">
+                    <StickyNote className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>暂无笔记</p>
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+
+            {/* Revisions Tab */}
+            <TabsContent value="revisions" className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold text-slate-900">更新历史</h3>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowReviseDialog(true)}
+                  className="border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 h-9 rounded-xl font-medium"
+                >
+                  <GitBranch className="w-3.5 h-3.5 mr-1.5" />
+                  发起新一轮更新
+                </Button>
+              </div>
+              <TaskRevisionTimeline task={task} />
+            </TabsContent>
+
+            {/* Comments Tab */}
+            <TabsContent value="comments" className="space-y-4">
+              <TaskComments task={task} />
+            </TabsContent>
+
+            {/* History Tab */}
+            <TabsContent value="history" className="space-y-4">
+                <TaskChangeHistory taskId={task.id} />
+            </TabsContent>
+            </div>
+          </Tabs>
+
+          {/* AI Analysis Result - 极简版 */}
+          {task.ai_analysis && (
+            <details className="group bg-slate-50 border border-slate-200 rounded-lg text-sm">
+              <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer list-none">
+                <CheckCircle2 className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                <span className="font-medium text-slate-700">智能分析</span>
+                {task.ai_analysis.suggested_priority && (
+                  <Badge variant="outline" className="h-5 px-1.5 text-[10px] border-indigo-200 text-indigo-700">
+                    {{low: "低", medium: "中", high: "高", urgent: "紧急"}[task.ai_analysis.suggested_priority]}
+                  </Badge>
+                )}
+                {task.ai_analysis.risk_level && (
+                  <span className={`text-[10px] ${['high','critical'].includes(task.ai_analysis.risk_level) ? 'text-red-500' : 'text-slate-400'}`}>
+                    风险 {task.ai_analysis.risk_level}
+                  </span>
+                )}
+                <span className="ml-auto text-xs text-slate-400 group-open:hidden">展开</span>
+                <span className="ml-auto text-xs text-slate-400 hidden group-open:inline">收起</span>
+              </summary>
+
+              <div className="px-3 pb-3 pt-1 space-y-2 text-xs text-slate-600">
+                {task.ai_analysis.status_summary && (
+                  <p className="leading-relaxed">{task.ai_analysis.status_summary}</p>
+                )}
+
+                {task.ai_analysis.suggested_priority && task.ai_analysis.suggested_priority !== task.priority && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => updateTaskMutation.mutate({
+                      id: task.id,
+                      data: { priority: task.ai_analysis.suggested_priority }
+                    })}
+                    className="h-6 text-[11px] px-2"
+                  >
+                    应用建议优先级
+                  </Button>
+                )}
+
+                {task.ai_analysis.recommended_execution_start && (
+                  <div>
+                    <span className="text-slate-400">⏰ 建议时间：</span>
+                    {format(new Date(task.ai_analysis.recommended_execution_start), "MM/dd HH:mm")}
+                    {task.ai_analysis.recommended_execution_end && ` - ${format(new Date(task.ai_analysis.recommended_execution_end), "HH:mm")}`}
+                  </div>
+                )}
+
+                {task.ai_analysis.risks?.length > 0 && (
+                  <div>
+                    <span className="text-slate-400">风险：</span>
+                    {task.ai_analysis.risks.join('；')}
+                  </div>
+                )}
+
+                {task.ai_analysis.suggestions?.length > 0 && (
+                  <div>
+                    <span className="text-slate-400">💡 建议：</span>
+                    {task.ai_analysis.suggestions.join('；')}
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+
+        </div>
+      </DialogContent>
+
+      <TaskReviseDialog
+        task={task}
+        open={showReviseDialog}
+        onOpenChange={setShowReviseDialog}
+      />
+
+      <TaskReviseDialog
+        task={revisingSubtask}
+        open={!!revisingSubtask}
+        onOpenChange={(o) => { if (!o) setRevisingSubtask(null); }}
+      />
+
+      {showRecurrenceEditor && (
+        <Dialog open={showRecurrenceEditor} onOpenChange={setShowRecurrenceEditor}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>编辑重复规则</DialogTitle>
+                </DialogHeader>
+                <RecurrenceEditor 
+                    value={task.custom_recurrence || { frequency: task.repeat_rule === 'none' ? 'weekly' : task.repeat_rule, interval: 1 }}
+                    onChange={(recurrence) => {
+                        updateTaskMutation.mutate({ 
+                            id: task.id, 
+                            data: { 
+                                repeat_rule: 'custom',
+                                custom_recurrence: recurrence 
+                            } 
+                        });
+                        setShowRecurrenceEditor(false);
+                    }}
+                    onClose={() => setShowRecurrenceEditor(false)}
+                />
+            </DialogContent>
+        </Dialog>
+      )}
+    </Dialog>
+  );
+}

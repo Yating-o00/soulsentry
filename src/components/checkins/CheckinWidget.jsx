@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { formatShanghai } from "@/lib/timeCore";
 import { X, Footprints, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildApiUrl } from "@/api/httpClient";
@@ -122,7 +121,7 @@ export default function CheckinWidget({ task, completed = false }) {
       : "打卡：记录这次赴约（已集齐全部里程碑，继续！）";
 
   const metaText = total > 0
-    ? `已打卡 ${total} 次${firstAt ? ` · 从 ${format(new Date(firstAt), "M月d日", { locale: zhCN })} 开始` : ""}`
+    ? `已打卡 ${total} 次${firstAt ? ` · 从 ${formatShanghai(firstAt, "M月d日")} 开始` : ""}`
     : null;
 
   return (
@@ -169,7 +168,7 @@ export default function CheckinWidget({ task, completed = false }) {
       {pending && (
         <div
           className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4"
-          onClick={() => finishPending(false)}
+          onClick={(e) => { e.stopPropagation(); finishPending(false); }}
         >
           <div
             className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl"
@@ -236,8 +235,11 @@ export default function CheckinWidget({ task, completed = false }) {
       {/* 赴约记录抽屉 */}
       {timelineOpen && (
         <>
-          <div className="fixed inset-0 bg-slate-900/30 z-40" onClick={() => setTimelineOpen(false)} />
-          <aside className="fixed top-0 right-0 bottom-0 w-[min(420px,92vw)] bg-[#F8F9FD] z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+          <div className="fixed inset-0 bg-slate-900/30 z-40" onClick={(e) => { e.stopPropagation(); setTimelineOpen(false); }} />
+          <aside
+            className="fixed top-0 right-0 bottom-0 w-[min(420px,92vw)] bg-[#F8F9FD] z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="relative px-6 pt-7 pb-4 border-b border-stone-100">
               <button
                 onClick={() => setTimelineOpen(false)}
@@ -248,7 +250,7 @@ export default function CheckinWidget({ task, completed = false }) {
               <h3 className="text-[16px] font-semibold text-stone-800 pr-8 truncate">{task.title}</h3>
               <p className="text-xs text-stone-400 mt-1.5">
                 已赴约 <span className="font-bold" style={{ color: CHECKIN_BRAND_PRIMARY }}>{total}</span> 次
-                {firstAt && ` · 从 ${format(new Date(firstAt), "yyyy年M月d日", { locale: zhCN })} 开始`}
+                {firstAt && ` · 从 ${formatShanghai(firstAt, "yyyy年M月d日")} 开始`}
               </p>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 relative">
@@ -263,7 +265,7 @@ export default function CheckinWidget({ task, completed = false }) {
                         <span className="w-[5px] h-[5px] rounded-full" style={{ background: CHECKIN_BRAND_SECONDARY }} />
                       </span>
                       <p className="text-[11px] text-stone-400">
-                        {format(new Date(c.created_at), "M月d日 HH:mm", { locale: zhCN })}
+                        {formatShanghai(c.created_at, "M月d日 HH:mm")}
                       </p>
                       {c.note && (
                         <p className="mt-1.5 text-[13.5px] leading-relaxed text-stone-700 bg-white rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm">
@@ -288,7 +290,7 @@ export default function CheckinWidget({ task, completed = false }) {
       {milestone && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-900/45 backdrop-blur-sm p-5"
-          onClick={() => setMilestone(null)}
+          onClick={(e) => { e.stopPropagation(); setMilestone(null); }}
         >
           <div
             className="relative w-full max-w-[400px] rounded-[28px] px-8 pt-12 pb-8 text-center overflow-hidden shadow-2xl"

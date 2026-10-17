@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { zhCN } from "date-fns/locale";
+import { formatShanghai } from "@/lib/timeCore";
 import html2canvas from "html2canvas";
 import { Download, Copy } from "lucide-react";
 import { buildApiUrl, httpRequest } from "@/api/httpClient";
@@ -80,8 +79,8 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
   const cardRef = useRef(null);
   const [exporting, setExporting] = useState(false);
   const range = firstAt
-    ? `${format(new Date(firstAt), "yyyy.MM")} — ${format(new Date(), "yyyy.MM")}`
-    : format(new Date(), "yyyy.MM");
+    ? `${formatShanghai(firstAt, "yyyy.MM")} — ${formatShanghai(new Date().toISOString(), "yyyy.MM")}`
+    : formatShanghai(new Date().toISOString(), "yyyy.MM");
   const isMilestone = total > 0 && CHECKIN_MILESTONES.includes(total);
 
   const saveImage = async () => {
@@ -141,7 +140,7 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
   return (
     <div
       className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-stone-900/50 backdrop-blur-sm p-4"
-      onClick={onClose}
+      onClick={(e) => { e.stopPropagation(); onClose(); }}
     >
       <div
         ref={cardRef}
@@ -179,7 +178,7 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
           </div>
 
           <span className="absolute bottom-3 left-6 text-[10px] tracking-[.16em] text-white/60">
-            {total > 0 ? `第 ${total} 次 · ` : ""}{format(new Date(), "yyyy年M月d日", { locale: zhCN })}
+            {total > 0 ? `第 ${total} 次 · ` : ""}{formatShanghai(new Date().toISOString(), "yyyy年M月d日")}
           </span>
         </div>
 
@@ -219,23 +218,19 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
           </p>
         </div>
 
-        {/* 底部：二维码（扫码匿名留言）+ 品牌 */}
+        {/* 底部：二维码（扫码匿名留言），文字单行对齐 */}
         <div
-          className="flex items-center justify-between border-t px-6 py-4"
+          className="flex items-center gap-3 border-t px-6 py-4"
           style={{ borderColor: CHECKIN_BRAND_TINT, background: "#F7F9FE" }}
         >
-          <div className="flex items-center gap-3">
-            {shareUrl ? (
-              <div className="rounded-lg border bg-white p-1.5" style={{ borderColor: CHECKIN_BRAND_TINT }}>
-                <QRCodeImage value={shareUrl} size={176} alt="扫码匿名留言" className="h-[72px] w-[72px]" />
-              </div>
-            ) : null}
-            <div>
-              <p className="text-[11px] font-semibold text-stone-600">扫码赴约</p>
-              <p className="mt-0.5 text-[10px] text-stone-400">无需登录 · 匿名留言</p>
+          {shareUrl ? (
+            <div className="rounded-lg border bg-white p-1.5" style={{ borderColor: CHECKIN_BRAND_TINT }}>
+              <QRCodeImage value={shareUrl} size={176} alt="扫码匿名留言" className="h-[72px] w-[72px]" />
             </div>
-          </div>
-          <small className="text-[10px] tracking-[.2em] text-stone-300">SOULSENTRY</small>
+          ) : null}
+          <p className="whitespace-nowrap text-[10px] text-stone-500">
+            扫码赴约 · 无需登录 · 匿名留言
+          </p>
         </div>
       </div>
 

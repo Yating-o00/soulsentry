@@ -1,0 +1,3867 @@
+import { Router } from "express";
+import { requireAuth } from "../middleware/auth.js";
+import { prisma } from "../lib/prisma.js";
+import { invokeKimiText, invokeKimiWebSearch, callKimiChat, parseModelJson } from "../lib/kimi.js";
+import { env } from "../config/env.js";
+import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
+import { analyzeImage, buildImageContentPart, VISION_MODELS } from "../services/analyzeImage.js";
+import { parseTaskInput } from "../services/parseTaskInput.js";
+import { recurrenceLabel } from "../lib/recurrence.js";
+import { getUserHabitProfile } from "../services/habitProfile.js";
+import { delegateAutoExecute } from "../services/autoAutomation.js";
+import { buildHeartSignFallback, detectVault, detectCrisis, looksLikeLedger, parseLedgerEntries } from "../services/heartSignFallback.js";
+import { executeAutomation } from "../services/executeAutomation.js";
+import { sendTestPush } from "../services/reminderSender.js";
+import { getCreditPack } from "../config/creditPacks.js";
+import { createWechatNativeOrder, generateOutTradeNo, getWechatMerchantConfig, queryWechatOrder as wechatQueryOrder } from "../lib/wechatPay.js";
+import { markWechatOrderPaid } from "../services/wechatOrders.js";
+import { savePptHtml } from "../lib/renderPpt.js";
+import { normalizeToGcj02, judgeOnTheWay } from "../lib/geo.js";
+import { getHardOverdue } from "../lib/timeSemantics.js";
+import { chargeAICredits, assertAICredits, usageCost } from "../services/aiCredits.js";
+import QRCode from "qrcode";
+
+// 各 AI 功能的固定扣费点数（与前端 creditConfig 的参考表一致；对话/通用调用按 token 用量动态结算）
+const AI_CALL_COSTS = {
+  kimi_web_browse: 2,
+  analyze_intent: 1,
+  analyze_image: 3,
+  task_parse: 2,
+  task_split: 2,
+  memory_insight: 1,
+  daily_briefing: 2,
+  mood_river: 1,
+  week_plan: 3,
+  month_plan: 4,
+  analyze_task: 1
+};
+
+// 预检点数：不足时直接回 402 并返回 false（调用方中断 AI 调用）
+async function guardCredits(req, res, cost, feature) {
+  try {
+    await assertAICredits(req.user.id, cost, feature);
+    return true;
+  } catch (e) {
+    if (e?.code === "INSUFFICIENT_CREDITS") {
+      res.status(402).json({ error: "INSUFFICIENT_CREDITS", message: e.message, balance: e.balance, required: e.required });
+      return false;
+    }
+    throw e;
+  }
+}
+
+// AI 调用成功后的结算：余额竞态（AI 已调用但扣费时不够）只记警告不阻断
+async function settleCredits(req, cost, feature, description) {
+  try {
+    return await chargeAICredits({ userId: req.user.id, cost, feature, description });
+  } catch (e) {
+    if (e?.code === "INSUFFICIENT_CREDITS") {
+      console.warn(`[credits] ${feature} 结算时余额不足（余额 ${e.balance}，需 ${e.required}），本次放行`);
+    } else {
+      console.error(`[credits] ${feature} 结算失败:`, e?.message || e);
+    }
+    return null;
+  }
+}
+
+// 把微信支付 Native 下单返回的 code_url 转成 PNG data URL，
+// 小程序端 Image 组件可直接渲染 base64 data URL（小程序无 qrcode 库）
+async function wechatCodeUrlToQrDataUrl(codeUrl) {
+  try {
+    return await QRCode.toDataURL(codeUrl, { margin: 1, width: 280 });
+  } catch (err) {
+    console.error("[wechatQr] generate qr data url failed:", err?.message || err);
+    return null;
+  }
+}
+
+export const functionsRouter = Router();
+
+functionsRouter.use(requireAuth);
+
+// 为所有 functions 路由设置 40 秒超时，避免 AI 调用挂起导致网关返回 HTML 错误页
+functionsRouter.use((req, res, next) => {
+  const FUNCTION_TIMEOUT_MS = 40000;
+  let timeoutId;
+
+  const originalJson = res.json.bind(res);
+  res.json = function jsonSafe(...args) {
+    if (!res.headersSent) return originalJson(...args);
+    return res;
+  };
+
+  const originalStatus = res.status.bind(res);
+  res.status = function statusSafe(code) {
+    if (!res.headersSent) return originalStatus(code);
+    return { json: () => res };
+  };
+
+  timeoutId = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({
+        error: "GATEWAY_TIMEOUT",
+        message: "AI 服务响应超时，请稍后重试"
+      });
+    }
+  }, FUNCTION_TIMEOUT_MS);
+
+  res.on("finish", () => clearTimeout(timeoutId));
+  next();
+});
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+// 心签分类：英文 key ↔ 中文标签
+const HEARTSIGN_TYPE_ZH = {
+  emotion: "情绪",
+  inspiration: "灵感",
+  material: "资料",
+  memo: "备忘",
+  share: "分享",
+  ledger: "账本"
+};
+const HEARTSIGN_ZH_TO_TYPE = Object.fromEntries(
+  Object.entries(HEARTSIGN_TYPE_ZH).map(([k, v]) => [v, k])
+);
+
+// 从纠错文本提取关键词（2-6 字中文片段，按频次取前 10）
+function extractCorrectionKeywords(text) {
+  const stop = new Set(["的", "了", "是", "我", "你", "在", "和", "就", "都", "也", "有", "这", "那", "个", "与", "及", "等", "要", "会", "能", "很", "一", "不", "人"]);
+  const t = String(text || "").replace(/https?:\/\/[^\s]+/g, "");
+  const freq = {};
+  for (let i = 0; i < t.length - 1; i++) {
+    for (let len = 6; len >= 2; len--) {
+      const s = t.slice(i, i + len);
+      if (stop.has(s)) continue;
+      if (/^[\u4e00-\u9fa5]+$/.test(s) && !/^(.)(\1)+$/.test(s)) {
+        freq[s] = (freq[s] || 0) + 1;
+      }
+    }
+  }
+  return Object.entries(freq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([k]) => k);
+}
+
+function getPreferenceExtraFields(preferences) {
+  if (preferences?.metadata && isPlainObject(preferences.metadata)) {
+    const extraFields = preferences.metadata._extraFields;
+    if (isPlainObject(extraFields)) {
+      return extraFields;
+    }
+  }
+  return {};
+}
+
+function haversineMeters(a, b) {
+  if (!a || !b) return Infinity;
+  const R = 6371000;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(b.latitude - a.latitude);
+  const dLon = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const x = Math.sin(dLat / 2) ** 2
+    + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function getTaskExtraFields(task) {
+  if (isPlainObject(task?.metadata?._extraFields)) {
+    return task.metadata._extraFields;
+  }
+  return {};
+}
+
+function getTaskLocationReminder(task) {
+  const extraFields = getTaskExtraFields(task);
+  const reminder = extraFields.location_reminder;
+  return isPlainObject(reminder) ? reminder : null;
+}
+
+function getTaskSpatiotemporal(task) {
+  const extraFields = getTaskExtraFields(task);
+  const st = extraFields.spatiotemporal;
+  return isPlainObject(st) ? st : null;
+}
+
+// ===== 地理守护触发核心（三重确认 / 三种时机 / 复合条件） =====
+
+// 复合条件 time_gate：{ start_hm, end_hm, days:[0-6] }（可选），按北京时间校验
+function timeGateAllows(gate) {
+  if (!gate || typeof gate !== "object") return true;
+  const bj = new Date(Date.now() + 8 * 3600 * 1000);
+  const hm = `${String(bj.getUTCHours()).padStart(2, "0")}:${String(bj.getUTCMinutes()).padStart(2, "0")}`;
+  const day = bj.getUTCDay();
+  if (Array.isArray(gate.days) && gate.days.length > 0 && !gate.days.map(Number).includes(day)) return false;
+  if (gate.start_hm && hm < String(gate.start_hm)) return false;
+  if (gate.end_hm && String(gate.end_hm) !== "23:59" && hm > String(gate.end_hm)) return false;
+  return true;
+}
+
+// 停留确认（dwell）：速度 <5km/h 且持续 ≥90s；或跨采样推断（上次也在圈内 + 间隔内位移 <50m + 间隔 ≥90s）。
+// 客户端高频确认（dwell_confirmed）直接通过。数据不足返回 false——宁漏不错，等下一次上报。
+function judgeDwell({ speedKmh, dwellConfirmed, insidePrev, displacementM, elapsedS }) {
+  if (dwellConfirmed === true) return true;
+  if (typeof speedKmh === "number" && speedKmh < 5 && typeof elapsedS === "number" && elapsedS >= 90) return true;
+  if (insidePrev === true && typeof displacementM === "number" && displacementM < 50 && typeof elapsedS === "number" && elapsedS >= 90) return true;
+  return false;
+}
+
+// ===== 约定列表智能分析辅助函数 =====
+function sameLocalDay(a, b) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function addLocalDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function formatHm(date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function buildTaskTimeLabel(task, now = new Date()) {
+  const end = task.end_time || task.due_at || task.reminder_time;
+  if (!end) return "未安排时间";
+  const d = new Date(end);
+  if (isNaN(d.getTime())) return String(end);
+
+  const done = task.status === "completed" || task.status === "done" || task.status === "archived";
+  const diffMs = d.getTime() - now.getTime();
+  const diffH = diffMs / (1000 * 60 * 60);
+
+  if (!done && diffMs < 0) {
+    const days = Math.max(1, Math.ceil(-diffMs / (1000 * 60 * 60 * 24)));
+    return `已逾期 ${days} 天`;
+  }
+
+  if (sameLocalDay(d, now)) return `今天 ${formatHm(d)}`;
+  if (sameLocalDay(d, addLocalDays(now, 1))) return `明天 ${formatHm(d)}`;
+  if (sameLocalDay(d, addLocalDays(now, 2))) return `后天 ${formatHm(d)}`;
+  return `${d.getMonth() + 1}/${d.getDate()} ${formatHm(d)}`;
+}
+
+function getTaskRecurringLabel(task) {
+  const tags = Array.isArray(task.tags) ? task.tags : [];
+  const meta = isPlainObject(task.metadata) ? task.metadata : {};
+  const extra = isPlainObject(meta._extraFields) ? meta._extraFields : {};
+  if (extra.recurring || meta.recurring) return String(extra.recurring || meta.recurring);
+  // 结构化重复规则（每天/每周/每月）优先于标题关键词猜测
+  if (extra.repeat_rule && extra.repeat_rule !== "none") {
+    const label = recurrenceLabel(extra.repeat_rule, extra.custom_recurrence);
+    if (label) return label;
+  }
+  const map = { "每天": "每天", "每周": "每周", "每月": "每月" };
+  for (const k of Object.keys(map)) {
+    if (tags.includes(k) || task.title?.includes(k)) return map[k];
+  }
+  if (/每天|每晚|每周|每月/.test(task.title || "")) {
+    const m = (task.title || "").match(/每[天周月晚]/);
+    if (m) return m[0];
+  }
+  return null;
+}
+
+function getTaskLocation(task) {
+  const reminder = getTaskLocationReminder(task);
+  if (reminder?.location_name) return reminder.location_name;
+  const meta = isPlainObject(task.metadata) ? task.metadata : {};
+  const extra = isPlainObject(meta._extraFields) ? meta._extraFields : {};
+  if (extra.location_name || meta.location_name) return String(extra.location_name || meta.location_name);
+  if (task.location) return String(task.location);
+  return null;
+}
+
+// 账本签内补录：用户在账本签里继续对话输入新的收支明细时，并入本条签（不新建签），
+// 重算合计，新明细带 is_new/added_at。返回新的 ledger 对象或 null（未识别到明细）
+function parseLedgerPatch(existingLedger, text) {
+  if (!existingLedger || !Array.isArray(existingLedger.items)) return null;
+  const t = String(text || "");
+  // 金额语境门槛：带 元/块 单位、含收支动词、出现 2 个以上数字（如"奶茶15不是18"），
+  // 或含 ≥10 的裸数字（如"礼品 860"、"打车15"）——账本签里的对话上下文本身就是记账语境，
+  // 门槛只拦时间类单小数字（如"明天3点开会"，3<10 且无单位无动词）
+  const digitHits = t.match(/\d+(?:\.\d+)?/g) || [];
+  const moneyLike = /(\d+(?:\.\d+)?\s*(?:元|块|块钱|rmb|RMB))|([花买吃付]|买了|打车|支付|工资|报销|转账|收入|支出|花了|退款|记账|多少钱|预算)/.test(t)
+    || digitHits.length >= 2
+    || digitHits.some((d) => parseFloat(d) >= 10);
+  if (!moneyLike) return null;
+  const normItems = parseLedgerEntries(t)
+    .map((i) => ({
+      name: String(i?.name || "一笔账").replace(/^[【\[（(「『]+|[】\]）)」』．.、:：]+$/g, "").slice(0, 12) || "一笔账",
+      category: String(i?.category || "其他"),
+      amount: Math.abs(Number(i?.amount) || 0),
+      type: /(income|收入)/.test(String(i?.type || "")) ? "income" : "expense"
+    }))
+    .filter((i) => i.amount > 0)
+    .slice(0, 20);
+  if (!normItems.length) return null;
+
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const addedAt = new Date().toISOString();
+  // 保留既有条目的 is_new：本次会话里陆续补录的条目（3条以内或更多）持续带「新」标识，
+  // 下次进入心签页时由前端统一静默清除
+  const items = [
+    ...existingLedger.items,
+    ...normItems.map((i) => ({ ...i, is_new: true, added_at: addedAt }))
+  ].slice(0, 50);
+  const totalExpense = round2(items.filter((i) => i.type === "expense").reduce((s, i) => s + (Number(i.amount) || 0), 0));
+  const totalIncome = round2(items.filter((i) => i.type === "income").reduce((s, i) => s + (Number(i.amount) || 0), 0));
+  return {
+    ledger: {
+      items,
+      total_expense: totalExpense,
+      total_income: totalIncome,
+      balance: round2(totalIncome - totalExpense),
+      advice: existingLedger.advice || ""
+    },
+    // 本轮实际解析出的条目（区别于 is_new 累积的历史新增，用于回复文案与正文追加，避免跨轮重复）
+    added: normItems
+  };
+}
+
+// 信任度动态评分：按用户按 automation_type 统计最近执行历史
+// 公式（移植海外版 getAutomationTrust）：成功率×60 + 平均评分/5×40（无评分按 3.5 计）
+// 样本 <3 条返回 null，调用方沿用默认值
+function computeTrustScores(executions) {
+  const byType = new Map();
+  for (const e of executions || []) {
+    const t = e?.automation_type || "none";
+    if (t === "none") continue;
+    if (!byType.has(t)) byType.set(t, []);
+    byType.get(t).push(e);
+  }
+  const scores = new Map();
+  for (const [type, list] of byType) {
+    const recent = list.slice(0, 50);
+    const finished = recent.filter((e) => ["completed", "failed"].includes(String(e.execution_status)));
+    if (finished.length < 3) continue;
+    const successRate = finished.filter((e) => e.execution_status === "completed").length / finished.length;
+    const ratings = recent
+      .map((e) => (e.user_feedback && typeof e.user_feedback === "object" ? e.user_feedback.rating : null))
+      .filter((r) => typeof r === "number" && r >= 1 && r <= 5);
+    const avgRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 3.5;
+    scores.set(type, Math.max(5, Math.min(99, Math.round(successRate * 60 + (avgRating / 5) * 40))));
+  }
+  return scores;
+}
+
+// 从执行结果 result.data 提取「可验收的产物文案」（结果优先）；
+// 只有计划没有结果时，才退回计划步骤（动作）作为占位
+function buildExecPreview(automationType, plan, result) {
+  const lines = [];
+  const push = (s) => {
+    if (s == null) return;
+    const t = String(s).trim();
+    if (t) lines.push(t);
+  };
+  if (result && typeof result.preview === "string" && result.preview.trim()) {
+    push(`—— ${result.preview.trim()}`);
+  }
+  const data = result && isPlainObject(result.data) ? result.data : {};
+  const str = (v) => (v == null ? "" : String(v));
+  switch (automationType) {
+    case "email_draft":
+      if (data.to) push(`收件人：${data.to}`);
+      if (data.cc) push(`抄送：${data.cc}`);
+      push(`主题：${data.subject}`);
+      push(data.body);
+      break;
+    case "summary_note":
+      push(data.title);
+      push(data.content);
+      (Array.isArray(data.key_points) ? data.key_points : []).slice(0, 7).forEach((k) => push(`· ${str(k)}`));
+      break;
+    case "web_research":
+      push(data.title);
+      push(data.executive_summary);
+      (Array.isArray(data.key_findings) ? data.key_findings : []).slice(0, 6).forEach((k) =>
+        push(`· ${typeof k === "string" ? k : str(k?.finding || k?.text || k?.title)}`)
+      );
+      (Array.isArray(data.recommendations) ? data.recommendations : []).slice(0, 4).forEach((r) => push(`→ ${str(r)}`));
+      if (data.file_url) push(`📎 文件：${data.file_url}`);
+      break;
+    case "office_doc":
+    case "ppt_doc":
+      push(data.title);
+      if (data.subtitle) push(data.subtitle);
+      (Array.isArray(data.sections) ? data.sections : []).slice(0, 8).forEach((s) =>
+        push(`· ${str(s?.heading || s?.title)}${s?.body ? "：" + str(s.body) : ""}`)
+      );
+      (Array.isArray(data.slides) ? data.slides : []).slice(0, 10).forEach((s, i) =>
+        push(`${i + 1}. ${str(s?.title)}${s?.bullets ? " — " + (Array.isArray(s.bullets) ? s.bullets.map(str).join("；") : str(s.bullets)) : ""}`)
+      );
+      if (data.file_url) push(`📎 文件：${data.file_url}`);
+      break;
+    case "calendar_event":
+      push(data.title);
+      if (data.start_time) push(`时间：${str(data.start_time)}${data.end_time ? " ~ " + str(data.end_time) : ""}`);
+      if (data.location) push(`地点：${str(data.location)}`);
+      if (Array.isArray(data.participants) && data.participants.length) push(`参与人：${data.participants.map(str).join("、")}`);
+      push(data.description);
+      break;
+    case "ledger_organize":
+      (Array.isArray(data.entries) ? data.entries : []).slice(0, 12).forEach((en) =>
+        push([en?.date, en?.category, en?.item || en?.note, en?.amount].map(str).filter(Boolean).join(" "))
+      );
+      if (isPlainObject(data.stats)) push(`—— 收入 ${str(data.stats.total_income ?? "-")} · 支出 ${str(data.stats.total_expense ?? "-")}`);
+      break;
+    case "file_organize":
+      push(data.summary);
+      (Array.isArray(result?.diff) ? result.diff : []).slice(0, 10).forEach((d) => push(`· ${str(d?.detail || d?.target)}`));
+      break;
+    default:
+      break;
+  }
+  // 兜底：该类型没有专属渲染时，平铺 data 的文本字段
+  if (lines.filter((l) => !l.startsWith("——")).length === 0) {
+    Object.values(data).forEach((v) => {
+      if (typeof v === "string" && v.trim()) push(v);
+    });
+  }
+  // 最后兜底：计划步骤（动作），仅在完全没有结果产物时展示
+  if (lines.length === 0) {
+    (Array.isArray(plan?.steps) ? plan.steps : []).slice(0, 8).forEach((s) => {
+      push(typeof s === "string" ? s : str(s?.name && s?.detail ? `${s.name}：${s.detail}` : s?.name || s?.detail));
+    });
+  }
+  if (lines.length === 0) push("心栈已根据约定内容生成执行方案，验收后即可自动完成。");
+  return lines;
+}
+
+function buildAutoExec(task, executions, trustScores) {
+  const done = task.status === "completed" || task.status === "done" || task.status === "archived";
+  if (done) return undefined;
+  const list = (executions || []).filter(
+    (e) => e.task_id === task.id && e.automation_type && e.automation_type !== "none"
+  );
+  if (list.length === 0) return undefined;
+  list.sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
+  const exec = list[0];
+  const status = String(exec.execution_status || "").toLowerCase();
+  const kindLabelMap = {
+    email_draft: "邮件草稿",
+    web_research: "联网调研",
+    ppt_doc: "演示稿",
+    summary_note: "纪要总结",
+    office_doc: "文档",
+    ledger_organize: "整理账本",
+    file_organize: "整理文件",
+    calendar_event: "日程同步",
+    none: "自动执行"
+  };
+  const kind = exec.automation_type || "none";
+  const label = kindLabelMap[kind] || "自动执行";
+
+  let trust = exec.requires_approval ? 78 : 92;
+  let trustLevel = exec.requires_approval ? "确认后执行" : "自动执行";
+  // 有历史样本时改用动态信任分（越用越准）
+  const dynamicTrust = trustScores instanceof Map ? trustScores.get(kind) : null;
+  if (typeof dynamicTrust === "number") {
+    trust = dynamicTrust;
+    trustLevel = trust < 60 ? "偏谨慎" : trust <= 80 ? "稳步" : "高信任";
+  }
+  let state = "ready";
+  if (status === "running" || status === "in_progress" || status === "executing" || status === "pending") {
+    state = "running";
+  } else if (status === "waiting_confirm" || status === "waiting_approval") {
+    state = "confirm";
+  } else if (status === "error" || status === "failed" || exec.error_message) {
+    trust = 45;
+    trustLevel = "人工接管";
+    state = "manual";
+  }
+
+  const plan = isPlainObject(exec.automation_plan) ? exec.automation_plan : {};
+  const result = isPlainObject(exec.automation_result) ? exec.automation_result : {};
+  const previewTitle = `${label} · ${state === "ready" ? "已备好，待你验收" : state === "confirm" ? "待你批准" : state === "running" ? "AI 生成中" : "信任度不足，已转人工"}`;
+  // 结果优先：展示执行产物（草稿正文/纪要/账目等），不再把计划动作当成验收内容
+  const previewBody = buildExecPreview(kind, plan, result);
+
+  return {
+    kind,
+    automation_type: kind,
+    label,
+    state,
+    trust,
+    trustLevel,
+    previewTitle,
+    previewBody,
+    executionId: exec.id
+  };
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("TIMEOUT")), ms);
+    })
+  ]);
+}
+
+function buildRuleAiNote(task, subtasks, autoExec) {
+  const subs = Array.isArray(subtasks) ? subtasks : [];
+  const doneCount = subs.filter((s) => s.status === "completed" || s.status === "done").length;
+  const overdue = task.timeLabel?.includes("逾期");
+  const location = getTaskLocation(task);
+
+  if (autoExec && autoExec.state === "ready") {
+    return "机器可完成的部分已预执行，你只需验收。";
+  }
+  if (autoExec && autoExec.state === "running") {
+    return `${autoExec.label}正在生成中，完成后会提醒你验收。`;
+  }
+  if (autoExec && autoExec.state === "manual") {
+    return "这条自动执行之前出过问题，心栈建议你来接管。";
+  }
+  if (subs.length > 0) {
+    if (doneCount === subs.length) {
+      return "子约定都已完成，可以一键完成这个约定了。";
+    }
+    return `已完成 ${doneCount}/${subs.length} 步，下一步：${subs.find((s) => s.status !== "completed" && s.status !== "done")?.title || "继续推进"}。`;
+  }
+  if (overdue) {
+    const days = task.timeLabel?.match(/(\d+)/)?.[1] || "几";
+    return `已等你 ${days} 天了。现在捞回它，比重新启动要容易得多。`;
+  }
+  if (location) {
+    return `到达 ${location} 附近时可以顺手处理这个约定。`;
+  }
+  if (task.priority === "urgent" || task.priority === "high") {
+    const hour = new Date().getHours();
+    if (hour >= 9 && hour < 12) return "上午是你的高产时段，这种高优先级约定通常推进得最快。";
+    return "这个约定优先级较高，建议先安排一个完整的时间段。";
+  }
+
+  // 基于标题关键词的个性化兜底（在 Kimi 不可用时仍保持差异感）
+  const t = String(task.title || "");
+  const lower = t.toLowerCase();
+  if (/看书|阅读|读书|翻书/.test(t)) return "把书放在手边，翻开读一页，惯性会带你继续。";
+  if (/加油|汽油|油箱|油站/.test(t)) return "顺路时油量最低，顺手加满，明天会轻松很多。";
+  if (/飞|航班|机场|登机|行李|收拾/.test(t)) return "提前 2 小时到机场，行李可以昨晚就开始收拾。";
+  if (/删|清理|整理|扔掉|丢掉/.test(t)) return "清理掉不再需要的，清单和心情都会轻一点。";
+  if (/药|吃药|服药|维生素|胶囊/.test(t)) return "把药和一杯水放在显眼处，吃完再忙别的。";
+  if (/锻炼|跑步|健身|运动|瑜伽/.test(t)) return "换上鞋出门就是最难的一步，接下来身体自己会动。";
+  if (/早餐|午饭|午餐|晚饭|晚餐|吃饭|吃点/.test(t)) return "按时吃饭不是奖励，是今天继续运转的燃料。";
+  if (/开会|会议|zoom|对齐|评审/.test(t)) return "提前 5 分钟到场，把要点在脑海里过一遍。";
+  if (/邮件|email|发信/.test(t)) return "先写主题和第一句，后面的内容会自然流出来。";
+  if (/报告|方案|文档|ppt|演示/.test(t)) return "先列 3 个要点，比一次性写完整版更容易启动。";
+  if (/电话|打电话|爸妈|父母|家人/.test(t)) return "电话接通后先说一声'想你了'，比说什么都重要。";
+  if (/写|写作|码字|文章/.test(t)) return "先写 50 字烂开头，改比写容易。";
+  if (/买|采购|超市|菜|水果/.test(t)) return "列一个小清单，一次买齐，少跑一趟。";
+  if (/还|还款|账单|交费|缴费/.test(t)) return "顺手还掉，避免月底一起算账的压力。";
+  if (/睡|睡觉|早睡|休息|放松/.test(t)) return "今晚把屏幕放远 20 厘米，睡眠会自己来。";
+  if (/提醒|记得|别忘了|别忘记/.test(t)) return "把它放在视觉中心，完成后再把它移开。";
+
+  // 按分类给出有区分度的兜底
+  const category = task.category || "other";
+  if (category === "health") return "照顾好自己，是今天最重要的小事之一。";
+  if (category === "work") return "把它放进高产时段，推进会比想象中快。";
+  if (category === "study") return "每天一小步，也是在给长期目标蓄力。";
+  if (category === "family") return "和重要的人有关的约定，顺水推一件就好。";
+  if (category === "finance") return "顺手处理，清单和心情都会轻一点。";
+  if (category === "shopping") return "顺手处理，清单和心情都会轻一点。";
+  return "把它放进今天的河流，顺水推一件就好。";
+}
+
+async function buildAiNote(task, subtasks, autoExec) {
+  const done = task.status === "completed" || task.status === "done" || task.status === "archived";
+
+  // 已完成的约定不需要 AI 分析；自动执行/子约定进度仍用规则文案更稳定
+  if (done) return undefined;
+  if (autoExec && autoExec.state) return buildRuleAiNote(task, subtasks, autoExec);
+  const subs = Array.isArray(subtasks) ? subtasks : [];
+  if (subs.length > 0) return buildRuleAiNote(task, subtasks, autoExec);
+  if (!task.title) return undefined;
+
+  const schema = {
+    type: "object",
+    properties: {
+      aiNote: { type: "string", description: "1-2句个性化建议，自然亲切、具体有针对性" }
+    },
+    required: ["aiNote"]
+  };
+
+  const categoryLabel = {
+    work: "工作", personal: "个人", health: "健康", study: "学习",
+    family: "家庭", shopping: "购物", finance: "财务", other: "其他"
+  }[task.category] || task.category || "其他";
+
+  const priorityLabel = { urgent: "紧急", high: "高", medium: "中", low: "低" }[task.priority] || task.priority || "中";
+
+  const prompt = `用户有这样一个约定：
+标题：${task.title}
+描述：${task.description || "无"}
+分类：${categoryLabel}
+优先级：${priorityLabel}
+时间：${task.timeLabel || "未安排"}
+地点：${getTaskLocation(task) || "未指定"}
+状态：${task.timeLabel?.includes("逾期") ? "已逾期" : task.timeLabel?.includes("今天") || task.timeLabel?.includes("即将") ? "今天/即将到期" : "进行中"}
+
+请基于以上信息，生成一句 1-2 行的个性化建议。要求：
+1. 内容具体、有温度，不要泛泛而谈。
+2. 如果是健康/用药/锻炼类，给出温暖的执行提示。
+3. 如果是工作/学习类，给出推进建议或最佳时段提示。
+4. 如果有地点，结合地点给出建议。
+5. 如果已逾期或即将到期，给出轻量安抚和最小下一步。
+6. 直接返回 JSON 对象 {"aiNote": "..."}，不要 markdown 或解释。`;
+
+  try {
+    console.log(`[buildAiNote] task=${task.id} title="${task.title}" calling Kimi`);
+    const result = await withTimeout(
+      invokeKimiText({
+        prompt,
+        systemPrompt: "你是 SoulSentry 的心栈伙伴，擅长把任务信息转化成一句温暖、具体、可执行的建议。必须直接返回 JSON 对象。",
+        responseJsonSchema: schema,
+        temperature: 0.6
+      }),
+      15000
+    );
+    const note = result?.aiNote?.trim();
+    console.log(`[buildAiNote] task=${task.id} note="${note?.slice(0, 80) || "(empty)"}"`);
+    return note || buildRuleAiNote(task, subtasks, autoExec);
+  } catch (err) {
+    console.error(`[buildAiNote] task=${task.id} Kimi failed:`, err?.message || err);
+    return buildRuleAiNote(task, subtasks, autoExec);
+  }
+}
+
+async function analyzeTask(task, executions, subtasks, trustScores) {
+  const now = new Date();
+  const timeLabel = buildTaskTimeLabel(task, now);
+  const recurring = getTaskRecurringLabel(task);
+  const location = getTaskLocation(task);
+  const autoExec = buildAutoExec(task, executions, trustScores);
+  const aiNote = await buildAiNote(task, subtasks, autoExec);
+  const subPromises = (subtasks || []).map((s) => ({
+    id: s.id,
+    title: s.title,
+    done: s.status === "completed" || s.status === "done"
+  }));
+
+  // 统一逾期语义：待安排/心愿/纯收集不因时间流逝变红（消除虚假逾期）；仅提醒时间过算 soft 待处理
+  const hard = getHardOverdue(task, now);
+  const overdue = hard.overdue;
+  const end = task.end_time || task.due_at;
+  const within24h = end && !overdue && new Date(end).getTime() - now.getTime() <= 24 * 60 * 60 * 1000;
+
+  let group = "suggested";
+  if (recurring) {
+    group = "fixed";
+  } else if (overdue || within24h) {
+    group = "due";
+  } else if (autoExec || location || (task.priority === "urgent" || task.priority === "high")) {
+    group = "now";
+  }
+
+  const priorityLabelMap = { urgent: "紧急", high: "高", medium: "中", low: "低" };
+
+  return {
+    group,
+    timeLabel,
+    overdue,
+    recurring,
+    location,
+    aiNote,
+    autoExec,
+    subPromises,
+    priorityLabel: priorityLabelMap[task.priority] || task.priority || "中"
+  };
+}
+
+const FORGETTING_CURVE = [
+  { days: 1, retention: 44 },
+  { days: 2, retention: 28 },
+  { days: 3, retention: 22 },
+  { days: 7, retention: 15 },
+  { days: 14, retention: 10 },
+  { days: 30, retention: 5 }
+];
+
+function getForgetRate(days) {
+  if (days < 1) return 0;
+  const hit = FORGETTING_CURVE.find((c) => days <= c.days);
+  const retention = hit ? hit.retention : 3;
+  return Math.min(95, 100 - retention);
+}
+
+function daysBetween(from, to = new Date()) {
+  if (!from) return 0;
+  return Math.floor((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24));
+}
+
+const CATEGORY_LABEL = {
+  work: "工作", personal: "个人", health: "健康", study: "学习",
+  family: "家庭", shopping: "购物", finance: "财务", other: "其他"
+};
+
+function startOfLocalDay(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfLocalDay(date) {
+  const d = new Date(date);
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+function buildDailyBriefingTitle(displayName) {
+  const now = new Date();
+  const hour = now.getHours();
+  const period = hour < 12 ? "早安" : hour < 18 ? "午后" : "晚间";
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${displayName || "旅行者"}的${period}心栈·${month}月${day}日`;
+}
+
+async function generateDailyBriefingForUser(user) {
+  const now = new Date();
+  const todayStart = startOfLocalDay(now);
+  const todayEnd = endOfLocalDay(now);
+
+  const tasks = await prisma.task.findMany({
+    where: { userId: user.id, deletedAt: null },
+    orderBy: [{ updatedAt: "desc" }],
+    take: 300
+  });
+
+  const activeTasks = tasks.filter((t) => t.status !== "DONE" && t.status !== "ARCHIVED");
+  const urgentTasks = activeTasks.filter((t) => t.priority === "urgent" || t.priority === "high");
+  const overdueTasks = activeTasks.filter((t) => t.endTime && new Date(t.endTime) < now);
+  const todayDueTasks = activeTasks.filter((t) => {
+    const candidate = t.dueAt || t.endTime || t.reminderTime;
+    if (!candidate) return false;
+    const dt = new Date(candidate);
+    return dt >= todayStart && dt <= todayEnd;
+  });
+
+  const recentCompleted = tasks
+    .filter((t) => t.status === "DONE")
+    .sort((a, b) => new Date(b.completedAt || b.updatedAt) - new Date(a.completedAt || a.updatedAt))
+    .slice(0, 5);
+
+  const topTitles = urgentTasks.slice(0, 3).map((t) => `「${t.title}」`).join("、");
+  const shortTerm = (() => {
+    if (activeTasks.length === 0) return "今天没有待办任务，适合把精力留给恢复与长期目标。";
+    if (urgentTasks.length > 0) return `优先推进 ${topTitles}。把需要快速反馈的事项先收口，再处理常规任务。`;
+    if (todayDueTasks.length > 0) return `今天有 ${todayDueTasks.length} 项需要关注的到期/提醒任务，建议先完成最容易推进的一项来启动节奏。`;
+    if (overdueTasks.length > 0) return `有 ${overdueTasks.length} 项任务已超过预期时间，挑选其中影响最大的先做一次“降阻/改期”处理。`;
+    return `你当前有 ${activeTasks.length} 项活跃任务，建议用一个 25 分钟专注块推进最关键的一项。`;
+  })();
+
+  const longTerm = (() => {
+    if (recentCompleted.length > 0) {
+      const names = recentCompleted.slice(0, 2).map((t) => `「${t.title}」`).join("、");
+      return `你最近完成了 ${names}。保持这个节奏，把“重要但不紧急”的事项也安排进日程里。`;
+    }
+    return "给未来留一点空间：把本周最重要的目标写下来，并为它预留一个稳定的固定时段。";
+  })();
+
+  const mindful = urgentTasks.length > 0
+    ? "先做最重要的一件事，其他事会自动变轻。"
+    : "慢一点也没关系，重要的是方向正确。";
+
+  return {
+    title: buildDailyBriefingTitle(user.displayName),
+    short_term_narrative: shortTerm,
+    long_term_narrative: longTerm,
+    mindful_tip: mindful,
+    task_stats: {
+      active: activeTasks.length,
+      urgent: urgentTasks.length,
+      overdue: overdueTasks.length,
+      today_due: todayDueTasks.length,
+      recent_completed: recentCompleted.length
+    }
+  };
+}
+
+function getGeofencePreset(locationType) {
+  const presets = {
+    home: { radius: 180, quiet_minutes: 45 },
+    office: { radius: 220, quiet_minutes: 30 },
+    gym: { radius: 120, quiet_minutes: 60 },
+    school: { radius: 180, quiet_minutes: 45 },
+    shopping: { radius: 150, quiet_minutes: 30 },
+    hospital: { radius: 220, quiet_minutes: 90 },
+    restaurant: { radius: 120, quiet_minutes: 20 },
+    other: { radius: 200, quiet_minutes: 30 }
+  };
+  return presets[String(locationType || "other")] || presets.other;
+}
+
+function decodeXmlEntities(value = "") {
+  return String(value)
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function stripHtml(value = "") {
+  return decodeXmlEntities(String(value).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+}
+
+function pickXmlValue(block, tagName) {
+  const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)</${tagName}>`, "i");
+  const matched = String(block || "").match(regex);
+  return matched ? decodeXmlEntities(matched[1]).trim() : "";
+}
+
+function pickXmlLink(block) {
+  const attributeMatch = String(block || "").match(/<link\b[^>]*href=["']([^"']+)["'][^>]*\/?>/i);
+  if (attributeMatch?.[1]) {
+    return decodeXmlEntities(attributeMatch[1]).trim();
+  }
+  return stripHtml(pickXmlValue(block, "link"));
+}
+
+function parseRssItems(xmlText = "") {
+  const blocks = String(xmlText).match(/<(item|entry)\b[\s\S]*?<\/(item|entry)>/gi) || [];
+  return blocks.map((block) => {
+    const title = stripHtml(pickXmlValue(block, "title"));
+    const link = pickXmlLink(block);
+    const description = stripHtml(
+      pickXmlValue(block, "description")
+      || pickXmlValue(block, "summary")
+      || pickXmlValue(block, "content")
+      || pickXmlValue(block, "content:encoded")
+    );
+    const pubDate = stripHtml(
+      pickXmlValue(block, "pubDate")
+      || pickXmlValue(block, "published")
+      || pickXmlValue(block, "updated")
+    );
+    return {
+      title,
+      link,
+      summary: description.slice(0, 280),
+      published_at: pubDate || null
+    };
+  }).filter((item) => item.title && item.link);
+}
+
+function buildExternalVisionCards(feed, items = []) {
+  return items.slice(0, 3).map((item, index) => ({
+    id: `${feed.id}:${index}:${item.link}`,
+    type: feed.feedType === "rss" ? "subscription" : "expansion",
+    title: item.title,
+    summary: item.summary || `${feed.name} 的最新更新`,
+    source: feed.name,
+    url: item.link,
+    relevance: feed.description || "",
+    published_at: item.published_at || null
+  }));
+}
+
+const YMD_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function toYmd(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = String(d.getFullYear());
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseYmd(value) {
+  if (typeof value !== "string" || !YMD_PATTERN.test(value)) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function addDaysYmd(value, offset) {
+  const base = parseYmd(value) || new Date();
+  base.setDate(base.getDate() + offset);
+  return toYmd(base);
+}
+
+function normalizeDateString(value, fallback) {
+  const direct = typeof value === "string" ? value.trim() : "";
+  if (direct && YMD_PATTERN.test(direct)) return direct;
+  const fb = typeof fallback === "string" ? fallback.trim() : "";
+  if (fb && YMD_PATTERN.test(fb)) return fb;
+  return toYmd(new Date());
+}
+
+function parseJsonLoose(value) {
+  if (!value) return value;
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return value;
+  const text = value.trim();
+  if (!text) return value;
+  if (!(text.startsWith("{") || text.startsWith("["))) return value;
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return value;
+  }
+}
+
+function getWeekDates(startDate) {
+  const start = parseYmd(startDate) || new Date();
+  const dates = [];
+  for (let i = 0; i < 7; i += 1) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    dates.push(toYmd(d));
+  }
+  return dates;
+}
+
+function normalizeWeekEvent(event, weekDates) {
+  if (!isPlainObject(event)) return null;
+  const title = typeof event.title === "string" ? event.title.trim() : "";
+  if (!title) return null;
+
+  const dayIndex = Number.isFinite(Number(event.day_index)) ? Number(event.day_index) : null;
+  const dateCandidate = typeof event.date === "string" ? event.date.trim() : "";
+  const date = YMD_PATTERN.test(dateCandidate)
+    ? dateCandidate
+    : dayIndex !== null && weekDates[dayIndex]
+      ? weekDates[dayIndex]
+      : weekDates[0];
+
+  const timeText = typeof event.time === "string" && event.time.trim() ? event.time.trim() : "09:00";
+  const typeText = typeof event.type === "string" && event.type.trim() ? event.type.trim() : "other";
+  const iconText = typeof event.icon === "string" && event.icon.trim() ? event.icon.trim().slice(0, 8) : "📅";
+
+  return {
+    date,
+    day_index: dayIndex !== null ? Math.max(0, Math.min(6, dayIndex)) : undefined,
+    title: title.slice(0, 160),
+    time: timeText.slice(0, 10),
+    type: typeText.slice(0, 40),
+    icon: iconText,
+    description: typeof event.description === "string" ? event.description.slice(0, 500) : ""
+  };
+}
+
+function normalizeWeekPlan(raw, startDate, existingPlan) {
+  const data = parseJsonLoose(raw);
+  const base = isPlainObject(data) ? data : {};
+  const weekDates = getWeekDates(startDate);
+
+  const events = Array.isArray(base.events)
+    ? base.events.map((item) => normalizeWeekEvent(item, weekDates)).filter(Boolean)
+    : [];
+
+  const automations = Array.isArray(base.automations)
+    ? base.automations
+        .map((item) => (isPlainObject(item) ? item : null))
+        .filter(Boolean)
+        .map((item) => ({
+          title: typeof item.title === "string" ? item.title.slice(0, 160) : "自动执行",
+          description: typeof item.description === "string" ? item.description.slice(0, 500) : "",
+          icon: typeof item.icon === "string" ? item.icon.slice(0, 8) : "⚙️",
+          status: typeof item.status === "string" ? item.status : "pending"
+        }))
+    : [];
+
+  const rawStrategies = isPlainObject(base.device_strategies) ? base.device_strategies : {};
+  const device_strategies = {
+    phone: rawStrategies.phone ?? rawStrategies.mobile ?? rawStrategies.smartphone ?? "",
+    watch: rawStrategies.watch ?? "",
+    pc: rawStrategies.pc ?? rawStrategies.desktop ?? "",
+    car: rawStrategies.car ?? "",
+    home: rawStrategies.home ?? "",
+    glasses: rawStrategies.glasses ?? ""
+  };
+
+  const statsRaw = isPlainObject(base.stats) ? base.stats : {};
+  const focusHours = Number(statsRaw.focus_hours);
+  const meetings = Number(statsRaw.meetings);
+  const travelDays = Number(statsRaw.travel_days);
+
+  return {
+    ...base,
+    plan_start_date: normalizeDateString(base.plan_start_date, startDate),
+    theme: typeof base.theme === "string" ? base.theme.slice(0, 120) : (existingPlan?.theme || ""),
+    summary: typeof base.summary === "string" ? base.summary.slice(0, 1600) : (existingPlan?.summary || ""),
+    events,
+    automations,
+    device_strategies,
+    stats: {
+      focus_hours: Number.isFinite(focusHours) ? focusHours : 0,
+      meetings: Number.isFinite(meetings) ? meetings : 0,
+      travel_days: Number.isFinite(travelDays) ? travelDays : 0
+    }
+  };
+}
+
+function buildWeekFallbackPlan(input, startDate, existingPlan) {
+  const weekDates = getWeekDates(startDate);
+  return {
+    is_demo: true,
+    plan_start_date: startDate,
+    theme: existingPlan?.theme || "演示周计划",
+    summary: "AI 服务暂时不可用，已生成演示规划（不影响保存与后续编辑）。",
+    events: [
+      {
+        date: weekDates[0],
+        day_index: 0,
+        title: "梳理本周三件最重要的事",
+        time: "09:30",
+        type: "focus",
+        icon: "🎯",
+        description: String(input || "").slice(0, 200)
+      }
+    ],
+    automations: [
+      { title: "每日晨间提醒", description: "09:00 触发今日三件事复盘", icon: "⏰", status: "pending" }
+    ],
+    device_strategies: {
+      phone: "提醒安排：根据日程自动推送关键任务与出行提醒。",
+      watch: "用短震动提示到点事项，避免打断深度工作。",
+      pc: "工作时段集中显示待办与会议摘要，减少切屏。",
+      car: "",
+      home: "",
+      glasses: ""
+    },
+    stats: { focus_hours: 6, meetings: 2, travel_days: 0 }
+  };
+}
+
+async function generateWeekPlan(payload) {
+  const startDate = normalizeDateString(payload.startDate, payload.currentDate);
+
+  const schema = {
+    type: "object",
+    properties: {
+      plan_start_date: { type: "string" },
+      theme: { type: "string" },
+      summary: { type: "string" },
+      events: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            date: { type: "string" },
+            day_index: { type: "number" },
+            title: { type: "string" },
+            time: { type: "string" },
+            type: { type: "string" },
+            icon: { type: "string" },
+            description: { type: "string" }
+          },
+          required: ["date", "title", "time", "type", "icon"]
+        }
+      },
+      device_strategies: { type: "object" },
+      automations: { type: "array" },
+      stats: { type: "object" }
+    },
+    required: ["plan_start_date", "theme", "summary", "events", "device_strategies"]
+  };
+
+  try {
+    const data = await invokeKimiText({
+      systemPrompt: [
+        "你是一名中文周计划规划助手。",
+        `当前查看周起始日期（周一）是：${startDate}。`,
+        "输出必须是 JSON，不要输出解释。",
+        "请返回完整周计划，而不是片段。",
+        "events 中每条都要包含：date(YYYY-MM-DD)、day_index(0-6)、title、time(HH:MM)、type、icon。",
+        "device_strategies 至少包含 phone/watch/pc 三项。",
+        "automations 仅保留 1-4 条最有价值的自动化动作。"
+      ].join("\n"),
+      prompt: String(payload.input || "").trim(),
+      responseJsonSchema: schema,
+      model: payload.model,
+      temperature: payload.temperature
+    });
+
+    return normalizeWeekPlan(data, startDate, payload.existingPlan);
+  } catch (_error) {
+    return buildWeekFallbackPlan(payload.input, startDate, payload.existingPlan);
+  }
+}
+
+function normalizeMonthPlan(raw, monthStartDate, existingPlan) {
+  const data = parseJsonLoose(raw);
+  const base = isPlainObject(data) ? data : {};
+
+  const strategies = isPlainObject(base.strategies) ? base.strategies : {};
+  const key_milestones = Array.isArray(base.key_milestones)
+    ? base.key_milestones
+        .map((m) => (isPlainObject(m) ? m : null))
+        .filter(Boolean)
+        .map((m) => ({
+          title: typeof m.title === "string" ? m.title.slice(0, 200) : "里程碑",
+          type: typeof m.type === "string" ? m.type : "milestone",
+          deadline: normalizeDateString(m.deadline, monthStartDate)
+        }))
+    : [];
+
+  const weeks_breakdown = Array.isArray(base.weeks_breakdown)
+    ? base.weeks_breakdown
+        .map((w) => (isPlainObject(w) ? w : null))
+        .filter(Boolean)
+        .map((w, idx) => ({
+          week_label: typeof w.week_label === "string" ? w.week_label.slice(0, 40) : `第 ${idx + 1} 周`,
+          focus: typeof w.focus === "string" ? w.focus.slice(0, 120) : "",
+          key_events: Array.isArray(w.key_events)
+            ? w.key_events.filter((e) => typeof e === "string" && e.trim()).map((e) => e.slice(0, 80)).slice(0, 8)
+            : []
+        }))
+    : [];
+
+  const statsRaw = isPlainObject(base.stats) ? base.stats : {};
+  const focusHours = Number(statsRaw.focus_hours);
+  const milestonesCount = Number(statsRaw.milestones_count);
+
+  return {
+    ...base,
+    plan_start_date: normalizeDateString(base.plan_start_date, monthStartDate),
+    theme: typeof base.theme === "string" ? base.theme.slice(0, 120) : (existingPlan?.theme || ""),
+    summary: typeof base.summary === "string" ? base.summary.slice(0, 2000) : (existingPlan?.summary || ""),
+    strategies,
+    key_milestones,
+    weeks_breakdown,
+    stats: {
+      focus_hours: Number.isFinite(focusHours) ? focusHours : 0,
+      milestones_count: Number.isFinite(milestonesCount) ? milestonesCount : key_milestones.length
+    }
+  };
+}
+
+function buildMonthFallbackPlan(input, monthStartDate, existingPlan) {
+  return {
+    is_demo: true,
+    plan_start_date: monthStartDate,
+    theme: existingPlan?.theme || "演示月计划",
+    summary: "AI 服务暂时不可用，已生成演示规划（不影响保存与后续编辑）。",
+    strategies: {
+      focus: "先完成最关键的一项交付，其余保持低摩擦推进。",
+      rhythm: "每周保留 2 个深度专注块，周末做一次复盘。"
+    },
+    key_milestones: [
+      { title: "确认本月目标与范围", type: "milestone", deadline: addDaysYmd(monthStartDate, 2) }
+    ],
+    weeks_breakdown: [
+      { week_label: "第 1 周", focus: "打底与拆解", key_events: ["明确目标", "列出关键交付"] },
+      { week_label: "第 2 周", focus: "集中推进", key_events: ["深度工作块", "阶段验收"] },
+      { week_label: "第 3 周", focus: "收口与修正", key_events: ["补齐短板", "预演输出"] },
+      { week_label: "第 4 周", focus: "发布与复盘", key_events: ["交付", "复盘"] }
+    ],
+    stats: { focus_hours: 32, milestones_count: 1 },
+    original_input: String(input || "").slice(0, 800)
+  };
+}
+
+async function generateMonthPlan(payload) {
+  const startDate = normalizeDateString(payload.startDate, payload.currentDate);
+
+  const schema = {
+    type: "object",
+    properties: {
+      plan_start_date: { type: "string" },
+      theme: { type: "string" },
+      summary: { type: "string" },
+      strategies: { type: "object" },
+      key_milestones: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            type: { type: "string" },
+            deadline: { type: "string" }
+          },
+          required: ["title", "type", "deadline"]
+        }
+      },
+      weeks_breakdown: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            week_label: { type: "string" },
+            focus: { type: "string" },
+            key_events: { type: "array", items: { type: "string" } }
+          },
+          required: ["week_label", "focus"]
+        }
+      },
+      stats: { type: "object" }
+    },
+    required: ["plan_start_date", "theme", "summary", "weeks_breakdown"]
+  };
+
+  try {
+    const data = await invokeKimiText({
+      systemPrompt: [
+        "你是一名中文月度目标拆解与节奏规划助手。",
+        `当前规划月份起始日期（YYYY-MM-DD）是：${startDate}。`,
+        "输出必须是 JSON，不要输出解释。",
+        "weeks_breakdown 需要给出 4-6 周的节奏，每周包含 week_label、focus、key_events(0-6条)。",
+        "key_milestones 给出 1-6 个关键里程碑，包含 title/type/deadline(YYYY-MM-DD)。",
+        "stats 至少包含 focus_hours、milestones_count。",
+      ].join("\n"),
+      prompt: String(payload.input || "").trim(),
+      responseJsonSchema: schema,
+      model: payload.model,
+      temperature: payload.temperature
+    });
+
+    return normalizeMonthPlan(data, startDate, payload.existingPlan);
+  } catch (_error) {
+    return buildMonthFallbackPlan(payload.input, startDate, payload.existingPlan);
+  }
+}
+
+function moodLastNDays(days) {
+  const list = [];
+  const today = new Date();
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    list.push(toYmd(d));
+  }
+  return list;
+}
+
+function summarizeMoodData(notes, tasks, executions, period) {
+  const dates = moodLastNDays(period);
+  const startDate = new Date(dates[0]);
+  startDate.setHours(0, 0, 0, 0);
+
+  const byDate = {};
+  dates.forEach((d) => {
+    byDate[d] = { notes: [], tasks: [], executions: [] };
+  });
+
+  notes.forEach((n) => {
+    const d = toYmd(n.createdAt);
+    if (byDate[d]) byDate[d].notes.push(n);
+  });
+
+  tasks.forEach((t) => {
+    const d = toYmd(t.createdAt);
+    if (byDate[d]) byDate[d].tasks.push(t);
+  });
+
+  executions.forEach((e) => {
+    const d = toYmd(e.createdAt);
+    if (byDate[d]) byDate[d].executions.push(e);
+  });
+
+  return dates.map((d) => {
+    const day = byDate[d];
+    const noteSummaries = day.notes.slice(0, 2).map((n) => {
+      const text = String(n.plainText || n.content || "").slice(0, 50);
+      const type = n.sourceType || "心签";
+      return `${type}: ${text || "..."}`;
+    });
+    const taskSummaries = day.tasks.slice(0, 2).map((t) => {
+      const status = t.status === "DONE" ? "完成" : t.status === "TODO" ? "待办" : "进行中";
+      return `${status} ${t.title?.slice(0, 25) || ""}`;
+    });
+    const execSummaries = day.executions.slice(0, 1).map((e) => {
+      return `${e.executionStatus || "执行"} ${e.taskTitle?.slice(0, 25) || ""}`;
+    });
+    return `${d} 心签${day.notes.length} 约定${day.tasks.length} 执行${day.executions.length}\n${[
+      noteSummaries.join(" | "),
+      taskSummaries.join(" | "),
+      execSummaries.join(" | ")
+    ].filter(Boolean).join("\n")}`;
+  }).join("\n---\n");
+}
+
+function computeLocalMoodSeries(notes, tasks, executions, period) {
+  const positiveWords = /开心|高兴|满足|幸福|暖|安心|踏实|治愈|感动|希望|轻松|顺利|完成|达成|谢谢|感恩|喜欢|享受|平静|宁静/i;
+  const negativeWords = /难过|焦虑|烦|累|委屈|害怕|孤独|失落|压力|想哭|崩溃|怀疑|失眠|沮丧|愤怒|内耗|emo|挫败|不安|迷茫|无助/i;
+
+  const dates = moodLastNDays(period);
+  const series = dates.map((ymd) => {
+    let score = 5;
+    const dayNotes = notes.filter((n) => toYmd(n.createdAt) === ymd);
+    const dayTasksCreated = tasks.filter((t) => toYmd(t.createdAt) === ymd);
+    const dayTasksCompleted = tasks.filter((t) => t.completedAt && toYmd(t.completedAt) === ymd);
+    const dayOverdue = tasks.filter((t) => {
+      if (!t.endTime || t.status === "DONE" || t.status === "ARCHIVED") return false;
+      return toYmd(t.endTime) < ymd;
+    });
+    const dayExec = executions.filter((e) => toYmd(e.createdAt) === ymd);
+
+    score += dayNotes.length * 0.4;
+    score += dayTasksCreated.length * 0.25;
+    score += dayTasksCompleted.length * 0.9;
+    score += dayExec.length * 0.5;
+    score -= dayOverdue.length * 1.2;
+
+    dayNotes.forEach((n) => {
+      const text = `${n.plainText || n.content || ""} ${JSON.stringify(n.metadata || {})}`;
+      if (positiveWords.test(text)) score += 1.1;
+      if (negativeWords.test(text)) score -= 1.1;
+    });
+
+    score = Math.max(1, Math.min(10, score));
+    return { date: ymd, score: Number(score.toFixed(1)) };
+  });
+
+  // 如果整条线完全水平（所有分数相同），人为拉开 0.3 的微小起伏，
+  // 避免用户看到一条完全无信息的直线。
+  const scores = series.map((d) => d.score);
+  const allSame = scores.every((s) => s === scores[0]);
+  if (allSame && scores[0] === 5 && (notes.length || tasks.length || executions.length)) {
+    return series.map((d, i) => ({
+      ...d,
+      score: Number((5 + Math.sin((i / Math.max(1, series.length - 1)) * Math.PI) * 0.5).toFixed(1))
+    }));
+  }
+
+  return series;
+}
+
+function generateLocalInsight(series) {
+  if (!series.length) return "开始记录吧，心栈会陪你看见自己的流动。";
+  const avg = series.reduce((s, d) => s + d.score, 0) / series.length;
+  const latest = series[series.length - 1]?.score || avg;
+  const trend = latest - series[0].score;
+
+  let insight = "";
+  if (trend > 1.2) insight = "近期流动呈上升趋势，你的状态在回暖。";
+  else if (trend < -1.2) insight = "近期流动有些波动，给自己多一点耐心。";
+  else insight = "近期流动相对平稳，这是扎实前行的节奏。";
+
+  return insight;
+}
+
+async function generateMoodRiverWithAI(userId, period) {
+  const now = new Date();
+  const startDate = new Date(now);
+  startDate.setDate(now.getDate() - period + 1);
+  startDate.setHours(0, 0, 0, 0);
+
+  const [notes, tasks, executions] = await Promise.all([
+    prisma.note.findMany({
+      where: { userId, deletedAt: null, createdAt: { gte: startDate } },
+      orderBy: { createdAt: "desc" },
+      take: 60
+    }),
+    prisma.task.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        OR: [
+          { createdAt: { gte: startDate } },
+          { completedAt: { gte: startDate } },
+          { endTime: { gte: startDate } }
+        ]
+      },
+      orderBy: { createdAt: "desc" },
+      take: 60
+    }),
+    prisma.taskExecution.findMany({
+      where: { userId, createdAt: { gte: startDate } },
+      orderBy: { createdAt: "desc" },
+      take: 30
+    })
+  ]);
+
+  if (notes.length === 0 && tasks.length === 0 && executions.length === 0) {
+    const series = computeLocalMoodSeries(notes, tasks, executions, period);
+    return { series, insight: "开始记录吧，心栈会陪你看见自己的流动。", source: "local-empty" };
+  }
+
+  // 曲线由本地算法基于真实数据计算，保证稳定且有起伏
+  const localSeries = computeLocalMoodSeries(notes, tasks, executions, period);
+
+  // AI 只负责生成觉察提示，prompt 更短、响应更快
+  const summary = summarizeMoodData(notes, tasks, executions, period);
+  const insightSchema = {
+    type: "object",
+    properties: { insight: { type: "string" } },
+    required: ["insight"]
+  };
+  const insightPrompt = `基于用户最近 ${period} 天的心签、约定与执行数据，写 1-2 句温暖、具体的觉察提示。\n\n数据：\n${summary}\n\n要求：\n- 1-2 句话，温暖具体，引用数据中的亮点或需要关注的点。\n- 直接返回 JSON {"insight": "..."}。`;
+
+  try {
+    console.log(`[moodRiver] calling AI insight: user=${userId}, period=${period}, notes=${notes.length}, tasks=${tasks.length}, execs=${executions.length}, promptLen=${insightPrompt.length}`);
+    const insightResult = await withTimeout(
+      invokeKimiText({
+        prompt: insightPrompt,
+        systemPrompt: "你是 SoulSentry 心栈的 AI 伙伴，从用户数据中提炼一句温暖的觉察。只用 JSON 返回。",
+        responseJsonSchema: insightSchema,
+        model: "kimi-k2.6",
+        temperature: 0.7,
+        fetchTimeout: 35000
+      }),
+      35000
+    );
+    console.log(`[moodRiver] AI insight result:`, JSON.stringify(insightResult).slice(0, 400));
+
+    const insight = String(insightResult?.insight || "").trim() || generateLocalInsight(localSeries);
+    return { series: localSeries, insight, source: "ai" };
+  } catch (err) {
+    const msg = err?.message || String(err);
+    console.error(`[moodRiver] AI failed for user=${userId}:`, msg);
+
+    let source = "local-fallback";
+    if (msg.includes("KIMI_API_KEY") || msg.includes("MOONSHOT_API_KEY") || msg.includes("未配置")) {
+      source = "local-no-key";
+    } else if (msg.includes("TIMEOUT") || msg.includes("timeout")) {
+      source = "local-timeout";
+    } else if (msg.includes("JSON") || msg.includes("json")) {
+      source = "local-parse-error";
+    }
+
+    const insight = generateLocalInsight(localSeries);
+    const errorHint = msg.slice(0, 120);
+    return { series: localSeries, insight, source, errorHint };
+  }
+}
+
+functionsRouter.post("/:name", async (req, res) => {
+  const { name } = req.params;
+  const payload = req.body || {};
+
+  try {
+    if (name === "invokeKimi") {
+      if (Array.isArray(payload.file_urls) && payload.file_urls.length > 0) {
+        return res.status(501).json({
+          error: "FILE_INPUT_NOT_IMPLEMENTED",
+          message: "独立后端当前仅支持纯文本 Kimi 调用，文件上传与附件抽取尚未迁移"
+        });
+      }
+      if (!(await guardCredits(req, res, 1, "invoke_kimi"))) return;
+
+      const { data, usage } = await invokeKimiText({
+        prompt: payload.prompt,
+        systemPrompt: payload.system_prompt,
+        responseJsonSchema: payload.response_json_schema,
+        model: payload.model,
+        temperature: payload.temperature,
+        withUsage: true
+      });
+
+      // 按实际 token 用量结算：1 点 / 1000 token（缓存命中的输入不计费），最少 1 点
+      const { cost, billableTokens } = usageCost(usage);
+      await settleCredits(req, cost, "invoke_kimi", `AI 调用（${Math.round(billableTokens)} tokens）`);
+
+      return res.json(data);
+    }
+
+    if (name === "kimiWebBrowse") {
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.kimi_web_browse, "kimi_web_browse"))) return;
+      const data = await invokeKimiWebSearch({
+        query: payload.query,
+        language: payload.language
+      });
+
+      await settleCredits(req, AI_CALL_COSTS.kimi_web_browse, "kimi_web_browse", "联网搜索");
+
+      return res.json(data);
+    }
+
+    if (name === "analyzeIntent") {
+      try {
+        if (!(await guardCredits(req, res, AI_CALL_COSTS.analyze_intent, "analyze_intent"))) return;
+        const data = await analyzeIntentWithKimi({
+          input: payload.input,
+          date: payload.date,
+          existingPlan: payload.existingPlan
+        });
+        await settleCredits(req, AI_CALL_COSTS.analyze_intent, "analyze_intent", "意图分析");
+        return res.json(data);
+      } catch (error) {
+        const message = error?.message || String(error);
+        if (message.includes("KIMI_API_KEY") || message.includes("MOONSHOT_API_KEY") || message.includes("未配置")) {
+          return res.json({
+            steps: [{ key: "fallback", text: "AI 服务未配置，已使用基础兜底分析", icon: "🛡️" }],
+            resolved_date: payload.date || toYmd(new Date()),
+            timeline: [
+              { time: "09:00", date: payload.date || toYmd(new Date()), title: "开始处理", description: String(payload.input || "").slice(0, 40) }
+            ],
+            devices: {
+              phone: { name: "手机", strategies: [] },
+              watch: { name: "手表", strategies: [] },
+              glasses: { name: "眼镜", strategies: [] },
+              car: { name: "汽车", strategies: [] },
+              home: { name: "家居", strategies: [] },
+              pc: { name: "工作站", strategies: [] }
+            },
+            automations: [],
+            parsed: { times: [], intents: [String(payload.input || "").slice(0, 60)], locations: [] }
+          });
+        }
+        throw error;
+      }
+    }
+
+    if (name === "analyzeImage") {
+      const fileUrl = String(payload.file_url || "").trim();
+      if (!fileUrl) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 file_url" });
+      }
+
+      try {
+        if (!(await guardCredits(req, res, AI_CALL_COSTS.analyze_image, "analyze_image"))) return;
+        const data = await analyzeImage({ fileUrl });
+        await settleCredits(req, AI_CALL_COSTS.analyze_image, "analyze_image", "图片识别");
+        return res.json(data);
+      } catch (error) {
+        const status = error?.status || 502;
+        const message = error?.message || String(error);
+        if (status === 400 || status === 422) {
+          return res.status(status).json({ error: "INVALID_IMAGE", message });
+        }
+        console.error("[analyzeImage] failed", error);
+        return res.status(status >= 500 ? status : 502).json({ error: "AI_SERVICE_ERROR", message: `图片识别失败：${message}` });
+      }
+    }
+
+    if (name === "parseVoiceTask" || name === "parseTaskInput") {
+      if (!payload.input || !String(payload.input).trim()) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少输入内容" });
+      }
+
+      try {
+        if (!(await guardCredits(req, res, AI_CALL_COSTS.task_parse, "task_parse"))) return;
+        const currentCoords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
+          ? { latitude: payload.latitude, longitude: payload.longitude }
+          : null;
+        const savedLocations = await prisma.savedLocation.findMany({
+          where: { userId: req.user.id, isActive: true }
+        });
+        const habitProfileText = await getUserHabitProfile(req.user.id, prisma);
+        const data = await parseTaskInput({
+          input: String(payload.input).trim(),
+          date: payload.date || toYmd(new Date()),
+          savedLocations,
+          currentCoords,
+          habitProfileText
+        });
+        await settleCredits(req, AI_CALL_COSTS.task_parse, "task_parse", "约定智能解析");
+        return res.json(data);
+      } catch (error) {
+        const message = error?.message || String(error);
+        if (message.includes("KIMI_API_KEY") || message.includes("MOONSHOT_API_KEY") || message.includes("未配置")) {
+          return res.status(503).json({ error: "AI_SERVICE_NOT_CONFIGURED", message: "AI 服务尚未配置" });
+        }
+        return res.status(502).json({ error: "AI_SERVICE_ERROR", message: `AI 解析失败：${message}` });
+      }
+    }
+
+    if (name === "delegateTaskAutomation") {
+      const taskId = String(payload.task_id || "").trim();
+      if (!taskId) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 task_id" });
+      }
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, userId: req.user.id }
+      });
+      if (!task) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "约定不存在" });
+      }
+      const result = await delegateAutoExecute(task, req.user.id, prisma);
+      return res.json(result);
+    }
+
+    if (name === "callAI") {
+      try {
+        // 预检余额：不足直接 402，不白嫖 AI 调用
+        if ((req.user.aiCredits ?? 0) < 1) {
+          return res.status(402).json({
+            error: "INSUFFICIENT_CREDITS",
+            message: "AI 点数不足，请先充值",
+            balance: req.user.aiCredits ?? 0,
+            required: 1
+          });
+        }
+
+        const { data, usage } = await invokeKimiText({
+          prompt: payload.prompt,
+          systemPrompt: payload.system_prompt,
+          responseJsonSchema: payload.response_json_schema,
+          model: payload.model,
+          temperature: payload.temperature,
+          maxTokens: 2500,
+          withUsage: true
+        });
+
+        // 按实际 token 用量扣费：1 点 / 1000 token（缓存命中的输入不计费），最少 1 点
+        const u = usage || {};
+        const billableTokens = Math.max(
+          0,
+          (Number(u.prompt_tokens) || 0) + (Number(u.completion_tokens) || 0) - (Number(u.prompt_cache_hit_tokens) || 0)
+        );
+        const cost = Math.max(1, Math.ceil(billableTokens / 1000));
+        let balance = req.user.aiCredits;
+        try {
+          const charge = await chargeAICredits({
+            userId: req.user.id,
+            cost,
+            feature: "ai_call",
+            description: `AI 对话（${Math.round(billableTokens)} tokens）`
+          });
+          balance = charge.balance;
+        } catch (chargeErr) {
+          // AI 已调用成功但扣费失败（如并发余额变动）：不阻断用户，仅记录
+          console.error("[callAI] charge failed after successful AI call:", chargeErr?.message || chargeErr);
+        }
+
+        return res.json({
+          data,
+          balance
+        });
+      } catch (error) {
+        const message = error?.message || String(error);
+        if (error?.code === "INSUFFICIENT_CREDITS") {
+          return res.status(402).json({
+            error: "INSUFFICIENT_CREDITS",
+            message: "AI 点数不足，请先充值",
+            balance: error.balance ?? 0,
+            required: error.required ?? 1
+          });
+        }
+        if (message.includes("KIMI_API_KEY") || message.includes("MOONSHOT_API_KEY") || message.includes("未配置")) {
+          return res.status(503).json({
+            error: "AI_SERVICE_NOT_CONFIGURED",
+            message: "AI 服务尚未配置（缺少 KIMI_API_KEY / MOONSHOT_API_KEY），请联系管理员配置后重试。"
+          });
+        }
+        return res.status(502).json({
+          error: "AI_SERVICE_ERROR",
+          message: `AI 服务调用失败：${message}`
+        });
+      }
+    }
+
+    if (name === "kimiMemoryInsight") {
+      const schema = {
+        type: "object",
+        properties: {
+          insight: { type: "string", description: "1-2句话的记忆洞察，自然亲切、具体有针对性" }
+        },
+        required: ["insight"]
+      };
+
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.memory_insight, "memory_insight"))) return;
+      const data = await invokeKimiText({
+        prompt: payload.prompt,
+        systemPrompt: "你是一个中文记忆洞察助手。请基于用户提供的约定内容和行为数据，生成一条自然、有针对性的简短洞察。必须直接返回 JSON 对象，不要输出 markdown、代码块或任何解释文字。",
+        responseJsonSchema: schema,
+        temperature: 0.5
+      });
+
+      await settleCredits(req, AI_CALL_COSTS.memory_insight, "memory_insight", "记忆洞察");
+      return res.json(data);
+    }
+
+    if (name === "getVapidPublicKey") {
+      return res.json({
+        publicKey: env.VAPID_PUBLIC_KEY || null
+      });
+    }
+
+    if (name === "sendTestPush") {
+      const result = await sendTestPush(req.user.id);
+      if (!result.ok) {
+        return res.status(400).json({ error: result.error, message: result.error });
+      }
+      return res.json({ ok: true });
+    }
+
+    if (name === "generateDailyBriefing") {
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.daily_briefing, "daily_briefing"))) return;
+      const data = await generateDailyBriefingForUser(req.user);
+      await settleCredits(req, AI_CALL_COSTS.daily_briefing, "daily_briefing", "每日智能简报");
+      return res.json(data);
+    }
+
+    if (name === "moodRiver") {
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.mood_river, "mood_river"))) return;
+      const period = Number(payload.period) === 30 ? 30 : 14;
+      const result = await generateMoodRiverWithAI(req.user.id, period);
+      await settleCredits(req, AI_CALL_COSTS.mood_river, "mood_river", "心流情绪洞察");
+      return res.json(result);
+    }
+
+    if (name === "generateWeekPlan") {
+      if (!payload.input || !String(payload.input).trim()) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少周计划输入内容" });
+      }
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.week_plan, "week_plan"))) return;
+      const data = await generateWeekPlan(payload);
+      await settleCredits(req, AI_CALL_COSTS.week_plan, "week_plan", "周计划生成");
+      return res.json(data);
+    }
+
+    if (name === "generateMonthPlan") {
+      if (!payload.input || !String(payload.input).trim()) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少月计划输入内容" });
+      }
+      if (!(await guardCredits(req, res, AI_CALL_COSTS.month_plan, "month_plan"))) return;
+      const data = await generateMonthPlan(payload);
+      await settleCredits(req, AI_CALL_COSTS.month_plan, "month_plan", "月计划生成");
+      return res.json(data);
+    }
+
+    if (name === "savePushSubscription") {
+      const existingPreferences = await prisma.userPreference.findUnique({
+        where: { userId: req.user.id }
+      });
+
+      const previousExtraFields = getPreferenceExtraFields(existingPreferences);
+      const nextExtraFields = {
+        ...previousExtraFields,
+        push_subscription: payload.subscription || null,
+        push_user_agent: payload.user_agent || previousExtraFields.push_user_agent || null,
+        push_enabled: Boolean(payload.subscription)
+      };
+
+      const nextMetadata = {
+        ...(isPlainObject(existingPreferences?.metadata) ? existingPreferences.metadata : {}),
+        _extraFields: nextExtraFields
+      };
+
+      const preference = await prisma.userPreference.upsert({
+        where: { userId: req.user.id },
+        update: {
+          pushNotifications: payload.subscription ? true : false,
+          metadata: nextMetadata
+        },
+        create: {
+          userId: req.user.id,
+          locale: "zh-CN",
+          timezone: "Asia/Shanghai",
+          pushNotifications: payload.subscription ? true : false,
+          metadata: nextMetadata
+        }
+      });
+
+      return res.json({
+        ok: true,
+        subscribed: Boolean(payload.subscription),
+        preference_id: preference.id
+      });
+    }
+
+    if (name === "suggestGeofenceParams") {
+      const preset = getGeofencePreset(payload.location_type);
+      return res.json({
+        radius: payload.radius || preset.radius,
+        quiet_minutes: payload.quiet_minutes || preset.quiet_minutes,
+        latitude: typeof payload.latitude === "number" ? payload.latitude : undefined,
+        longitude: typeof payload.longitude === "number" ? payload.longitude : undefined,
+        resolved_address: payload.address || payload.name || "",
+        source: "standalone-heuristic"
+      });
+    }
+
+    if (name === "geofenceTrigger") {
+      const curCoords = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      if (!curCoords) return res.json({ reminders: [] });
+      const tasks = await prisma.task.findMany({
+        where: {
+          userId: req.user.id,
+          deletedAt: null
+        }
+      });
+
+      const reminders = tasks
+        .map((task) => {
+          const locationReminder = getTaskLocationReminder(task);
+          if (!locationReminder?.enabled) return null;
+          const rCoords = normalizeToGcj02(locationReminder.latitude, locationReminder.longitude, locationReminder.coord_type);
+          if (!rCoords) return null;
+
+          const distance = haversineMeters(curCoords, rCoords);
+
+          const radius = Number(locationReminder.radius || 200);
+          if (distance > radius) return null;
+
+          return {
+            task_id: task.id,
+            title: task.title,
+            distance: Math.round(distance),
+            location_name: locationReminder.location_name || "目标地点",
+            trigger_on: locationReminder.trigger_on || "enter"
+          };
+        })
+        .filter(Boolean);
+
+      return res.json({ reminders });
+    }
+
+    if (name === "nearbyTaskMatcher") {
+      const curCoords = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      if (!curCoords) return res.json({ matched: false, matches: [], card: null });
+      const tasks = await prisma.task.findMany({
+        where: {
+          userId: req.user.id,
+          deletedAt: null
+        }
+      });
+
+      const matches = tasks
+        .map((task) => {
+          const locationReminder = getTaskLocationReminder(task);
+          if (!locationReminder?.enabled) return null;
+          const rCoords = normalizeToGcj02(locationReminder.latitude, locationReminder.longitude, locationReminder.coord_type);
+          if (!rCoords) return null;
+
+          const distance = haversineMeters(curCoords, rCoords);
+
+          const radius = Number(locationReminder.radius || 200);
+          if (distance > Math.max(radius, 400)) return null;
+
+          return {
+            task_id: task.id,
+            title: task.title,
+            distance: Math.round(distance),
+            location_name: locationReminder.location_name || "附近地点",
+            priority: task.priority
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, 5);
+
+      return res.json({
+        matched: matches.length > 0,
+        matches,
+        card: matches[0] || null
+      });
+    }
+
+    if (name === "sentinelGeofenceTrigger") {
+      // 坐标归一化：web（wgs84）与小程序（gcj02）上报统一转成 GCJ-02 后判定，消除坐标系偏差
+      const coords = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      const prevCoords = normalizeToGcj02(payload.prev_latitude, payload.prev_longitude, payload.coord_type);
+      if (!coords) return res.json({ results: [] });
+
+      const locations = await prisma.savedLocation.findMany({
+        where: {
+          userId: req.user.id,
+          isActive: true
+        }
+      });
+
+      const tasks = await prisma.task.findMany({
+        where: {
+          userId: req.user.id,
+          deletedAt: null
+        }
+      });
+
+      // 偏好开关：显式关闭位置提醒（locationReminders === false）时只返回判定结果、不推送
+      const prefsRow = await prisma.userPreference.findUnique({ where: { userId: req.user.id } });
+      const remindersEnabled = prefsRow?.locationReminders !== false;
+      const geoExtra = (prefsRow?.metadata && typeof prefsRow.metadata === "object" && prefsRow.metadata._extraFields) || {};
+      const geoInside = { ...(geoExtra.geo_inside || {}) };
+      const nowMs = Date.now();
+
+      // 本次上报的运动学数据：客户端算好的速度 + 与服务端上次上报点的跨采样推断
+      const speedKmh = typeof payload.speed_kmh === "number" ? payload.speed_kmh : null;
+      const dwellConfirmed = payload.dwell_confirmed === true;
+      const lastReport = geoExtra.geo_last_report;
+      let elapsedS = null;
+      let displacementM = null;
+      if (lastReport && typeof lastReport.lat === "number" && typeof lastReport.lon === "number" && lastReport.at) {
+        const lastAt = new Date(lastReport.at).getTime();
+        if (!isNaN(lastAt)) {
+          elapsedS = (nowMs - lastAt) / 1000;
+          displacementM = haversineMeters(coords, { latitude: lastReport.lat, longitude: lastReport.lon });
+        }
+      }
+
+      // 全局停留判定：速度/跨采样/客户端确认三选一；语义观察与常驻点学习共用
+      const dwellingNow = dwellConfirmed
+        || (speedKmh !== null && speedKmh < 5 && (elapsedS ?? 0) >= 90)
+        || ((displacementM ?? Infinity) < 50 && (elapsedS ?? 0) >= 90);
+
+      const results = [];
+
+      // dwell 确认后用于到达 Top3 提醒的地点（记录最近一个）
+      let hitLocation = null;
+      let hitDistance = Infinity;
+      let hitDwellOk = false;
+
+      // 通勤触发队列：exit 事件处判定，待 userWithPrefs 就绪后统一走推送/冷却
+      const commuteQueue = [];
+
+      // ========== 1) SavedLocation 维度：进出状态机 + 停留确认 ==========
+      for (const location of locations) {
+        const locCoords = normalizeToGcj02(location.latitude, location.longitude, location.coordType)
+          || { latitude: location.latitude, longitude: location.longitude };
+        const distance = haversineMeters(coords, locCoords);
+        const insideNow = distance <= location.radius;
+        const prevInside = geoInside[location.id] === "1";
+        if (insideNow) geoInside[location.id] = "1";
+        else if (prevInside) geoInside[location.id] = "0";
+
+        if (!insideNow) {
+          if (prevInside) {
+            // exit 事件：补上此前从不写入的离开时间（供守护面板「离开」展示）
+            await prisma.savedLocation.update({ where: { id: location.id }, data: { lastExitedAt: new Date() } }).catch(() => {});
+            // 通勤观察触发判定：退出锚点 + 朝向另一端 + 通勤时段（结果先入队，推送走主链路冷却）
+            try {
+              const { evaluateCommuteWatches } = await import("../services/semanticPlace.js");
+              for (const fire of evaluateCommuteWatches({
+                prefsExtra: geoExtra,
+                exitedLocation: location,
+                prevCoords,
+                coords,
+                locations,
+                nowMs
+              })) {
+                commuteQueue.push({ ...fire, location_id: location.id, location_name: location.name });
+              }
+            } catch (e) {
+              console.warn("[sentinelGeofenceTrigger] commute evaluate failed:", e?.message || e);
+            }
+          }
+          continue;
+        }
+
+        // 三重确认之停留确认：dwell 未确认时该地点只作候选提示，不推送
+        const dwellOk = judgeDwell({ speedKmh, dwellConfirmed, insidePrev: prevInside, displacementM, elapsedS });
+        const way = judgeOnTheWay(prevCoords, coords, locCoords);
+        const linkedTask = tasks.find((task) => {
+          const locationReminder = getTaskLocationReminder(task);
+          if (!locationReminder?.enabled) return false;
+          if (locationReminder.location_name && locationReminder.location_name === location.name) return true;
+          const rCoords = normalizeToGcj02(locationReminder.latitude, locationReminder.longitude, locationReminder.coord_type);
+          return !!rCoords && haversineMeters(locCoords, rCoords) <= Math.max(Number(locationReminder.radius || 200), location.radius);
+        });
+
+        if (linkedTask) {
+          results.push({
+            event: dwellOk ? "enter" : "enter_candidate",
+            level: "standard",
+            location_name: location.name,
+            task_id: linkedTask.id,
+            task_title: linkedTask.title,
+            context_summary: dwellOk
+              ? `${linkedTask.title} 已进入 ${location.name} 附近可提醒范围`
+              : `正在确认你是否停留在 ${location.name}（路过不打扰）`,
+            distance: Math.round(distance),
+            on_the_way: way.onTheWay !== false,
+            dwell_confirmed: dwellOk
+          });
+        }
+
+        if (distance < hitDistance) {
+          hitLocation = location;
+          hitDistance = distance;
+          hitDwellOk = dwellOk;
+        }
+      }
+
+      try {
+        const { maybeSendOnTheWayReminder, maybeSendArrivalReminder, maybeSendExitReminder, rankTopTasksForLocation, maybeSendPoiReminder, geoGuardCheck, patchGeoPreference } = await import("../services/contextReminder.js");
+        const userWithPrefs = await prisma.user.findUnique({
+          where: { id: req.user.id },
+          include: { preferences: true }
+        });
+
+        // ========== 1.5) 通勤观察兑现：结果卡片 + 推送（4h 冷却 + 7 天静默沿用主链路） ==========
+        for (const fire of commuteQueue) {
+          const hit = {
+            event: "commute",
+            level: "standard",
+            location_name: fire.location_name,
+            watch_id: fire.watch.id,
+            task_id: fire.task_id,
+            task_title: null,
+            context_summary: fire.message,
+            on_the_way: true
+          };
+          results.push(hit);
+
+          if (!remindersEnabled || !userWithPrefs) continue;
+          const locKey = `commute:${fire.location_id}`;
+          if (geoGuardCheck(geoExtra, locKey)) { hit.push_status = "cooldown"; continue; }
+          let sent = { pushed: false, skippedReason: "no_task" };
+          if (fire.task_id) {
+            const task = tasks.find((t) => t.id === fire.task_id);
+            if (task) {
+              sent = await maybeSendOnTheWayReminder(userWithPrefs, task, {
+                location_name: fire.counterpart_name || fire.location_name,
+                trigger_on: "passby"
+              }, { onTheWay: true, ahead: true });
+            }
+          }
+          hit.push_status = sent.pushed ? "pushed" : (sent.skippedReason || "skipped");
+          if (sent.pushed || sent.inAppFallback) {
+            await patchGeoPreference(req.user.id, {
+              geo_cooldowns: { ...(geoExtra.geo_cooldowns || {}), [locKey]: new Date(nowMs + 4 * 3600 * 1000).toISOString() }
+            });
+          }
+        }
+
+        // ========== 2) 任务级地点围栏：三种时机（目的地/路过/离开）+ 复合条件 + 防骚扰 ==========
+        for (const task of tasks) {
+          if (task.status === "DONE" || task.status === "ARCHIVED") continue;
+          const reminder = getTaskLocationReminder(task);
+          if (!reminder?.enabled) continue;
+          if (typeof reminder.latitude !== "number" || typeof reminder.longitude !== "number") continue;
+          const rCoords = normalizeToGcj02(reminder.latitude, reminder.longitude, reminder.coord_type);
+          if (!rCoords) continue;
+
+          const distance = haversineMeters(coords, rCoords);
+          const radius = Number(reminder.radius || 300);
+          const triggerOn = reminder.trigger_on || "enter";
+          const locKey = `task:${task.id}`;
+          const insideKey = `t:${task.id}`;
+          const prevInside = geoInside[insideKey] === "1";
+          const insideNow = distance <= radius;
+          if (insideNow !== prevInside) geoInside[insideKey] = insideNow ? "1" : "0";
+          const way = judgeOnTheWay(prevCoords, coords, rCoords);
+
+          // 触发时机决策
+          let action = null;
+          if (triggerOn === "exit") {
+            // 离开型：出圈 + 行进方向背离（朝它走却出圈 = 边缘抖动，不算离开）
+            if (!insideNow && prevInside && way.onTheWay !== true) action = "exit";
+          } else if (triggerOn === "passby") {
+            // 路过型：判定圈外扩 150m（约一个路口）+ 方向朝向，不要求停留
+            if (distance <= radius + 150 && way.onTheWay !== false) action = "passby";
+          } else {
+            // 目的地型（enter）：停留确认后才开口，宁漏不错
+            if (insideNow && judgeDwell({ speedKmh, dwellConfirmed, insidePrev: prevInside, displacementM, elapsedS })) {
+              action = "arrival";
+            }
+            // both：enter 之外叠加 exit 语义
+            if (!action && triggerOn === "both" && !insideNow && prevInside && way.onTheWay !== true) action = "exit";
+          }
+          if (!action) {
+            // 目的地型未确认停留：回传候选信号，驱动客户端切高频采样做 dwell 确认（宁漏不错，先不打扰）
+            if (insideNow && (triggerOn === "enter" || triggerOn === "both")) {
+              results.push({
+                event: "enter_candidate",
+                level: "ambient",
+                location_name: reminder.location_name || "目标地点",
+                task_id: task.id,
+                task_title: task.title,
+                context_summary: `正在确认你是否停留在 ${reminder.location_name || "目标地点"}（路过不打扰）`,
+                distance: Math.round(distance),
+                dwell_confirmed: false
+              });
+            }
+            continue;
+          }
+
+          // 防骚扰（地点级 4h 冷却 + 7 天静默）与复合条件（time_gate）
+          const blocked = geoGuardCheck(geoExtra, locKey);
+          const gateOk = timeGateAllows(reminder.time_gate);
+
+          results.push({
+            event: action,
+            level: "standard",
+            location_name: reminder.location_name || "目标地点",
+            task_id: task.id,
+            task_title: task.title,
+            context_summary: action === "exit"
+              ? `你正离开「${reminder.location_name || "目标地点"}」附近，路上可处理「${task.title}」`
+              : action === "passby"
+                ? `等下会路过「${reminder.location_name || "目标地点"}」，可顺路处理「${task.title}」`
+                : `你${way.onTheWay ? "正路过" : "在"}「${reminder.location_name || "目标地点"}」附近，可顺手处理「${task.title}」`,
+            distance: Math.round(distance),
+            on_the_way: way.onTheWay !== false,
+            push_status: !gateOk ? "time_gate_blocked" : (blocked || undefined)
+          });
+
+          if (!remindersEnabled || !userWithPrefs || blocked || !gateOk) continue;
+
+          let sent = { pushed: false, skippedReason: "not_attempted" };
+          if (action === "exit") {
+            sent = await maybeSendExitReminder(userWithPrefs, task, reminder);
+          } else {
+            sent = await maybeSendOnTheWayReminder(userWithPrefs, task, reminder, {
+              distanceM: distance,
+              onTheWay: way.onTheWay === true,
+              ahead: action === "passby",
+              arrived: action === "arrival"
+            });
+          }
+          const hit = results.find((r) => r.task_id === task.id && r.event === action);
+          if (hit) hit.push_status = sent.pushed ? "pushed" : (sent.skippedReason || "skipped");
+
+          // 推送成功（含应用内兜底）：记地点级 4 小时冷却，同类地点不重复轰炸
+          if (sent.pushed || sent.inAppFallback) {
+            await patchGeoPreference(req.user.id, {
+              geo_cooldowns: { ...(geoExtra.geo_cooldowns || {}), [locKey]: new Date(nowMs + 4 * 3600 * 1000).toISOString() }
+            });
+          }
+        }
+
+        // ========== 3) SavedLocation 到达 Top3：dwell 确认后才开口（防路过误触） ==========
+        if (hitLocation && hitDwellOk && remindersEnabled && userWithPrefs) {
+          const topTasks = await rankTopTasksForLocation(req.user.id, hitLocation, 3);
+          const arrival = await maybeSendArrivalReminder(userWithPrefs, hitLocation, topTasks, lastReport?.at || null);
+          if (arrival.topTasks?.length) {
+            const hitWay = judgeOnTheWay(prevCoords, coords,
+              normalizeToGcj02(hitLocation.latitude, hitLocation.longitude, hitLocation.coordType) || hitLocation);
+            const hitResult = results.find((r) => r.location_name === hitLocation.name) || results[0];
+            if (hitResult) {
+              hitResult.top_tasks = arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }));
+              hitResult.on_the_way = hitWay.onTheWay !== false;
+            } else {
+              results.push({
+                event: "enter",
+                level: "standard",
+                location_name: hitLocation.name,
+                task_id: topTasks[0].id,
+                task_title: topTasks[0].title,
+                context_summary: `到了${hitLocation.name}，有 ${topTasks.length} 件事最值得现在处理`,
+                distance: Math.round(hitDistance),
+                on_the_way: hitWay.onTheWay !== false,
+                top_tasks: arrival.topTasks.map((t) => ({ task_id: t.id, title: t.title, priority: t.priority }))
+              });
+            }
+            // 命中点名称作为 POI 文本泛化检查：地点叫"超市/快递柜"等时触发对应顺路场景提醒
+            void maybeSendPoiReminder(userWithPrefs, { poiName: hitLocation.name, poiType: hitLocation.locationType || "" }).catch(() => {});
+            // 到家时近似"家附近快递柜"场景：顺带检查取快递类约定
+            if (arrival.pushed && hitLocation.locationType === "home") {
+              void maybeSendPoiReminder(userWithPrefs, { poiName: "快递柜", poiType: "parcel_locker" }).catch(() => {});
+            }
+          }
+        }
+
+        // ========== 4) 语义地点学习：到场停留确认后问一次「这是你要守护的地点吗」 ==========
+        try {
+          const { evaluateSemanticWatches } = await import("../services/semanticPlace.js");
+          const fires = await evaluateSemanticWatches({
+            userId: req.user.id,
+            coords,
+            locations,
+            prefsExtra: geoExtra,
+            dwellingNow
+          });
+          for (const f of fires) {
+            results.push({
+              event: "semantic_confirm",
+              level: "standard",
+              location_name: f.location_name,
+              watch_id: f.watch.id,
+              location_id: f.location_id,
+              new_place: f.new_place,
+              task_id: f.watch.task_ids?.[0] || null,
+              context_summary: f.message
+            });
+          }
+        } catch (e) {
+          console.warn("[sentinelGeofenceTrigger] semantic watches failed:", e?.message || e);
+        }
+
+        // ========== 5) 常驻点学习：停留会话记录（开放会话维护，失败不影响主链路） ==========
+        try {
+          const { recordDwellReport } = await import("../services/homeLearn.js");
+          await recordDwellReport(req.user.id, coords, { dwellingNow, prefsExtra: geoExtra });
+        } catch (e) {
+          console.warn("[sentinelGeofenceTrigger] dwell record failed:", e?.message || e);
+        }
+
+        // 持久化：进出状态机 + 本次上报点（GCJ-02，供跨采样 dwell 推断）
+        await patchGeoPreference(req.user.id, {
+          geo_inside: geoInside,
+          geo_last_report: { lat: coords.latitude, lon: coords.longitude, at: new Date(nowMs).toISOString() }
+        });
+      } catch (err) {
+        console.warn("[sentinelGeofenceTrigger] failed:", err?.message || err);
+      }
+
+      return res.json({ results });
+    }
+
+    // 地理守护操作回写：「不了」= 该地点 7 天静默；「此地此事项不匹配」额外记录降权凭据
+    if (name === "sentinelGeoAction") {
+      const { patchGeoPreference } = await import("../services/contextReminder.js");
+      const action = String(payload.action || "");
+      const locKey = String(payload.loc_key || "").slice(0, 120);
+      if (!locKey || !["silence", "mismatch"].includes(action)) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 silence/mismatch 且提供 loc_key" });
+      }
+      const prefsRow = await prisma.userPreference.findUnique({ where: { userId: req.user.id } });
+      const extra = (prefsRow?.metadata && typeof prefsRow.metadata === "object" && prefsRow.metadata._extraFields) || {};
+      const silences = { ...(extra.geo_silences || {}), [locKey]: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString() };
+      const patch = { geo_silences: silences };
+      if (action === "mismatch" && payload.task_id) {
+        const mismatches = { ...(extra.geo_mismatches || {}) };
+        const list = Array.isArray(mismatches[locKey]) ? [...mismatches[locKey]] : [];
+        if (!list.includes(String(payload.task_id))) list.push(String(payload.task_id));
+        mismatches[locKey] = list;
+        patch.geo_mismatches = mismatches;
+      }
+      await patchGeoPreference(req.user.id, patch);
+      return res.json({ ok: true, action, loc_key: locKey });
+    }
+
+    // 语义地点解析：「家附近的超市」「到阿哲家附近」→ 已存地点落点 / 候选清单 / 登记观察
+    if (name === "sentinelSemanticPlace") {
+      const { parseSemanticText, resolveSemanticPlace, upsertSemanticWatch } = await import("../services/semanticPlace.js");
+      const text = String(payload.text || "").trim().slice(0, 80);
+      if (!text) return res.status(400).json({ error: "INVALID_INPUT", message: "text 不能为空" });
+      const locations = await prisma.savedLocation.findMany({ where: { userId: req.user.id, isActive: true } });
+      const current = normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type);
+      const parsed = parseSemanticText(text);
+      const resolution = resolveSemanticPlace({ parsed, locations, currentCoords: current });
+      // 落不了点 → 登记「语义观察」：到场停留后问用户确认（首次触发即确认学习）
+      let watch = null;
+      if (resolution.status === "watch") {
+        watch = await upsertSemanticWatch(req.user.id, { raw: text, task_id: payload.task_id ? String(payload.task_id) : null, parsed });
+      }
+      return res.json({ ...resolution, semantic: parsed, watch });
+    }
+
+    // 语义地点动作：confirm=兑现到已存地点 / new_place=当场新记地点 / ignore=不是（忽略两次降权）/ remove=移除观察
+    if (name === "sentinelSemanticAction") {
+      const semantic = await import("../services/semanticPlace.js");
+      const action = String(payload.action || "");
+      const watchId = String(payload.watch_id || "");
+      if (!watchId) return res.status(400).json({ error: "INVALID_INPUT", message: "watch_id 不能为空" });
+      const watch = await semantic.getWatch(req.user.id, watchId);
+      if (!watch) return res.status(404).json({ error: "NOT_FOUND", message: "观察不存在或已清理" });
+
+      if (action === "confirm") {
+        const location = await prisma.savedLocation.findFirst({ where: { id: String(payload.location_id || ""), userId: req.user.id } });
+        if (!location) return res.status(404).json({ error: "NOT_FOUND", message: "地点不存在" });
+        const result = await semantic.confirmWatch({ userId: req.user.id, watch, place: { ...location, location_id: location.id } });
+        return res.json({ ok: true, ...result });
+      }
+      if (action === "new_place") {
+        const lat = Number(payload.latitude);
+        const lon = Number(payload.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return res.status(400).json({ error: "INVALID_INPUT", message: "坐标无效" });
+        const created = await prisma.savedLocation.create({
+          data: {
+            userId: req.user.id,
+            name: String(payload.name || watch.poi_text || watch.raw).slice(0, 30),
+            locationType: watch.category && watch.category !== "other" ? watch.category : "other",
+            latitude: lat,
+            longitude: lon,
+            coordType: payload.coord_type === "gcj02" ? "gcj02" : "wgs84",
+            radius: 200,
+            icon: "📍",
+            isActive: true,
+            address: watch.anchor_text ? `${watch.anchor_text}附近` : null
+          }
+        });
+        const result = await semantic.confirmWatch({ userId: req.user.id, watch, place: { ...created, location_id: created.id } });
+        return res.json({ ok: true, location_id: created.id, ...result });
+      }
+      if (action === "ignore") {
+        const result = await semantic.ignoreWatch(req.user.id, watch);
+        return res.json({ ok: true, ...result });
+      }
+      if (action === "remove") {
+        await semantic.removeWatch(req.user.id, watch);
+        return res.json({ ok: true });
+      }
+      return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 confirm/new_place/ignore/remove" });
+    }
+
+    // 常驻点学习：status=候选列表 / confirm=确认入库(设家·公司·常去) / ignore=忽略不再问 / history=停留记录 / clear_history=清空
+    if (name === "sentinelDwellLearn") {
+      const learn = await import("../services/homeLearn.js");
+      const action = String(payload.action || "status");
+      const prefsRow = await prisma.userPreference.findUnique({ where: { userId: req.user.id } });
+      const extra = (prefsRow?.metadata && typeof prefsRow.metadata === "object" && prefsRow.metadata._extraFields) || {};
+
+      if (action === "status") {
+        return res.json(await learn.analyzeDwellPatterns(req.user.id, extra));
+      }
+      if (action === "confirm" || action === "ignore") {
+        const candidate = payload.candidate;
+        if (!candidate || typeof candidate.latitude !== "number" || typeof candidate.longitude !== "number" || !candidate.key) {
+          return res.status(400).json({ error: "INVALID_INPUT", message: "candidate 无效" });
+        }
+        // 服务端重新计算候选并按键匹配：客户端只回传选择，坐标以服务端分析为准
+        const fresh = await learn.analyzeDwellPatterns(req.user.id, extra);
+        const match = fresh.candidates.find((c) => c.key === String(candidate.key));
+        if (!match) {
+          return res.status(404).json({ error: "NOT_FOUND", message: "候选已失效（可能已确认过或数据不足）" });
+        }
+        const result = action === "confirm"
+          ? await learn.confirmCandidate(req.user.id, { ...match, custom_name: payload.custom_name })
+          : await learn.ignoreCandidate(req.user.id, match);
+        return res.json({ ok: true, ...result });
+      }
+      if (action === "history") {
+        return res.json({ sessions: await learn.listDwellHistory(req.user.id, payload.limit) });
+      }
+      if (action === "delete_session") {
+        if (!payload.session_id) return res.status(400).json({ error: "INVALID_INPUT", message: "session_id 不能为空" });
+        return res.json(await learn.deleteDwellSession(req.user.id, payload.session_id));
+      }
+      if (action === "clear_history") {
+        return res.json(await learn.clearDwellHistory(req.user.id));
+      }
+      return res.status(400).json({ error: "INVALID_INPUT", message: "action 需为 status/confirm/ignore/history/delete_session/clear_history" });
+    }
+
+    // POI 情境触发：客户端识别到附近 POI（如快递柜）时上报，匹配相关约定并提醒
+    if (name === "poiContextTrigger") {
+      const { maybeSendPoiReminder } = await import("../services/contextReminder.js");
+      const userWithPrefs = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        include: { preferences: true }
+      });
+      const result = await maybeSendPoiReminder(userWithPrefs || { id: req.user.id, preferences: null }, {
+        poiName: String(payload.poi_name || ""),
+        poiType: String(payload.poi_type || "")
+      });
+      return res.json({ ok: true, ...result });
+    }
+
+    if (name === "getSentinelGuard") {
+      const coords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
+        ? (normalizeToGcj02(payload.latitude, payload.longitude, payload.coord_type) || { latitude: payload.latitude, longitude: payload.longitude })
+        : null;
+
+      // ========== 1) 地理感知 ==========
+      const locations = await prisma.savedLocation.findMany({
+        where: { userId: req.user.id, isActive: true }
+      });
+
+      let geoContext = null;
+      const now = new Date();
+      const todayStart = startOfLocalDay(now);
+      const todayEnd = endOfLocalDay(now);
+
+      let hitLocation = null;
+      let hitDistance = null;
+      let hitEvent = "enter";
+
+      if (coords && locations.length > 0) {
+        for (const loc of locations) {
+          const locCoords = normalizeToGcj02(loc.latitude, loc.longitude, loc.coordType)
+            || { latitude: loc.latitude, longitude: loc.longitude };
+          const dist = haversineMeters(coords, locCoords);
+          if (dist <= (loc.radius || 200) + 100) {
+            if (!hitLocation || dist < hitDistance) {
+              hitLocation = loc;
+              hitDistance = dist;
+              hitEvent = "enter";
+            }
+          }
+        }
+      }
+
+      // 降级：使用最近进入/离开的地点
+      if (!hitLocation && locations.length > 0) {
+        const recent = locations
+          .filter((l) => l.lastEnteredAt || l.lastExitedAt)
+          .sort((a, b) => {
+            const ta = new Date(a.lastEnteredAt || a.lastExitedAt || 0).getTime();
+            const tb = new Date(b.lastEnteredAt || b.lastExitedAt || 0).getTime();
+            return tb - ta;
+          })[0];
+        if (recent) {
+          const enterT = recent.lastEnteredAt ? new Date(recent.lastEnteredAt).getTime() : 0;
+          const exitT = recent.lastExitedAt ? new Date(recent.lastExitedAt).getTime() : 0;
+          hitLocation = recent;
+          hitEvent = enterT >= exitT ? "enter" : "exit";
+          const lastTime = Math.max(enterT, exitT);
+          if (now.getTime() - lastTime < 2 * 60 * 60 * 1000) {
+            hitDistance = recent.radius || 200;
+          } else {
+            hitLocation = null;
+          }
+        }
+      }
+
+      if (hitLocation) {
+        const allActive = await prisma.task.findMany({
+          where: {
+            userId: req.user.id,
+            deletedAt: null,
+            status: { in: ["TODO", "IN_PROGRESS"] }
+          },
+          orderBy: { priority: "desc" },
+          take: 30
+        });
+
+        const CATEGORY_MAP = {
+          office: ["work"], home: ["personal", "family", "health"],
+          gym: ["health"], school: ["study"], shopping: ["shopping"],
+          hospital: ["health"], restaurant: ["personal"]
+        };
+        const related = CATEGORY_MAP[hitLocation.locationType] || [];
+
+        const parentIdsGeo = [...new Set(allActive.map((t) => t.parentTaskId).filter(Boolean))];
+        const aliveParentsGeo = parentIdsGeo.length > 0
+          ? await prisma.task.findMany({ where: { id: { in: parentIdsGeo } } })
+          : [];
+        const aliveParentIdSetGeo = new Set(
+          aliveParentsGeo
+            .filter((p) => !p.deletedAt && p.status !== "DONE" && p.status !== "ARCHIVED")
+            .map((p) => p.id)
+        );
+        const isParentClosedGeo = (t) => t.parentTaskId && !aliveParentIdSetGeo.has(t.parentTaskId);
+
+        const relevantTasks = allActive
+          .filter((t) => !isParentClosedGeo(t))
+          .map((t) => {
+            let score = 0;
+            if (t.reminderTime) {
+              const rt = new Date(t.reminderTime);
+              if (rt >= todayStart && rt <= todayEnd) score += 40;
+              if (rt < now) score += 25;
+            }
+            if (related.includes(t.category)) score += 20;
+            if (t.priority === "urgent") score += 30;
+            else if (t.priority === "high") score += 20;
+            const lr = getTaskLocationReminder(t);
+            if (lr?.enabled && typeof lr.latitude === "number") {
+              const d = haversineMeters(
+                { latitude: hitLocation.latitude, longitude: hitLocation.longitude },
+                { latitude: lr.latitude, longitude: lr.longitude }
+              );
+              if (d < (hitLocation.radius || 300) + 500) score += 35;
+            }
+            // 读取创建时记录的 spatiotemporal 上下文进行地点匹配
+            const st = getTaskSpatiotemporal(t);
+            if (st?.current_place_type) {
+              if (st.current_place_type === hitLocation.locationType) score += 25;
+              if (st.location_type === hitLocation.locationType) score += 20;
+            }
+            if (st?.nearest_location?.location_type === hitLocation.locationType) score += 20;
+            return { task: t, score };
+          })
+          .filter((x) => x.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3)
+          .map((x) => ({
+            id: x.task.id,
+            title: x.task.title,
+            time: x.task.reminderTime,
+            priority: x.task.priority,
+            overdue: x.task.reminderTime ? new Date(x.task.reminderTime) < now : false
+          }));
+
+        if (relevantTasks.length > 0) {
+          const typeLabel = {
+            office: "工作", home: "生活", gym: "健康", school: "学习",
+            shopping: "购物", hospital: "健康", restaurant: "生活", other: "相关"
+          }[hitLocation.locationType] || "相关";
+          geoContext = {
+            location_id: hitLocation.id,
+            location_name: hitLocation.name,
+            location_type: hitLocation.locationType,
+            icon: hitLocation.icon || "📍",
+            event: hitEvent,
+            distance: Math.round(hitDistance || hitLocation.radius || 200),
+            tasks: relevantTasks,
+            contextual_reason: `你已到${hitLocation.name}附近，这里有 ${relevantTasks.length} 个${typeLabel}约定可以顺手处理`
+          };
+        }
+      }
+
+      // ========== 2) 遗忘拯救 ==========
+      const allTasks = await prisma.task.findMany({
+        where: {
+          userId: req.user.id,
+          deletedAt: null,
+          status: { in: ["TODO", "IN_PROGRESS"] }
+        },
+        orderBy: { createdAt: "desc" },
+        take: 80
+      });
+
+      const parentIds = [...new Set(allTasks.map((t) => t.parentTaskId).filter(Boolean))];
+      const aliveParents = parentIds.length > 0
+        ? await prisma.task.findMany({ where: { id: { in: parentIds } } })
+        : [];
+      const aliveParentIdSet = new Set(
+        aliveParents
+          .filter((p) => !p.deletedAt && p.status !== "DONE" && p.status !== "ARCHIVED")
+          .map((p) => p.id)
+      );
+      const isParentClosed = (t) => t.parentTaskId && !aliveParentIdSet.has(t.parentTaskId);
+
+      const silentTasks = allTasks
+        .filter((t) => !isParentClosed(t))
+        .map((t) => {
+          const refDate = t.reminderTime || t.createdAt;
+          const days = daysBetween(refDate);
+          return { task: t, days, forgetRate: getForgetRate(days) };
+        })
+        .filter((x) => x.days >= 3 && x.forgetRate >= 60)
+        .sort((a, b) => b.forgetRate - a.forgetRate)
+        .slice(0, 3);
+
+      const notes = await prisma.note.findMany({
+        where: { userId: req.user.id, deletedAt: null },
+        orderBy: { updatedAt: "desc" },
+        take: 30
+      });
+      const silentNotes = notes
+        .map((n) => {
+          const refDate = n.updatedAt || n.createdAt;
+          return { note: n, days: daysBetween(refDate) };
+        })
+        .filter((x) => x.days >= 14)
+        .sort((a, b) => b.days - a.days)
+        .slice(0, 2);
+
+      const forgettingRescue = silentTasks.length > 0 ? {
+        primary: {
+          id: silentTasks[0].task.id,
+          title: silentTasks[0].task.title,
+          days: silentTasks[0].days,
+          forget_rate: silentTasks[0].forgetRate,
+          context: silentTasks[0].task.description
+            || `${silentTasks[0].days}天前创建，至今未处理`,
+          overdue_days: silentTasks[0].task.reminderTime
+            ? Math.max(0, daysBetween(silentTasks[0].task.reminderTime))
+            : 0
+        },
+        others: silentTasks.slice(1).map((x) => ({
+          id: x.task.id, title: x.task.title, days: x.days, forget_rate: x.forgetRate
+        })),
+        silent_notes: silentNotes.map((x) => ({
+          id: x.note.id,
+          title: (x.note.plainText || x.note.content || "").slice(0, 30) || "未命名心签",
+          days: x.days
+        }))
+      } : null;
+
+      return res.json({
+        success: true,
+        geo_context: geoContext,
+        forgetting_rescue: forgettingRescue,
+        generated_at: new Date().toISOString()
+      });
+    }
+
+    if (name === "getAssociationRecommendations") {
+      const coords = (typeof payload.latitude === "number" && typeof payload.longitude === "number")
+        ? { latitude: payload.latitude, longitude: payload.longitude }
+        : null;
+
+      const completedTasks = await prisma.task.findMany({
+        where: {
+          userId: req.user.id,
+          deletedAt: null,
+          status: "DONE"
+        },
+        orderBy: { completedAt: "desc" },
+        take: 180
+      });
+
+      const completed = completedTasks.filter((t) => t.completedAt);
+
+      // ========== 0) 情境上下文：当前地点（两个推荐分支共用） ==========
+      const now = new Date();
+      let nearLocation = null;
+      let nearDist = null;
+      if (coords) {
+        const locations = await prisma.savedLocation.findMany({
+          where: { userId: req.user.id, isActive: true }
+        });
+        for (const loc of locations) {
+          if (typeof loc.latitude !== "number" || typeof loc.longitude !== "number") continue;
+          const d = haversineMeters(coords, { latitude: loc.latitude, longitude: loc.longitude });
+          const threshold = (loc.radius || 200) + 200;
+          if (d <= threshold && (!nearLocation || d < nearDist)) {
+            nearLocation = loc;
+            nearDist = d;
+          }
+        }
+      }
+
+      // 情境打分：时间窗口匹配 × 地点关联 × 固有优先级。
+      // 典型场景：「每天18-19点吃药」这类时间固定约定，在其他时段不被优先推荐；
+      // 处于办公/学习场所时工作类约定加权，取快递、买东西等地点弱相关约定降权。
+      const LOW_LOCATION_BIND_CATEGORIES = new Set(["shopping"]);
+      const WORK_LOCATION_TYPES = new Set(["office", "school"]);
+      function contextScore(task) {
+        let score = 0;
+        const reasons = [];
+        const extra =
+          task.metadata && typeof task.metadata === "object" && task.metadata._extraFields
+            ? task.metadata._extraFields
+            : {};
+        const rule = ["daily", "weekly", "monthly", "custom"].includes(extra.repeat_rule) ? extra.repeat_rule : null;
+
+        // 时间适配：固定时间窗的重复约定只在窗口附近加分，远离窗口明显降权
+        if (rule && task.reminderTime) {
+          const start = new Date(task.reminderTime).getTime();
+          const end = task.endTime ? new Date(task.endTime).getTime() : start + 60 * 60 * 1000;
+          const t = now.getTime();
+          if (t >= start - 30 * 60 * 1000 && t <= end) {
+            score += 30;
+            reasons.push("此刻在约定时间窗内");
+          } else if (t < start && start - t <= 2 * 60 * 60 * 1000) {
+            score += 10;
+            reasons.push("临近约定时间");
+          } else {
+            score -= 25;
+            reasons.push("不在约定时间窗");
+          }
+        } else if (task.reminderTime) {
+          const diffH = (new Date(task.reminderTime).getTime() - now.getTime()) / 3600000;
+          if (diffH >= -1 && diffH <= 3) {
+            score += 15;
+            reasons.push("未来3小时内到点");
+          } else if (diffH > 3 && diffH <= 24) {
+            score += 5;
+          } else if (diffH < -1) {
+            score -= 5;
+          } else {
+            score -= 10;
+            reasons.push("时间尚早");
+          }
+        }
+
+        // 地点适配
+        if (nearLocation) {
+          const locType = nearLocation.locationType;
+          const lr = getTaskLocationReminder(task);
+          const looselyBound = LOW_LOCATION_BIND_CATEGORIES.has(task.category) && !(lr && lr.enabled);
+          if (WORK_LOCATION_TYPES.has(locType)) {
+            if (task.category === "work") {
+              score += 20;
+              reasons.push("在办公场所，工作约定优先");
+            }
+            if (looselyBound) {
+              score -= 20;
+              reasons.push("与当前地点关联不大");
+            }
+          }
+          if (lr && lr.enabled && typeof lr.latitude === "number" && coords) {
+            const d = haversineMeters(coords, { latitude: lr.latitude, longitude: lr.longitude });
+            if (d <= (lr.radius || 300) + 200) {
+              score += 15;
+              reasons.push("就在附近可顺手做");
+            }
+          }
+        }
+
+        // 固有优先级
+        score += { urgent: 20, high: 12, medium: 6, low: 2 }[String(task.priority || "").toLowerCase()] ?? 6;
+        return { score, reasons };
+      }
+      // 候选按情境分排序（分高者 = 此刻最值得先做）
+      const ctxRank = (list) =>
+        list
+          .map((t) => {
+            const { score, reasons } = contextScore(t);
+            return { t, score, reasons };
+          })
+          .sort((a, b) => b.score - a.score);
+
+      // ========== 1) 序贯规则挖掘 ==========
+      const asc = [...completed].sort(
+        (a, b) => new Date(a.completedAt) - new Date(b.completedAt)
+      );
+
+      const WINDOW_MS = 24 * 60 * 60 * 1000;
+      const pairCount = new Map();
+      const aCount = new Map();
+
+      for (let i = 0; i < asc.length; i++) {
+        const a = asc[i];
+        if (!a.category) continue;
+        aCount.set(a.category, (aCount.get(a.category) || 0) + 1);
+        const aT = new Date(a.completedAt).getTime();
+
+        const seenBForThisA = new Set();
+        for (let j = i + 1; j < asc.length; j++) {
+          const b = asc[j];
+          const bT = new Date(b.completedAt).getTime();
+          if (bT - aT > WINDOW_MS) break;
+          if (!b.category || b.category === a.category) continue;
+          if (seenBForThisA.has(b.category)) continue;
+          seenBForThisA.add(b.category);
+          const key = `${a.category}|${b.category}`;
+          pairCount.set(key, (pairCount.get(key) || 0) + 1);
+        }
+      }
+
+      const allRules = [];
+      for (const [key, support] of pairCount.entries()) {
+        const [a, b] = key.split("|");
+        const base = aCount.get(a) || 1;
+        const confidence = support / base;
+        if (support >= 2 && confidence >= 0.3) {
+          allRules.push({
+            from: a, to: b, support, confidence,
+            from_label: CATEGORY_LABEL[a] || a,
+            to_label: CATEGORY_LABEL[b] || b
+          });
+        }
+      }
+      allRules.sort((x, y) => (y.confidence - x.confidence) || (y.support - x.support));
+
+      let sequentialRecommendation = null;
+      const lastDone = asc[asc.length - 1];
+      if (lastDone?.category) {
+        const candidateRules = allRules
+          .filter((r) => r.from === lastDone.category)
+          .slice(0, 2);
+
+        if (candidateRules.length > 0) {
+          const pending = await prisma.task.findMany({
+            where: {
+              userId: req.user.id,
+              deletedAt: null,
+              status: { in: ["TODO", "IN_PROGRESS"] }
+            },
+            orderBy: { priority: "desc" },
+            take: 40
+          });
+
+          const suggestions = candidateRules.map((rule) => {
+            const matches = ctxRank(pending.filter((t) => t.category === rule.to))
+              .slice(0, 2)
+              .map(({ t, score, reasons }) => ({
+                id: t.id,
+                title: t.title,
+                priority: t.priority,
+                context_score: score,
+                context_reasons: reasons
+              }));
+            return {
+              from_label: rule.from_label,
+              to_label: rule.to_label,
+              confidence: Math.round(rule.confidence * 100),
+              support: rule.support,
+              tasks: matches
+            };
+          }).filter((s) => s.tasks.length > 0);
+
+          if (suggestions.length > 0) {
+            sequentialRecommendation = {
+              trigger_task: {
+                id: lastDone.id,
+                title: lastDone.title,
+                category_label: CATEGORY_LABEL[lastDone.category] || lastDone.category,
+                completed_at: lastDone.completedAt
+              },
+              suggestions
+            };
+          }
+        }
+      }
+
+      // ========== 2) 地点情境推荐（nearLocation 已在情境上下文中算好） ==========
+      let locationPattern = null;
+
+      if (nearLocation) {
+          const histTasks = completed.filter((t) => {
+            const lr = getTaskLocationReminder(t);
+            if (!lr?.enabled) return false;
+            if (typeof lr.latitude !== "number" || typeof lr.longitude !== "number") return false;
+            const d = haversineMeters(
+              { latitude: nearLocation.latitude, longitude: nearLocation.longitude },
+              { latitude: lr.latitude, longitude: lr.longitude }
+            );
+            return d <= (nearLocation.radius || 300) + 300;
+          });
+
+          const CATEGORY_MAP = {
+            office: "work", home: "personal", gym: "health",
+            school: "study", shopping: "shopping",
+            hospital: "health", restaurant: "personal"
+          };
+          const fallbackCat = CATEGORY_MAP[nearLocation.locationType];
+          const sample = histTasks.length > 0
+            ? histTasks
+            : (fallbackCat ? completed.filter((t) => t.category === fallbackCat) : []);
+
+          if (sample.length >= 2) {
+            const catCount = new Map();
+            const titleFreq = new Map();
+            for (const t of sample) {
+              if (t.category) catCount.set(t.category, (catCount.get(t.category) || 0) + 1);
+              if (t.title) titleFreq.set(t.title, (titleFreq.get(t.title) || 0) + 1);
+            }
+            const topCategories = [...catCount.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 2)
+              .map(([cat, cnt]) => ({
+                category: cat,
+                label: CATEGORY_LABEL[cat] || cat,
+                count: cnt
+              }));
+            const topTitles = [...titleFreq.entries()]
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 3)
+              .map(([title, cnt]) => ({ title, count: cnt }));
+
+            const pending = await prisma.task.findMany({
+              where: {
+                userId: req.user.id,
+                deletedAt: null,
+                status: { in: ["TODO", "IN_PROGRESS"] }
+              },
+              orderBy: { priority: "desc" },
+              take: 30
+            });
+
+            const topCatSet = new Set(topCategories.map((c) => c.category));
+            const suggestedTasks = ctxRank(pending.filter((t) => topCatSet.has(t.category)))
+              .slice(0, 3)
+              .map(({ t, score, reasons }) => ({
+                id: t.id,
+                title: t.title,
+                category_label: CATEGORY_LABEL[t.category] || t.category,
+                priority: t.priority,
+                context_score: score,
+                context_reasons: reasons
+              }));
+
+            locationPattern = {
+              location_id: nearLocation.id,
+              location_name: nearLocation.name,
+              icon: nearLocation.icon || "📍",
+              distance: Math.round(nearDist),
+              history_sample_size: sample.length,
+              top_categories: topCategories,
+              top_titles: topTitles,
+              suggested_tasks: suggestedTasks
+            };
+          }
+      }
+
+      return res.json({
+        success: true,
+        sequential_recommendation: sequentialRecommendation,
+        location_pattern: locationPattern,
+        rules_count: allRules.length,
+        generated_at: new Date().toISOString()
+      });
+    }
+
+    if (name === "fetchExternalFeeds") {
+      const feed = await prisma.externalFeed.findFirst({
+        where: {
+          id: payload.feed_id,
+          userId: req.user.id
+        }
+      });
+
+      if (!feed) {
+        return res.status(404).json({
+          error: "NOT_FOUND",
+          message: "外部信息源不存在"
+        });
+      }
+
+      if (!feed.url) {
+        return res.status(400).json({
+          error: "INVALID_FEED",
+          message: "该信息源缺少 URL"
+        });
+      }
+
+      const response = await fetch(feed.url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 SoulSentry/1.0"
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) {
+        return res.status(502).json({
+          error: "FETCH_FAILED",
+          message: `拉取失败：${response.status}`
+        });
+      }
+
+      const xmlText = await response.text();
+      const items = parseRssItems(xmlText);
+      const now = new Date();
+
+      let archived = 0;
+      if (feed.autoArchiveToHeartsign) {
+        for (const item of items.slice(0, 10)) {
+          const duplicate = await prisma.note.findFirst({
+            where: {
+              userId: req.user.id,
+              sourceType: "external_feed",
+              plainText: `${item.title} ${item.summary}`.slice(0, 1000)
+            }
+          });
+
+          if (duplicate) continue;
+
+          await prisma.note.create({
+            data: {
+              userId: req.user.id,
+              title: item.title.slice(0, 200),
+              content: `**${item.title}**\n\n${item.summary}\n\n来源：${feed.name}\n链接：${item.link}`,
+              plainText: `${item.title} ${item.summary}`.slice(0, 1000),
+              sourceType: "external_feed",
+              aiStatus: "pending",
+              tags: ["外部信息", feed.name]
+            }
+          });
+          archived += 1;
+        }
+      }
+
+      await prisma.externalFeed.update({
+        where: { id: feed.id },
+        data: {
+          lastFetchedAt: now,
+          lastItemCount: items.length,
+          metadata: {
+            ...(isPlainObject(feed.metadata) ? feed.metadata : {}),
+            latest_items: items.slice(0, 10)
+          }
+        }
+      });
+
+      return res.json({
+        fetched: items.length,
+        archived,
+        feed_id: feed.id
+      });
+    }
+
+    if (name === "getExternalVision") {
+      const feeds = await prisma.externalFeed.findMany({
+        where: {
+          userId: req.user.id,
+          isActive: true
+        },
+        orderBy: [
+          { lastFetchedAt: "desc" },
+          { createdAt: "desc" }
+        ],
+        take: 6
+      });
+
+      const cards = [];
+
+      for (const feed of feeds) {
+        const latestItems = Array.isArray(feed.metadata?.latest_items) ? feed.metadata.latest_items : [];
+
+        if (latestItems.length > 0) {
+          cards.push(...buildExternalVisionCards(feed, latestItems));
+          continue;
+        }
+
+        cards.push({
+          id: feed.id,
+          type: feed.feedType === "rss" ? "subscription" : "expansion",
+          title: feed.name,
+          summary: feed.description || "已接入外部信息源，等待首次拉取内容。",
+          source: feed.name,
+          url: feed.url || "",
+          relevance: "可在“外部信息接入”中手动拉取最新内容"
+        });
+      }
+
+      return res.json({
+        cards: cards.slice(0, 12)
+      });
+    }
+
+    if (name === "createWechatOrder") {
+      const pack = getCreditPack(payload.packId);
+      if (!pack) {
+        return res.status(400).json({ error: "INVALID_PACK", message: "无效的点数包" });
+      }
+
+      const cfg = await getWechatMerchantConfig();
+      if (!cfg) {
+        return res.status(501).json({ error: "WECHAT_NOT_CONFIGURED", message: "微信支付未配置" });
+      }
+
+      const reuseAfterMs = 10 * 60 * 1000;
+      const reuseSince = new Date(Date.now() - reuseAfterMs);
+      const existing = await prisma.wechatOrder.findFirst({
+        where: {
+          userId: req.user.id,
+          packId: pack.id,
+          status: "PENDING",
+          createdAt: { gt: reuseSince }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+
+      if (existing?.codeUrl) {
+        return res.json({
+          code_url: existing.codeUrl,
+          qr_data_url: await wechatCodeUrlToQrDataUrl(existing.codeUrl),
+          order_no: existing.orderNo
+        });
+      }
+
+      const outTradeNo = generateOutTradeNo("wx");
+      const description = `SoulSentry · ${pack.name} · ${pack.credits}点`;
+      const attach = JSON.stringify({ user_id: req.user.id, pack_id: pack.id, credits: pack.credits });
+
+      const result = await createWechatNativeOrder(
+        {
+          description,
+          outTradeNo,
+          totalFen: pack.priceFen,
+          attach
+        },
+        cfg
+      );
+
+      const codeUrl = result?.code_url;
+      if (!codeUrl) {
+        return res.status(502).json({ error: "WECHAT_CREATE_ORDER_FAILED", message: "微信下单失败" });
+      }
+
+      await prisma.wechatOrder.create({
+        data: {
+          userId: req.user.id,
+          orderNo: outTradeNo,
+          packId: pack.id,
+          credits: pack.credits,
+          amountFen: pack.priceFen,
+          description,
+          codeUrl,
+          status: "PENDING"
+        }
+      });
+
+      return res.json({
+        code_url: codeUrl,
+        qr_data_url: await wechatCodeUrlToQrDataUrl(codeUrl),
+        order_no: outTradeNo
+      });
+    }
+
+    if (name === "queryWechatOrder") {
+      const orderNo = String(payload.order_no || "").trim();
+      if (!orderNo) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少订单号" });
+      }
+
+      const order = await prisma.wechatOrder.findFirst({
+        where: { orderNo, userId: req.user.id }
+      });
+
+      if (!order) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "订单不存在" });
+      }
+
+      if (order.status === "PAID") {
+        return res.json({ paid: true, order_no: order.orderNo });
+      }
+
+      const cfg = await getWechatMerchantConfig();
+      if (!cfg) {
+        return res.json({ paid: false, order_no: order.orderNo });
+      }
+
+      try {
+        const remote = await wechatQueryOrder(order.orderNo, cfg);
+        const tradeState = remote?.trade_state;
+        const transactionId = remote?.transaction_id || null;
+        const successTime = remote?.success_time || null;
+
+        if (tradeState === "SUCCESS") {
+          await markWechatOrderPaid({
+            orderNo: order.orderNo,
+            transactionId,
+            paidAt: successTime ? new Date(successTime) : null
+          });
+          return res.json({ paid: true, order_no: order.orderNo });
+        }
+
+        if (tradeState && tradeState !== order.status) {
+          await prisma.wechatOrder.update({
+            where: { id: order.id },
+            data: { status: String(tradeState).slice(0, 40) }
+          });
+        }
+      } catch (_error) {
+        void _error;
+      }
+
+      return res.json({ paid: false, order_no: order.orderNo });
+    }
+
+    if (name === "executeAutomation") {
+      const result = await executeAutomation({
+        executionId: payload.execution_id,
+        phase: payload.phase,
+        userId: req.user.id,
+        prisma
+      });
+      return res.json(result);
+    }
+
+    if (name === "renderPpt") {
+      const pptData = payload.data || payload;
+      if (!pptData || !Array.isArray(pptData.slides) || pptData.slides.length === 0) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少有效的 slides 数据" });
+      }
+      const { fileName, fileUrl } = savePptHtml({
+        data: pptData,
+        fileBaseName: payload.file_base_name || pptData.title
+      });
+      return res.json({ file_url: fileUrl, file_name: fileName });
+    }
+
+    if (name === "recordHeartSignCorrection") {
+      const { note_id: corrNoteId, from_type: corrFrom, to_type: corrTo, text: corrText = "" } = payload;
+      if (!corrNoteId || !corrFrom || !corrTo) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 note_id / from_type / to_type" });
+      }
+      // 存中文分类标签（AI prompt 按中文分类）；英文 key 自动转换
+      const fromType = HEARTSIGN_TYPE_ZH[corrFrom] || String(corrFrom);
+      const toType = HEARTSIGN_TYPE_ZH[corrTo] || String(corrTo);
+      if (fromType === toType) {
+        return res.json({ ok: true, skipped: true, message: "分类未变化" });
+      }
+      // 幂等：同一 note 同一目标分类已记录过则跳过
+      const existed = await prisma.userCorrection.findFirst({
+        where: { noteId: corrNoteId, toType }
+      });
+      if (existed) {
+        return res.json({ ok: true, skipped: true, id: existed.id });
+      }
+      const created = await prisma.userCorrection.create({
+        data: {
+          userId: req.user.id,
+          noteId: corrNoteId,
+          fromType,
+          toType,
+          keywords: extractCorrectionKeywords(corrText),
+          textSample: String(corrText || "").slice(0, 200)
+        }
+      });
+      return res.json({ ok: true, id: created.id });
+    }
+
+    if (name === "analyzeHeartSign") {
+      const noteId = payload.note_id;
+      const noteData = payload.note_data || {};
+      // force_category：用户「分错了」纠正后强制按新分类重分析（中文类名），并绕过 completed 跳过
+      const forceCategory = payload.force_category ? String(payload.force_category) : null;
+      if (!noteId) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 note_id" });
+      }
+
+      let note = await prisma.note.findFirst({
+        where: { id: noteId, userId: req.user.id }
+      });
+      if (!note && (noteData.plain_text || noteData.content)) {
+        note = { id: noteId, ...noteData, userId: req.user.id };
+      }
+      if (!note) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "心签不存在" });
+      }
+
+      const existingAi = note.metadata?.ai_analysis;
+      // 已分析且有回应的才跳过；早期 bug 导致部分签 analyzed 但回应为空，放行重跑自愈。
+      // force_category（用户刚纠正分类）必须重跑，让回应按新类型重新生成
+      if (!forceCategory && note.aiStatus === "completed" && existingAi?.analyzed_at && existingAi?.emotional_response) {
+        return res.json({ ok: true, skipped: true, ai_analysis: existingAi });
+      }
+      if (note.aiStatus === "processing") {
+        return res.json({ ok: true, skipped: true, message: "已有分析任务在进行中" });
+      }
+
+      const materialText = String(note.plainText || note.content || "")
+        .replace(/<[^>]+>/g, " ")
+        .slice(0, 8000);
+
+      // 危机兜底：不进入 AI 管道，直接写死安全话术
+      if (detectCrisis(materialText)) {
+        const crisis = buildHeartSignFallback({ content: note.content, plainText: note.plainText });
+        const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
+        await prisma.note.update({
+          where: { id: noteId },
+          data: {
+            aiStatus: "completed",
+            sourceType: "emotion",
+            metadata: { ...currentMetadata, ai_analysis: crisis, is_crisis: true }
+          }
+        });
+        return res.json({ ok: true, ai_analysis: crisis, is_crisis: true });
+      }
+
+      // 保险柜兜底：敏感信息不进入 AI 管道，标记为 vault
+      if (detectVault(materialText)) {
+        const vaultFallback = buildHeartSignFallback({ content: note.content, plainText: note.plainText });
+        const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
+        await prisma.note.update({
+          where: { id: noteId },
+          data: {
+            aiStatus: "completed",
+            sourceType: "vault",
+            metadata: { ...currentMetadata, ai_analysis: vaultFallback, is_vault: true }
+          }
+        });
+        return res.json({ ok: true, ai_analysis: vaultFallback, is_vault: true, vault_label: vaultFallback.vault_label });
+      }
+
+      // 原子性地把 aiStatus 从非 processing 改为 processing，防止并发重复分析
+      const claimed = await prisma.note.updateMany({
+        where: {
+          id: noteId,
+          userId: req.user.id,
+          OR: [
+            { aiStatus: null },
+            { aiStatus: { not: "processing" } }
+          ]
+        },
+        data: { aiStatus: "processing" }
+      });
+      if (claimed.count === 0) {
+        return res.json({ ok: true, skipped: true, message: "已有分析任务在进行中" });
+      }
+
+      const density = note.metadata?.response_density || "light";
+
+      // 账本检测：金额模式 ≥2 即按账本签处理；显式 source_type=ledger 也强制走账本（AI 精解析 + 本地兜底双保险）
+      const isLedger = looksLikeLedger(materialText) || note.sourceType === "ledger" || note.source_type === "ledger" || forceCategory === "账本";
+
+      // 纠错学习：参考用户历史「分错了」纠正，同类内容越分越准
+      const corrections = await prisma.userCorrection.findMany({
+        where: { userId: req.user.id },
+        orderBy: { createdAt: "desc" },
+        take: 50
+      });
+      const correctionHints = [];
+      let strongCorrection = null;
+      for (const c of corrections) {
+        const kws = Array.isArray(c.keywords) ? c.keywords.filter((k) => k && String(k).length >= 2) : [];
+        const hits = kws.filter((k) => materialText.includes(String(k)));
+        if (hits.length >= 2) strongCorrection = c;
+        if (hits.length >= 1) {
+          correctionHints.push(`用户曾把包含「${hits[0]}」的内容从「${c.fromType}」纠正为「${c.toType}」，遇到相似内容请优先按「${c.toType}」分类`);
+        }
+        if (correctionHints.length >= 3) break;
+      }
+
+      const schema = {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "8-20 字的简短标语，提炼心情或核心状态，用作笔记标题；若输入≤50字可返回空字符串" },
+          summary: { type: "string", description: "1-2 句话精炼摘要" },
+          key_points: { type: "array", items: { type: "string" }, description: "3-5 个核心要点" },
+          tags: { type: "array", items: { type: "string" }, description: "3-6 个智能标签，不含 #" },
+          category: { type: "string", description: "分类：情绪/灵感/资料/备忘/分享/账本" },
+          is_emotional: { type: "boolean", description: "是否值得温柔回应" },
+          response_persona: { type: "string", description: "回应身份：comforter/mentor/clerk/friend/poet" },
+          response_title: { type: "string", description: "回应标题" },
+          emotional_response: { type: "string", description: "简短回应，每条签都必须给出：情绪签80字内、资料/账本签60字内、备忘签20字内、灵感签50字内、分享签40字内" },
+          response_tag: { type: "string", description: "回应标签：感性回应/理性补充/收录" },
+          table_md: { type: "string", description: "可选：内容适合表格化表达时（资料对比/清单/价格/日程排列），用 Markdown 表格呈现：首行 | 表头 |、次行 |---| 分隔、随后每行数据；不适合则返回空字符串" },
+          ...(isLedger ? {
+            ledger: {
+              type: "object",
+              description: "账本明细（仅账本签返回）",
+              properties: {
+                items: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", description: "事项名称，≤12字" },
+                      category: { type: "string", description: "类别：餐饮/交通/购物/居住/娱乐/收入/其他" },
+                      amount: { type: "number", description: "金额，正数" },
+                      type: { type: "string", description: "expense 支出 / income 收入" }
+                    }
+                  }
+                },
+                advice: { type: "string", description: "一句吐槽式回应：像损友一样幽默调侃这笔花销（轻松、毒舌但不伤人），≤60字" }
+              }
+            }
+          } : {})
+        },
+        required: ["title", "summary", "tags", "category"]
+      };
+
+      const systemPrompt = `你是用户的"另一个自己"，更温柔、更克制、更懂用户。
+处理流程：
+1. 先判断这条心签属于哪一类：情绪/灵感/资料/备忘/分享${isLedger ? "/账本（本条内容很像账本）" : ""}。
+2. 根据分类决定回应方式，回应要让人一眼就看出这是为这类签量身定做的：先给正能量，再给一点轻推。
+
+分类与回应策略：
+- 情绪签：先简短镜像用户的感受（"被否定确实不好受"），再给一句轻托举。不要讲道理、不要给建议。
+- 灵感签：先肯定这个念头值得留下，再轻推一句"它最想解决的是哪一个瞬间？"，帮用户把灵感落地。
+- 资料签：提炼核心要点，并建议下一步（沉淀知识库 / 转成约定 / 延伸阅读）。
+- 备忘签：只确认"已收好"，不展开。
+- 分享签：鼓励传播，提到可以生成签卡。
+${isLedger ? "- 账本签：解析收支明细写入 ledger.items（名称/类别/金额/收支），并用 ledger.advice 以吐槽口吻回应——像最熟悉你的损友那样开玩笑式调侃这笔花销（比如'又点外卖？这个月第几杯奶茶了'），轻松幽默、不评判不伤人，结尾可轻点一个花钱留意项。" : ""}
+
+约束：
+- 情绪≤80字，资料/账本≤60字，备忘≤20字，灵感≤50字，分享≤40字。
+- 当前回应浓度为"${density}"：mute 只输出"已收好。"；light 一句；full 最多两句。
+- 危机词：若用户表达自杀/自伤意图，只返回固定话"谢谢你愿意说出来。你现在可能很难受，可以拨打心理援助热线 400-161-9995。我一直在。"
+- response_tag：情绪/灵感/分享→"感性回应"；资料/账本→"理性补充"；备忘→"收录"。
+- 不同类目的回应风格必须一眼可区分：情绪签是温暖托举、资料签是知识补充加下一步建议、备忘签极简确认、账本签是损友式吐槽，禁止所有类别用同一种口吻。
+- 输入≤50字时 title 返回空字符串。
+- 若内容适合表格化表达（多个事物的对比、清单、价格、日程排列等），把 Markdown 表格写进 table_md 字段（首行 | 表头 |、次行 |---| 分隔、每行一条数据），不适合则 table_md 返回空字符串；账本签不需要 table_md，明细一律走 ledger.items。
+- table_md 必须是「重新组织后的结构化提炼」：表格与原文表述不得重复，原文已逐条罗列的内容不要再原样搬进表格；只有当表格能比原文更清晰（对比、归类、汇总）时才生成。
+${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correctionHints.join("\n- ")}\n` : ""}${forceCategory ? `用户已明确把这条签归类为「${forceCategory}」：category 必须返回「${forceCategory}」，emotional_response 必须严格按该类风格生成，禁止沿用旧分类的口吻。\n` : ""}严格按 JSON schema 返回：\n${JSON.stringify(schema)}`;
+
+      try {
+        // 图片心签：把 /uploads/ 图片一并送进视觉模型，回应会结合图中内容
+        const rawImageUrls = [].concat(note.metadata?.image_url || []).filter(Boolean).slice(0, 3);
+        const imageParts = rawImageUrls.map((u) => buildImageContentPart(u)).filter(Boolean);
+        const hasImage = imageParts.length > 0;
+
+        const analysisPrompt = hasImage
+          ? `用户把心签做成了一张图片${materialText ? "，并附上文字" : ""}（当前回应浓度：${density}）${materialText ? `：\n\n${materialText}` : "。"}`
+          : `请分析以下心签内容（当前回应浓度：${density}）：\n\n${materialText}`;
+        const imageGuidance = hasImage
+          ? `\n- 这条心签包含图片：你必须先识别图片内容（画面是什么、图中文字、氛围），回应要像真的看到了这张图——可以说出你看到的东西并顺势回应，不要假装没图。`
+          : "";
+
+        // Kimi 只给 12 秒：K2 冷启动 + 生成式回应常超过 5 秒,
+        // 之前的 5 秒上限会过早打落到模板兜底,用户收到"没有温度的回应"
+        const kimiPromise = hasImage
+          ? (async () => {
+              let lastErr = null;
+              for (const model of VISION_MODELS) {
+                try {
+                  const result = await callKimiChat({
+                    messages: [
+                      { role: "system", content: systemPrompt + imageGuidance },
+                      { role: "user", content: [{ type: "text", text: analysisPrompt }, ...imageParts] }
+                    ],
+                    model,
+                    responseJsonSchema: true,
+                    temperature: 0.9,
+                    maxTokens: 4000,
+                    fetchTimeout: 30000
+                  });
+                  return parseModelJson(result.content);
+                } catch (err) {
+                  lastErr = err;
+                  console.log(`[analyzeHeartSign] vision model ${model} failed: ${err?.message || err}`);
+                }
+              }
+              // 视觉模型不可用：降级为 analyzeImage 的 OCR 通道提取图中文字，再走文本心签分析
+              console.log("[analyzeHeartSign] vision unavailable, fallback to OCR text extraction");
+              try {
+                const draft = await analyzeImage({ fileUrl: rawImageUrls[0] });
+                const ocrText = String(draft?.extracted_text || "").trim();
+                if (!ocrText) throw lastErr || new Error("image has no recognizable text");
+                return invokeKimiText({
+                  prompt: `用户的心签包含一张图片（当前回应浓度：${density}）。${materialText ? `附言：${materialText}\n\n` : ""}【图片中的文字内容】\n${ocrText}\n\n请结合图片文字分析这条心签并回应。`,
+                  systemPrompt: systemPrompt + `\n- 这条心签的文字来自用户上传图片的识别结果，回应要结合图中内容。`,
+                  responseJsonSchema: schema,
+                  temperature: 0.9
+                });
+              } catch (ocrErr) {
+                // 图中没有文字（风景/物品照片）：以「分享了一张照片」为线索走文本分析，
+                // 给出有温度的回应，而不是降级成无感模板
+                if (/没有识别到文字/.test(String(ocrErr?.message || ""))) {
+                  return invokeKimiText({
+                    prompt: `用户上传了一张图片作为心签（当前回应浓度：${density}），但图中没有可识别的文字，可能是一张生活照片、风景、手绘或物品照片${materialText ? `。用户的附言：${materialText}` : ""}。请像真的看到了这张照片一样回应：接纳用户分享此刻的心情，并轻轻邀请用户说说这张照片背后的故事或当时的心情。`,
+                    systemPrompt: systemPrompt + `\n- 用户分享了一张没有文字的图片，你看不到它，回应要承认这份分享、表达接纳，并好奇地邀请用户讲讲照片背后的故事，不要假装知道图里具体是什么。`,
+                    responseJsonSchema: schema,
+                    temperature: 0.9
+                  });
+                }
+                throw lastErr || ocrErr;
+              }
+            })()
+          : invokeKimiText({
+              prompt: analysisPrompt,
+              systemPrompt,
+              responseJsonSchema: schema,
+              temperature: 0.9
+            });
+        // 图片心签可能走 OCR 降级链（识图+文本分析），超时放宽到 25 秒
+        const timeoutMs = hasImage ? 25000 : 12000;
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs)
+        );
+
+        let parsed;
+        let usedFallback = false;
+        try {
+          parsed = await Promise.race([kimiPromise, timeoutPromise]);
+        } catch (kimiErr) {
+          console.error("[analyzeHeartSign] Kimi failed or timeout, use local fallback", kimiErr?.message || kimiErr);
+          parsed = buildHeartSignFallback({ content: note.content, plainText: note.plainText, density, forceCategory });
+          usedFallback = true;
+        }
+
+        // Kimi 成功路径按次扣 2 点；余额不足不阻断回应（降级照常返回），只记警告
+        if (!usedFallback) {
+          try {
+            await chargeAICredits({
+              userId: req.user.id,
+              cost: 2,
+              feature: "analyze_heart_sign",
+              description: "心签 AI 分析"
+            });
+          } catch (chargeErr) {
+            if (chargeErr?.code === "INSUFFICIENT_CREDITS") {
+              console.warn(`[analyzeHeartSign] user=${req.user.id} 点数不足（余额 ${chargeErr.balance}），本次分析免费`);
+            } else {
+              console.error("[analyzeHeartSign] charge failed:", chargeErr?.message || chargeErr);
+            }
+          }
+        }
+
+        // 纠错强匹配：用户已明确纠正过同类内容，直接覆盖分类
+        if (strongCorrection && HEARTSIGN_ZH_TO_TYPE[strongCorrection.toType]) {
+          parsed.category = strongCorrection.toType;
+        }
+        // 用户刚在签卡上纠正分类：以用户选择为最终权威，回应按新类型重生成
+        if (forceCategory && HEARTSIGN_ZH_TO_TYPE[forceCategory]) {
+          parsed.category = forceCategory;
+        }
+
+        // 账本签一致性：「分类」是唯一权威。启发式（looksLikeLedger）只决定要不要把账本选项
+        // 交给 AI；最终是否账本签以 AI 判定为准——AI 明确判为非账本时尊重 AI（分错就纠正），
+        // 非账本签绝不挂账本数据；AI 判为账本时归一化明细（优先保留聊天补录），不凭空造账。
+        const aiSaysLedger = parsed.category === "账本"
+          || (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length > 0)
+          || forceCategory === "账本";
+
+        if (isLedger && !aiSaysLedger) {
+          // 启发式命中但 AI 明确判为其他分类（如「预算200元，明天开会前提醒我」是备忘）：
+          // 剥掉账本数据，按 AI 的分类走，卡片上不会出现账本明细
+          parsed.ledger = null;
+        } else if (aiSaysLedger) {
+          // 明细优先级：现有 ai_analysis.ledger.items（含聊天补录，是用户维护的最新真相）>
+          // 结构化 ledger_entries > AI 解析 > 文本解析。
+          // 不能用 structuredEntries 优先：聊天补录从不写回该字段，重分析会把补录的条目整体冲掉
+          const existingItems = Array.isArray(note.metadata?.ai_analysis?.ledger?.items) && note.metadata.ai_analysis.ledger.items.length
+            ? note.metadata.ai_analysis.ledger.items
+            : null;
+          const structuredEntries = Array.isArray(note.metadata?.ledger_entries)
+            ? note.metadata.ledger_entries
+            : (Array.isArray(note.metadata?.ledger?.entries) ? note.metadata.ledger.entries : null);
+          const rawItems = existingItems
+            || (structuredEntries && structuredEntries.length
+              ? structuredEntries
+              : (Array.isArray(parsed.ledger?.items) && parsed.ledger.items.length
+                ? parsed.ledger.items
+                : parseLedgerEntries(materialText)));
+          const normItems = rawItems
+            .map((i) => ({
+              name: String(i?.name || i?.item || "一笔账").slice(0, 12),
+              category: String(i?.category || "其他"),
+              amount: Math.abs(Number(i?.amount) || 0),
+              type: /(income|收入)/.test(String(i?.type || "")) ? "income" : "expense"
+            }))
+            .filter((i) => i.amount > 0 && !/^(合计|总计|总额|合计¥|total)/i.test(i.name))
+            .slice(0, 50);
+          if (normItems.length) {
+            const totalExpense = Math.round(normItems.filter((i) => i.type === "expense").reduce((s, i) => s + i.amount, 0) * 100) / 100;
+            const totalIncome = Math.round(normItems.filter((i) => i.type === "income").reduce((s, i) => s + i.amount, 0) * 100) / 100;
+            parsed.ledger = {
+              items: normItems,
+              total_expense: totalExpense,
+              total_income: totalIncome,
+              balance: Math.round((totalIncome - totalExpense) * 100) / 100,
+              // 账本吐槽：AI 本次给了用本次的，否则沿用旧的（聊天补录不清空吐槽）
+              advice: String(parsed.ledger?.advice || note.metadata?.ai_analysis?.ledger?.advice || "").slice(0, 120)
+            };
+            parsed.category = "账本";
+            // 本地兜底话术按签类型区分：账本签不用情绪签的安慰文案
+            if (usedFallback) {
+              parsed.emotional_response = "账已记好，明细见上方。";
+              parsed.response_tag = "理性补充";
+            }
+          } else {
+            parsed.ledger = null;
+          }
+        }
+
+        // 最终一致性兜底：分类不是账本 → 账本数据一律剥掉，
+        // 保证「非账本签的卡片永远没有账本明细」（含 AI 幻觉字段、纠错改分类等一切路径）
+        if (parsed.category !== "账本") {
+          parsed.ledger = null;
+        }
+
+        const ai_analysis = {
+          summary: parsed.summary || "",
+          key_points: parsed.key_points || [],
+          category: parsed.category || "其他",
+          is_emotional: !!parsed.is_emotional,
+          response_persona: parsed.is_emotional ? (parsed.response_persona || "friend") : "",
+          response_title: parsed.is_emotional ? (parsed.response_title || "") : "",
+          emotional_response: parsed.emotional_response || "",
+          response_tag: parsed.response_tag || (parsed.is_emotional ? "感性回应" : "收录"),
+          analyzed_at: new Date().toISOString(),
+          source: usedFallback ? "local_fallback" : "kimi",
+          note_type: parsed.note_type || null,
+          table_md: parsed.table_md || null,
+          ledger: parsed.ledger || null
+        };
+
+        // 表格去重：回应只是在复述用户输入（与原文高度重叠）时，只保留表格，
+        // 回应改成一句过渡语，避免"原文、回应、表格"三份重复内容
+        if (ai_analysis.table_md && ai_analysis.emotional_response) {
+          const norm = (s) => String(s || "").replace(/[\s|｜，。、：:；;！!？?·\-—*#>`]/g, "");
+          const respNorm = norm(ai_analysis.emotional_response);
+          const noteNorm = norm(materialText);
+          if (respNorm.length >= 10 && noteNorm.length >= 10) {
+            const overlap = [...respNorm].filter((ch) => noteNorm.includes(ch)).length / respNorm.length;
+            if (overlap > 0.7) {
+              ai_analysis.emotional_response = "内容已经整理成表格啦，一目了然。";
+            }
+          }
+        }
+
+        // 兜底：任何分类都必须给出一条回应，避免"生成后没有 AI 回复"
+        if (!ai_analysis.emotional_response) {
+          const FALLBACK_REPLY = {
+            "资料": "这条资料我帮你收好了，要点已提炼，需要时一搜就能找到。",
+            "备忘": "已收好，到点会提醒你。",
+            "账本": "账已记好，明细见上方。",
+            "灵感": "这个念头值得留下，想落地的时候随时说。",
+            "分享": "收到这份分享，已好好安放。",
+            "情绪": "收到了，都在。"
+          };
+          ai_analysis.emotional_response = FALLBACK_REPLY[ai_analysis.category] || "收到了，都在。";
+        }
+
+        const mergedTags = Array.from(new Set([...(note.tags || []), ...(parsed.tags || [])])).slice(0, 12);
+        const plainTextLen = String(note.plainText || note.content || "").trim().length;
+        const title = plainTextLen <= 50
+          ? ""
+          : (parsed.title ? parsed.title.slice(0, 60) : (parsed.summary ? parsed.summary.slice(0, 60) : (note.title || "心签")));
+        const sourceType = parsed.category && HEARTSIGN_ZH_TO_TYPE[parsed.category]
+          ? HEARTSIGN_ZH_TO_TYPE[parsed.category]
+          : (parsed.note_type || note.sourceType);
+
+        const currentMetadata = isPlainObject(note.metadata) ? note.metadata : {};
+        const updatedNote = await prisma.note.update({
+          where: { id: noteId },
+          data: {
+            title,
+            tags: mergedTags,
+            sourceType,
+            aiStatus: "completed",
+            metadata: {
+              ...currentMetadata,
+              ai_analysis
+            }
+          }
+        });
+
+        return res.json({
+          ok: true,
+          ai_analysis,
+          tags: mergedTags,
+          title: updatedNote.title,
+          source_type: updatedNote.sourceType,
+          used_fallback: usedFallback
+        });
+      } catch (error) {
+        console.error("[analyzeHeartSign] unexpected error", error);
+        await prisma.note.update({
+          where: { id: noteId },
+          data: { aiStatus: "failed" }
+        });
+        throw error;
+      }
+    }
+
+    if (name === "followupHeartSign") {
+      const { note_id: followNoteId, text, round = 1, density = "light" } = payload;
+      if (!followNoteId || !text) {
+        return res.status(400).json({ error: "INVALID_INPUT", message: "缺少 note_id 或 text" });
+      }
+
+      const followNote = await prisma.note.findFirst({
+        where: { id: followNoteId, userId: req.user.id }
+      });
+      if (!followNote) {
+        return res.status(404).json({ error: "NOT_FOUND", message: "心签不存在" });
+      }
+
+      // 保存用户继续消息
+      await prisma.noteComment.create({
+        data: {
+          noteId: followNoteId,
+          userId: req.user.id,
+          content: String(text).slice(0, 4000)
+        }
+      });
+
+      const noteType = followNote.sourceType || "emotion";
+      const categoryMap = {
+        emotion: "情绪",
+        inspiration: "灵感",
+        material: "资料",
+        memo: "备忘",
+        share: "分享",
+        ledger: "账本"
+      };
+      const category = categoryMap[noteType] || "情绪";
+
+      // 账本签内补录：继续对话输入的收支明细并入本条签（不新建签），重算合计
+      const existingLedger = followNote.metadata?.ai_analysis?.ledger;
+      const ledgerResult = noteType === "ledger"
+        ? parseLedgerPatch(existingLedger, text)
+        : null;
+      const ledgerPatch = ledgerResult?.ledger || null;
+      const ledgerAdded = ledgerResult?.added || [];
+
+      let replyText = "";
+      let closing = false;
+      let tag = "感性回应";
+
+      if (category === "情绪") {
+        if (Number(round) >= 3) {
+          replyText = "今天的对话先说到这里，好吗？谢谢你愿意说这么多。我会一直在这儿，明天如果想继续，随时回来。";
+          closing = true;
+          tag = "感性回应";
+        } else if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else {
+          const emotionalFollowups = {
+            full: [
+              "嗯，我在听。继续说，我跟着你。",
+              "这些感受都值得被认真放着。那时候，你最希望发生什么？",
+              "如果给现在的感受起一个名字，它叫什么？"
+            ],
+            light: [
+              "嗯，我在听。你慢慢说。",
+              "这些感受都值得被认真放着。",
+              "如果愿意，可以再具体说说那个瞬间。"
+            ]
+          };
+          const pool = emotionalFollowups[density] || emotionalFollowups.light;
+          replyText = pool[Math.floor(Math.random() * pool.length)];
+          tag = "感性回应";
+        }
+      } else if (category === "资料") {
+        if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else {
+          replyText = density === "full"
+            ? "往深想一步：这条内容和你正在做的事，连接点在哪里？要沉淀进知识库或转成约定，随时告诉我。"
+            : "往深想一步：这条内容和你正在做的事，连接点在哪里？";
+          tag = "理性补充";
+        }
+      } else if (category === "灵感") {
+        if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else {
+          replyText = density === "full"
+            ? "这个念头我收好了。它最想解决的是哪一个瞬间？想落地的话，我可以帮你转成约定。"
+            : "这个念头我收好了。想落地的话，我可以帮你转成约定。";
+          tag = "感性回应";
+        }
+      } else if (category === "备忘") {
+        replyText = "嗯，这条也一并记在这张签里了。";
+        tag = "收录";
+      } else if (category === "分享") {
+        replyText = density === "mute" ? "已收好。" : "好，分享的内容我都放进签卡里了。";
+        tag = density === "mute" ? "收录" : "感性回应";
+      } else if (category === "账本") {
+        if (density === "mute") {
+          replyText = "已收好。";
+          tag = "收录";
+        } else if (ledgerPatch) {
+          // 签内补录：报出本轮刚记上的明细，签里同步更新
+          const names = ledgerAdded.map((i) => `${i.name} ${i.type === "income" ? "+" : "-"}${i.amount}`).join("、");
+          replyText = `记上了：${names}。这笔账我帮你拢在这条签里。`;
+          tag = "理性补充";
+        } else {
+          replyText = density === "full"
+            ? "账本我先记着了。想按周或按月看汇总，或者给某个类别设个预算提醒，跟我说一声就好。"
+            : "账本我先记着了。想看汇总或设预算提醒，随时跟我说。";
+          tag = "理性补充";
+        }
+      } else {
+        replyText = "我记下了。";
+        tag = "感性回应";
+      }
+
+      const now = new Date().toISOString();
+      const currentMeta = isPlainObject(followNote.metadata) ? followNote.metadata : {};
+      const conversation = Array.isArray(currentMeta.conversation) ? currentMeta.conversation : [];
+      const nextConversation = [...conversation, { role: "user", text, ts: now }, { role: "other", text: replyText, tag, ts: now }];
+
+      const nextMeta = { ...currentMeta, conversation: nextConversation };
+      if (ledgerPatch) {
+        nextMeta.ai_analysis = {
+          ...(isPlainObject(currentMeta.ai_analysis) ? currentMeta.ai_analysis : {}),
+          ledger: ledgerPatch
+        };
+        // 同步结构化 entries：任何从 ledger_entries 重建明细的路径（如 analyzeHeartSign 重跑）也包含补录
+        nextMeta.ledger_entries = ledgerPatch.items.map((i) => ({
+          item: i.name,
+          amount: i.amount,
+          category: i.category,
+          type: i.type
+        }));
+      }
+
+      // 每一轮补录都写进账单正文：去掉旧的合计行，追加本轮明细行和刷新后的合计，
+      // 保证心流页卡片正文、详情页看到的账单文本与结构化明细一致
+      let updatedPlain = null;
+      if (ledgerAdded.length) {
+        const oldText = String(followNote.plainText || followNote.content || "");
+        const keptLines = oldText.split("\n").filter((l) => l.trim() && !/^合计\s*¥?[\d.]+/.test(l.trim()));
+        const newLines = ledgerAdded.map((i) => `${i.name} ¥${i.amount}${i.category && i.category !== "其他" ? `（${i.category}）` : ""}`);
+        const grand = Math.round(ledgerPatch.items.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 100) / 100;
+        updatedPlain = [...keptLines, ...newLines, `合计 ¥${grand.toFixed(2)}`].join("\n");
+      }
+
+      await prisma.note.update({
+        where: { id: followNoteId },
+        data: {
+          metadata: nextMeta,
+          ...(updatedPlain ? { content: updatedPlain, plainText: updatedPlain } : {})
+        }
+      });
+
+      return res.json({
+        ok: true,
+        text: replyText,
+        tag,
+        closing,
+        conversation: nextConversation,
+        ledger: ledgerPatch || undefined,
+        plain_text: updatedPlain || undefined
+      });
+    }
+
+    if (name === "analyzeTasks") {
+      const tasks = Array.isArray(payload.tasks) ? payload.tasks.filter((t) => t?.id) : [];
+      const executions = Array.isArray(payload.executions) ? payload.executions : [];
+      const subtaskMap = isPlainObject(payload.subtasks) ? payload.subtasks : {};
+      console.log(`[analyzeTasks] received tasks=${tasks.length} executions=${executions.length}`);
+      const result = {};
+      const trustScores = computeTrustScores(executions);
+
+      // 约定智能分析：每条约定 1 点，调用前预检总额
+      if (tasks.length) {
+        if (!(await guardCredits(req, res, tasks.length * AI_CALL_COSTS.analyze_task, "analyze_task"))) return;
+      }
+
+      // 限制并发，避免大量任务同时调用 Kimi 导致超时/限流
+      const poolLimit = 2;
+      const executing = [];
+      const promises = [];
+
+      for (const task of tasks) {
+        if (!task?.id) continue;
+        const promise = analyzeTask(task, executions, subtaskMap[task.id] || [], trustScores).then(
+          (analysis) => {
+            result[task.id] = analysis;
+            // 每条分析成功扣 1 点（fire-and-forget，不阻塞批量分析）
+            settleCredits(req, AI_CALL_COSTS.analyze_task, "analyze_task", `约定智能分析：${String(task.title || "").slice(0, 20)}`);
+          },
+          (err) => {
+            console.error(`[analyzeTasks] analyzeTask failed for task ${task.id}:`, err?.message || err);
+            result[task.id] = {};
+          }
+        );
+        promises.push(promise);
+        if (tasks.length > poolLimit) {
+          const wrapped = promise.then(() => {
+            const idx = executing.indexOf(wrapped);
+            if (idx !== -1) executing.splice(idx, 1);
+          });
+          executing.push(wrapped);
+          if (executing.length >= poolLimit) {
+            await Promise.race(executing);
+          }
+        }
+      }
+      await Promise.all(promises);
+      return res.json(result);
+    }
+
+    if (name === "createStripeCheckout") {
+      return res.status(501).json({
+        error: "FUNCTION_NOT_IMPLEMENTED",
+        message: "独立后端已预留 createStripeCheckout，但尚未完成迁移",
+        input: payload
+      });
+    }
+
+    if (name === "kimiStatus") {
+      const results = [];
+      const endpoints = [];
+      try {
+        const primaryApiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
+        const primaryBaseUrl = (process.env.KIMI_BASE_URL || "https://api.moonshot.cn/v1").replace(/\/+$/, "");
+        const fallbackApiKey = process.env.KIMI_FALLBACK_API_KEY || process.env.MOONSHOT_FALLBACK_API_KEY;
+        const fallbackBaseUrl = (process.env.KIMI_FALLBACK_BASE_URL || "https://api.moonshot.ai/v1").replace(/\/+$/, "");
+        if (primaryApiKey) endpoints.push({ label: "primary", apiKey: primaryApiKey.trim(), baseUrl: primaryBaseUrl });
+        if (fallbackApiKey) {
+          const normalizedFallbackKey = fallbackApiKey.trim();
+          const isDuplicate = endpoints.some((item) => item.apiKey === normalizedFallbackKey && item.baseUrl === fallbackBaseUrl);
+          if (!isDuplicate) endpoints.push({ label: "fallback", apiKey: normalizedFallbackKey, baseUrl: fallbackBaseUrl });
+        }
+      } catch (e) {
+        return res.status(500).json({ error: "CONFIG_ERROR", message: String(e) });
+      }
+
+      for (const endpoint of endpoints) {
+        const startAt = Date.now();
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const response = await fetch(`${endpoint.baseUrl}/models`, {
+            method: "GET",
+            headers: { Authorization: `Bearer ${endpoint.apiKey}` },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          const duration = Date.now() - startAt;
+          const body = await response.text();
+          results.push({
+            label: endpoint.label,
+            baseUrl: endpoint.baseUrl,
+            status: response.status,
+            duration,
+            ok: response.ok,
+            bodyPreview: body.slice(0, 200)
+          });
+        } catch (err) {
+          results.push({
+            label: endpoint.label,
+            baseUrl: endpoint.baseUrl,
+            status: 0,
+            duration: Date.now() - startAt,
+            ok: false,
+            error: err?.message || String(err)
+          });
+        }
+      }
+
+      return res.json({
+        configured: results.length > 0,
+        results,
+        models: ["kimi-k2.6", "kimi-k2.7-code", "kimi-k3"]
+      });
+    }
+
+    return res.status(404).json({
+      error: "FUNCTION_NOT_FOUND",
+      message: `未找到函数 ${name}`
+    });
+  } catch (error) {
+    if (error.code === "INSUFFICIENT_CREDITS") {
+      return res.status(402).json({
+        code: "INSUFFICIENT_CREDITS",
+        required: error.required,
+        balance: error.balance
+      });
+    }
+
+    return res.status(error.status || 500).json({
+      error: "FUNCTION_EXECUTION_FAILED",
+      message: error.message || "函数执行失败"
+    });
+  }
+});

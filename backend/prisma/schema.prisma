@@ -1,0 +1,749 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String                @id @default(cuid())
+  email             String?               @unique
+  phone             String?               @unique
+  passwordHash      String?
+  vaultPwdHash      String?
+  displayName       String?
+  role              UserRole              @default(USER)
+  subscriptionPlan  String                @default("free")
+  aiCredits         Int                   @default(200)
+  themePreferences  Json?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  creditTxs         AICreditTransaction[]
+  comments          Comment[]
+  corrections       UserCorrection[]
+  dailyPlans        DailyPlan[]
+  devices           Device[]
+  dwellStays        DwellStay[]
+  externalFeeds     ExternalFeed[]
+  feedbacks         Feedback[]
+  knowledgeItems    KnowledgeBase[]
+  monthlyPlans      MonthlyPlan[]
+  notes             Note[]
+  noteComments      NoteComment[]
+  notifications     Notification[]
+  notificationRules NotificationRule[]
+  relationships     Relationship[]
+  savedLocations    SavedLocation[]
+  tasks             Task[]
+  taskChangeLogs    TaskChangeLog[]
+  taskMemberships   TaskMember[]
+  taskCompletions   TaskCompletion[]
+  taskDeferralLogs  TaskDeferralLog[]
+  taskExecutions    TaskExecution[]
+  taskTemplates     TaskTemplate[]
+  behaviors         UserBehavior[]
+  checkins          Checkin[]
+  userDataPoints    UserDataPoint[]
+  preferences       UserPreference?
+  wechatOrders      WechatOrder[]
+  weeklyPlans       WeeklyPlan[]
+  memoryRecords     MemoryRecord[]
+  vaultItems        VaultItem[]
+}
+
+model UserPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  quietHoursStart    String?
+  quietHoursEnd      String?
+  emailNotifications Boolean  @default(true)
+  pushNotifications  Boolean  @default(true)
+  locationReminders  Boolean  @default(false)
+  locale             String   @default("zh-CN")
+  timezone           String   @default("Asia/Shanghai")
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MemoryRecord {
+  id            String    @id @default(cuid())
+  userId        String
+  title         String
+  content       String?
+  memoryType    String?   @default("personal")
+  emotion       String?   @default("neutral")
+  eventDate     DateTime?
+  people        Json?
+  locations     Json?
+  tags          Json?
+  aiInsight     Json?
+  sourceTaskId  String?
+  sourceNoteId  String?
+  isPinned      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, memoryType])
+  @@index([userId, sourceTaskId])
+  @@index([userId, sourceNoteId])
+}
+
+model Task {
+  id               String     @id @default(cuid())
+  userId           String
+  title            String
+  description      String?
+  status           TaskStatus @default(TODO)
+  priority         String     @default("medium")
+  category         String?
+  dueAt            DateTime?
+  reminderTime     DateTime?
+  endTime          DateTime?
+  isAllDay         Boolean    @default(false)
+  parentTaskId     String?
+  gcalSyncEnabled  Boolean    @default(false)
+  progress         Int        @default(0)
+  completedAt      DateTime?
+  deletedAt        DateTime?
+  tags             Json?
+  reminderStrategy Json?
+  metadata         Json?
+  shareToken       String?    @unique
+  shareEnabled     Boolean    @default(false)
+  shareExpiresAt   DateTime?
+  members          TaskMember[]
+  checkins         Checkin[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, dueAt])
+  @@index([userId, reminderTime])
+  @@index([userId, deletedAt])
+  @@index([shareEnabled, shareExpiresAt])
+}
+
+model Checkin {
+  id        String   @id @default(cuid())
+  userId    String
+  taskId    String
+  note      String?
+  photoUrl  String?
+  source    String   @default("manual")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model TaskMember {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  invitedBy String?
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+}
+
+model Note {
+  id             String        @id @default(cuid())
+  userId         String
+  title          String?
+  content        String
+  plainText      String?
+  status         NoteStatus    @default(ACTIVE)
+  color          String?
+  sourceType     String?
+  aiStatus       String?
+  deletedAt      DateTime?
+  tags           Json?
+  metadata       Json?
+  shareToken     String?       @unique
+  shareEnabled   Boolean       @default(false)
+  shareExpiresAt DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  noteComments   NoteComment[]
+
+  @@index([userId, status])
+  @@index([userId, deletedAt])
+  @@index([shareEnabled, shareExpiresAt])
+}
+
+model VaultItem {
+  id        String   @id @default(cuid())
+  userId    String
+  label     String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String             @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  channel   String             @default("in_app")
+  status    NotificationStatus @default(PENDING)
+  payload   Json?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model NotificationRule {
+  id                   String   @id @default(cuid())
+  userId               String
+  title                String
+  isEnabled            Boolean  @default(true)
+  conditionCategory    String   @default("all")
+  conditionPriority    String   @default("all")
+  actionMute           Boolean  @default(false)
+  actionSound          String   @default("default")
+  actionChannels       Json?
+  actionAdvanceMinutes Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isEnabled])
+  @@index([userId, conditionCategory, conditionPriority])
+  @@index([userId, createdAt])
+}
+
+model UserBehavior {
+  id                  String   @id @default(cuid())
+  userId              String
+  eventType           String
+  taskId              String?
+  hourOfDay           Int?
+  dayOfWeek           Int?
+  category            String?
+  responseTimeSeconds Int?
+  metadata            Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, eventType])
+  @@index([userId, taskId])
+  @@index([userId, createdAt])
+  @@index([userId, category])
+}
+
+model AICreditTransaction {
+  id           String                @id @default(cuid())
+  userId       String
+  type         CreditTransactionType
+  amount       Int
+  balanceAfter Int
+  feature      String?
+  description  String?
+  createdAt    DateTime              @default(now())
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model TaskExecution {
+  id               String    @id @default(cuid())
+  userId           String
+  taskId           String?
+  taskTitle        String
+  category         String    @default("task")
+  executionStatus  String    @default("parsing")
+  originalInput    String?
+  aiParsedResult   Json?
+  executionSteps   Json?
+  errorMessage     String?
+  completedAt      DateTime?
+  automationType   String    @default("none")
+  automationPlan   Json?
+  automationResult Json?
+  requiresApproval Boolean   @default(false)
+  userFeedback     Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, taskId])
+  @@index([userId, executionStatus])
+  @@index([userId, completedAt])
+}
+
+model DailyPlan {
+  id            String   @id @default(cuid())
+  userId        String
+  planDate      String
+  originalInput String?
+  theme         String?
+  summary       String?
+  planJson      Json
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, planDate])
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+}
+
+model WeeklyPlan {
+  id            String   @id @default(cuid())
+  userId        String
+  weekStartDate String
+  originalInput String?
+  theme         String?
+  summary       String?
+  planJson      Json
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, weekStartDate])
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+}
+
+model MonthlyPlan {
+  id             String   @id @default(cuid())
+  userId         String
+  monthStartDate String
+  originalInput  String?
+  theme          String?
+  summary        String?
+  planJson       Json
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, monthStartDate])
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+}
+
+model NoteComment {
+  id           String       @id @default(cuid())
+  userId       String?
+  visitorToken String?
+  visitorName  String?
+  noteId       String
+  content      String
+  mentions     Json?
+  parentId     String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  note         Note         @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent       NoteComment? @relation("NoteCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      NoteComment[] @relation("NoteCommentReplies")
+
+  @@index([userId, createdAt])
+  @@index([noteId, createdAt])
+  @@index([visitorToken, createdAt])
+  @@index([parentId, createdAt])
+}
+
+model WechatOrder {
+  id            String    @id @default(cuid())
+  userId        String
+  orderNo       String    @unique
+  packId        String
+  credits       Int
+  amountFen     Int
+  description   String?
+  codeUrl       String?
+  transactionId String?
+  status        String    @default("PENDING")
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+}
+
+model KnowledgeBase {
+  id               String    @id @default(cuid())
+  userId           String
+  title            String
+  content          String
+  summary          String?
+  category         String?
+  importance       Int       @default(3)
+  tags             Json?
+  keyPoints        Json?
+  sourceType       String?
+  sourceId         String?
+  embeddingSummary String?
+  // 约定沉淀时的完整快照（含子约定树），供知识库展开展示与删除后重建
+  snapshot         Json?
+  accessCount      Int       @default(0)
+  lastAccessed     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+  @@index([userId, category])
+  @@index([userId, importance])
+  @@index([userId, accessCount])
+  @@index([userId, lastAccessed])
+}
+
+model Device {
+  id               String    @id @default(cuid())
+  userId           String
+  deviceId         String
+  name             String?
+  nameCustomized   Boolean   @default(false)
+  deviceType       String    @default("other")
+  role             String    @default("secondary")
+  platform         String?
+  browser          String?
+  userAgent        String?
+  screenSize       String?
+  isOnline         Boolean   @default(false)
+  lastSeenAt       DateTime?
+  pushSubscription Json?
+  capabilities     Json?
+  isCurrent        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId, deviceId])
+  @@index([userId, lastSeenAt])
+  @@index([userId, isOnline])
+}
+
+model SavedLocation {
+  id                String    @id @default(cuid())
+  userId            String
+  name              String
+  locationType      String    @default("other")
+  latitude          Float
+  longitude         Float
+  // 坐标系来源："wgs84"（web/Leaflet）| "gcj02"（微信小程序）；旧数据默认按 wgs84 纠偏
+  coordType         String    @default("wgs84")
+  radius            Int       @default(200)
+  address           String?
+  icon              String?   @default("📍")
+  isActive          Boolean   @default(true)
+  triggerOn         String    @default("enter")
+  lastEnteredAt     DateTime?
+  lastExitedAt      DateTime?
+  quietMinutes      Int       @default(30)
+  quietPolicy       Json?
+  notificationStats Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([userId, locationType])
+  @@index([userId, updatedAt])
+}
+
+model DwellStay {
+  id          String    @id @default(cuid())
+  userId      String
+  latitude    Float
+  longitude   Float
+  coordType   String    @default("gcj02")
+  startedAt   DateTime
+  endedAt     DateTime?
+  durationMin Int       @default(0)
+  source      String    @default("sentinel")
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+}
+
+model TaskDeferralLog {
+  id                  String    @id @default(cuid())
+  userId              String
+  taskId              String
+  taskTitle           String?
+  originalTime        DateTime?
+  deferredTo          DateTime?
+  reasonCategory      String    @default("other")
+  missingPrerequisite String?
+  reasonNote          String?
+  carryToNextPlan     Boolean   @default(true)
+  consumedInReplanAt  DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskId])
+  @@index([userId, carryToNextPlan])
+  @@index([userId, createdAt])
+  @@index([userId, consumedInReplanAt])
+}
+
+model Relationship {
+  id                   String    @id @default(cuid())
+  userId               String
+  name                 String
+  nickname             String?
+  relationshipType     String    @default("friend")
+  closeness            Int       @default(5)
+  interactionCount     Int       @default(0)
+  lastInteractionDate  DateTime?
+  favors               Json?
+  notes                String?
+  tags                 Json?
+  preferredContactTime String?
+  contactFrequencyDays Int       @default(30)
+  avatarColor          String?   @default("#384877")
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, relationshipType])
+  @@index([userId, lastInteractionDate])
+  @@index([userId, createdAt])
+}
+
+model Comment {
+  id           String    @id @default(cuid())
+  userId       String?
+  visitorToken String?
+  visitorName  String?
+  taskId       String?
+  noteId       String?
+  content      String
+  mentions     Json?
+  parentId     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent       Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      Comment[] @relation("CommentReplies")
+
+  @@index([taskId, createdAt])
+  @@index([noteId, createdAt])
+  @@index([userId, createdAt])
+  @@index([visitorToken, createdAt])
+  @@index([parentId, createdAt])
+}
+
+model SharedActionLog {
+  id           String   @id @default(cuid())
+  shareToken   String
+  targetType   String
+  targetId     String
+  visitorToken String
+  visitorName  String?
+  actionType   String
+  payload      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([shareToken, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([visitorToken, createdAt])
+}
+
+model TaskCompletion {
+  id          String    @id @default(cuid())
+  userId      String
+  taskId      String
+  status      String    @default("completed")
+  completedAt DateTime?
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, completedAt])
+  @@index([userId, createdAt])
+  @@index([userId, status])
+}
+
+model TaskChangeLog {
+  id            String   @id @default(cuid())
+  userId        String
+  taskId        String
+  parentTaskId  String?
+  changeType    String
+  taskTitle     String?
+  changedFields Json?
+  changesDetail Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([parentTaskId, createdAt])
+  @@index([userId, changeType])
+}
+
+model TaskTemplate {
+  id           String   @id @default(cuid())
+  userId       String
+  name         String
+  description  String?
+  templateData Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, updatedAt])
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  userId      String?
+  type        String   @default("other")
+  status      String   @default("pending")
+  content     String
+  contactInfo String
+  adminReply  String?
+  images      Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model UserCorrection {
+  id         String   @id @default(cuid())
+  userId     String
+  noteId     String?
+  fromType   String
+  toType     String
+  keywords   Json // 纠错时从原文提取的关键词数组（前 10 个）
+  textSample String // 原文截断 200 字
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model ExternalFeed {
+  id                     String    @id @default(cuid())
+  userId                 String
+  name                   String
+  feedType               String    @default("rss")
+  url                    String?
+  description            String?
+  icon                   String?   @default("📡")
+  isActive               Boolean   @default(true)
+  fetchFrequencyHours    Int       @default(24)
+  lastFetchedAt          DateTime?
+  lastItemCount          Int       @default(0)
+  autoArchiveToHeartsign Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isActive])
+  @@index([userId, createdAt])
+  @@index([userId, lastFetchedAt])
+}
+
+model UserDataPoint {
+  id            String   @id @default(cuid())
+  userId        String
+  dataType      String
+  subtype       String?
+  summary       String
+  category      String?
+  weight        Int      @default(1)
+  tags          Json?
+  occurredAt    DateTime @default(now())
+  hourOfDay     Int?
+  dayOfWeek     Int?
+  relatedTaskId String?
+  relatedNoteId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dataType, createdAt])
+  @@index([userId, occurredAt])
+  @@index([userId, category])
+}
+
+model SmsVerification {
+  id         String    @id @default(cuid())
+  phone      String
+  code       String
+  purpose    String    @default("login")
+  attempts   Int       @default(0)
+  verifiedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  @@index([phone, purpose, createdAt])
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  ARCHIVED
+}
+
+enum NoteStatus {
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  READ
+  FAILED
+}
+
+enum CreditTransactionType {
+  PURCHASE
+  CONSUME
+  GIFT
+  REFUND
+  SUBSCRIPTION_BONUS
+}

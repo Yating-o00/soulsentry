@@ -1,0 +1,453 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles, Map as MapIcon } from "lucide-react";
+import SoulSentryFeed from "@/components/smart/SoulSentryFeed";
+import GeofenceMapView from "@/components/location/GeofenceMapView";
+import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
+import { format } from "date-fns";
+import { zhCN } from "date-fns/locale";
+import { motion, AnimatePresence } from "framer-motion";
+import ExecutionStatusCards from "@/components/notifications/ExecutionStatusCards";
+import ExecutionItem from "@/components/notifications/ExecutionItem";
+import SmartInputBar from "@/components/notifications/SmartInputBar";
+import AIExecutionAdvisor from "@/components/notifications/AIExecutionAdvisor";
+import ReminderActionCard from "@/components/notifications/ReminderActionCard";
+import ProductTimeline from "@/components/memory/ProductTimeline";
+import { toast } from "sonner";
+
+export default function NotificationsPage() {
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("executions");
+  const [feedMode, setFeedMode] = useState("execution"); // 'execution' = 执行链路, 'timeline' = 统一活动流
+  const [advisorExecution, setAdvisorExecution] = useState(null);
+  const [statusFilter, setStatusFilter] = useState(null);
+  const queryClient = useQueryClient();
+
+  const { data: currentUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: () => base44.auth.me()
+  });
+
+  const { data: executions = [], isLoading: loadingExec } = useQuery({
+    queryKey: ['task-executions'],
+    queryFn: () => base44.entities.TaskExecution.list("-created_date", 50),
+    staleTime: 5000,
+  });
+
+  const { data: allTasks = [] } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: () => base44.entities.Task.list('-reminder_time', 30),
+    initialData: [],
+  });
+
+  const { data: allNotes = [] } = useQuery({
+    queryKey: ['notes'],
+    queryFn: () => base44.entities.Note.list('-created_date', 20),
+    initialData: [],
+  });
+
+  // 合并活动流所需的附加数据源
+  const { data: relationships = [] } = useQuery({
+    queryKey: ['relationships-timeline'],
+    queryFn: () => base44.entities.Relationship.list("-created_date", 50),
+    initialData: [],
+  });
+
+  const { data: teamUsers = [] } = useQuery({
+    queryKey: ['team-users-timeline'],
+    queryFn: () => base44.entities.User.list(),
+    initialData: [],
+  });
+
+  const { data: comments = [] } = useQuery({
+    queryKey: ['comments-timeline'],
+    queryFn: () => base44.entities.Comment.list("-created_date", 200),
+    initialData: [],
+  });
+
+  const { data: notifications = [], isLoading: loadingNotif } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: async () => {
+      if (!currentUser?.id) return [];
+      return base44.entities.Notification.filter({ recipient_id: currentUser.id }, "-created_date", 50);
+    },
+    enabled: !!currentUser?.id,
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id) => base44.entities.Notification.update(id, { is_read: true }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      const unread = notifications.filter(n => !n.is_read);
+      for (const n of unread) {
+        await base44.entities.Notification.update(n.id, { is_read: true });
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Notification.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  const handleRetry = async (execution) => {
+    const now = new Date().toISOString();
+    const retrySteps = (execution.execution_steps || []).map(s => ({
+      ...s, status: "pending", timestamp: null,
+    }));
+    if (retrySteps.length > 0) {
+      retrySteps[0].status = "running";
+      retrySteps[0].timestamp = now;
+    }
+    await base44.entities.TaskExecution.update(execution.id, {
+      execution_status: "executing",
+      error_message: null,
+      execution_steps: retrySteps,
+    });
+    queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    toast("正在重试执行...", { icon: "🔄" });
+  };
+
+  const handleConfirm = async (execution) => {
+    // waiting_confirm 且已有产物 → 直接标 completed（验收产物）；
+    // waiting_confirm 但没有产物（只有方案）→ 触发实际执行，而不是直接标完成
+    if (execution.execution_status === "waiting_confirm" && !execution.automation_result) {
+      try {
+        const res = await base44.functions.invoke('executeAutomation', {
+          execution_id: execution.id,
+          phase: "execute"
+        });
+        if (res.data?.error) throw new Error(res.data.error);
+        queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+        toast.success("已开始执行");
+      } catch (e) {
+        toast.error("执行失败：" + e.message);
+      }
+      return;
+    }
+    const now = new Date().toISOString();
+    await base44.entities.TaskExecution.update(execution.id, {
+      execution_status: "completed",
+      completed_at: now,
+      execution_steps: (execution.execution_steps || []).map(s => ({ ...s, status: "completed", timestamp: s.timestamp || now })),
+    });
+    queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+    toast.success("已确认执行");
+  };
+
+  const handleDismiss = async (execution) => {
+    await base44.entities.TaskExecution.update(execution.id, { execution_status: "cancelled" });
+    queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+  };
+
+  const filteredExecutions = executions.filter(e => {
+    let catMatch = false;
+    if (activeFilter === "all") catMatch = true;
+    else if (activeFilter === "automation") catMatch = !!e.automation_type && e.automation_type !== "none";
+    else catMatch = e.category === activeFilter;
+    const srcMatch = sourceFilter === "all" || e.ai_parsed_result?.source === sourceFilter;
+    let statusMatch = true;
+    if (statusFilter === "parsing") {
+      statusMatch = e.execution_status === "parsing";
+    } else if (statusFilter === "completed") {
+      statusMatch = e.execution_status === "completed";
+    } else if (statusFilter === "waiting") {
+      statusMatch = e.execution_status === "waiting_confirm" || e.execution_status === "executing";
+    } else if (statusFilter === "failed") {
+      statusMatch = e.execution_status === "failed";
+    }
+    return catMatch && srcMatch && statusMatch;
+  });
+
+  // Compute active sources for filter buttons
+  const activeSources = [...new Set(executions.map(e => e.ai_parsed_result?.source).filter(Boolean))];
+
+  const unreadCount = notifications.filter(n => !n.is_read).length;
+
+  const getNotifIcon = (type) => {
+    switch (type) {
+      case 'assignment': return <UserPlus className="w-4 h-4 text-blue-500" />;
+      case 'comment': return <MessageSquare className="w-4 h-4 text-green-500" />;
+      case 'mention': return <Info className="w-4 h-4 text-purple-500" />;
+      case 'reminder': return <Bell className="w-4 h-4 text-orange-500" />;
+      default: return <Bell className="w-4 h-4 text-slate-500" />;
+    }
+  };
+
+  const filters = [
+    { key: "all", label: "全部" },
+    { key: "automation", label: "🤖 自动执行" },
+    { key: "promise", label: "约定" },
+    { key: "task", label: "任务" },
+    { key: "note", label: "心签" },
+  ];
+
+  const advisorRelatedTasks = advisorExecution?.task_id
+    ? allTasks.filter(t => t.id === advisorExecution.task_id || t.category === allTasks.find(at => at.id === advisorExecution.task_id)?.category)
+    : allTasks.slice(0, 5);
+
+  return (
+    <div className="min-h-screen bg-slate-50/30 p-4 md:p-8">
+      <div className="max-w-3xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-white to-slate-50/80 border border-slate-200/70 shadow-sm p-5 md:p-6">
+          {/* 装饰性光晕 */}
+          <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-gradient-to-br from-[#384877]/8 to-emerald-400/8 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-10 w-40 h-40 rounded-full bg-gradient-to-tr from-blue-400/5 to-transparent blur-3xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2.5 flex-wrap mb-2">
+                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md shadow-[#384877]/20 flex-shrink-0">
+                  <Zap className="w-4.5 h-4.5 text-white" strokeWidth={2.5} />
+                </div>
+                <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-slate-900 via-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+                  智能执行控制台
+                </h1>
+                {/* 引擎在线 - 精致徽标 */}
+                <div className="group relative flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-emerald-50 to-emerald-50/70 border border-emerald-200/80 shadow-sm">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-[10px] font-semibold tracking-wide text-emerald-700">引擎在线</span>
+                </div>
+              </div>
+              {/* 流程胶囊标签 */}
+              <div className="flex items-center gap-1 flex-wrap text-[11px] md:text-xs text-slate-500">
+                {['意图理解', '智能规划', '自动执行', '结果反馈'].map((step, idx, arr) => (
+                  <React.Fragment key={step}>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-600 font-medium">
+                      {step}
+                    </span>
+                    {idx < arr.length - 1 && (
+                      <span className="text-slate-300">→</span>
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 rounded-xl bg-white/80 backdrop-blur border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 hover:text-[#384877] transition-all"
+              >
+                <Link to={createPageUrl("ReminderSettings")}>
+                  <BellRing className="w-4 h-4 mr-1.5" />提醒设置
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="h-9 rounded-xl bg-white/80 backdrop-blur border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 hover:text-[#384877] transition-all"
+              >
+                <Link to={createPageUrl("NotificationSettings")}>
+                  <Settings className="w-4 h-4 mr-1.5" />通知规则
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <SmartInputBar />
+        <ExecutionStatusCards executions={executions} activeStatus={statusFilter} onStatusClick={setStatusFilter} />
+
+        {/* Tab switch */}
+        <div className="flex items-center gap-3 border-b border-slate-200 pb-0 overflow-x-auto">
+          <button onClick={() => setActiveTab("sentry")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "sentry" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <Sparkles className="w-4 h-4 inline mr-1.5" />情境哨兵
+          </button>
+          <button onClick={() => setActiveTab("executions")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "executions" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <Zap className="w-4 h-4 inline mr-1.5" />执行控制台
+          </button>
+          <button onClick={() => setActiveTab("notifications")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "notifications" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <Bell className="w-4 h-4 inline mr-1.5" />系统通知
+            {unreadCount > 0 && <Badge className="ml-1.5 bg-red-500 hover:bg-red-600 border-0 text-[10px] px-1.5">{unreadCount}</Badge>}
+          </button>
+          <button onClick={() => setActiveTab("map")} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "map" ? "border-[#384877] text-[#384877]" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+            <MapIcon className="w-4 h-4 inline mr-1.5" />地图视图
+          </button>
+        </div>
+
+        {/* 情境哨兵 */}
+        {activeTab === "sentry" && <SoulSentryFeed showHeader={true} />}
+
+        {/* 地图视图 */}
+        {activeTab === "map" && <GeofenceMapView />}
+
+        {/* Execution feed */}
+        {activeTab === "executions" && (
+          <div className="space-y-4">
+            {/* 视图模式切换：执行链路 vs 统一活动流 */}
+            <div className="flex items-center justify-between gap-2 p-1 bg-slate-100 rounded-lg w-fit">
+              <button
+                onClick={() => setFeedMode("execution")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${feedMode === "execution" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                执行链路
+              </button>
+              <button
+                onClick={() => setFeedMode("timeline")}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${feedMode === "timeline" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+              >
+                <Brain className="w-3.5 h-3.5" />
+                统一活动流
+              </button>
+            </div>
+
+            {feedMode === "timeline" ? (
+              /* 合并后的统一活动流（原"记忆进化"活动流） */
+              <ProductTimeline
+                tasks={allTasks}
+                notes={allNotes}
+                executions={executions}
+                relationships={relationships}
+                teamUsers={teamUsers}
+                comments={comments}
+              />
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg">
+                    {filters.map(f => (
+                      <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.label}</button>
+                    ))}
+                  </div>
+                  {activeSources.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <Filter className="w-3 h-3 text-slate-400" />
+                      <div className="flex gap-1 bg-slate-50 p-0.5 rounded-lg border border-slate-100">
+                        <button onClick={() => setSourceFilter("all")} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === "all" ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>全部来源</button>
+                        {activeSources.map(src => {
+                          const cfg = SOURCE_CONFIG[src];
+                          if (!cfg) return null;
+                          return (
+                            <button key={src} onClick={() => setSourceFilter(src)} className={`px-2 py-1 rounded text-[11px] font-medium transition-colors ${sourceFilter === src ? "bg-white text-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-600"}`}>
+                              {cfg.emoji} {cfg.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {loadingExec ? (
+                  <div className="p-8 text-center text-slate-500">加载中...</div>
+                ) : filteredExecutions.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-200">
+                    <Zap className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                    <p className="text-slate-500">暂无执行记录</p>
+                    <p className="text-xs text-slate-400 mt-1">输入内容后AI将自动生成执行链路并逐步执行</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <AnimatePresence mode="popLayout">
+                      {filteredExecutions.map(exec => (
+                        <ExecutionItem
+                          key={exec.id}
+                          execution={exec}
+                          onRetry={handleRetry}
+                          onConfirm={handleConfirm}
+                          onDismiss={handleDismiss}
+                          onOpenAdvisor={(ex) => setAdvisorExecution(ex)}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Notifications feed */}
+        {activeTab === "notifications" && (
+          <div className="space-y-4">
+            {unreadCount > 0 && (
+              <div className="flex justify-end">
+                <Button variant="outline" size="sm" onClick={() => markAllReadMutation.mutate()} className="text-xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />全部已读
+                </Button>
+              </div>
+            )}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 divide-y divide-slate-100">
+              {loadingNotif ? (
+                <div className="p-8 text-center text-slate-500">加载通知中...</div>
+              ) : notifications.length === 0 ? (
+                <div className="text-center py-12">
+                  <Bell className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                  <p className="text-slate-500">暂无通知</p>
+                </div>
+              ) : (
+                <AnimatePresence mode="popLayout">
+                  {notifications.map(n => {
+                    // 约定类提醒：能解析到约定时升级为可点击小组件（立即处理/延后/轻轻放下），并感知距离
+                    const linkedTask = n.type === 'reminder'
+                      ? allTasks.find(t => t.id && (t.id === n.task_id || t.id === n.taskId))
+                      : null;
+                    const taskActive = linkedTask && !["completed", "cancelled"].includes(linkedTask.status) && !linkedTask.deleted_at;
+                    // 历史通知的深链是 /tasks?id=，统一修正为 ?taskId=（提醒类通知的链接在 payload.url 上）
+                    const rawLink = n.link || n.url;
+                    const fixedLink = rawLink ? rawLink.replace('/tasks?id=', '/tasks?taskId=') : null;
+                    return (
+                    <motion.div key={n.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: -20 }} className={`p-4 transition-colors ${!n.is_read ? "bg-blue-50/30" : ""}`}>
+                      <div className="flex gap-3">
+                        <div className={`mt-0.5 p-2 rounded-lg ${n.is_read ? "bg-slate-50" : "bg-white shadow-sm"}`}>{getNotifIcon(n.type)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start mb-0.5">
+                            <h4 className={`font-medium text-sm ${n.is_read ? "text-slate-600" : "text-slate-900"}`}>{n.title}</h4>
+                            <span className="text-[11px] text-slate-400 ml-2 flex-shrink-0">{format(new Date(n.created_date), "MM-dd HH:mm", { locale: zhCN })}</span>
+                          </div>
+                          <p className="text-xs text-slate-500 mb-2">{n.content}</p>
+                          {taskActive ? (
+                            <ReminderActionCard
+                              compact
+                              task={linkedTask}
+                              onAction={() => markReadMutation.mutate(n.id)}
+                            />
+                          ) : (
+                          <div className="flex items-center gap-2">
+                            {fixedLink && <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild><Link to={fixedLink}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link></Button>}
+                            {!n.is_read && <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(n.id)} className="h-6 text-[11px] text-blue-600"><Check className="w-3 h-3 mr-1" />已读</Button>}
+                            <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(n.id)} className="h-6 text-[11px] text-slate-400 hover:text-red-500 ml-auto"><Trash2 className="w-3 h-3" /></Button>
+                          </div>
+                          )}
+                        </div>
+                        {!n.is_read && <div className="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0" />}
+                      </div>
+                    </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <AIExecutionAdvisor
+        open={!!advisorExecution}
+        onOpenChange={(open) => { if (!open) setAdvisorExecution(null); }}
+        execution={advisorExecution}
+        relatedTasks={advisorRelatedTasks}
+        relatedNotes={allNotes.slice(0, 5)}
+      />
+    </div>
+  );
+}

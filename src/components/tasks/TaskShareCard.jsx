@@ -1,0 +1,1151 @@
+import React, { useMemo, useRef, useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQuery, useQueries } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Download, Copy, Share2, Sparkles, Circle, CheckCircle2, Clock, Target, Maximize2, Minimize2, Quote, Calendar, Award, Check, Paperclip, FileText, Link as LinkIcon, StickyNote, Palette, RefreshCw, Wand2, Image as ImageIcon, Globe, Lock, Users, MessageSquare, CheckSquare } from "lucide-react";
+import { format } from "date-fns";
+import { createPageUrl } from "@/utils";
+import { zhCN } from "date-fns/locale";
+import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import ReactMarkdown from "react-markdown";
+import html2canvas from "html2canvas";
+import QRCodeImage from "@/components/ui/QRCode";
+import { httpRequest } from "@/api/httpClient";
+import { invokeAI } from "@/components/utils/aiHelper";
+
+const THEME_PRIMARY = "#384877";
+const THEME_SECONDARY = "#3b5aa2";
+const THEME_TINT = "#EEF2FF";
+
+const CATEGORY_COLORS = {
+  work: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  personal: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  health: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  study: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  family: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  shopping: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  finance: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  checkin: { accent: THEME_PRIMARY, bg: THEME_TINT },
+  other: { accent: THEME_PRIMARY, bg: THEME_TINT },
+};
+
+const CATEGORY_LABELS = {
+  work: { zh: "工作", en: "Work" },
+  personal: { zh: "个人", en: "Personal" },
+  health: { zh: "健康", en: "Health" },
+  study: { zh: "学习", en: "Study" },
+  family: { zh: "家庭", en: "Family" },
+  shopping: { zh: "购物", en: "Shopping" },
+  finance: { zh: "财务", en: "Finance" },
+  checkin: { zh: "打卡", en: "Check-in" },
+  other: { zh: "其他", en: "Other" },
+};
+
+const PRIORITY_LABELS = {
+  low: { zh: "低优先级", en: "Low Priority" },
+  medium: { zh: "中优先级", en: "Medium Priority" },
+  high: { zh: "高优先级", en: "High Priority" },
+  urgent: { zh: "紧急", en: "Urgent" },
+};
+
+// Share Card Component
+export default function TaskShareCard({ task, open, onClose }) {
+  const cardRef = useRef(null);
+  const [generating, setGenerating] = useState(false);
+  const [showAllSubtasks, setShowAllSubtasks] = useState(false);
+  const [expandedView, setExpandedView] = useState(false);
+  const [headerImage, setHeaderImage] = useState(null);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [titleIcon, setTitleIcon] = useState(null); // 右上角图标：按约定内容自动生成（emoji+底色），localStorage 按约定缓存
+  const [publicShareEnabled, setPublicShareEnabled] = useState(task?.share_enabled || false);
+  const [publicShareUrl, setPublicShareUrl] = useState(
+    task?.share_token && typeof window !== "undefined"
+      ? `${window.location.origin}/share/${task.share_token}`
+      : ""
+  );
+  const [publicShareLoading, setPublicShareLoading] = useState(false);
+  const [collabLogs, setCollabLogs] = useState(null);
+  const [collabLoading, setCollabLoading] = useState(false);
+
+  // Fetch collaboration summary when public share is enabled
+  React.useEffect(() => {
+    if (!publicShareEnabled || !task?.share_token) {
+      setCollabLogs(null);
+      return;
+    }
+    setCollabLoading(true);
+    httpRequest(`/api/public/share/${task.share_token}/logs`)
+      .then(setCollabLogs)
+      .catch(() => setCollabLogs(null))
+      .finally(() => setCollabLoading(false));
+  }, [publicShareEnabled, task?.share_token]);
+
+  // 打开卡片时确保公开分享链接已生成：二维码始终指向 /share/<token> 公开协作页，
+  // 扫码者无需登录即可留言、勾选进度、订阅提醒
+  React.useEffect(() => {
+    if (!open || !task?.id || publicShareUrl) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
+          method: "POST",
+          body: { enabled: true },
+        });
+        if (cancelled) return;
+        if (result?.enabled) {
+          setPublicShareEnabled(true);
+          if (result.url) {
+            setPublicShareUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
+          }
+          if (result.token) {
+            httpRequest(`/api/public/share/${result.token}/logs`)
+              .then(setCollabLogs)
+              .catch(() => {});
+          }
+        }
+      } catch {
+        // 生成失败：二维码暂时回落到应用内链接
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, task?.id, publicShareUrl]);
+
+  // 右上角图标按约定内容自动生成：AI 选一个贴切的 emoji + 柔和底色；
+  // 结果按约定 id 缓存在 localStorage（标题变了会重新生成），失败则保持产品图标
+  React.useEffect(() => {
+    if (!open || !task?.id) return;
+    let cancelled = false;
+    const cacheKey = `ss_share_icon_${task.id}`;
+    try {
+      const cached = JSON.parse(window.localStorage.getItem(cacheKey) || "null");
+      if (cached && cached.title === task.title && cached.emoji) {
+        setTitleIcon(cached);
+        return;
+      }
+    } catch (e) {}
+    (async () => {
+      try {
+        const result = await invokeAI({
+          prompt: `约定标题：${task.title || "未命名"}\n约定描述：${(task.description || "").slice(0, 200) || "无"}\n类别：${task.category || "其他"}`,
+          response_json_schema: {
+            type: "object",
+            properties: {
+              emoji: { type: "string", description: "最能代表这条约定内容的一个 emoji 字符" },
+              color: { type: "string", description: "与 emoji 搭配的柔和浅色背景色，hex 格式，如 #EEF2FF" }
+            },
+            required: ["emoji", "color"]
+          }
+        }, "share_card_icon");
+        if (cancelled || !result?.emoji) return;
+        const emoji = Array.from(String(result.emoji).trim()).slice(0, 4).join("");
+        const color = /^#[0-9a-fA-F]{6}$/.test(result.color || "") ? result.color : "#EEF2FF";
+        const icon = { title: task.title, emoji, color };
+        setTitleIcon(icon);
+        try { window.localStorage.setItem(cacheKey, JSON.stringify(icon)); } catch (e) {}
+      } catch (e) {
+        // 生成失败：不打扰用户，右上角保持产品图标
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, task?.id, task?.title]);
+
+  const getSubtaskLastLog = (subtaskId) => {
+    if (!collabLogs?.recent_logs) return null;
+    return collabLogs.recent_logs.find(
+      (log) => log.action_type === "toggle" && log.payload?.subtaskId === subtaskId
+    );
+  };
+
+  const PRESET_HEADERS = [
+    "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80", // Landscape
+    "https://images.unsplash.com/photo-1518173946687-a4c8892bbd9f?w=800&q=80", // Nature
+    "https://images.unsplash.com/photo-1534224039826-c7a0eda0e6b3?w=800&q=80", // Gradient art
+    "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=800&q=80", // Tech
+    "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=800&q=80", // Texture
+  ];
+
+  const handleGenerateAIImage = async () => {
+    setIsGeneratingImage(true);
+    try {
+      const { url } = await base44.integrations.Core.GenerateImage({
+        prompt: `A beautiful abstract wallpaper background for a task named "${task.title}". minimalist, artistic, high quality, 4k, suitable for card header.`,
+      });
+      setHeaderImage(url);
+      toast.success(isEnglish ? "Header image generated" : "顶图已生成");
+    } catch (error) {
+      console.error(error);
+      toast.error(isEnglish ? "Generation failed" : "生成失败");
+    } finally {
+      setIsGeneratingImage(false);
+    }
+  };
+
+  // 查询子约定
+  const { data: subtasks = [] } = useQuery({
+    queryKey: ['subtasks', task?.id],
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: task.id }),
+    enabled: !!task?.id,
+    initialData: [],
+  });
+
+  // 二级从属小约定：子约定下挂载的下一层；queryKey 与任务详情一致，缓存/失效复用
+  const childQueries = useQueries({
+    queries: subtasks.map((s) => ({
+      queryKey: ['subtasks', s.id],
+      queryFn: () => base44.entities.Task.filter({ parent_task_id: s.id }),
+      enabled: !!s?.id,
+    })),
+  });
+  const childMap = useMemo(() => {
+    const map = {};
+    subtasks.forEach((s, i) => {
+      map[s.id] = (childQueries[i]?.data || []).filter((c) => !c.deleted_at);
+    });
+    return map;
+  }, [subtasks, childQueries]);
+
+  const { data: dependencyTasks = [] } = useQuery({
+    queryKey: ['dependencies', task?.id],
+    queryFn: async () => {
+      if (!task?.dependencies?.length) return [];
+      const results = await Promise.all(task.dependencies.map(id => 
+        base44.entities.Task.filter({ id }).then(res => res[0]).catch(() => null)
+      ));
+      return results.filter(Boolean);
+    },
+    enabled: !!task?.dependencies?.length,
+  });
+
+  const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
+  const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
+
+  const taskUrl = typeof window !== 'undefined' 
+    ? `${window.location.origin}${createPageUrl("Tasks")}?taskId=${task.id}`
+    : "";
+
+  // 二维码始终指向公开协作页（/share/<token>）；仅当链接生成失败时才回落到应用内链接
+  const qrCodeValue = publicShareUrl || taskUrl;
+
+  // Detect language
+  const isEnglish = React.useMemo(() => {
+    const allText = task.title + (task.description || "");
+    const chineseChars = (allText.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const totalChars = allText.length;
+    return chineseChars < totalChars * 0.3; // English if less than 30% Chinese
+  }, [task]);
+
+  const [quote] = useState(() => {
+    const quotesZh = [
+      "每一个不曾起舞的日子，都是对生命的辜负。",
+      "坚持不是因为看到了希望，而是因为坚持了才有希望。",
+      "今日的努力，是明日的惊喜。",
+      "自律给我自由。",
+      "星光不问赶路人，时光不负有心人。",
+      "做难事必有所得。",
+      "种一棵树最好的时间是十年前，其次是现在。",
+      "不积跬步，无以至千里。",
+      "每天进步一点点，坚持带来大改变。",
+      "专注当下，未来可期。"
+    ];
+    const quotesEn = [
+      "The only way to do great work is to love what you do.",
+      "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+      "Believe you can and you're halfway there.",
+      "The future belongs to those who believe in the beauty of their dreams.",
+      "Don't watch the clock; do what it does. Keep going.",
+      "The secret of getting ahead is getting started.",
+      "It always seems impossible until it's done.",
+      "Small daily improvements are the key to staggering long-term results.",
+      "Focus on being productive instead of busy.",
+      "Your limitation—it's only your imagination."
+    ];
+    const quotes = isEnglish ? quotesEn : quotesZh;
+    return quotes[Math.floor(Math.random() * quotes.length)];
+  });
+
+  // html2canvas is now imported directly for better performance
+
+  const handleDownload = async () => {
+    if (!cardRef.current) return;
+    
+    setGenerating(true);
+    let previewContainer = null;
+    let originalMaxHeight = '';
+    let originalOverflow = '';
+
+    try {
+      // 临时移除预览区域的高度限制，确保捕获完整内容
+      previewContainer = cardRef.current.parentElement;
+      if (previewContainer) {
+        originalMaxHeight = previewContainer.style.maxHeight;
+        originalOverflow = previewContainer.style.overflow;
+        previewContainer.style.maxHeight = 'none';
+        previewContainer.style.overflow = 'visible';
+      }
+      
+      // 等待DOM更新
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 计算卡片高度，长内容时调整 scale
+      const cardHeight = cardRef.current.scrollHeight;
+      const scaleFactor = cardHeight > 1500 ? 1.2 : cardHeight > 1000 ? 1.5 : 2;
+      
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: '#ffffff',
+        scale: scaleFactor,
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        windowWidth: cardRef.current.scrollWidth,
+        windowHeight: cardRef.current.scrollHeight,
+      });
+
+      // 恢复原始样式
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
+
+      const link = document.createElement('a');
+      link.download = `约定-${task.title}-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png', 0.95);
+      link.click();
+      
+      toast.success("约定卡片已保存到本地");
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error(error.message || "生成卡片失败，请重试");
+    } finally {
+      // Ensure styles are restored even if an error occurs
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
+      setGenerating(false);
+    }
+  };
+
+  const handleCopyImage = async () => {
+    if (!cardRef.current) return;
+
+    setGenerating(true);
+    let previewContainer = null;
+    let originalMaxHeight = '';
+    let originalOverflow = '';
+    let blob = null;
+
+    try {
+      // 临时移除预览区域的高度限制
+      previewContainer = cardRef.current.parentElement;
+      if (previewContainer) {
+        originalMaxHeight = previewContainer.style.maxHeight;
+        originalOverflow = previewContainer.style.overflow;
+        previewContainer.style.maxHeight = 'none';
+        previewContainer.style.overflow = 'visible';
+      }
+      
+      const cardHeight = cardRef.current.scrollHeight;
+      const scaleFactor = cardHeight > 1500 ? 1.2 : cardHeight > 1000 ? 1.5 : 2;
+      
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: '#ffffff',
+        scale: scaleFactor,
+        logging: false,
+        useCORS: true,
+        allowTaint: true,
+        windowWidth: cardRef.current.scrollWidth,
+        windowHeight: cardRef.current.scrollHeight,
+      });
+
+      // 恢复原始样式
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+        previewContainer = null; // 标记已恢复
+      }
+
+      blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.95));
+
+      if (!blob) throw new Error("图片生成失败");
+
+      if (navigator.clipboard && navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        toast.success("约定卡片已复制到剪贴板");
+      } else {
+        throw new Error("UNSUPPORTED");
+      }
+    } catch (error) {
+      console.error("Copy error:", error);
+      // Safari/部分浏览器拒绝图片剪贴板权限：自动降级为下载 PNG
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `约定卡片-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        toast.success("浏览器限制了图片复制，已改为下载到本地");
+      } else {
+        toast.error("复制失败，请重试");
+      }
+    } finally {
+      if (previewContainer) {
+        previewContainer.style.maxHeight = originalMaxHeight;
+        previewContainer.style.overflow = originalOverflow;
+      }
+      setGenerating(false);
+    }
+  };
+
+  const handleTogglePublicShare = async (enabled) => {
+    if (!task?.id) return;
+    setPublicShareLoading(true);
+    try {
+      const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
+        method: "POST",
+        body: { enabled }
+      });
+      setPublicShareEnabled(result.enabled);
+      if (result.enabled && result.url) {
+        // 后端在反代后可能生成 http:// 链接，统一改成本页源（生产即 https 域名）
+        setPublicShareUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
+        // Refresh collaboration summary after enabling
+        setCollabLoading(true);
+        httpRequest(`/api/public/share/${result.token}/logs`)
+          .then(setCollabLogs)
+          .catch(() => setCollabLogs(null))
+          .finally(() => setCollabLoading(false));
+      } else {
+        setPublicShareUrl("");
+        setCollabLogs(null);
+      }
+      toast.success(enabled ? "公开分享已开启" : "公开分享已关闭");
+    } catch (error) {
+      console.error("Toggle public share failed:", error);
+      toast.error(error?.message || "分享设置失败");
+    } finally {
+      setPublicShareLoading(false);
+    }
+  };
+
+  const handleCopyPublicLink = () => {
+    if (!publicShareUrl) return;
+    navigator.clipboard.writeText(publicShareUrl).then(() => {
+      toast.success("公开链接已复制");
+    }).catch(() => {
+      toast.error("复制失败");
+    });
+  };
+
+  const handleCopyText = () => {
+    const categoryLabel = CATEGORY_LABELS[task.category] || { zh: "其他", en: "Other" };
+    const priorityLabel = PRIORITY_LABELS[task.priority] || { zh: "中优先级", en: "Medium" };
+    
+    const taskText = `
+【约定卡片】
+
+📋 ${task.title}
+
+${task.description ? `📝 ${task.description}\n` : ''}
+📅 提醒时间：${format(new Date(task.reminder_time), "yyyy年M月d日 EEEE HH:mm", { locale: zhCN })}${task.end_time ? ` - ${format(new Date(task.end_time), "HH:mm", { locale: zhCN })}` : ''}
+🏷️ 类别：${categoryLabel.zh}
+⚡ 优先级：${priorityLabel.zh}
+📊 完成进度：${progress}%
+${task.status === "completed" ? "✅ 已完成" : "🔵 进行中"}
+${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => {
+  const title = s.title || '';
+  const titleMatch = title.match(/^(\d+)\.\s*/);
+  const cleanTitle = titleMatch ? title.replace(/^\d+\.\s*/, '') : title;
+  const childLines = (childMap[s.id] || []).map((c) => {
+    const childTitle = (c.title || '').replace(/^\d+\.\s*/, '');
+    return `   └ ${childTitle} ${c.status === "completed" ? "✅" : "⭕"}`;
+  });
+  return [`${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`, ...childLines].join('\n');
+}).join('\n')}` : ''}
+
+🔗 查看详情：
+${taskUrl}
+
+---
+来自「约定管家」智能提醒系统
+${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
+    `.trim();
+
+    navigator.clipboard.writeText(taskText).then(() => {
+      toast.success("约定文本已复制到剪贴板");
+    }).catch(() => {
+      toast.error("复制失败");
+    });
+  };
+
+  if (!task) return null;
+
+  const categoryColor = CATEGORY_COLORS[task.category] || CATEGORY_COLORS.other;
+  
+  // 决定显示多少子约定
+  const displayedSubtasks = showAllSubtasks || expandedView ? subtasks : subtasks.slice(0, 6);
+  const hasMoreSubtasks = subtasks.length > 6 && !showAllSubtasks && !expandedView;
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className={`${expandedView ? 'max-w-4xl' : 'max-w-2xl'} max-h-[90vh] overflow-y-auto`}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Share2 className="w-5 h-5 text-blue-700" />
+              分享约定卡片
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setExpandedView(!expandedView)}
+              className="h-8 w-8"
+            >
+              {expandedView ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </Button>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-6">
+          {/* 样式控制选项 */}
+          <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+               <Palette className="w-4 h-4" />
+               <span>{isEnglish ? "Header Style" : "卡片顶图"}</span>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+               {/* Default Gradient */}
+               <button 
+                 onClick={() => setHeaderImage(null)}
+                 className={`w-14 h-14 rounded-xl border-2 flex-shrink-0 transition-all shadow-sm ${!headerImage ? 'border-blue-600 ring-2 ring-blue-100 ring-offset-1' : 'border-transparent hover:border-slate-300'}`}
+                 style={{ background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}dd)` }}
+                 title={isEnglish ? "Default Color" : "默认颜色"}
+               />
+               
+               {/* Presets */}
+               {PRESET_HEADERS.map((img, idx) => (
+                 <button 
+                   key={idx}
+                   onClick={() => setHeaderImage(img)}
+                   className={`w-14 h-14 rounded-xl border-2 flex-shrink-0 overflow-hidden relative transition-all shadow-sm ${headerImage === img ? 'border-blue-600 ring-2 ring-blue-100 ring-offset-1' : 'border-transparent hover:border-slate-300'}`}
+                 >
+                   <img src={img} className="w-full h-full object-cover" alt="preset" crossOrigin="anonymous" />
+                 </button>
+               ))}
+
+               {/* AI Generate */}
+               <button 
+                 onClick={handleGenerateAIImage}
+                 disabled={isGeneratingImage}
+                 className="w-14 h-14 rounded-xl border-2 border-slate-200 border-dashed flex flex-col items-center justify-center gap-1 flex-shrink-0 bg-white hover:bg-slate-50 transition-colors group"
+                 title={isEnglish ? "AI Generate" : "AI生成"}
+               >
+                 {isGeneratingImage ? (
+                   <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+                 ) : (
+                   <>
+                     <Wand2 className="w-5 h-5 text-purple-500 group-hover:scale-110 transition-transform" />
+                     <span className="text-[10px] text-slate-500 font-medium">AI</span>
+                   </>
+                 )}
+               </button>
+            </div>
+          </div>
+
+          {/* 列表控制选项 */}
+          {subtasks.length > 6 && (
+            <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-200">
+              <div className="flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-blue-700" />
+                <div>
+                  <Label className="text-sm font-semibold text-blue-900">
+                    {isEnglish ? "Show All Subtasks" : "显示所有子约定"}
+                  </Label>
+                  <p className="text-xs text-blue-700 mt-0.5">
+                   {isEnglish 
+                     ? `Total ${subtasks.length} items, showing ${displayedSubtasks.length}`
+                     : `共 ${subtasks.length} 个子约定，当前显示 ${displayedSubtasks.length} 个`}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={showAllSubtasks}
+                onCheckedChange={setShowAllSubtasks}
+                className="data-[state=checked]:bg-blue-700"
+              />
+            </div>
+          )}
+
+          {/* 预览区域 */}
+          <div className="flex justify-center bg-slate-100/50 p-4 md:p-8 rounded-2xl max-h-[60vh] overflow-y-auto">
+            <div ref={cardRef} className={`${expandedView ? 'w-[720px]' : 'w-[450px]'} relative transition-all duration-300`}>
+              {/* 主卡片 - 采用打卡风格 */}
+              <div 
+                className="relative bg-white rounded-3xl overflow-hidden shadow-2xl"
+                style={{
+                  boxShadow: `0 20px 60px -10px ${categoryColor.accent}30`
+                }}
+              >
+                {/* 顶部背景 */}
+                {headerImage ? (
+                  <>
+                    <img 
+                      src={headerImage}
+                      className="h-32 w-full absolute top-0 left-0 object-cover"
+                      style={{
+                        clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
+                      }}
+                      crossOrigin="anonymous"
+                      alt="Header"
+                    />
+                    <div 
+                      className="h-32 w-full absolute top-0 left-0 bg-black/20"
+                      style={{
+                        clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
+                      }}
+                    />
+                  </>
+                ) : (
+                  <div 
+                    className="h-32 w-full absolute top-0 left-0"
+                    style={{
+                      background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}dd)`,
+                      clipPath: 'polygon(0 0, 100% 0, 100% 70%, 0 100%)'
+                    }}
+                  />
+                )}
+
+                {/* 装饰圆环 */}
+                <div className="absolute top-0 right-0 w-32 h-32 opacity-10 transform translate-x-10 -translate-y-10">
+                  <div className="w-full h-full rounded-full border-[12px] border-white" />
+                </div>
+                <div className="absolute top-10 left-0 w-16 h-16 opacity-10 transform -translate-x-8">
+                   <div className="w-full h-full rounded-full bg-white" />
+                </div>
+
+                <div className="relative z-10 px-8 pt-8 pb-10">
+                  {/* 头部：日期与打卡标识 */}
+                  <div className="flex justify-between items-start mb-6">
+                    <div className="text-white">
+                      <div className="flex items-center gap-2 mb-1 opacity-90">
+                        <Calendar className="w-4 h-4" />
+                        <span className="text-sm font-medium tracking-wide">{isEnglish ? "DAILY CHECK-IN" : "每日打卡"}</span>
+                      </div>
+                      <h3 className="text-3xl font-bold tracking-tight">
+                        {format(new Date(), "dd")}
+                        <span className="text-lg font-normal ml-1 opacity-80">/ {format(new Date(), "MMM", { locale: zhCN })}</span>
+                      </h3>
+                      <p className="text-sm opacity-80 mt-1">{format(new Date(), "EEEE", { locale: zhCN })}</p>
+                    </div>
+
+                    <div className="bg-white/20 backdrop-blur-md rounded-2xl p-2 border border-white/20">
+                      <div 
+                        className="w-12 h-12 rounded-xl flex items-center justify-center bg-white shadow-lg"
+                        style={{ color: categoryColor.accent }}
+                      >
+                        {titleIcon ? (
+                          <div
+                            className="w-10 h-10 rounded-lg flex items-center justify-center"
+                            style={{ background: titleIcon.color }}
+                          >
+                            <span className="text-xl leading-none">{titleIcon.emoji}</span>
+                          </div>
+                        ) : (
+                          <img
+                            src="/icon-192.png"
+                            alt="Logo"
+                            crossOrigin="anonymous"
+                            className="w-10 h-10 object-contain"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 约定核心内容 */}
+                  <div className="mt-8 mb-8">
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider" 
+                         style={{ 
+                           backgroundColor: `${categoryColor.accent}15`, 
+                           color: categoryColor.accent 
+                         }}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-current" />
+                        {CATEGORY_LABELS[task.category]?.[isEnglish ? 'en' : 'zh'] || task.category}
+                      </div>
+
+                      <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                        task.priority === 'urgent' ? 'bg-red-100 text-red-700' :
+                        task.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                        task.priority === 'medium' ? 'bg-blue-100 text-blue-700' :
+                        'bg-slate-100 text-slate-700'
+                      }`}>
+                        <span className="w-2 h-2 rounded-full bg-current" />
+                        {PRIORITY_LABELS[task.priority]?.[isEnglish ? 'en' : 'zh'] || task.priority}
+                      </div>
+                    </div>
+
+                    <h1 className="text-3xl font-black text-slate-800 leading-tight mb-4">
+                      {task.title}
+                    </h1>
+
+                    {task.description && (
+                      <div className="relative pl-4 border-l-2 border-slate-200 py-1 mb-6">
+                        <ReactMarkdown 
+                          className="prose prose-sm max-w-none text-slate-600 text-sm leading-relaxed
+                            prose-headings:text-slate-800 prose-headings:font-semibold prose-headings:text-sm prose-headings:mb-1 prose-headings:mt-2 first:prose-headings:mt-0
+                            prose-p:my-1 prose-p:leading-relaxed first:prose-p:mt-0 last:prose-p:mb-0
+                            prose-ul:my-1 prose-ul:list-disc prose-ul:pl-4 prose-ul:space-y-0.5
+                            prose-ol:my-1 prose-ol:list-decimal prose-ol:pl-4 prose-ol:space-y-0.5
+                            prose-li:text-slate-600 prose-li:text-sm
+                            prose-strong:text-slate-800 prose-strong:font-semibold
+                            prose-em:text-slate-600 prose-em:italic
+                            prose-code:bg-slate-200 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:text-xs
+                            prose-blockquote:border-l-2 prose-blockquote:border-slate-300 prose-blockquote:pl-2 prose-blockquote:italic
+                            prose-hr:border-slate-200 prose-hr:my-2"
+                        >
+                          {task.description}
+                        </ReactMarkdown>
+                      </div>
+                    )}
+
+                    {/* 时间信息 */}
+                    <div className="grid grid-cols-1 gap-2 mt-4 mb-6 bg-slate-50/50 rounded-xl p-4 border border-slate-100">
+                    <div className="flex items-center gap-3 text-sm">
+                      <div className="flex items-center gap-2 text-slate-600 min-w-[80px]">
+                        <Clock className="w-4 h-4" />
+                        <span className="font-medium">{isEnglish ? "Start Time" : "提醒时间"}</span>
+                      </div>
+                      <span className="font-semibold text-slate-800">
+                        {format(new Date(task.reminder_time), isEnglish ? "MMM dd, yyyy HH:mm" : "yyyy-MM-dd HH:mm", { locale: isEnglish ? undefined : zhCN })}
+                      </span>
+                    </div>
+                    {task.end_time && (
+                      <div className="flex items-center gap-3 text-sm">
+                        <div className="flex items-center gap-2 text-slate-600 min-w-[80px]">
+                          <Target className="w-4 h-4" />
+                          <span className="font-medium">{isEnglish ? "End Time" : "截止时间"}</span>
+                        </div>
+                        <span className="font-semibold text-slate-800">
+                          {format(new Date(task.end_time), isEnglish ? "MMM dd, yyyy HH:mm" : "yyyy-MM-dd HH:mm", { locale: isEnglish ? undefined : zhCN })}
+                        </span>
+                      </div>
+                    )}
+                    </div>
+
+                    {/* 附件信息 */}
+                    {task.attachments && task.attachments.length > 0 && (
+                      <div className="mb-4">
+                        <div className="flex items-center gap-2 text-slate-500 mb-2">
+                          <Paperclip className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium uppercase tracking-wider">{isEnglish ? "Attachments" : "相关附件"}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {task.attachments.map((att, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600">
+                              <FileText className="w-3 h-3 text-slate-400" />
+                              <span className="truncate max-w-[150px]">{att.file_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 依赖任务 */}
+                    {dependencyTasks.length > 0 && (
+                      <div className="mb-4">
+                         <div className="flex items-center gap-2 text-slate-500 mb-2">
+                          <LinkIcon className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium uppercase tracking-wider">{isEnglish ? "Dependencies" : "前置依赖"}</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                           {dependencyTasks.map((dep, idx) => (
+                             <div key={dep.id} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                               <span className="w-4 h-4 flex items-center justify-center bg-slate-200 rounded-full text-[10px] font-mono text-slate-500">{idx+1}</span>
+                               <span className="line-clamp-1">{dep.title}</span>
+                             </div>
+                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 笔记 */}
+                    {task.notes && task.notes.length > 0 && (
+                       <div className="mb-6">
+                         <div className="flex items-center gap-2 text-slate-500 mb-2">
+                          <StickyNote className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium uppercase tracking-wider">{isEnglish ? "Notes" : "相关笔记"}</span>
+                        </div>
+                        <div className="space-y-2">
+                          {task.notes.slice(0, 3).map((note, idx) => (
+                            <div key={idx} className="bg-yellow-50/50 p-3 rounded-xl border border-yellow-100/50 text-xs text-slate-600 leading-relaxed relative">
+                              <div className="absolute top-0 left-0 w-1 h-full bg-yellow-200/50 rounded-l-xl"></div>
+                              <div className="pl-2">
+                                {note.content.replace(/<[^>]+>/g, '').slice(0, 100)}{note.content.length > 100 ? '...' : ''}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                       </div>
+                    )}
+                  </div>
+
+                  {/* 进度圆环/统计 */}
+                  <div className="grid grid-cols-2 gap-4 mb-8">
+                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center items-center text-center">
+                        <div className="relative w-16 h-16 mb-2">
+                           <svg className="w-full h-full transform -rotate-90">
+                             <circle cx="32" cy="32" r="28" stroke="#e2e8f0" strokeWidth="6" fill="none" />
+                             <circle 
+                               cx="32" cy="32" r="28" 
+                               stroke={categoryColor.accent} 
+                               strokeWidth="6" 
+                               fill="none" 
+                               strokeDasharray={175.9}
+                               strokeDashoffset={175.9 - (175.9 * progress) / 100}
+                               className="transition-all duration-1000 ease-out"
+                               strokeLinecap="round"
+                             />
+                           </svg>
+                           <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-sm font-bold text-slate-700">{progress}%</span>
+                           </div>
+                        </div>
+                        <span className="text-xs text-slate-500 font-medium">{isEnglish ? "Progress" : "完成进度"}</span>
+                     </div>
+
+                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex flex-col justify-center items-center text-center">
+                        <div 
+                          className="w-12 h-12 rounded-full mb-3 flex items-center justify-center text-white text-xl font-bold"
+                          style={{ background: `linear-gradient(135deg, ${categoryColor.accent}, ${categoryColor.accent}bb)` }}
+                        >
+                          {completedSubtasks}
+                        </div>
+                        <span className="text-xs text-slate-500 font-medium">
+                          {completedSubtasks === subtasks.length && subtasks.length > 0 
+                            ? (isEnglish ? "All Done" : "全部完成") 
+                            : (isEnglish ? "Completed" : "已完成项目")}
+                        </span>
+                     </div>
+                  </div>
+
+                  {/* 子约定列表 (精简版) */}
+                  {displayedSubtasks.length > 0 && (
+                     <div className="mb-8 bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                          <span className="w-1 h-1 rounded-full bg-slate-300" />
+                          {isEnglish ? "CHECKLIST" : "清单"}
+                          <div className="h-px bg-slate-200 flex-1" />
+                        </div>
+                        <div className="space-y-2">
+                         {displayedSubtasks.map((subtask, index) => {
+                            const isCompleted = subtask.status === "completed";
+                            const title = subtask.title || '';
+                            const cleanTitle = title.replace(/^\d+\.\s*/, '');
+                            const lastLog = getSubtaskLastLog(subtask.id);
+                            return (
+                              <React.Fragment key={subtask.id}>
+                                <div className="flex items-start gap-3">
+                                   <div className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isCompleted ? 'bg-slate-800 border-slate-800 text-white' : 'border-slate-300'}`}>
+                                     {isCompleted && <Check className="w-3 h-3" />}
+                                   </div>
+                                   <div className="flex-1 min-w-0">
+                                     <span className={`text-sm ${isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+                                       {cleanTitle}
+                                     </span>
+                                     {lastLog && (
+                                       <div className="text-[10px] text-slate-400 mt-0.5">
+                                         {lastLog.visitor_name || "访客"}
+                                         <span className="ml-1 font-mono">#{String(lastLog.visitor_token || "").slice(0, 6)}</span>
+                                         <span className="ml-1">· {format(new Date(lastLog.created_date), "M月d日 HH:mm", { locale: zhCN })}</span>
+                                       </div>
+                                     )}
+                                   </div>
+                                </div>
+                                {childMap[subtask.id]?.length > 0 && (
+                                  <div className="ml-7 mt-1 space-y-1.5 border-l border-slate-200 pl-3">
+                                    {childMap[subtask.id].map((child) => {
+                                      const childCompleted = child.status === "completed";
+                                      const childTitle = (child.title || '').replace(/^\d+\.\s*/, '');
+                                      return (
+                                        <div key={child.id} className="flex items-start gap-2">
+                                          <div className={`mt-0.5 w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${childCompleted ? 'bg-slate-400 border-slate-400 text-white' : 'border-slate-300'}`}>
+                                            {childCompleted && <Check className="w-2.5 h-2.5" />}
+                                          </div>
+                                          <span className={`text-xs ${childCompleted ? 'text-slate-400 line-through' : 'text-slate-500'}`}>
+                                            {childTitle}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </React.Fragment>
+                            );
+                         })}
+                          {hasMoreSubtasks && (
+                            <p className="text-xs text-slate-400 italic pl-7 pt-1">
+                              + {isEnglish 
+                                  ? `${subtasks.length - displayedSubtasks.length} more items` 
+                                  : `还有 ${subtasks.length - displayedSubtasks.length} 项子约定`}
+                            </p>
+                          )}
+                        </div>
+                     </div>
+                  )}
+
+                  {/* 每日金句 */}
+                  <div className="mb-8">
+                     <div className="relative py-4 px-6 bg-yellow-50/80 rounded-xl border border-yellow-100">
+                        <Quote className="absolute top-2 left-2 w-4 h-4 text-yellow-400 opacity-50 transform rotate-180" />
+                        <p className="text-center text-sm font-medium text-slate-700 italic">
+                          {quote}
+                        </p>
+                        <Quote className="absolute bottom-2 right-2 w-4 h-4 text-yellow-400 opacity-50" />
+                     </div>
+                  </div>
+
+                  {/* 底部 Footer */}
+                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                       <div className="w-8 h-8 rounded-lg overflow-hidden bg-transparent flex items-center justify-center">
+                         <img 
+                           src="/icon-192.png"
+                           alt="Logo"
+                           crossOrigin="anonymous"
+                           className="w-full h-full object-contain"
+                         />
+                       </div>
+                       <div>
+                         <p className="text-xs font-bold text-slate-900">{isEnglish ? "SoulSentry" : "心灵存放站"}</p>
+                         <p className="text-[10px] text-slate-400 uppercase tracking-wider">{isEnglish ? "Focus & Achieve" : "坚定守护 · 适时轻唤"}</p>
+                       </div>
+                    </div>
+                    
+                    {/* 二维码区域 */}
+                    <div className="flex items-center gap-2">
+                       <div className="text-right hidden sm:block">
+                         <p className="text-[10px] text-slate-400">{isEnglish ? "Scan to join" : "扫码参与"}</p>
+                       </div>
+                       <div className="w-12 h-12 bg-white rounded-md p-0.5 shadow-sm border border-slate-100">
+                         <QRCodeImage value={qrCodeValue} size={96} alt="QR Code" className="w-full h-full object-contain" />
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* 完成印章 */}
+                  {task.status === "completed" && (
+                    <div className="absolute bottom-24 right-8 transform rotate-[-15deg] opacity-90 pointer-events-none">
+                      <div className="w-32 h-32 border-4 border-green-600 rounded-full flex items-center justify-center p-2" style={{ maskImage: 'url("data:image/svg+xml;base64,...")' }}> {/* 模拟印章纹理可用CSS实现，这里简化 */}
+                         <div className="w-full h-full border-2 border-green-600 rounded-full flex flex-col items-center justify-center text-green-600">
+                            <span className="text-xs font-bold tracking-widest uppercase">{isEnglish ? "Mission" : "任务"}</span>
+                            <span className="text-xl font-black uppercase tracking-wider">{isEnglish ? "Completed" : "已完成"}</span>
+                            <span className="text-[10px] font-mono mt-1">{format(new Date(), isEnglish ? "MM.dd.yyyy" : "yyyy.MM.dd")}</span>
+                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 公开分享 */}
+          <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {publicShareEnabled ? <Globe className="w-4 h-4 text-blue-600" /> : <Lock className="w-4 h-4 text-slate-400" />}
+                <div>
+                  <Label className="text-sm font-medium text-slate-700">公开分享</Label>
+                  <p className="text-xs text-slate-500">任何人通过链接或二维码即可查看、评论和勾选</p>
+                </div>
+              </div>
+              <Switch
+                checked={publicShareEnabled}
+                onCheckedChange={handleTogglePublicShare}
+                disabled={publicShareLoading}
+                className="data-[state=checked]:bg-blue-700"
+              />
+            </div>
+
+            {publicShareEnabled && publicShareUrl && (
+              <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200">
+                <p className="text-xs text-slate-500 truncate flex-1">{publicShareUrl}</p>
+                <Button size="sm" variant="outline" onClick={handleCopyPublicLink}>
+                  <Copy className="w-4 h-4 mr-1.5" />
+                  复制链接
+                </Button>
+              </div>
+            )}
+
+            {publicShareEnabled && collabLogs && (
+              <div className="pt-3 border-t border-slate-200">
+                <p className="text-xs font-medium text-slate-600 mb-2">合作动态</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white rounded-lg p-2 text-center border border-slate-200">
+                    <Users className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-slate-800">{collabLogs.visitor_count}</p>
+                    <p className="text-[10px] text-slate-500">访客</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 text-center border border-slate-200">
+                    <MessageSquare className="w-4 h-4 text-indigo-500 mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-slate-800">{collabLogs.comment_count}</p>
+                    <p className="text-[10px] text-slate-500">评论</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 text-center border border-slate-200">
+                    <CheckSquare className="w-4 h-4 text-emerald-500 mx-auto mb-1" />
+                    <p className="text-lg font-semibold text-slate-800">{collabLogs.toggle_count + collabLogs.import_count}</p>
+                    <p className="text-[10px] text-slate-500">互动</p>
+                  </div>
+                </div>
+                {collabLogs.recent_logs?.length > 0 && (
+                  <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
+                    {collabLogs.recent_logs.slice(0, 5).map((log) => {
+                      const visitorLabel = log.visitor_name || "访客";
+                      const visitorId = (log.visitor_token || "").slice(0, 6);
+                      const timeText = format(new Date(log.created_date), "M月d日 HH:mm", { locale: zhCN });
+                      const payload = log.payload || {};
+                      let actionText = "";
+                      let detailText = "";
+                      if (log.action_type === "comment") {
+                        actionText = "评论";
+                        detailText = payload.preview || "";
+                      } else if (log.action_type === "toggle") {
+                        actionText = payload.checked ? "勾选" : "取消勾选";
+                        const subtaskIdShort = payload.subtaskId ? `#${String(payload.subtaskId).slice(0, 6)}` : "";
+                        detailText = payload.subtaskTitle
+                          ? `${payload.subtaskTitle} ${subtaskIdShort}`
+                          : task.title || "约定";
+                      } else if (log.action_type === "import") {
+                        actionText = "保存到个人列表";
+                        detailText = task.title || "约定";
+                      } else if (log.action_type === "subscribe") {
+                        actionText = "订阅更新";
+                        detailText = payload.email ? `邮箱：${payload.email}` : "";
+                      }
+                      return (
+                        <div key={log.id} className="text-xs bg-white rounded-lg px-3 py-2 border border-slate-200">
+                          <div className="flex items-center justify-between mb-0.5">
+                            <span className="font-medium text-slate-800">
+                              {visitorLabel}
+                              <span className="ml-1 text-[10px] font-mono text-slate-400">#{visitorId}</span>
+                            </span>
+                            <span className="text-slate-400">{timeText}</span>
+                          </div>
+                          <div className="text-slate-600">
+                            <span className="text-slate-500">{actionText}</span>
+                            {detailText && (
+                              <span className="ml-1 font-medium text-slate-700 truncate block">
+                                {detailText}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {publicShareEnabled && collabLoading && (
+              <div className="flex items-center justify-center py-2 text-xs text-slate-400">
+                <Sparkles className="w-3 h-3 animate-spin mr-1.5" />
+                加载合作动态...
+              </div>
+            )}
+          </div>
+
+          {/* 操作按钮 */}
+          <div className="grid grid-cols-3 gap-3">
+            <Button
+              onClick={handleDownload}
+              disabled={generating}
+              variant="outline"
+              className="border-slate-300 bg-white text-slate-900 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <Download className="w-4 h-4 mr-2 text-slate-900" />
+              {generating ? "生成中..." : "下载图片"}
+            </Button>
+            <Button
+              onClick={handleCopyImage}
+              disabled={generating}
+              variant="outline"
+              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              复制图片
+            </Button>
+            <Button
+              onClick={handleCopyText}
+              variant="outline"
+              className="border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+            >
+              <Copy className="w-4 h-4 mr-2" />
+              复制文本
+            </Button>
+          </div>
+
+          <div className="bg-gradient-to-r from-[#384877]/10 to-[#3b5aa2]/10 rounded-xl p-4 border border-[#384877]/20">
+            <div className="flex gap-3">
+              <Sparkles className="w-5 h-5 text-blue-700 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-blue-900 mb-1">
+                  {isEnglish ? "Smart Generation Tips" : "智能生成提示"}
+                </p>
+                <ul className="text-xs text-blue-800 space-y-1">
+                  {isEnglish ? (
+                    <>
+                      <li>• Long task lists are automatically optimized for clarity</li>
+                      <li>• Enable "Show All Subtasks" to generate a complete long image</li>
+                      <li>• Copy text function includes all subtask information</li>
+                      <li>• Click the expand button for a larger preview</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>• 长约定列表将自动优化图片质量以保证清晰度</li>
+                      <li>• 开启"显示所有子约定"可以生成包含完整列表的长图</li>
+                      <li>• 复制文本功能会包含所有子约定信息</li>
+                      <li>• 点击右上角展开按钮可以获得更大的预览视图</li>
+                    </>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <style jsx>{`
+          .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 10px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+          }
+          .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+        `}</style>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,0 +1,666 @@
+import React, { useState } from "react";
+import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
+import { Loader2, Check, ChevronRight, Sparkles, Zap, Plus, FileText, Mail, Globe, FileSpreadsheet, Presentation, Calendar as CalIcon, StickyNote } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
+import ExecutionResultDialog from "@/components/automation/ExecutionResultDialog";
+import EmailPreviewDialog from "@/components/automation/EmailPreviewDialog";
+import { detectAutomationGaps, mergeGapAnswers } from "@/lib/automationGaps";
+import { Input } from "@/components/ui/input";
+import { AlertCircle } from "lucide-react";
+
+// 从标题/描述/原始输入粗略推断 automation_type，让单条卡片直接走 executeAutomation
+// 原始输入 userText 通常比 AI 生成的标题更准确，优先纳入判断
+function inferAutomationType(title = "", desc = "", userText = "") {
+  const t = `${title} ${desc} ${userText}`.toLowerCase();
+  if (/写邮件|发邮件|邮件草稿|邮件主题|邮件正文|email|mail/.test(t)) return "email_draft";
+  if (/做调研|市场调研|行业调研|竞品调研|调研报告|联网搜索|查.*资料|research|分析报告/.test(t)) return "web_research";
+  if (/做ppt|生成ppt|演示稿|幻灯片|slide|presentation/.test(t)) return "ppt_doc";
+  if (/写报告|写方案|写文档|word文档|excel表格|办公文档|office doc/.test(t)) return "office_doc";
+  // 账本优先于文件整理，避免"整理账本"被误判为文件整理
+  if (/整理账本|记账|账本|收支|报销|账单|花销|开销|生活费|房租|水电|工资/.test(t)) return "ledger_organize";
+  if (/整理文件|文件归档|文件整理|分类归档|目录整理/.test(t)) return "file_organize";
+  // 约定优先于心签，"加约定"必须命中；但"整理笔记/写邮件/做调研"等明确内容生产意图不应被"安排"等词覆盖
+  if (/加约定|添加约定|创建约定|日历事件|日程安排|会议.*时间|约.*时间|提醒.*时间/.test(t)) return "calendar_event";
+  if (/整理笔记|会议纪要|会议记录|总结笔记|note|summary|心签|复盘/.test(t)) return "summary_note";
+  // 兜底：如果 AI 标题里写了"安排邮件沟通"这类，原始输入里没有邮件/调研等词，再按泛化词判断
+  if (/约定|日历|会议|预约|安排|事件|开会|约饭|约见|见面|聚餐|约会|活动/.test(t)) return "calendar_event";
+  return "summary_note";
+}
+
+// 统一使用应用主色调（#384877 深蓝）+ 中性灰，避免彩虹色冲突
+const TYPE_META = {
+  email_draft:    { icon: Mail,            bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "邮件" },
+  web_research:   { icon: Globe,           bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "调研" },
+  office_doc:     { icon: FileSpreadsheet, bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "文档" },
+  ppt_doc:        { icon: Presentation,    bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "PPT" },
+  file_organize:  { icon: FileText,        bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "文件" },
+  calendar_event: { icon: CalIcon,         bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "日历" },
+  summary_note:   { icon: StickyNote,      bg: "bg-[#384877]/8",  color: "text-[#384877]", label: "心签" },
+};
+
+const STATUS_STYLE = {
+  ready:      { dot: "bg-[#384877]",   text: "text-[#384877]",   label: "就绪",     border: "border-l-[#384877]/30" },
+  pending:    { dot: "bg-amber-500",   text: "text-amber-700",   label: "待确认",   border: "border-l-amber-400" },
+  running:    { dot: "bg-[#3b5aa2]",   text: "text-[#3b5aa2]",   label: "执行中",   border: "border-l-[#3b5aa2]", pulse: true },
+  done:       { dot: "bg-emerald-500", text: "text-emerald-700", label: "已执行",   border: "border-l-emerald-400" },
+  failed:     { dot: "bg-rose-500",    text: "text-rose-700",    label: "失败",     border: "border-l-rose-400" },
+  incomplete: { dot: "bg-red-500",     text: "text-red-700",     label: "待补充",   border: "border-l-red-400", pulse: true },
+};
+
+function normalizeStatus(s) {
+  if (!s) return "ready";
+  const v = String(s).toLowerCase();
+  if (v === "active" || v === "monitoring" || v === "in_progress") return "running";
+  if (v === "completed") return "done";
+  if (["ready","pending","running","done","failed"].includes(v)) return v;
+  return "ready";
+}
+
+// 从 automation_result 中提炼一段可在卡片内直接展示的摘要文本
+function extractPreview(ar, automationType = "") {
+  if (!ar) return "";
+  if (ar.preview && typeof ar.preview === "string" && ar.preview.trim()) return ar.preview.trim();
+  if (ar.data) {
+    const d = ar.data;
+    const t = (automationType || "").toLowerCase();
+
+    // 邮件：主题 + 收件人 + 正文片段
+    if (t.includes("email") || d.subject || d.body || d.to) {
+      const lines = [];
+      if (d.subject) lines.push(`📧 ${d.subject}`);
+      if (d.to) lines.push(`收件人：${d.to}`);
+      if (d.body) lines.push("");
+      if (d.body) lines.push(String(d.body));
+      return lines.join("\n").trim();
+    }
+
+    // 调研报告
+    if (t.includes("research") || t.includes("web")) {
+      const lines = [];
+      if (d.title || d.topic) lines.push(`📊 ${d.title || d.topic}`);
+      if (d.executive_summary) lines.push(String(d.executive_summary));
+      else if (d.markdown) lines.push(String(d.markdown).slice(0, 300));
+      if (Array.isArray(d.key_findings) && d.key_findings.length > 0) {
+        lines.push("");
+        d.key_findings.slice(0, 5).forEach((k, i) => lines.push(`${i + 1}. ${k}`));
+      }
+      return lines.join("\n").trim();
+    }
+
+    // 日历约定
+    if (t.includes("calendar") || t.includes("event") || d.start_time) {
+      const lines = [];
+      if (d.title) lines.push(`📅 ${d.title}`);
+      if (d.start_time) {
+        try {
+          const start = new Date(d.start_time);
+          const end = d.end_time ? new Date(d.end_time) : null;
+          lines.push(`${start.toLocaleString("zh-CN")}${end ? ` - ${end.toLocaleTimeString("zh-CN")}` : ""}`);
+        } catch {}
+      }
+      if (d.location) lines.push(`地点：${d.location}`);
+      if (d.description) lines.push(d.description);
+      return lines.join("\n").trim();
+    }
+
+    // PPT
+    if (t.includes("ppt") || t.includes("slide") || Array.isArray(d.slides) || Array.isArray(d.outline)) {
+      const lines = [];
+      if (d.title) lines.push(`📽 ${d.title}`);
+      const items = d.slides || d.outline || [];
+      items.slice(0, 5).forEach((s, i) => {
+        const text = typeof s === "string" ? s : (s.heading || s.title || "");
+        if (text) lines.push(`${i + 1}. ${text}`);
+      });
+      return lines.join("\n").trim();
+    }
+
+    // 文件整理
+    if (t.includes("file") || t.includes("organize") || Array.isArray(d.plan)) {
+      return d.summary || `整理方案共 ${Array.isArray(d.plan) ? d.plan.length : 0} 项`;
+    }
+
+    // 账本
+    if (t.includes("ledger") || Array.isArray(d.entries)) {
+      const stats = d.stats || {};
+      return d.preview || `共 ${Array.isArray(d.entries) ? d.entries.length : 0} 条账目 · 收入 ${stats.total_income ?? 0} · 支出 ${stats.total_expense ?? 0}`;
+    }
+
+    // 会议纪要 / 文档 / 笔记：title + summary / content
+    if (d.title || d.summary || d.content || d.executive_summary) {
+      const lines = [];
+      if (d.title) lines.push(d.title);
+      if (d.summary) lines.push(d.summary);
+      if (d.executive_summary) lines.push(d.executive_summary);
+      if (d.content) lines.push(String(d.content).slice(0, 500));
+      return lines.join("\n").trim();
+    }
+
+    if (typeof d === "string") return d;
+    // 兜底：返回对象的第一段文本值，而不是原始 JSON
+    for (const v of Object.values(d)) {
+      if (typeof v === "string" && v.trim()) return v.trim();
+      if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return v.join("\n");
+    }
+    return "";
+  }
+  return "";
+}
+
+export default function AutoExecCards({ tasks = [], userText = "", onItemStatusChange }) {
+  const queryClient = useQueryClient();
+  const [items, setItems] = useState([]);
+  const [openExec, setOpenExec] = useState(null);
+  const [feedback, setFeedback] = useState(null); // { mode, item, resultPreview?, errorMessage?, suggestions? }
+  const [emailDraft, setEmailDraft] = useState(null); // { item, draft:{to,subject,body}, executionId }
+
+  // 把 props 同步进 state（保持父组件传入的最新清单），但保留本地已推进的执行状态
+  // 关键：如果本地已经执行过（running/done/failed），不能被 props 里的 ready 覆盖；
+  // 同样本地已有的 execution_id / result_preview 也要保留，避免「执行完又被刷新回未执行」
+  React.useEffect(() => {
+    setItems(prev => {
+      const prevById = new Map(prev.map(p => [p._id, p]));
+      return (tasks || []).slice(0, 6).map((t, i) => {
+        const _id = `plan-${i}-${(t.title || "").slice(0, 12)}`;
+        const local = prevById.get(_id);
+        const propStatus = normalizeStatus(t.status);
+        // 本地状态比 props 更"靠后"时优先用本地的
+        const ranks = { ready: 0, pending: 1, running: 2, failed: 3, done: 4 };
+        const mergedStatus = local && ranks[local.status] >= ranks[propStatus]
+          ? local.status
+          : propStatus;
+        return {
+          _id,
+          _idx: i,
+          title: t.title || `自动项 ${i + 1}`,
+          desc: t.desc || t.description || "根据规划自动派生",
+          status: mergedStatus,
+          automation_type: inferAutomationType(t.title, t.desc || t.description, userText),
+          // 优先用本地已写入的 execution_id / result_preview（执行过的状态不被刷掉）
+          execution_id: local?.execution_id || t.execution_id || null,
+          result_preview: local?.result_preview || t.result_preview || null,
+        };
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(tasks)]);
+
+  // 自动为「已完成且带 execution_id 但缺预览」的卡片拉取结果
+  React.useEffect(() => {
+    const targets = items.filter(it => it.status === "done" && it.execution_id && !it.result_preview);
+    if (targets.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      for (const it of targets) {
+        const exec = await base44.entities.TaskExecution.get(it.execution_id).catch(() => null);
+        if (cancelled || !exec) continue;
+        const preview = extractPreview(exec.automation_result, it.automation_type);
+        if (preview) updateItem(it._id, { result_preview: preview });
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.map(i => i._id + i.status + (i.execution_id || "")).join("|")]);
+
+  if (items.length === 0) return null;
+
+  const updateItem = (id, patch, opts = {}) => {
+    setItems(prev => prev.map(it => it._id === id ? { ...it, ...patch } : it));
+    // 关键状态变化（done/running 或带 execution_id/result_preview）回写到父组件持久化
+    if (opts.persist !== false && onItemStatusChange) {
+      const target = items.find(it => it._id === id);
+      if (target && typeof target._idx === 'number') {
+        const persistPatch = {};
+        if (patch.status === 'done' || patch.status === 'running') persistPatch.status = patch.status;
+        if (patch.execution_id !== undefined) persistPatch.execution_id = patch.execution_id;
+        if (patch.result_preview !== undefined) persistPatch.result_preview = patch.result_preview;
+        if (Object.keys(persistPatch).length > 0) {
+          onItemStatusChange(target._idx, persistPatch);
+        }
+      }
+    }
+  };
+
+  // 授权 → 先做参数校验：缺关键字段 → 卡片就地标红「待补充」+ 把内容填入图2输入框，让用户补全后再发送
+  const handleAuthorize = async (item, overrideInput) => {
+    // 步骤 0：参数充分性校验（缺关键字段则就地标红，不消耗 AI 点数）
+    const sourceText = overrideInput || `${item.title}\n${item.desc || ""}`;
+    const { missing, hint } = detectAutomationGaps(item.automation_type, sourceText);
+    if (missing.length > 0 && !overrideInput) {
+      updateItem(item._id, { status: "incomplete", missing, gap_hint: hint, gap_answers: {} });
+      // 同步把卡片内容填入图2输入框，给出"补全后一键执行"路径
+      try {
+        window.dispatchEvent(new CustomEvent("auto-exec-fill-input", {
+          detail: {
+            text: `${item.title}（${hint}）\n${item.desc || ""}`.trim(),
+            missing: missing.map(m => m.label),
+          }
+        }));
+      } catch (_) {}
+      toast.warning(`需要补充：${missing.map(m => m.label).join('、')}`, {
+        id: `gap-${item._id}`,
+        duration: 4500,
+      });
+      return;
+    }
+
+    // 邮件类：已有草稿且未发送时，直接重新打开预览窗，避免重复调用 AI
+    if (
+      item.automation_type === "email_draft" &&
+      item.execution_id &&
+      item.result_preview &&
+      item.status === "ready" &&
+      !overrideInput
+    ) {
+      const exec = await base44.entities.TaskExecution.get(item.execution_id).catch(() => null);
+      const d = exec?.automation_result?.data;
+      if (d) {
+        setEmailDraft({
+          item,
+          executionId: item.execution_id,
+          draft: { to: d.to || "", subject: d.subject || "", body: d.body || "" },
+        });
+        return;
+      }
+    }
+
+    updateItem(item._id, { status: "running" });
+    toast.loading(`AI 正在执行：${item.title}`, { id: `exec-${item._id}`, duration: 60000 });
+    const input = overrideInput || item.desc || item.title;
+    try {
+      const exec = await base44.entities.TaskExecution.create({
+        task_title: item.title,
+        original_input: input,
+        category: "task",
+        execution_status: "parsing",
+        automation_type: item.automation_type,
+        ai_parsed_result: {
+          source: "smart_daily_planner",
+          summary: input,
+          scene: userText || "",
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+      updateItem(item._id, { execution_id: exec.id });
+
+      const planRes = await base44.functions.invoke('executeAutomation', { execution_id: exec.id, phase: "plan" });
+      if (planRes.data?.error) throw new Error(planRes.data.error);
+
+      const execRes = await base44.functions.invoke('executeAutomation', { execution_id: exec.id, phase: "execute" });
+      if (execRes.data?.error) throw new Error(execRes.data.error);
+
+      queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+
+      // 成功反馈：拉取最终 execution 并取 preview 作为摘要
+      const finalExec = await base44.entities.TaskExecution.get(exec.id).catch(() => null);
+      const preview = extractPreview(finalExec?.automation_result, item.automation_type);
+
+      // 邮件类型：execute 仅生成草稿，弹出预览窗让用户编辑并确认发送
+      if (item.automation_type === "email_draft" && finalExec?.automation_result?.data) {
+        const d = finalExec.automation_result.data;
+        // 草稿已生成但尚未发送 → 状态保持 ready，UI 显示「待发送」由预览窗推进
+        updateItem(item._id, { status: "ready", execution_id: exec.id, result_preview: preview });
+        toast.success("邮件草稿已生成，请确认发送", { id: `exec-${item._id}` });
+        setEmailDraft({
+          item: { ...item, execution_id: exec.id },
+          executionId: exec.id,
+          draft: { to: d.to || "", subject: d.subject || "", body: d.body || "" },
+        });
+        return;
+      }
+
+      updateItem(item._id, { status: "done", result_preview: preview });
+      toast.success(`已完成：${item.title}`, { id: `exec-${item._id}` });
+      setFeedback({
+        mode: "success",
+        item: { ...item, execution_id: exec.id },
+        resultPreview: preview,
+      });
+    } catch (e) {
+      updateItem(item._id, { status: "failed" });
+      // 兜底解包：axios 抛出时 e.message 只有"Request failed with status code 400"这种泛化文案，
+      // 真正后端错误在 e.response.data.error / message，要逐级捞出来让用户能看懂
+      const backendErr =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        e?.data?.error ||
+        e?.data?.message;
+      const rawMsg = backendErr || e?.message || "未知错误";
+      // 进一步把"Kimi API error 400: {…}"里的真实原因抽出来
+      const kimiMatch = String(rawMsg).match(/Kimi API error \d+:\s*({[\s\S]*})/);
+      let msg = rawMsg;
+      if (kimiMatch) {
+        try {
+          const kimiBody = JSON.parse(kimiMatch[1]);
+          msg = kimiBody?.error?.message || kimiBody?.message || rawMsg;
+        } catch (_) { /* keep rawMsg */ }
+      }
+      toast.error(`执行失败：${msg}`, { id: `exec-${item._id}` });
+      setFeedback({
+        mode: "failed",
+        item,
+        errorMessage: msg,
+        suggestions: buildSuggestions(item.automation_type, msg),
+      });
+    }
+  };
+
+  const openExecution = async (item) => {
+    if (!item.execution_id) return;
+    const exec = await base44.entities.TaskExecution.get(item.execution_id);
+    setOpenExec(exec);
+  };
+
+  return (
+    <>
+      <div className="relative rounded-3xl border border-slate-200/60 bg-gradient-to-br from-white via-slate-50/60 to-[#384877]/5 p-5 shadow-[0_4px_24px_-12px_rgba(56,72,119,0.15)] overflow-hidden">
+        {/* 背景装饰光晕 - 主色调 */}
+        <div className="absolute -top-16 -right-16 w-40 h-40 bg-[#384877]/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-10 w-32 h-32 bg-[#3b5aa2]/8 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/25">
+              <Zap className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h4 className="text-[15px] font-bold text-slate-800">自动执行清单</h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">点击「确认执行」由 AI 自动完成</p>
+            </div>
+          </div>
+          {(() => {
+            const doneCount = items.filter(it => it.status === "done").length;
+            const pendingCount = items.length - doneCount;
+            return (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/80 backdrop-blur-sm border border-slate-200/60">
+                {doneCount > 0 && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span className="text-[11px] font-medium text-emerald-700">{doneCount} 已执行</span>
+                    {pendingCount > 0 && <span className="text-[11px] text-slate-300">·</span>}
+                  </>
+                )}
+                {pendingCount > 0 && (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#384877] animate-pulse" />
+                    <span className="text-[11px] font-medium text-slate-600">{pendingCount} 项待执行</span>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+
+        <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3">
+          <AnimatePresence>
+            {items.map((it) => (
+              <ExecCard
+                key={it._id}
+                item={it}
+                onAuthorize={() => handleAuthorize(it)}
+                onOpen={() => openExecution(it)}
+                onResolveGaps={(target, answers) => {
+                  const merged = mergeGapAnswers(`${target.title}\n${target.desc || ""}`, answers);
+                  updateItem(target._id, { status: "ready", missing: [], gap_hint: "", gap_answers: {} });
+                  handleAuthorize(target, merged);
+                }}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <AutomationDetailDialog
+        execution={openExec}
+        open={!!openExec}
+        onOpenChange={(o) => !o && setOpenExec(null)}
+      />
+
+      <EmailPreviewDialog
+        open={!!emailDraft}
+        onOpenChange={(o) => !o && setEmailDraft(null)}
+        draft={emailDraft?.draft}
+        executionId={emailDraft?.executionId}
+        instruction={emailDraft?.item?.desc || emailDraft?.item?.title || userText}
+        onSent={(finalDraft) => {
+          // 发送成功 → 把卡片标为 done 并刷新预览
+          if (emailDraft?.item) {
+            const preview = `📧 ${finalDraft.subject}\n收件人：${finalDraft.to}\n\n${finalDraft.body}`;
+            updateItem(emailDraft.item._id, { status: "done", result_preview: preview });
+            queryClient.invalidateQueries({ queryKey: ['task-executions'] });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          }
+        }}
+      />
+
+      <ExecutionResultDialog
+        open={!!feedback}
+        onOpenChange={(o) => !o && setFeedback(null)}
+        mode={feedback?.mode}
+        title={feedback?.item?.title || ""}
+        automationType={feedback?.item?.automation_type}
+        resultPreview={feedback?.resultPreview}
+        errorMessage={feedback?.errorMessage}
+        suggestions={feedback?.suggestions}
+        onRetry={feedback?.mode === "failed" ? () => handleAuthorize(feedback.item) : undefined}
+        onRetryWithEdit={feedback?.mode === "failed"
+          ? (newInput) => handleAuthorize(feedback.item, newInput)
+          : undefined}
+        onHandover={feedback?.mode === "failed" ? async () => {
+          // 人工接管：创建一个普通约定，状态为待办，由用户手动处理
+          try {
+            await base44.entities.Task.create({
+              title: feedback.item.title,
+              description: `${feedback.item.desc || ""}\n\n⚠️ AI 自动执行失败，已转为人工待办。\n失败原因：${feedback.errorMessage || "未知"}`,
+              status: "pending",
+              priority: "medium",
+              tags: ["人工接管", "AI失败回退"],
+            });
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            toast.success("已转为人工待办，请在「约定」中处理", { icon: "👤" });
+          } catch (err) {
+            toast.error("接管失败：" + err.message);
+          }
+        } : undefined}
+        onViewDetail={feedback?.mode === "success" && feedback?.item?.execution_id
+          ? async () => {
+              const exec = await base44.entities.TaskExecution.get(feedback.item.execution_id);
+              setOpenExec(exec);
+            }
+          : undefined}
+      />
+    </>
+  );
+}
+
+// 根据错误特征 + 任务类型生成「修改建议」
+function buildSuggestions(automationType, errorMsg = "") {
+  const msg = errorMsg.toLowerCase();
+  const list = [];
+
+  if (/timeout|超时|network|网络/.test(msg)) {
+    list.push("网络可能不稳定，稍后重试一次通常即可解决。");
+  }
+  if (/key|api|密钥|401|403|权限/.test(msg)) {
+    list.push("可能是相关服务未授权，请到「我的账户 → 集成」检查授权状态。");
+  }
+  if (/parse|json|格式|解析/.test(msg)) {
+    list.push("AI 解析需求时出现歧义，建议把任务描述写得更具体（包含人名、时间、目标）。");
+  }
+
+  // 按类型补建议
+  const byType = {
+    email_draft: [
+      "明确收件人、邮件主旨与希望传达的核心一句话。",
+      "如果是回复某邮件，附带原始邮件标题会让 AI 更精准。",
+    ],
+    web_research: [
+      "提供具体的关键词或要回答的问题，而非宽泛主题。",
+      "限定信息源类型（行业报告 / 新闻 / 维基）会更聚焦。",
+    ],
+    office_doc: [
+      "说明文档结构（如：含 3 个章节的 Word、5 列表格 Excel）。",
+      "提供目标读者与核心结论，AI 会按对应口吻撰写。",
+    ],
+    ppt_doc: [
+      "说明演示场景（如：路演、内训、季度汇报），AI 会自动选合适主题。",
+      "告知期望页数（默认 8-12 页），以及核心信息架构。",
+    ],
+    file_organize: [
+      "告诉 AI 整理后的目录结构或命名规则。",
+    ],
+    calendar_event: [
+      "补充具体的开始/结束时间、参与人、是否要提醒。",
+    ],
+    summary_note: [
+      "贴上要总结的原文或关键要点，AI 会更准确。",
+    ],
+  };
+  (byType[automationType] || []).forEach(s => list.push(s));
+
+  if (list.length === 0) {
+    list.push("把任务描述补充得更具体（包含目标、对象、约束），通常就能修复。");
+    list.push("如果仍不行，可以选择「人工接管」转为普通待办自己处理。");
+  }
+  return list.slice(0, 3);
+}
+
+function ExecCard({ item, onAuthorize, onOpen, onFillInput, onResolveGaps }) {
+  const meta = TYPE_META[item.automation_type] || TYPE_META.summary_note;
+  const status = STATUS_STYLE[item.status] || STATUS_STYLE.ready;
+  const Icon = meta.icon;
+  const isRunning = item.status === "running";
+  const isDone = item.status === "done";
+  const isIncomplete = item.status === "incomplete";
+  const canAuthorize = item.status === "ready" || item.status === "pending" || item.status === "failed";
+  const [gapAnswers, setGapAnswers] = React.useState({});
+
+  const handleGapSubmit = () => {
+    const filled = Object.values(gapAnswers).filter(v => String(v || "").trim()).length;
+    if (filled === 0) return;
+    onResolveGaps && onResolveGaps(item, gapAnswers);
+    setGapAnswers({});
+  };
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      whileHover={{ y: -1 }}
+      className={`group relative bg-white rounded-xl border border-slate-200/80 border-l-[3px] ${status.border} px-3 py-2.5 hover:shadow-[0_6px_20px_-10px_rgba(56,72,119,0.25)] hover:border-[#384877]/30 transition-all duration-200 overflow-hidden`}
+    >
+      {/* Header: 图标 + 标题 + 类型 + 状态 */}
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className={`w-6 h-6 rounded-md ${meta.bg} flex items-center justify-center flex-shrink-0`}>
+          <Icon className={`w-3 h-3 ${meta.color}`} />
+        </div>
+        <div className="text-[13px] font-semibold text-slate-800 truncate flex-1 leading-tight">{item.title}</div>
+        <span className={`text-[9.5px] font-semibold ${meta.color} px-1.5 py-0.5 rounded ${meta.bg} flex-shrink-0`}>
+          {meta.label}
+        </span>
+        <div className={`flex items-center gap-0.5 text-[9.5px] font-medium ${status.text} flex-shrink-0`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${status.dot} ${status.pulse ? 'animate-pulse' : ''}`} />
+          {status.label}
+        </div>
+      </div>
+
+      {/* 描述 */}
+      <div className="text-[11.5px] text-slate-500 line-clamp-2 leading-[1.5] pl-8 pr-1 mb-2">
+        {item.desc}
+      </div>
+
+      {/* 待补充：行内 chip + 输入框，填完一键继续执行 */}
+      {isIncomplete && Array.isArray(item.missing) && item.missing.length > 0 && (
+        <div className="ml-8 mb-2 rounded-lg bg-rose-50/60 border border-rose-200 px-2.5 py-2 space-y-1.5">
+          <div className="flex items-center gap-1 text-[10px] font-semibold text-rose-700">
+            <AlertCircle className="w-2.5 h-2.5" />
+            缺少：{item.missing.map(m => m.label).join('、')}
+          </div>
+          <div className="space-y-1">
+            {item.missing.map(m => (
+              <Input
+                key={m.key}
+                value={gapAnswers[m.key] || ""}
+                onChange={(e) => setGapAnswers(prev => ({ ...prev, [m.key]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleGapSubmit(); }}
+                placeholder={m.placeholder}
+                className="h-7 text-[11px] bg-white border-rose-200/80 focus-visible:ring-rose-300 focus-visible:ring-offset-0"
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 已执行：内嵌结果预览（AI 产物），点击可打开完整详情 */}
+      {isDone && item.result_preview && (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="ml-8 mb-2 w-[calc(100%-2rem)] text-left rounded-lg bg-emerald-50/40 border border-emerald-100 hover:border-emerald-300 hover:bg-emerald-50/70 px-2.5 py-2 max-h-32 overflow-y-auto transition-colors group"
+        >
+          <div className="flex items-center gap-1 text-[9.5px] font-semibold text-emerald-700 mb-1">
+            <Sparkles className="w-2.5 h-2.5" />
+            AI 执行结果
+            <span className="ml-auto text-[9px] text-emerald-600/70 group-hover:text-emerald-700">点击查看完整详情</span>
+          </div>
+          <pre className="text-[11px] text-slate-700 whitespace-pre-wrap font-sans leading-[1.5] line-clamp-5">
+            {item.result_preview}
+          </pre>
+        </button>
+      )}
+      {isDone && !item.result_preview && item.execution_id && (
+        <div className="ml-8 mb-2 text-[10.5px] text-slate-400 italic">
+          正在加载执行结果…
+        </div>
+      )}
+
+      {/* 操作行 */}
+      <div className="flex items-center justify-end pl-8">
+        {isIncomplete && (
+          <Button
+            size="sm"
+            onClick={handleGapSubmit}
+            disabled={Object.values(gapAnswers).filter(v => String(v || "").trim()).length === 0}
+            className="h-6 px-2.5 text-[10.5px] font-medium bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white rounded-md shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+            补全并执行
+          </Button>
+        )}
+        {canAuthorize && (
+          <Button
+            size="sm"
+            onClick={onAuthorize}
+            className="h-6 px-2.5 text-[10.5px] font-medium bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white rounded-md shadow-sm shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all"
+          >
+            <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+            确认执行
+          </Button>
+        )}
+        {isRunning && (
+          <span className="flex items-center gap-1 text-[10.5px] font-medium text-[#3b5aa2] px-2 py-0.5 rounded-md bg-[#384877]/8">
+            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            执行中
+          </span>
+        )}
+        {isDone && item.execution_id && (
+          <Button
+            size="sm"
+            onClick={onOpen}
+            className="h-6 px-2.5 text-[10.5px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium shadow-sm"
+          >
+            <Check className="w-2.5 h-2.5 mr-0.5" />
+            查看完整结果
+            <ChevronRight className="w-2.5 h-2.5 ml-0.5" />
+          </Button>
+        )}
+      </div>
+    </motion.div>
+  );
+}

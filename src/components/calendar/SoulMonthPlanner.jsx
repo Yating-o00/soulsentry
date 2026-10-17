@@ -1,0 +1,646 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
+import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
+import { 
+  Mic, 
+  Image as ImageIcon, 
+  ChevronDown, 
+  ArrowRight, 
+  Sparkles,
+  Calendar as CalendarIcon,
+  Zap,
+  Target,
+  Flag,
+  Lightbulb,
+  Plus,
+  Loader2
+} from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+import { extractAndCreateTasks } from "@/components/utils/extractAndCreateTasks";
+import { attachPlanItemsToParent } from "@/components/utils/attachPlanItemsToParent";
+import { cn } from "@/lib/utils";
+import { base44 } from "@/api/base44Client";
+import { useAICreditGate } from "@/components/credits/useAICreditGate";
+import InsufficientCreditsDialog from "@/components/credits/InsufficientCreditsDialog";
+import { syncPlanToNote } from "@/components/utils/syncPlanToNote";
+import { useQuery } from "@tanstack/react-query";
+import CalendarMonthView from "./CalendarMonthView";
+
+const QUICK_TEMPLATES = [
+  { text: '下个月重点是项目冲刺，前两周完成开发，第三周测试，最后一周发布。希望能保持每天高效率工作，周末适当休息。', label: '🚀 项目冲刺月' },
+  { text: '我想利用下个月好好提升自己，计划读完3本书，每周去健身房3次，还需要准备月底的资格考试。', label: '📚 自我提升月' },
+  { text: '下个月比较轻松，主要是维护现有工作，想多花时间陪家人，安排一次短途旅行。', label: '🌿 生活平衡月' }
+];
+
+const PROCESSING_STEPS = [
+  { icon: '📅', text: '分析月度时间跨度...' },
+  { icon: '🎯', text: '提取核心目标与里程碑...' },
+  { icon: '📊', text: '规划周度节奏与重点...' },
+  { icon: '⚖️', text: '平衡工作与生活策略...' },
+  { icon: '✨', text: '生成月度全景蓝图...' }
+];
+
+export default function SoulMonthPlanner({ 
+  currentDate: initialDate,
+  tasks,
+  notes,
+  onDateClick,
+  onTaskDrop,
+  onTaskClick
+}) {
+  const [stage, setStage] = useState('input');
+  const [userInput, setUserInput] = useState('');
+  const [currentMonthDate, setCurrentMonthDate] = useState(initialDate || new Date());
+  const [processingStepIndex, setProcessingStepIndex] = useState(0);
+  const [monthData, setMonthData] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [existingPlanId, setExistingPlanId] = useState(null);
+  const [parentTaskId, setParentTaskId] = useState(null);
+  const [showQuickTemplates, setShowQuickTemplates] = useState(false);
+  const [appendInput, setAppendInput] = useState('');
+  const [isAppending, setIsAppending] = useState(false);
+  const [showAppendInput, setShowAppendInput] = useState(false);
+  const { gate, showInsufficientDialog, insufficientProps, dismissDialog } = useAICreditGate();
+  const queryClient = useQueryClient();
+
+  // Fetch user behaviors for smart planning
+  const { data: recentBehaviors = [] } = useQuery({
+    queryKey: ['recentBehaviors_planner'],
+    queryFn: () => base44.entities.UserBehavior.list('-created_date', 50).catch(() => []),
+    staleTime: 5 * 60 * 1000
+  });
+
+  const resultsRef = useRef(null);
+
+  const start = startOfMonth(currentMonthDate);
+  const currentMonthStartStr = format(start, 'yyyy-MM-dd');
+  const monthLabel = format(start, 'yyyy年M月', { locale: zhCN });
+
+  useEffect(() => {
+    if (initialDate) {
+      setCurrentMonthDate(initialDate);
+    }
+  }, [initialDate]);
+
+  // Load existing plan with react-query caching
+  const { data: monthPlans } = useQuery({
+    queryKey: ['monthlyPlan', currentMonthStartStr],
+    queryFn: () => base44.entities.MonthlyPlan.filter({ month_start_date: currentMonthStartStr }),
+    staleTime: 2 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (monthPlans === undefined) return;
+    if (monthPlans && monthPlans.length > 0) {
+      const plan = monthPlans[0];
+      setExistingPlanId(plan.id);
+      setParentTaskId(plan.plan_json?.parent_task_id || null);
+      setMonthData({
+        ...plan.plan_json,
+        theme: plan.theme,
+        summary: plan.summary
+      });
+      setUserInput(plan.original_input || '');
+      setStage('results');
+    } else {
+      setExistingPlanId(null);
+      setParentTaskId(null);
+      setMonthData(null);
+      setUserInput('');
+      setStage('input');
+    }
+  }, [monthPlans]);
+
+  const savePlanToDB = async (data, input, parentTaskIdValue) => {
+    try {
+      const nextParentTaskId = parentTaskIdValue || data?.parent_task_id || parentTaskId || null;
+      const planJson = nextParentTaskId ? { ...data, parent_task_id: nextParentTaskId } : data;
+      const planData = {
+        month_start_date: data.plan_start_date || currentMonthStartStr,
+        original_input: input,
+        theme: data.theme,
+        summary: data.summary,
+        plan_json: planJson,
+        is_active: true
+      };
+
+      if (existingPlanId) {
+        await base44.entities.MonthlyPlan.update(existingPlanId, planData);
+        toast.success("月度规划已更新");
+      } else {
+        const newPlan = await base44.entities.MonthlyPlan.create(planData);
+        setExistingPlanId(newPlan.id);
+        toast.success("月度规划已保存");
+      }
+      queryClient.invalidateQueries({ queryKey: ['monthlyPlan'] });
+    } catch (error) {
+      console.error("Failed to save plan:", error);
+      toast.error("保存规划失败");
+    }
+  };
+
+  const deletePlan = async () => {
+    if (!existingPlanId) return;
+    try {
+      await base44.entities.MonthlyPlan.delete(existingPlanId);
+      setExistingPlanId(null);
+      resetView();
+      queryClient.invalidateQueries({ queryKey: ['monthlyPlan'] });
+      toast.success("规划已删除");
+    } catch (error) {
+      console.error("Failed to delete plan:", error);
+      toast.error("删除失败");
+    }
+  };
+
+  const handleProcess = async () => {
+    if (!userInput.trim()) return;
+    
+    const allowed = await gate("monthly_plan", "月计划生成");
+    if (!allowed) return;
+
+    setStage('processing');
+    setIsProcessing(true);
+    setProcessingStepIndex(0);
+
+    const stepInterval = setInterval(() => {
+        setProcessingStepIndex(prev => (prev < PROCESSING_STEPS.length - 1 ? prev + 1 : prev));
+    }, 1500);
+
+    try {
+        const { data } = await base44.functions.invoke('generateMonthPlan', {
+            input: userInput,
+            startDate: format(start, 'yyyy-MM-dd'),
+            behaviors: recentBehaviors || []
+        });
+
+        if (data) {
+            setMonthData(data);
+            clearInterval(stepInterval);
+            setProcessingStepIndex(PROCESSING_STEPS.length - 1);
+
+            const monthStartStr = data.plan_start_date || format(start, 'yyyy-MM-dd');
+            let resolvedParentTaskId = parentTaskId || data?.parent_task_id || null;
+            try {
+              if (resolvedParentTaskId) {
+                const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+                if (!parent?.id) resolvedParentTaskId = null;
+              }
+
+              if (!resolvedParentTaskId) {
+                const tasksCreated = await extractAndCreateTasks(userInput, monthStartStr);
+                const parent = tasksCreated?.[0];
+                resolvedParentTaskId = parent?.id || null;
+              }
+
+              if (resolvedParentTaskId) {
+                setParentTaskId(resolvedParentTaskId);
+                const childItems = [
+                  ...(data.key_milestones || []).map(m => ({
+                    title: m.title,
+                    description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
+                    date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
+                    tag: '月度里程碑',
+                  })),
+                  ...(data.weeks_breakdown || []).map(w => ({
+                    title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
+                    description: (w.key_events || []).join('、'),
+                    tag: '周度节奏',
+                  })),
+                ];
+                const n = await attachPlanItemsToParent(resolvedParentTaskId, childItems, '月度规划').catch(() => 0);
+                toast.success(n > 0 ? `已生成 1 条约定，含 ${n} 项子约定` : '已生成 1 条约定');
+              }
+            } catch (_error) { void _error; }
+
+            // 同步到心签
+            syncPlanToNote(userInput, "month_plan", { dateRange: monthLabel, theme: data.theme }).then(note => {
+              if (note) toast.success("已同步到心签");
+            }).catch(e => console.error("Note sync failed", e));
+            
+            setTimeout(() => {
+                setStage('results');
+                setIsProcessing(false);
+                toast.success("已生成月度全景规划");
+                savePlanToDB(data, userInput, resolvedParentTaskId);
+                
+                setTimeout(() => {
+                    resultsRef.current?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+            }, 800);
+        }
+    } catch (error) {
+        console.error("Planning failed details:", error);
+        toast.error("规划生成失败，请重试");
+        setStage('input');
+        setIsProcessing(false);
+        clearInterval(stepInterval);
+    }
+  };
+
+  const resetView = () => {
+    setStage('input');
+    setUserInput('');
+    setMonthData(null);
+  };
+
+  const handleAppend = async () => {
+    if (!appendInput.trim() || !monthData) return;
+
+    const allowed = await gate("general_ai", "追加月计划内容");
+    if (!allowed) return;
+
+    setIsAppending(true);
+    try {
+      const { data } = await base44.functions.invoke('generateMonthPlan', {
+        input: `现有规划摘要: ${monthData.summary}\n\n新增内容: ${appendInput}`,
+        startDate: format(start, 'yyyy-MM-dd'),
+        behaviors: recentBehaviors || [],
+        existingPlan: monthData
+      });
+      if (data) {
+        const merged = {
+          ...monthData,
+          ...data,
+          key_milestones: [
+            ...(monthData.key_milestones || []),
+            ...(data.key_milestones || []).filter(newM =>
+              !(monthData.key_milestones || []).some(m => m.title === newM.title)
+            )
+          ]
+        };
+        setMonthData(merged);
+        const monthStartStr = merged.plan_start_date || format(start, 'yyyy-MM-dd');
+        let resolvedParentTaskId = parentTaskId || merged?.parent_task_id || null;
+        try {
+          if (resolvedParentTaskId) {
+            const parent = await base44.entities.Task.get(resolvedParentTaskId).catch(() => null);
+            if (!parent?.id) resolvedParentTaskId = null;
+          }
+
+          if (!resolvedParentTaskId) {
+            const tasksCreated = await extractAndCreateTasks(userInput, monthStartStr);
+            const parent = tasksCreated?.[0];
+            resolvedParentTaskId = parent?.id || null;
+          }
+
+          if (resolvedParentTaskId) {
+            setParentTaskId(resolvedParentTaskId);
+            const childItems = [
+              ...(merged.key_milestones || []).map(m => ({
+                title: m.title,
+                description: ({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || '里程碑',
+                date: m.deadline && /^\d{4}-\d{2}-\d{2}$/.test(m.deadline) ? m.deadline : undefined,
+                tag: '月度里程碑',
+              })),
+              ...(merged.weeks_breakdown || []).map(w => ({
+                title: w.week_label ? `${w.week_label}：${w.focus || ''}`.trim() : (w.focus || '周节奏'),
+                description: (w.key_events || []).join('、'),
+                tag: '周度节奏',
+              })),
+            ];
+            await attachPlanItemsToParent(resolvedParentTaskId, childItems, '月度规划').catch(() => 0);
+          }
+        } catch (_error) { void _error; }
+
+        savePlanToDB(merged, userInput + '\n' + appendInput, resolvedParentTaskId);
+        setAppendInput('');
+        setShowAppendInput(false);
+        toast.success('已将新内容智能融入本月规划');
+      }
+    } catch (e) {
+      toast.error('更新失败，请重试');
+    } finally {
+      setIsAppending(false);
+    }
+  };
+
+  return (
+    <>
+    <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
+      <div className="relative z-10 p-6 md:p-8 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">
+        
+        <AnimatePresence mode="wait">
+          {stage === 'input' && (
+            <motion.section 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="flex-1 flex flex-col justify-center items-center text-center space-y-8 mt-8"
+            >
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-white rounded-full border border-slate-200 shadow-sm">
+                  <span className="w-2 h-2 bg-[#384877] rounded-full animate-pulse"></span>
+                  <span className="text-xs font-medium text-slate-600">AI Month Planner</span>
+                </div>
+                <h1 className="text-3xl md:text-5xl font-bold text-slate-900 tracking-tight leading-tight">
+                  智能目标分解 · {monthLabel}<br />
+                  <span className="text-[#384877]">从宏观愿景到落地行动</span>
+                </h1>
+                <p className="text-base text-slate-500 max-w-lg mx-auto leading-relaxed">
+                  输入您的宏观目标（如“提升效率”），AI 将结合您的行为习惯，自动拆解为可执行的月度规划。
+                </p>
+              </div>
+
+              <div className="w-full max-w-2xl relative group">
+                 <div className="relative bg-white rounded-3xl shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-slate-100 p-2 transition-shadow duration-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)]">
+                    <div className="bg-white rounded-2xl flex flex-col">
+                      <Textarea 
+                        value={userInput}
+                        onChange={(e) => setUserInput(e.target.value)}
+                        placeholder="例如：本月重点是完成新产品上线，前两周集中开发，第三周测试；同时想养成晨跑习惯..."
+                        className="w-full bg-transparent border-none outline-none text-lg text-slate-800 placeholder:text-slate-400 resize-none px-6 py-5 font-light min-h-[140px] focus-visible:ring-0 leading-relaxed"
+                      />
+                      <div className="flex items-center justify-between px-4 pb-4 pt-2 border-t border-slate-50">
+                         <div className="flex gap-2">
+                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-[#384877] hover:bg-slate-50">
+                              <Mic className="w-5 h-5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-[#384877] hover:bg-slate-50">
+                              <ImageIcon className="w-5 h-5" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => setShowQuickTemplates(!showQuickTemplates)}
+                              className="text-xs text-slate-500 hover:text-[#384877] hover:bg-slate-50 gap-1"
+                            >
+                              快速模板 <ChevronDown className="w-3 h-3" />
+                            </Button>
+                         </div>
+                         <Button 
+                            onClick={handleProcess}
+                            disabled={!userInput.trim() || isProcessing}
+                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl px-6 h-10 shadow-lg shadow-[#384877]/20 transition-all duration-300"
+                         >
+                            {isProcessing ? '规划中...' : '生成蓝图'} <ArrowRight className="w-4 h-4 ml-2" />
+                         </Button>
+                      </div>
+                    </div>
+                 </div>
+              </div>
+
+              {showQuickTemplates && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-wrap justify-center gap-3 max-w-2xl"
+                >
+                  {QUICK_TEMPLATES.map((tpl, idx) => (
+                    <button 
+                      key={idx}
+                      onClick={() => {
+                        setUserInput(tpl.text);
+                        setShowQuickTemplates(false);
+                      }}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-full text-sm text-slate-600 hover:border-[#384877] hover:text-[#384877] transition-all shadow-sm"
+                    >
+                      {tpl.label}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </motion.section>
+          )}
+
+          {stage === 'processing' && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex items-center justify-center"
+            >
+               <div className="w-full max-w-xl bg-white rounded-3xl p-8 border border-slate-100 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+                  <div className="flex items-center gap-3 mb-8 text-[#384877]">
+                     <Sparkles className="w-5 h-5 animate-pulse" />
+                     <span className="font-medium text-lg">正在生成月度蓝图...</span>
+                  </div>
+                  <div className="space-y-6 pl-2">
+                     {PROCESSING_STEPS.map((step, idx) => (
+                       <motion.div 
+                         key={idx}
+                         initial={{ opacity: 0, x: -10 }}
+                         animate={{ 
+                           opacity: idx <= processingStepIndex ? 1 : 0.4,
+                           x: idx <= processingStepIndex ? 0 : -10,
+                           scale: idx === processingStepIndex ? 1.02 : 1
+                         }}
+                         className="flex items-center gap-4"
+                       >
+                          <div className={cn(
+                              "w-8 h-8 rounded-full flex items-center justify-center text-sm border transition-colors duration-500",
+                              idx < processingStepIndex ? "bg-emerald-50 border-emerald-200 text-emerald-600" :
+                              idx === processingStepIndex ? "bg-[#384877]/10 border-[#384877]/30 text-[#384877]" :
+                              "bg-slate-50 border-slate-100 text-slate-300"
+                          )}>
+                             {idx < processingStepIndex ? <div className="w-2 h-2 bg-emerald-500 rounded-full" /> : 
+                              idx === processingStepIndex ? <div className="w-2 h-2 bg-[#384877] rounded-full animate-ping" /> :
+                              <div className="w-2 h-2 bg-slate-200 rounded-full" />
+                             }
+                          </div>
+                          <span className={cn(
+                              "text-sm font-medium transition-colors duration-300",
+                              idx <= processingStepIndex ? "text-slate-800" : "text-slate-400"
+                          )}>{step.text}</span>
+                       </motion.div>
+                     ))}
+                  </div>
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {stage === 'results' && monthData && (
+          <motion.div 
+            ref={resultsRef}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="w-full space-y-8 pb-20"
+          >
+             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                   <div className="flex items-center gap-3 mb-1">
+                       <h3 className="text-2xl font-bold text-slate-900">月度全景蓝图</h3>
+                       <span className="px-3 py-1 bg-[#384877]/10 text-[#384877] text-xs font-medium rounded-full">
+                          {monthData.theme || '月度规划'}
+                       </span>
+                   </div>
+                   <p className="text-sm text-slate-500">{monthLabel} · {monthData.summary}</p>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                   <Button size="sm" className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl" onClick={() => setShowAppendInput(v => !v)}>
+                     <Plus className="w-3.5 h-3.5 mr-1" /> 追加内容
+                   </Button>
+                   <Button variant="outline" onClick={() => { if(confirm('确定删除?')) deletePlan() }} className="text-red-600 hover:bg-red-50 border-slate-200">
+                      删除
+                   </Button>
+                   <Button variant="outline" onClick={() => setStage('input')} className="border-slate-200">
+                      重新规划
+                   </Button>
+                </div>
+             </div>
+
+             {/* Append Input */}
+             <AnimatePresence>
+               {showAppendInput && (
+                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                     <p className="text-xs text-slate-500 mb-2 font-medium">追加内容将被 AI 智能融入现有月度规划：</p>
+                     <Textarea value={appendInput} onChange={e => setAppendInput(e.target.value)} placeholder="例如：月底新增了一次重要汇报..." className="bg-white border-slate-200 rounded-xl resize-none text-sm min-h-[80px] focus-visible:ring-[#384877]/20" rows={3} autoFocus />
+                     <div className="flex gap-2 mt-3">
+                       <Button onClick={handleAppend} disabled={!appendInput.trim() || isAppending} className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-9 px-4 text-sm">
+                         {isAppending ? <><Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />融入中...</> : <><Sparkles className="w-3.5 h-3.5 mr-1" />智能融入</>}
+                       </Button>
+                       <Button variant="ghost" size="sm" onClick={() => setShowAppendInput(false)} className="text-slate-400 h-9 rounded-xl">取消</Button>
+                     </div>
+                   </div>
+                 </motion.div>
+               )}
+             </AnimatePresence>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Stats */}
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 mb-3">
+                        <Zap className="w-6 h-6" />
+                    </div>
+                    <div className="text-4xl font-bold text-slate-900 mb-1">{monthData.stats?.focus_hours || 0}</div>
+                    <div className="text-sm text-slate-500">预计专注小时</div>
+                </div>
+                <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col items-center justify-center text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-3">
+                        <Target className="w-6 h-6" />
+                    </div>
+                    <div className="text-4xl font-bold text-slate-900 mb-1">{monthData.stats?.milestones_count || 0}</div>
+                    <div className="text-sm text-slate-500">关键里程碑</div>
+                </div>
+                
+                {/* Strategies */}
+                <div className="bg-[#384877] rounded-3xl p-6 text-white relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-10">
+                        <Lightbulb className="w-24 h-24" />
+                    </div>
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" /> 核心策略
+                    </h4>
+                    <div className="space-y-3 relative z-10 text-sm opacity-90">
+                        {monthData.strategies && Object.entries(monthData.strategies).map(([key, val]) => {
+                            const STRATEGY_LABELS = {
+                                focus: '专注重点',
+                                priority: '优先级',
+                                pace: '节奏',
+                                rhythm: '节奏',
+                                balance: '平衡',
+                                risk: '风险',
+                                risks: '风险',
+                                review: '复盘',
+                                approach: '方法',
+                                method: '方法',
+                                principle: '原则',
+                                principles: '原则',
+                                execution: '执行',
+                            };
+                            const label = STRATEGY_LABELS[key] || key.replace(/_/g, ' ');
+                            return (
+                                <div key={key}>
+                                    <span className="font-medium opacity-70 block text-xs tracking-wider mb-0.5">
+                                        {label}
+                                    </span>
+                                    <p>{val}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+             </div>
+
+             {/* Milestones */}
+             {monthData.key_milestones && monthData.key_milestones.length > 0 && (
+                 <section>
+                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <Flag className="w-5 h-5 text-slate-400" /> 关键里程碑
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {monthData.key_milestones.map((m, i) => (
+                            <div key={i} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
+                                <div>
+                                    <div className="font-semibold text-slate-800">{m.title}</div>
+                                    <div className="text-xs text-slate-500 mt-1">{({ deadline: '截止', milestone: '里程碑', goal: '目标', review: '复盘', launch: '上线', delivery: '交付' })[m.type] || m.type}</div>
+                                </div>
+                                <div className="text-sm font-medium text-[#384877] bg-[#384877]/5 px-3 py-1 rounded-lg">
+                                    {m.deadline}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                 </section>
+             )}
+
+             {/* Weeks Breakdown */}
+             <section>
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <CalendarIcon className="w-5 h-5 text-slate-400" /> 周度节奏
+                </h3>
+                <div className="space-y-4">
+                    {monthData.weeks_breakdown?.map((week, idx) => (
+                        <div key={idx} className="bg-white rounded-2xl p-5 border border-slate-100 hover:shadow-md transition-shadow">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-sm">
+                                        W{idx + 1}
+                                    </div>
+                                    <h4 className="font-semibold text-slate-900">{week.week_label}</h4>
+                                </div>
+                                <div className="bg-slate-50 px-3 py-1 rounded-lg text-sm text-slate-600 border border-slate-100">
+                                    <span className="font-medium mr-2">聚焦：</span>
+                                    {week.focus}
+                                </div>
+                            </div>
+                            {week.key_events && week.key_events.length > 0 && (
+                                <div className="pl-11">
+                                    <div className="flex flex-wrap gap-2">
+                                        {week.key_events.map((evt, i) => (
+                                            <span key={i} className="text-xs bg-slate-50 text-slate-600 px-2 py-1 rounded border border-slate-100">
+                                                {evt}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+             </section>
+
+             {/* Visual Calendar Grid */}
+             <section>
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <CalendarIcon className="w-5 h-5 text-slate-400" /> 任务视图
+                </h3>
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                    <CalendarMonthView 
+                        currentDate={currentMonthDate}
+                        tasks={tasks}
+                        notes={notes}
+                        onDateClick={onDateClick}
+                        onTaskDrop={onTaskDrop}
+                        onTaskClick={onTaskClick}
+                    />
+                </div>
+             </section>
+          </motion.div>
+        )}
+      </div>
+    </div>
+    <InsufficientCreditsDialog
+      open={showInsufficientDialog}
+      onOpenChange={dismissDialog}
+      {...insufficientProps}
+    />
+    </>
+  );
+}

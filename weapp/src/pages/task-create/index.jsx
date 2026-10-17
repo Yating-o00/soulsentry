@@ -1,0 +1,1811 @@
+import { useState, useEffect, useRef } from "react";
+import Taro, { useShareAppMessage } from "@tarojs/taro";
+import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from "@tarojs/components";
+import { get, post, patch, del } from "@/utils/api";
+import createQRCode from "@/lib/qrcode";
+import VoiceInput from "@/components/VoiceInput";
+import theme from "@/components/tasks/theme";
+
+function AiBadge({ text = "AI 生成" }) {
+  return (
+    <View
+      style={{
+        padding: "2rpx 10rpx",
+        borderRadius: "8rpx",
+        background: "rgba(91,130,160,0.10)",
+        border: "1rpx solid rgba(91,130,160,0.20)"
+      }}
+    >
+      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
+    </View>
+  );
+}
+
+const priorities = [
+  { value: "urgent", label: "紧急" },
+  { value: "high", label: "高" },
+  { value: "medium", label: "中" },
+  { value: "low", label: "低" }
+];
+
+const categories = [
+  { value: "work", label: "工作" },
+  { value: "personal", label: "个人" },
+  { value: "health", label: "健康" },
+  { value: "study", label: "学习" },
+  { value: "family", label: "家庭" },
+  { value: "shopping", label: "购物" },
+  { value: "finance", label: "财务" },
+  { value: "other", label: "其他" }
+];
+
+const DEVICE_ICONS = {
+  phone: "📱",
+  watch: "⌚",
+  glasses: "🕶️",
+  car: "🚗",
+  home: "🏠",
+  pc: "💻"
+};
+
+const STATUS_LABEL = {
+  active: "进行中",
+  ready: "已就绪",
+  monitoring: "监控中",
+  pending: "待触发"
+};
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+async function getWeappLocation() {
+  try {
+    const res = await Taro.getLocation({ type: "gcj02" });
+    if (res && typeof res.latitude === "number" && typeof res.longitude === "number") {
+      return { latitude: res.latitude, longitude: res.longitude };
+    }
+  } catch (e) {
+    console.warn("getWeappLocation failed:", e);
+  }
+  return null;
+}
+
+function toISODate(date, time) {
+  if (!date) return "";
+  const t = time || "00:00";
+  // 后端 zod .datetime() 要求带 Z 的 ISO 8601，这里按 Asia/Shanghai 时区转成 UTC 返回
+  return new Date(`${date}T${t}:00+08:00`).toISOString();
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function buildFallbackAutomations(timeline, devices) {
+  const list = [];
+  if (Array.isArray(timeline) && timeline.length > 0) {
+    const first = timeline[0];
+    list.push({
+      title: "关键节点提醒",
+      desc: `在 ${first.date || ""} ${first.time || ""} 提醒「${first.title}」`,
+      status: "ready",
+      device_id: "phone"
+    });
+  }
+  if (devices?.phone?.strategies?.length) {
+    list.push({
+      title: "手机协同推送",
+      desc: "通过手机推送保持约定进度同步",
+      status: "active",
+      device_id: "phone"
+    });
+  }
+  if (devices?.watch?.strategies?.length) {
+    list.push({
+      title: "手表轻提醒",
+      desc: "在手表上发送轻量提醒，避免打扰",
+      status: "ready",
+      device_id: "watch"
+    });
+  }
+  if (list.length === 0) {
+    list.push({
+      title: "到期前提醒",
+      desc: "在约定截止前自动发送提醒",
+      status: "ready",
+      device_id: "phone"
+    });
+  }
+  return list;
+}
+
+// 注意：必须定义在组件外部。若放在 TaskCreate 内部，每次输入 setState 都会生成新的
+// 组件类型，React 会卸载重建整个子树，输入框原生组件被销毁——iOS 上即表现为
+// 键盘收起、需反复点击才能重新唤起。
+function SectionCard({ children, title, hint }) {
+  return (
+    <View
+      style={{
+        marginTop: "28rpx",
+        padding: "24rpx",
+        borderRadius: "16rpx",
+        background: "#ffffff",
+        border: "1rpx solid #e8ecef"
+      }}
+    >
+      {title && (
+        <View style={{ marginBottom: "16rpx" }}>
+          <Text style={{ fontSize: "26rpx", fontWeight: 600, color: "#384877" }}>{title}</Text>
+          {hint && <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginTop: "4rpx" }}>{hint}</Text>}
+        </View>
+      )}
+      {children}
+    </View>
+  );
+}
+
+export default function TaskCreate() {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("23:59");
+  const [reminderDate, setReminderDate] = useState("");
+  const [reminderTime, setReminderTime] = useState("09:00");
+  const [priorityIndex, setPriorityIndex] = useState(2);
+  const [categoryIndex, setCategoryIndex] = useState(7);
+  const [analysis, setAnalysis] = useState(null);
+  const [shareToken, setShareToken] = useState("");
+  const [step, setStep] = useState("form");
+  const [parsedHint, setParsedHint] = useState("");
+  const [parsedMetadata, setParsedMetadata] = useState(null);
+  const [parsedLocation, setParsedLocation] = useState(""); // AI 识别出的地点，确认页可改
+  const [geoReminder, setGeoReminder] = useState(null); // 用户主动选择的地点提醒 {name, latitude, longitude}
+  const [semanticText, setSemanticText] = useState(""); // 语义地点输入（如：家附近的超市）
+  const [semanticBusy, setSemanticBusy] = useState(false);
+  const [semanticWatch, setSemanticWatch] = useState(null); // 解析未落点时的观察 {raw, watch_id}
+  const [parsedRepeat, setParsedRepeat] = useState(null);
+  const [parsedSubtasks, setParsedSubtasks] = useState([]);
+  const [newParsedSubtaskText, setNewParsedSubtaskText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [createdTask, setCreatedTask] = useState(null);
+  const [posterUrl, setPosterUrl] = useState("");
+  const [posterSize, setPosterSize] = useState(() => {
+    try {
+      const sys = Taro.getSystemInfoSync();
+      const winWidth = sys.windowWidth || 375;
+      const width = Math.round(winWidth * 0.9);
+      const height = Math.round(width * 840 / 600);
+      return { width, height };
+    } catch {
+      return { width: 600, height: 840 };
+    }
+  });
+  const [editId, setEditId] = useState("");
+  const [isEdit, setIsEdit] = useState(false);
+
+  const [subtaskList, setSubtaskList] = useState([]);
+  const [newSubtaskText, setNewSubtaskText] = useState("");
+  const [newChildText, setNewChildText] = useState({});
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  // 微信小程序订阅消息模板 ID（与后端 .env 保持一致）
+  const wechatTmplIds = ["o0Xzec1QIL9CF9C2E4wspUEmfWX04vpBVwXkThQRWHc", "Sq9pF3iv5eiiVL99-odo8oG62XixtDojRMDCWKwchhY"];
+
+  const isFormValid = title.trim().length > 0;
+
+  // 用户主动选点（微信内置选点器，GCJ-02 坐标）：为约定标记地点提醒，默认路过型
+  const chooseGeoReminder = () => {
+    Taro.chooseLocation({
+      success: (res) => {
+        setSemanticWatch(null);
+        setGeoReminder({
+          name: res.name || res.address || "所选地点",
+          latitude: res.latitude,
+          longitude: res.longitude,
+          trigger_on: "passby"
+        });
+      },
+      fail: () => {}
+    });
+  };
+
+  // 语义地点：说人话选址（如：家附近的超市）。落点成功=直接选点；落不了点=登记观察，到场后问用户确认
+  const resolveSemanticText = () => {
+    const text = semanticText.trim();
+    if (!text || semanticBusy) return;
+    setSemanticBusy(true);
+    Taro.showLoading({ title: "解析中", mask: true });
+    post("/functions/sentinelSemanticPlace", { text })
+      .then((data) => {
+        if (data?.status === "resolved" && data.place) {
+          setSemanticWatch(null);
+          setGeoReminder({ name: data.place.name, latitude: data.place.latitude, longitude: data.place.longitude, trigger_on: "passby" });
+          Taro.showToast({ title: `已定位到「${data.place.name}」`, icon: "none" });
+        } else if (data?.status === "candidates" && data.candidates?.length) {
+          // 小程序端简化：取历史光顾最高的候选，提示用户可改
+          const top = data.candidates[0];
+          setSemanticWatch(null);
+          setGeoReminder({ name: top.name, latitude: top.latitude, longitude: top.longitude, trigger_on: "passby" });
+          Taro.showToast({ title: `已定位「${top.name}」等${data.candidates.length}个候选，取最常去的`, icon: "none", duration: 2500 });
+        } else if (data?.status === "watch" && data.watch) {
+          setGeoReminder(null);
+          setSemanticWatch({ raw: text, watch_id: data.watch.id });
+          Taro.showToast({ title: "已记住，到场后问你确认", icon: "none" });
+        } else {
+          Taro.showToast({ title: data?.message || "没听懂这个地点", icon: "none" });
+        }
+      })
+      .catch(() => Taro.showToast({ title: "解析失败，请稍后再试", icon: "none" }))
+      .finally(() => {
+        setSemanticBusy(false);
+        Taro.hideLoading();
+      });
+  };
+
+  const GEO_TRIGGER_OPTIONS = [
+    { key: "passby", label: "路过时" },
+    { key: "enter", label: "到达时" },
+    { key: "exit", label: "离开时" }
+  ];
+
+  const renderGeoReminderPicker = () => (
+    <View style={{ marginTop: "20rpx" }}>
+      <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>地点提醒（可选）</Text>
+      {geoReminder ? (
+        <View>
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: "1rpx solid rgba(91,130,160,0.35)", background: "rgba(91,130,160,0.08)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
+            <Text style={{ fontSize: "26rpx", color: theme.inkSecondary, flex: 1 }} numberOfLines={1}>
+              📍 {geoReminder.name}
+            </Text>
+            <Text onClick={() => setGeoReminder(null)} style={{ fontSize: "24rpx", color: "#e53935", marginLeft: "16rpx" }}>清除</Text>
+          </View>
+          <View style={{ display: "flex", gap: "12rpx", marginTop: "10rpx" }}>
+            {GEO_TRIGGER_OPTIONS.map((opt) => {
+              const active = (geoReminder.trigger_on || "passby") === opt.key;
+              return (
+                <Text
+                  key={opt.key}
+                  onClick={() => setGeoReminder({ ...geoReminder, trigger_on: opt.key })}
+                  style={{
+                    fontSize: "22rpx",
+                    padding: "8rpx 20rpx",
+                    borderRadius: "999rpx",
+                    border: `1rpx solid ${active ? theme.water : "rgba(91,130,160,0.35)"}`,
+                    background: active ? "rgba(91,130,160,0.18)" : "transparent",
+                    color: active ? theme.water : "#9ca0a8"
+                  }}
+                >
+                  {opt.label}
+                </Text>
+              );
+            })}
+          </View>
+        </View>
+      ) : (
+        <View>
+          <View onClick={chooseGeoReminder} style={{ border: "1rpx dashed rgba(91,130,160,0.45)", padding: "18rpx 20rpx", borderRadius: "10rpx" }}>
+            <Text style={{ fontSize: "26rpx", color: theme.water }}>＋ 选择地点（超市/快递点/健身房等），按时机提醒你</Text>
+          </View>
+          {semanticWatch ? (
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12rpx", border: "1rpx solid rgba(217,119,6,0.35)", background: "rgba(217,119,6,0.08)", padding: "16rpx 20rpx", borderRadius: "10rpx" }}>
+              <Text style={{ fontSize: "24rpx", color: "#b45309", flex: 1 }} numberOfLines={2}>
+                已记住「{semanticWatch.raw}」：到场停留后问你确认
+              </Text>
+              <Text onClick={() => setSemanticWatch(null)} style={{ fontSize: "24rpx", color: "#e53935", marginLeft: "16rpx" }}>清除</Text>
+            </View>
+          ) : (
+            <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginTop: "12rpx" }}>
+              <Input
+                value={semanticText}
+                onInput={(e) => setSemanticText(e.detail.value)}
+                onConfirm={resolveSemanticText}
+                placeholder="或描述：家附近的超市"
+                placeholderStyle={{ color: "#b8bcc4", fontSize: "24rpx" }}
+                style={{ flex: 1, border: "1rpx solid rgba(91,130,160,0.35)", background: "rgba(91,130,160,0.06)", padding: "14rpx 20rpx", borderRadius: "10rpx", fontSize: "26rpx", color: theme.ink }}
+              />
+              <Text
+                onClick={resolveSemanticText}
+                style={{ fontSize: "24rpx", color: semanticBusy || !semanticText.trim() ? "#9ca0a8" : theme.water, padding: "14rpx 24rpx", borderRadius: "10rpx", border: "1rpx solid rgba(91,130,160,0.35)" }}
+              >
+                解析
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+    </View>
+  );
+
+  useEffect(() => {
+    const params = Taro.getCurrentInstance().router.params || {};
+    const id = params.id;
+    const mode = params.mode;
+    if (id && mode === "edit") {
+      setEditId(id);
+      setIsEdit(true);
+      loadTask(id);
+      return;
+    }
+
+    // 来自心签等外部来源的预填数据
+    if (params.title) setTitle(decodeURIComponent(params.title));
+    if (params.description) setDescription(decodeURIComponent(params.description));
+
+    if (params.reminder_time) setDateTimeFromISO(decodeURIComponent(params.reminder_time), setReminderDate, setReminderTime);
+    if (params.end_time) setDateTimeFromISO(decodeURIComponent(params.end_time), setEndDate, setEndTime);
+
+    if (params.priority) {
+      const idx = priorities.findIndex((p) => p.value === params.priority);
+      if (idx >= 0) setPriorityIndex(idx);
+    }
+    if (params.category) {
+      const idx = categories.findIndex((c) => c.value === params.category);
+      if (idx >= 0) setCategoryIndex(idx);
+    }
+  }, []);
+
+  const loadSubtasksRecursive = async (parentId) => {
+    const subs = await get("/tasks", { parent_task_id: parentId, limit: 200 });
+    let result = [];
+    for (const sub of subs || []) {
+      result.push({ ...sub, _isNew: false, _isDeleted: false, _isModified: false });
+      const children = await loadSubtasksRecursive(sub.id);
+      result = result.concat(children);
+    }
+    return result;
+  };
+
+  const loadTask = async (id) => {
+    setLoading(true);
+    try {
+      const task = await get(`/tasks/${id}`);
+      setTitle(task.title || "");
+      setDescription(task.description || "");
+      setPriorityIndex(Math.max(0, priorities.findIndex((p) => p.value === task.priority)));
+      setCategoryIndex(Math.max(0, categories.findIndex((c) => c.value === task.category)));
+
+      if (task.end_time) {
+        const d = new Date(task.end_time);
+        if (!isNaN(d.getTime())) {
+          setEndDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+          setEndTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+        }
+      }
+      if (task.reminder_time) {
+        const d = new Date(task.reminder_time);
+        if (!isNaN(d.getTime())) {
+          setReminderDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+          setReminderTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+        }
+      }
+
+      const allSubs = await loadSubtasksRecursive(id);
+      setSubtaskList(allSubs);
+      setExpandedIds(new Set());
+
+      // 回填已设置的地点提醒（任务详情里 _extraFields 展开到顶层）
+      const lr = task.location_reminder;
+      if (lr?.enabled && typeof lr.latitude === "number" && typeof lr.longitude === "number") {
+        setGeoReminder({ name: lr.location_name || "已选地点", latitude: lr.latitude, longitude: lr.longitude });
+      }
+    } catch (err) {
+      // handled globally
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const topSubtasks = () => subtaskList.filter((s) => s.parent_task_id === editId && !s._isDeleted);
+  const childSubtasks = (parentId) => subtaskList.filter((s) => s.parent_task_id === parentId && !s._isDeleted);
+
+  const updateSubtask = (id, nextTitle) => {
+    setSubtaskList((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, title: nextTitle, _isModified: !s._isNew } : s))
+    );
+  };
+
+  // 删除子约定：确认后立即从服务端删除并移出列表（本地未落库的直接移除）
+  const deleteSubtask = (id) => {
+    const target = subtaskList.find((s) => s.id === id);
+    if (!target) return;
+    Taro.showModal({
+      title: "删除子约定",
+      content: `确定删除「${target.title || "这条子约定"}」吗？`,
+      confirmColor: "#e53935",
+      success: (res) => {
+        if (!res.confirm) return;
+        // 本地新增、还没落库的：直接从列表移除（含其二级）
+        if (target._isNew) {
+          setSubtaskList((prev) => prev.filter((s) => s.id !== id && s.parent_task_id !== id));
+          return;
+        }
+        // 已落库的：立即删除（先二级后父级），成功后移出列表
+        const ids = [id, ...subtaskList.filter((s) => s.parent_task_id === id).map((s) => s.id)];
+        (async () => {
+          try {
+            for (const sid of ids.reverse()) {
+              await del(`/tasks/${sid}`);
+            }
+            setSubtaskList((prev) => prev.filter((s) => !ids.includes(s.id)));
+            Taro.showToast({ title: "已删除", icon: "success" });
+          } catch (e) {
+            console.error("delete subtask failed", id, e);
+            Taro.showToast({ title: "删除失败，请重试", icon: "none" });
+          }
+        })();
+      }
+    });
+  };
+
+  const restoreSubtask = (id) => {
+    setSubtaskList((prev) =>
+      prev.map((s) => {
+        if (s.id === id) return { ...s, _isDeleted: false };
+        if (s.parent_task_id === id) return { ...s, _isDeleted: false };
+        return s;
+      })
+    );
+  };
+
+  const addSubtask = () => {
+    const text = newSubtaskText.trim();
+    if (!text) return;
+    const tempId = `new-${Date.now()}`;
+    setSubtaskList((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        title: text,
+        parent_task_id: editId,
+        priority: priorities[priorityIndex].value,
+        category: categories[categoryIndex].value,
+        status: "pending",
+        _isNew: true,
+        _isDeleted: false,
+        _isModified: false
+      }
+    ]);
+    setNewSubtaskText("");
+  };
+
+  const addChildSubtask = (parentId) => {
+    const text = (newChildText[parentId] || "").trim();
+    if (!text) return;
+    const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setSubtaskList((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        title: text,
+        parent_task_id: parentId,
+        priority: priorities[priorityIndex].value,
+        category: categories[categoryIndex].value,
+        status: "pending",
+        _isNew: true,
+        _isDeleted: false,
+        _isModified: false
+      }
+    ]);
+    setNewChildText((prev) => ({ ...prev, [parentId]: "" }));
+    setExpandedIds((prev) => new Set(prev).add(parentId));
+  };
+
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // 逐项独立保存，单个失败不影响其他；返回未保存成功的子约定标题
+  const saveSubtasks = async () => {
+    const failed = [];
+
+    // 1. 先删（二级在前，避免父已删导致子删除 404 中断后续）
+    for (const s of [...subtaskList].reverse().filter((x) => x._isDeleted && !x._isNew)) {
+      try {
+        await del(`/tasks/${s.id}`);
+      } catch (e) {
+        console.error("delete subtask failed", s.id, e);
+        failed.push(s.title);
+      }
+    }
+    // 2. 新建一级子约定，记录真实 id 供二级挂接
+    const idMap = {};
+    for (const s of subtaskList.filter((x) => x._isNew && !x._isDeleted && x.parent_task_id === editId)) {
+      try {
+        const created = await post("/tasks", {
+          title: s.title.trim(),
+          parent_task_id: editId,
+          priority: s.priority,
+          category: s.category,
+          status: s.status
+        });
+        if (created?.id) idMap[s.id] = created.id;
+      } catch (e) {
+        console.error("create top subtask failed", e);
+        failed.push(s.title);
+      }
+    }
+    // 3. 新建二级子约定（父级是新建一级时用真实 id，挂不上时跳过而不是中断）
+    for (const s of subtaskList.filter((x) => x._isNew && !x._isDeleted && x.parent_task_id !== editId)) {
+      const realParent = idMap[s.parent_task_id] || s.parent_task_id;
+      try {
+        await post("/tasks", {
+          title: s.title.trim(),
+          parent_task_id: realParent,
+          priority: s.priority,
+          category: s.category,
+          status: s.status
+        });
+      } catch (e) {
+        console.error("create child subtask failed", e);
+        failed.push(s.title);
+      }
+    }
+    // 4. 修改已有
+    for (const s of subtaskList.filter((x) => !x._isNew && !x._isDeleted && x._isModified)) {
+      try {
+        await patch(`/tasks/${s.id}`, { title: s.title.trim() });
+      } catch (e) {
+        console.error("update subtask failed", s.id, e);
+        failed.push(s.title);
+      }
+    }
+    return failed;
+  };
+
+  const buildLocalAnalysis = () => {
+    const input = [title, description].filter(Boolean).join("\n");
+    const steps = [
+      { text: "梳理约定目标与关键交付物" },
+      { text: "拆解可执行的步骤与检查点" },
+      { text: "设置提醒，确保按时推进" }
+    ];
+    const timeline = [
+      { time: "09:00", date: endDate || todayStr(), title: "开始处理", description: input.slice(0, 40) }
+    ];
+    if (endDate) {
+      timeline.push({ time: endTime || "23:59", date: endDate, title: "截止交付", description: "完成并检查约定" });
+    }
+    return {
+      resolved_date: endDate || todayStr(),
+      steps,
+      timeline,
+      devices: {
+        phone: { name: "手机", strategies: [{ time: "到期前", content: "发送提醒推送" }] }
+      },
+      automations: buildFallbackAutomations(timeline, { phone: { strategies: [] } }),
+      parsed: { times: endDate ? [endDate] : [], intents: [title], locations: [] }
+    };
+  };
+
+  const analyze = async (voiceText) => {
+    const inputText = voiceText || [title, description].filter(Boolean).join("\n");
+    if (!inputText.trim()) {
+      Taro.showToast({ title: "请先输入约定内容", icon: "none" });
+      return;
+    }
+
+    setLoading(true);
+    let timeoutId = null;
+    try {
+      const requestPromise = post("/functions/analyzeIntent", {
+        input: inputText,
+        date: endDate || new Date().toISOString().slice(0, 10)
+      });
+
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("AI 分析超时")), 25000);
+      });
+
+      const data = await Promise.race([requestPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
+
+      // 兜底：如果后端未返回 automations，根据时间线和设备生成默认建议
+      if (!Array.isArray(data.automations) || data.automations.length === 0) {
+        data.automations = buildFallbackAutomations(data.timeline, data.devices);
+      }
+
+      setAnalysis(data);
+      setStep("analysis");
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error("analyze failed", err);
+      // 超时或失败时使用本地兜底分析
+      setAnalysis(buildLocalAnalysis());
+      setStep("analysis");
+      Taro.showToast({ title: "AI 分析响应较慢，已展示基础建议", icon: "none", duration: 2500 });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestReminderSubscribeSync = () => {
+    if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) return;
+    // 必须在用户点击按钮的同步调用栈内发起，否则微信会拒绝
+    wx.requestSubscribeMessage({
+      tmplIds: wechatTmplIds,
+      success: (res) => {
+        console.log("[task-create] subscribe result", res);
+      },
+      fail: (err) => {
+        // 用户拒绝、未配置模板或环境不支持，不影响保存
+        console.log("[task-create] subscribe request failed/ignored", err);
+      }
+    });
+  };
+
+  const saveTask = async () => {
+    if (!isFormValid) {
+      Taro.showToast({ title: "请输入标题", icon: "none" });
+      return;
+    }
+
+    const payload = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      priority: priorities[priorityIndex].value,
+      category: categories[categoryIndex].value
+    };
+
+    const reminderISO = toISODate(reminderDate, reminderTime);
+    const endISO = toISODate(endDate, endTime);
+
+    if (reminderISO) payload.reminder_time = reminderISO;
+    if (endISO) payload.end_time = endISO;
+    if (parsedMetadata || parsedLocation) {
+      // 地点以确认页用户编辑后的版本为准，随 spatiotemporal 元数据透传
+      const extra = parsedMetadata?._extraFields || {};
+      const spatiotemporal = extra.spatiotemporal || {
+        created_at: new Date().toISOString(),
+        input: (title || "").slice(0, 500),
+        location_type: "unknown",
+        event_type: null,
+        time_source: "unknown"
+      };
+      // 用户在确认页补设了时间 → time_plan 标记已排期；没设时间则保留"待安排"语义（不造虚假逾期）
+      const timePlan = (reminderISO || endISO)
+        ? { ...(extra.time_plan || { semantics: "explicit" }), arranged: true }
+        : (extra.time_plan || null);
+      payload.metadata = {
+        ...parsedMetadata,
+        _extraFields: {
+          ...extra,
+          time_plan: timePlan,
+          spatiotemporal: { ...spatiotemporal, location: parsedLocation.trim() || null }
+        }
+      };
+    }
+    if (geoReminder) {
+      // 用户主动选择的地点提醒：微信选点器返回 GCJ-02 坐标，标记来源供服务端统一纠偏
+      const baseMeta = payload.metadata || parsedMetadata || {};
+      const extra = baseMeta._extraFields || {};
+      payload.metadata = {
+        ...baseMeta,
+        _extraFields: {
+          ...extra,
+          location_reminder: {
+            enabled: true,
+            latitude: geoReminder.latitude,
+            longitude: geoReminder.longitude,
+            radius: 300,
+            location_name: geoReminder.name,
+            trigger_on: geoReminder.trigger_on || "passby",
+            coord_type: "gcj02"
+          }
+        }
+      };
+      // 用户主动选择地点提醒 → 打开全局位置提醒开关（服务端推送闸：显式关闭才不推）
+      patch("/user-preferences", { location_reminders: true }).catch(() => {});
+    }
+    if (!geoReminder && semanticWatch) {
+      // 语义观察未落点：先记下观察（无坐标，围栏链路自动跳过）；到场确认后服务端补写具体坐标
+      const baseMeta = payload.metadata || parsedMetadata || {};
+      const extra = baseMeta._extraFields || {};
+      payload.metadata = {
+        ...baseMeta,
+        _extraFields: {
+          ...extra,
+          location_reminder: {
+            enabled: true,
+            semantic: { raw: semanticWatch.raw, watch_id: semanticWatch.watch_id, status: "watching" },
+            trigger_on: "passby"
+          }
+        }
+      };
+      patch("/user-preferences", { location_reminders: true }).catch(() => {});
+    }
+    if (parsedRepeat) {
+      payload.repeat_rule = parsedRepeat.repeat_rule;
+      if (parsedRepeat.custom_recurrence) payload.custom_recurrence = parsedRepeat.custom_recurrence;
+    }
+
+    setLoading(true);
+    try {
+      if (isEdit && editId) {
+        await patch(`/tasks/${editId}`, payload);
+        if (subtaskList.length > 0) {
+          const failedSubs = await saveSubtasks();
+          if (failedSubs.length > 0) {
+            Taro.showToast({ title: `部分子约定未保存：${failedSubs[0]}等`, icon: "none", duration: 2500 });
+          }
+        }
+        Taro.showToast({ title: "更新成功", icon: "success" });
+        setTimeout(() => Taro.navigateBack(), 500);
+        return;
+      }
+
+      const task = await post("/tasks", payload);
+      setCreatedTask(task);
+
+      // 确认页编辑过的子约定随约定一并创建
+      if (parsedSubtasks.length > 0) {
+        for (const st of parsedSubtasks) {
+          const t = (st.title || "").trim();
+          if (!t) continue;
+          await post("/tasks", {
+            title: t.slice(0, 120),
+            parent_task_id: task.id,
+            priority: payload.priority,
+            category: payload.category,
+            status: "pending"
+          }).catch(() => {});
+        }
+      }
+
+      try {
+        const share = await post(`/public/share/generate/task/${task.id}`);
+        setShareToken(share.token || "");
+      } catch (shareErr) {
+        console.error("generate share failed", shareErr);
+      }
+
+      setStep("created");
+    } catch (err) {
+      // handled globally
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const drawQRCode = (ctx, text, x, y, size) => {
+    try {
+      const qr = createQRCode(0, "M");
+      qr.addData(text);
+      qr.make();
+      const count = qr.getModuleCount();
+      const cell = size / count;
+      for (let row = 0; row < count; row++) {
+        for (let col = 0; col < count; col++) {
+          if (qr.isDark(row, col)) {
+            ctx.setFillStyle("#1f2937");
+            ctx.fillRect(x + col * cell, y + row * cell, cell, cell);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("QR draw failed", err);
+    }
+  };
+
+  const generatePoster = () => {
+    if (!shareToken) {
+      Taro.showToast({ title: "分享链接未生成", icon: "none" });
+      return;
+    }
+
+    try {
+      const { width, height } = posterSize;
+      const ctx = Taro.createCanvasContext("shareCanvas");
+      const scale = width / 600;
+
+      // 整体缩放，使 600x840 的内容适配到当前屏幕宽度的 90%
+      ctx.scale(scale, scale);
+
+      // 背景
+      const grd = ctx.createLinearGradient(0, 0, 0, 840);
+      grd.addColorStop(0, "#384877");
+      grd.addColorStop(1, "#4a5d8f");
+      ctx.setFillStyle(grd);
+      ctx.fillRect(0, 0, 600, 840);
+
+      // 顶部品牌
+      ctx.setFillStyle("#ffffff");
+      ctx.setFontSize(28);
+      ctx.fillText("SoulSentry", 40, 60);
+
+      // 标题
+      ctx.setFontSize(40);
+      const displayTitle = title.length > 14 ? title.slice(0, 14) + "…" : title;
+      ctx.fillText(displayTitle, 40, 140);
+
+      // 描述
+      ctx.setFontSize(26);
+      const desc = description || "与你一起守护这个约定";
+      const displayDesc = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
+      ctx.fillText(displayDesc, 40, 200);
+
+      // 时间
+      const endISO = toISODate(endDate, endTime);
+      if (endISO) {
+        ctx.setFontSize(24);
+        ctx.fillText(`截止时间：${formatDateTime(endISO)}`, 40, 270);
+      }
+
+      // 白色内容区
+      ctx.setFillStyle("#ffffff");
+      ctx.fillRect(40, 320, 520, 360);
+
+      // 内容区文字
+      ctx.setFillStyle("#384877");
+      ctx.setFontSize(28);
+      ctx.fillText("扫码参与约定", 70, 360);
+
+      ctx.setFillStyle("#666666");
+      ctx.setFontSize(22);
+      ctx.fillText("对方可匿名勾选进度、留言", 70, 650);
+
+      // 二维码
+      const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
+      const qrSize = 200;
+      const qrX = (600 - qrSize) / 2;
+      const qrY = 400;
+      ctx.setFillStyle("#ffffff");
+      ctx.fillRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16);
+      drawQRCode(ctx, link, qrX, qrY, qrSize);
+
+      // 底部提示
+      ctx.setFillStyle("rgba(255,255,255,0.8)");
+      ctx.setFontSize(22);
+      ctx.fillText("长按识别 · 共同守护", 40, 780);
+
+      ctx.draw(false, () => {
+        Taro.canvasToTempFilePath({
+          canvasId: "shareCanvas",
+          x: 0,
+          y: 0,
+          width,
+          height,
+          destWidth: width * 2,
+          destHeight: height * 2,
+          success: (res) => {
+            setPosterUrl(res.tempFilePath);
+            Taro.showToast({ title: "卡片已生成", icon: "success" });
+          },
+          fail: (err) => {
+            console.error("canvasToTempFilePath failed", err);
+            Taro.showToast({ title: "卡片生成失败", icon: "none" });
+          }
+        });
+      });
+    } catch (err) {
+      console.error("generate poster failed", err);
+      Taro.showToast({ title: "卡片生成失败", icon: "none" });
+    }
+  };
+
+  const savePoster = () => {
+    if (!posterUrl) {
+      generatePoster();
+      return;
+    }
+    Taro.saveImageToPhotosAlbum({
+      filePath: posterUrl,
+      success: () => Taro.showToast({ title: "已保存到相册", icon: "success" }),
+      fail: (err) => {
+        if (err.errMsg?.includes("auth deny")) {
+          Taro.showModal({
+            title: "需要授权",
+            content: "请允许保存图片到相册",
+            showCancel: false
+          });
+        }
+      }
+    });
+  };
+
+  const copyShareLink = () => {
+    if (!shareToken) return;
+    const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
+    Taro.setClipboardData({
+      data: link,
+      success: () => Taro.showToast({ title: "分享链接已复制", icon: "success" })
+    });
+  };
+
+  const goBack = () => {
+    Taro.navigateBack();
+  };
+
+  useShareAppMessage(() => {
+    if (!shareToken) return { title: "SoulSentry 约定" };
+    return {
+      title: `邀你一起守护：${title}`,
+      path: `/pages/share/index?token=${shareToken}`
+    };
+  });
+
+  useEffect(() => {
+    if (step === "created" && shareToken && !posterUrl) {
+      // 延迟生成，确保 canvas 已渲染
+      const timer = setTimeout(generatePoster, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [step, shareToken, posterUrl]);
+
+  const renderSubtaskEditor = () => {
+    if (!isEdit) return null;
+
+    const renderItem = (sub, depth = 0) => {
+      const isDeleted = sub._isDeleted;
+      const children = childSubtasks(sub.id);
+      const isExpanded = expandedIds.has(sub.id);
+
+      return (
+        <View key={sub.id} style={{ marginBottom: "12rpx" }}>
+          <View style={{ display: "flex", alignItems: "center", paddingLeft: `${depth * 36}rpx` }}>
+            <View
+              onClick={() => toggleExpand(sub.id)}
+              style={{
+                width: "36rpx",
+                height: "36rpx",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+            >
+              <Text style={{ color: "#384877", fontSize: "26rpx" }}>{isExpanded ? "−" : "+"}</Text>
+            </View>
+            <Input
+              className="ss-input"
+              style={{
+                flex: 1,
+                height: "68rpx",
+                marginRight: "12rpx",
+                textDecoration: isDeleted ? "line-through" : "none",
+                color: isDeleted ? "#999" : "#333",
+                background: isDeleted ? "#f0f0f0" : "#f8f9fb"
+              }}
+              value={sub.title}
+              disabled={isDeleted}
+              onInput={(e) => updateSubtask(sub.id, e.detail.value)}
+            />
+            {isDeleted ? (
+              <Text
+                onClick={() => restoreSubtask(sub.id)}
+                style={{ color: "#384877", fontSize: "24rpx", padding: "0 8rpx" }}
+              >
+                恢复
+              </Text>
+            ) : (
+              <View
+                onClick={() => deleteSubtask(sub.id)}
+                style={{
+                  width: "44rpx",
+                  height: "44rpx",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <Text style={{ color: "#e53935", fontSize: "36rpx", lineHeight: "36rpx" }}>×</Text>
+              </View>
+            )}
+          </View>
+
+          {isExpanded && (
+            <View style={{ marginTop: "8rpx", paddingLeft: `${(depth + 1) * 36}rpx` }}>
+              {children.map((child) => renderItem(child, depth + 1))}
+              <View style={{ display: "flex", alignItems: "center", marginTop: "8rpx" }}>
+                <Input
+                  className="ss-input"
+                  style={{ flex: 1, height: "60rpx", marginRight: "12rpx" }}
+                  placeholder="二级子约定"
+                  value={newChildText[sub.id] || ""}
+                  onInput={(e) => setNewChildText((prev) => ({ ...prev, [sub.id]: e.detail.value }))}
+                />
+                <Button className="ss-btn ss-btn-sm" style={{ height: "56rpx", lineHeight: "56rpx" }} onClick={() => addChildSubtask(sub.id)}>
+                  添加
+                </Button>
+              </View>
+            </View>
+          )}
+        </View>
+      );
+    };
+
+    return (
+      <View style={{ marginTop: "32rpx" }}>
+        <View className="ss-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Text>子约定</Text>
+          <Text className="ss-muted" style={{ fontSize: "22rpx" }}>{topSubtasks().length} 个</Text>
+        </View>
+        {topSubtasks().length === 0 && (
+          <View className="ss-empty" style={{ padding: "16rpx 0" }}>暂无子约定</View>
+        )}
+        {topSubtasks().map((sub) => renderItem(sub, 0))}
+
+        <View style={{ display: "flex", alignItems: "center", marginTop: "16rpx" }}>
+          <Input
+            className="ss-input"
+            style={{ flex: 1, height: "68rpx", marginRight: "12rpx" }}
+            placeholder="添加一个子约定"
+            value={newSubtaskText}
+            onInput={(e) => setNewSubtaskText(e.detail.value)}
+          />
+          <Button className="ss-btn ss-btn-sm" style={{ height: "56rpx", lineHeight: "56rpx" }} onClick={addSubtask}>
+            添加
+          </Button>
+        </View>
+      </View>
+    );
+  };
+
+  const createTaskFromVoice = async (parsed) => {
+    setLoading(true);
+    try {
+      const payload = {
+        title: parsed.title?.trim(),
+        description: parsed.description?.trim() || undefined,
+        priority: parsed.priority || "medium",
+        category: parsed.category || "other"
+      };
+      if (parsed.reminder_time) payload.reminder_time = parsed.reminder_time;
+      if (parsed.end_time) payload.end_time = parsed.end_time;
+      if (parsedRepeat) {
+        payload.repeat_rule = parsedRepeat.repeat_rule;
+        if (parsedRepeat.custom_recurrence) payload.custom_recurrence = parsedRepeat.custom_recurrence;
+      }
+      if (parsed.spatiotemporal || parsed.time_plan) {
+        payload.metadata = {
+          _extraFields: {
+            ...(parsed.spatiotemporal ? { spatiotemporal: parsed.spatiotemporal } : {}),
+            ...(parsed.time_plan
+              ? { time_plan: parsed.reminder_time ? { ...parsed.time_plan, arranged: true } : parsed.time_plan }
+              : {})
+          }
+        };
+      }
+
+      const task = await post("/tasks", payload);
+      setCreatedTask(task);
+
+      // 直达创建不自动生成 AI 拆解的子约定（子约定只在确认页经用户确认后才创建）
+
+      try {
+        const share = await post(`/public/share/generate/task/${task.id}`);
+        setShareToken(share.token || "");
+      } catch (shareErr) {
+        console.error("generate share failed", shareErr);
+      }
+
+      Taro.showToast({ title: "约定已创建", icon: "success" });
+      setStep("created");
+    } catch (err) {
+      // handled globally
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+
+  const setDateTimeFromISO = (iso, setDate, setTime) => {
+    if (!iso) return;
+    const d = new Date(iso);
+    if (!isNaN(d.getTime())) {
+      setDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+      setTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    }
+  };
+
+  const applyParsedFields = (parsed, opts = {}) => {
+    if (!parsed) return;
+
+    // 标题：用户把长内容输在 title 框，AI 提取后覆盖为简洁标题
+    if (opts.forceTitle || !title.trim()) {
+      setTitle(parsed.title || "");
+    }
+    // 描述：强制模式时，仅当 AI 返回了有效描述才覆盖；否则保留用户已输入内容
+    if (opts.forceDescription) {
+      if (parsed.description?.trim()) setDescription(parsed.description);
+    } else if (!description.trim()) {
+      setDescription(parsed.description || "");
+    }
+
+    // 优先级/分类：只在当前为默认值或为空时覆盖
+    const priorityIdx = priorities.findIndex((p) => p.value === parsed.priority);
+    const categoryIdx = categories.findIndex((c) => c.value === parsed.category);
+    if (priorityIdx >= 0 && (priorityIndex === 2 || opts.forcePriority)) {
+      setPriorityIndex(priorityIdx);
+    }
+    if (categoryIdx >= 0 && (categoryIndex === 7 || opts.forceCategory)) {
+      setCategoryIndex(categoryIdx);
+    }
+
+    // 时间：只在未设置时回填，避免覆盖用户手动选择
+    if (!reminderDate || opts.forceTime) {
+      setDateTimeFromISO(parsed.reminder_time, setReminderDate, setReminderTime);
+    }
+    if (!endDate || opts.forceTime) {
+      setDateTimeFromISO(parsed.end_time, setEndDate, setEndTime);
+    }
+
+    // 保存解析出的时空元数据，创建时透传给后端
+    if (parsed.spatiotemporal || parsed.location || parsed.location_type || parsed.event_type) {
+      setParsedLocation(parsed.location || "");
+      setParsedMetadata({
+        _extraFields: {
+          time_plan: parsed.time_plan || null,
+          spatiotemporal: parsed.spatiotemporal || {
+            created_at: new Date().toISOString(),
+            input: (parsed.title || "").slice(0, 500),
+            location: parsed.location || null,
+            location_type: parsed.location_type || "unknown",
+            event_type: parsed.event_type || null,
+            time_source: parsed.time_source || "unknown"
+          }
+        }
+      });
+    }
+
+    // 重复提醒：每天/每周/每月，创建时透传给后端，由后端按周期推进提醒
+    if (parsed.repeat_rule && parsed.repeat_rule !== "none") {
+      setParsedRepeat({
+        repeat_rule: parsed.repeat_rule,
+        custom_recurrence: parsed.custom_recurrence || undefined
+      });
+    }
+
+    // 子约定：AI 拆解的步骤清单，确认页可编辑
+    if (Array.isArray(parsed.subtasks)) {
+      setParsedSubtasks(
+        parsed.subtasks
+          .map((s) => ({ title: String(s || "").slice(0, 60) }))
+          .filter((s) => s.title.trim())
+      );
+    }
+
+    // 提示
+    const hints = [];
+    if (parsed.location) hints.push(`地点：${parsed.location}`);
+    if (parsed.event_type) hints.push(`类型：${parsed.event_type}`);
+    if (parsed.repeat_rule && parsed.repeat_rule !== "none") {
+      const freq = parsed.custom_recurrence?.frequency || parsed.repeat_rule;
+      const interval = parsed.custom_recurrence?.interval;
+      const label = interval > 1
+        ? `每隔${interval}天`
+        : { daily: "每天", weekly: "每周", monthly: "每月" }[freq] || "周期";
+      hints.push(`已设为${label}重复提醒`);
+    }
+    if (hints.length > 0) setParsedHint(hints.join(" · "));
+  };
+
+  const parseInput = async (text, opts = {}) => {
+    const inputText = String(text || title).trim();
+    if (!inputText) return;
+
+    setLoading(true);
+    try {
+      const coords = await getWeappLocation();
+      const parsed = await post("/functions/parseTaskInput", {
+        input: inputText,
+        date: todayStr(),
+        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {})
+      });
+      applyParsedFields(parsed, opts);
+    } catch (err) {
+      console.error("parseTaskInput failed", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const parseInputAndConfirm = async (text) => {
+    const inputText = String(text || [title, description].filter(Boolean).join("\n")).trim();
+    if (!inputText) {
+      Taro.showToast({ title: "请先输入约定内容", icon: "none" });
+      return;
+    }
+
+    setLoading(true);
+    let timeoutId = null;
+    try {
+      const coords = await getWeappLocation();
+      const requestPromise = post("/functions/parseTaskInput", {
+        input: inputText,
+        date: todayStr(),
+        ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {})
+      });
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("AI 解析超时")), 30000);
+      });
+      const parsed = await Promise.race([requestPromise, timeoutPromise]);
+      clearTimeout(timeoutId);
+
+      applyParsedFields(parsed, {
+        forceTitle: true,
+        forceDescription: true,
+        forceTime: true,
+        forcePriority: true,
+        forceCategory: true
+      });
+      // 用户输入的完整内容存入约定详情（确认页可再改），AI 拟定的简明标题作为约定卡片标题
+      setDescription(inputText);
+      setStep("confirm");
+    } catch (err) {
+      clearTimeout(timeoutId);
+      console.error("parseInputAndConfirm failed", err);
+      Taro.showToast({ title: "AI 解析失败，请手动填写", icon: "none", duration: 2500 });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVoiceResult = (text) => {
+    const t = String(text || "").trim();
+    if (!t) return;
+    // 语音内容追加到输入框末尾：不覆盖原文、不自动分析，用户可继续手动修改后点「分析约定」
+    setTitle((prev) => {
+      const base = String(prev || "").replace(/\s+$/, "");
+      return base ? `${base} ${t}` : t;
+    });
+  };
+
+  const handleInputBlur = () => {
+    // 新流程：失焦时不再自动解析，统一由用户点击「分析约定」触发
+  };
+
+  const handleVoiceTouchStart = () => {
+    // 在用户主动按下语音按钮的同步调用栈内请求订阅授权
+    requestReminderSubscribeSync();
+  };
+
+  const renderForm = () => (
+    <View>
+      <View className="ss-card" style={{ paddingBottom: "16rpx" }}>
+        <View className="ss-title">{isEdit ? "编辑约定" : "新建约定"}</View>
+      </View>
+
+      {!isEdit && (
+        <View style={{ marginTop: "24rpx", display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <VoiceInput
+            onResult={handleVoiceResult}
+            onTouchStart={handleVoiceTouchStart}
+            onError={(err) => Taro.showToast({ title: err, icon: "none" })}
+          />
+        </View>
+      )}
+
+      {parsedHint ? (
+        <View
+          style={{
+            marginTop: "24rpx",
+            marginLeft: "24rpx",
+            marginRight: "24rpx",
+            padding: "14rpx 18rpx",
+            borderRadius: "12rpx",
+            background: "#f0f5fa",
+            border: "1rpx solid #d4e4f0"
+          }}
+        >
+          <Text style={{ fontSize: "24rpx", color: "#5b82a0", lineHeight: "38rpx" }}>🪄 {parsedHint}</Text>
+        </View>
+      ) : null}
+
+      <SectionCard title={isEdit ? "基本信息" : "你的输入"}>
+        {!isEdit && (
+          <View>
+            <Textarea
+              className="ss-textarea"
+              style={{ height: "360rpx" }}
+              placeholder="例如：周五前完成报告 / 明天下午3点在三楼会议室开会 / 记得每天睡前读书20分钟"
+              value={title}
+              maxlength={500}
+              disableDefaultPadding
+              showConfirmBar={false}
+              onInput={(e) => setTitle(e.detail.value)}
+            />
+            <Text style={{ fontSize: "20rpx", color: "#9ca0a8", marginTop: "10rpx" }}>
+              时间、地点、想分几步都可以写进去，点下方「分析约定」自动识别，识别后还能改
+            </Text>
+          </View>
+        )}
+        {isEdit && (
+          <View style={{ marginBottom: "20rpx" }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>约定标题</Text>
+            <Input
+              className="ss-input"
+              placeholder="约定标题"
+              value={title}
+              onInput={(e) => setTitle(e.detail.value)}
+            />
+          </View>
+        )}
+        {isEdit && (
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
+          <Textarea
+            className="ss-textarea"
+            style={{ height: "240rpx" }}
+            placeholder="补充说明（可选），也可在这里补充时间、地点"
+            value={description}
+            maxlength={500}
+            disableDefaultPadding
+            showConfirmBar={false}
+            onInput={(e) => setDescription(e.detail.value)}
+          />
+        </View>
+        )}
+        {isEdit && renderGeoReminderPicker()}
+      </SectionCard>
+
+      {isEdit && renderSubtaskEditor()}
+
+      {isEdit && (
+      <SectionCard title="属性">
+        <View style={{ display: "flex", gap: "16rpx" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>优先级</Text>
+            <Picker
+              mode="selector"
+              range={priorities.map((p) => p.label)}
+              value={priorityIndex}
+              onChange={(e) => setPriorityIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{priorities[priorityIndex].label}</Text>
+              </View>
+            </Picker>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>分类</Text>
+            <Picker
+              mode="selector"
+              range={categories.map((c) => c.label)}
+              value={categoryIndex}
+              onChange={(e) => setCategoryIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{categories[categoryIndex].label}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+      </SectionCard>
+      )}
+
+      {isEdit && (
+      <SectionCard title="时间">
+        <View style={{ marginBottom: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>截止时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endTime}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>提醒时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderTime}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+      </SectionCard>
+      )}
+
+      <View className="ss-card" style={{ marginTop: "32rpx" }}>
+        <Button
+          className="ss-btn"
+          loading={loading}
+          disabled={loading || !isFormValid}
+          onClick={() => {
+            if (isEdit) {
+              if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+              saveTask();
+            } else {
+              parseInputAndConfirm();
+            }
+          }}
+        >
+          {isEdit ? "保存修改" : "分析约定"}
+        </Button>
+      </View>
+    </View>
+  );
+
+  const renderConfirm = () => (
+    <View>
+      <View className="ss-card" style={{ paddingBottom: "16rpx" }}>
+        <View className="ss-title">确认约定信息</View>
+      </View>
+
+      {parsedHint ? (
+        <View
+          style={{
+            marginTop: "24rpx",
+            marginLeft: "24rpx",
+            marginRight: "24rpx",
+            padding: "14rpx 18rpx",
+            borderRadius: "12rpx",
+            background: "#f0f5fa",
+            border: "1rpx solid #d4e4f0"
+          }}
+        >
+          <Text style={{ fontSize: "24rpx", color: "#5b82a0", lineHeight: "38rpx" }}>🪄 {parsedHint}</Text>
+        </View>
+      ) : null}
+
+      <SectionCard title="基本信息">
+        <View style={{ marginBottom: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>约定标题</Text>
+          <Input
+            className="ss-input"
+            placeholder="约定标题"
+            value={title}
+            onInput={(e) => setTitle(e.detail.value)}
+          />
+        </View>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
+          <Textarea
+            className="ss-textarea"
+            style={{ height: "240rpx" }}
+            placeholder="补充说明（可选）"
+            value={description}
+            disableDefaultPadding
+            showConfirmBar={false}
+            onInput={(e) => setDescription(e.detail.value)}
+          />
+        </View>
+        <View style={{ marginTop: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>地点（可选）</Text>
+          <Input
+            className="ss-input"
+            placeholder="如：三楼会议室 / 家里，未识别可不填"
+            value={parsedLocation}
+            onInput={(e) => setParsedLocation(e.detail.value)}
+          />
+        </View>
+        {renderGeoReminderPicker()}
+      </SectionCard>
+
+      <SectionCard title="子约定">
+        <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "12rpx" }}>
+          {parsedSubtasks.length > 0
+            ? `识别到 ${parsedSubtasks.length} 件子约定，将随约定一并创建，可直接修改`
+            : "AI 未识别出子约定；需要分步完成的话，可在下方手动添加"}
+        </Text>
+        {parsedSubtasks.map((st, idx) => (
+            <View key={idx} style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
+              <Input
+                className="ss-input"
+                style={{ flex: 1, height: "68rpx", marginRight: "12rpx" }}
+                value={st.title}
+                onInput={(e) =>
+                  setParsedSubtasks((prev) => prev.map((x, i) => (i === idx ? { ...x, title: e.detail.value } : x)))
+                }
+              />
+              <View
+                onClick={() => setParsedSubtasks((prev) => prev.filter((_, i) => i !== idx))}
+                style={{ width: "44rpx", height: "44rpx", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <Text style={{ color: "#e53935", fontSize: "36rpx", lineHeight: "36rpx" }}>×</Text>
+              </View>
+            </View>
+          ))}
+          <View style={{ display: "flex", alignItems: "center" }}>
+            <Input
+              className="ss-input"
+              style={{ flex: 1, height: "68rpx", marginRight: "12rpx" }}
+              placeholder="添加一个子约定"
+              value={newParsedSubtaskText}
+              onInput={(e) => setNewParsedSubtaskText(e.detail.value)}
+            />
+            <Button
+              className="ss-btn ss-btn-sm"
+              style={{ height: "56rpx", lineHeight: "56rpx" }}
+              onClick={() => {
+                const t = newParsedSubtaskText.trim();
+                if (!t) return;
+                setParsedSubtasks((prev) => [...prev, { title: t.slice(0, 60) }]);
+                setNewParsedSubtaskText("");
+              }}
+            >
+              添加
+            </Button>
+          </View>
+        </SectionCard>
+
+      <SectionCard title="属性">
+        <View style={{ display: "flex", gap: "16rpx" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>优先级</Text>
+            <Picker
+              mode="selector"
+              range={priorities.map((p) => p.label)}
+              value={priorityIndex}
+              onChange={(e) => setPriorityIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{priorities[priorityIndex].label}</Text>
+              </View>
+            </Picker>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>分类</Text>
+            <Picker
+              mode="selector"
+              range={categories.map((c) => c.label)}
+              value={categoryIndex}
+              onChange={(e) => setCategoryIndex(Number(e.detail.value))}
+            >
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{categories[categoryIndex].label}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+      </SectionCard>
+
+      <SectionCard title="时间">
+        <View style={{ marginBottom: "20rpx" }}>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>截止时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={endDate || todayStr()} onChange={(e) => setEndDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={endTime} onChange={(e) => setEndTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{endTime}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>提醒时间</Text>
+          <View style={{ display: "flex", gap: "16rpx" }}>
+            <Picker mode="date" value={reminderDate || todayStr()} onChange={(e) => setReminderDate(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderDate || "选择日期"}</Text>
+              </View>
+            </Picker>
+            <Picker mode="time" value={reminderTime} onChange={(e) => setReminderTime(e.detail.value)}>
+              <View className="ss-input" style={{ display: "flex", alignItems: "center" }}>
+                <Text style={{ fontSize: "28rpx", color: "#1c1c1e" }}>{reminderTime}</Text>
+              </View>
+            </Picker>
+          </View>
+        </View>
+      </SectionCard>
+
+      <View className="ss-card" style={{ marginTop: "32rpx" }}>
+        <Button
+          className="ss-btn"
+          loading={loading}
+          disabled={loading || !isFormValid}
+          onClick={() => {
+            if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+            saveTask();
+          }}
+        >
+          确认创建
+        </Button>
+        <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>
+          返回修改
+        </Button>
+      </View>
+    </View>
+  );
+
+  const renderAnalysis = () => (
+    <View>
+      <View className="ss-card">
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "8rpx" }}>
+          <View className="ss-title">AI 分析结果</View>
+          <AiBadge />
+        </View>
+        <Text className="ss-subtitle">执行建议</Text>
+
+        {analysis?.resolved_date && (
+          <View style={{ marginTop: "16rpx" }}>
+            <Text className="ss-tag ss-tag-primary">预计完成日期：{analysis.resolved_date}</Text>
+          </View>
+        )}
+      </View>
+
+      {Array.isArray(analysis?.steps) && analysis.steps.length > 0 && (
+        <View className="ss-card">
+          <View className="ss-section-title">建议步骤</View>
+          {analysis.steps.map((step, idx) => (
+            <View key={idx} style={{ display: "flex", marginBottom: "16rpx", alignItems: "flex-start" }}>
+              <Text style={{ color: "#384877", fontWeight: 600, marginRight: "12rpx", fontSize: "30rpx" }}>{idx + 1}.</Text>
+              <Text style={{ fontSize: "30rpx", color: "#333", lineHeight: "48rpx", flex: 1 }}>{step.text || step}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {Array.isArray(analysis?.timeline) && analysis.timeline.length > 0 && (
+        <View className="ss-card">
+          <View className="ss-section-title">时间线</View>
+          {analysis.timeline.map((item, idx) => (
+            <View key={idx} style={{ marginBottom: "20rpx", paddingBottom: "20rpx", borderBottom: "1rpx solid #e5e6eb" }}>
+              <View style={{ display: "flex", justifyContent: "space-between", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "30rpx", color: "#384877", fontWeight: 500 }}>{item.title}</Text>
+                <Text className="ss-muted">{item.time}</Text>
+              </View>
+              {item.description && <Text className="ss-muted">{item.description}</Text>}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {analysis?.devices && Object.keys(analysis.devices).length > 0 && (
+        <View className="ss-card">
+          <View className="ss-section-title">多设备协同</View>
+          {Object.entries(analysis.devices).map(([key, device]) => {
+            if (!device?.strategies?.length) return null;
+            return (
+              <View key={key} style={{ marginBottom: "20rpx" }}>
+                <View style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
+                  <Text style={{ fontSize: "32rpx", marginRight: "12rpx" }}>{DEVICE_ICONS[key] || "🔹"}</Text>
+                  <Text style={{ fontSize: "30rpx", fontWeight: 600, color: "#333" }}>{device.name || key}</Text>
+                </View>
+                {device.strategies.map((s, i) => (
+                  <View key={i} style={{ marginLeft: "44rpx", marginBottom: "8rpx" }}>
+                    <Text style={{ fontSize: "28rpx", color: "#666" }}>• {s.time ? `${s.time} · ` : ""}{s.content || s.method || JSON.stringify(s)}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      {Array.isArray(analysis?.automations) && analysis.automations.length > 0 && (
+        <View className="ss-card">
+          <View className="ss-section-title">自动化建议</View>
+          {analysis.automations.map((item, idx) => (
+            <View key={idx} style={{ marginBottom: "16rpx", padding: "16rpx", background: "#f8f9fb", borderRadius: "12rpx" }}>
+              <View style={{ display: "flex", justifyContent: "space-between", marginBottom: "8rpx" }}>
+                <Text style={{ fontSize: "30rpx", fontWeight: 600, color: "#333" }}>{item.title}</Text>
+                <Text className={`ss-tag ${item.status === "active" ? "ss-tag-success" : "ss-tag-warning"}`}>
+                  {STATUS_LABEL[item.status] || item.status}
+                </Text>
+              </View>
+              <Text className="ss-muted">{item.desc}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View className="ss-card">
+        <Button
+          className="ss-btn"
+          loading={loading}
+          disabled={loading}
+          onClick={() => {
+            if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
+            saveTask();
+          }}
+        >
+          创建约定
+        </Button>
+        <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>
+          返回修改
+        </Button>
+      </View>
+    </View>
+  );
+
+  const renderCreated = () => (
+    <View>
+      <View className="ss-card" style={{ textAlign: "center", padding: "48rpx 24rpx" }}>
+        <View style={{ fontSize: "64rpx", marginBottom: "16rpx" }}>✅</View>
+        <View className="ss-title">约定已创建</View>
+        <Text className="ss-muted">{createdTask?.title}</Text>
+      </View>
+
+      <View className="ss-card">
+        <View className="ss-title">分享卡片</View>
+
+        {shareToken ? (
+          <View>
+            <Canvas
+              canvasId="shareCanvas"
+              style={{
+                width: `${posterSize.width}px`,
+                height: `${posterSize.height}px`,
+                margin: "24rpx auto",
+                borderRadius: "16rpx",
+                boxShadow: "0 4rpx 20rpx rgba(0,0,0,0.1)"
+              }}
+            />
+            <Button className="ss-btn" onClick={savePoster}>保存分享卡片</Button>
+            <Button className="ss-btn ss-btn-plain" openType="share">微信转发</Button>
+            <Button className="ss-btn ss-btn-plain" onClick={copyShareLink}>复制链接</Button>
+          </View>
+        ) : (
+          <Text className="ss-muted" style={{ marginTop: "24rpx" }}>分享链接生成失败，可在约定详情页重试。</Text>
+        )}
+      </View>
+
+      <Button className="ss-btn ss-btn-plain" onClick={goBack}>完成</Button>
+    </View>
+  );
+
+  return (
+    <View className="ss-page">
+      <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
+        {step === "form" && renderForm()}
+        {step === "confirm" && renderConfirm()}
+        {step === "analysis" && renderAnalysis()}
+        {step === "created" && renderCreated()}
+
+        <View
+          style={{
+            margin: "0 24rpx 24rpx",
+            padding: "18rpx 22rpx",
+            borderRadius: "14rpx",
+            background: "rgba(91,130,160,0.06)",
+            border: "1rpx solid rgba(91,130,160,0.12)",
+            display: "flex",
+            alignItems: "center"
+          }}
+        >
+          <View
+            style={{
+              width: "28rpx",
+              height: "28rpx",
+              borderRadius: "50%",
+              background: theme.water,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "14rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
+            部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
+          </Text>
+        </View>
+
+        <View style={{ height: "40rpx" }} />
+      </ScrollView>
+    </View>
+  );
+}

@@ -1,0 +1,554 @@
+import { useState, useEffect } from "react";
+import Taro from "@tarojs/taro";
+import { View, Text, Textarea, Button, Input, Image } from "@tarojs/components";
+import { post, get } from "@/utils/api";
+import { getToken } from "@/utils/auth";
+import VoiceInput from "@/components/VoiceInput";
+import theme from "@/components/tasks/theme";
+
+// 前端敏感检测规则，与后端保持一致
+// 密码/验证码/密钥兼容「密码：xxx」「密码是xxx」「密码xxx」等写法；
+// 值必须是连续字母数字/符号串，避免误伤"忘记密码""密码锁"这类日常表述
+const VAULT_PATTERNS = [
+  /\b\d{17}[\dXx]\b/,
+  /\b\d{15}\b/,
+  /\b(?:\d{4}[ -]?){3,4}\d{1,4}\b/,
+  /密码(?:是|为|[:：])?\s*[A-Za-z0-9@#$%^&*!~?.+-]{3,}/i,
+  /验证码(?:是|为|[:：])?\s*\d{4,8}/i,
+  /密钥(?:是|为|[:：])?\s*[A-Za-z0-9+/=._-]{6,}/i,
+  /私钥|token|api\s*key|护照|驾照|驾驶证/i
+];
+
+const VAULT_LABELS = ["身份证", "证件号", "银行卡/卡号", "密码", "验证码", "密钥", "敏感凭证"];
+
+function detectSensitive(text) {
+  for (let i = 0; i < VAULT_PATTERNS.length; i++) {
+    if (VAULT_PATTERNS[i].test(text)) return VAULT_LABELS[i];
+  }
+  return null;
+}
+
+export default function NoteCreate() {
+  const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [voiceErrorCount, setVoiceErrorCount] = useState(0);
+  const [vaultMode, setVaultMode] = useState(false);
+  const [vaultStep, setVaultStep] = useState("check"); // check | setup | unlock
+  const [vaultPwd, setVaultPwd] = useState("");
+  const [vaultNewPwd, setVaultNewPwd] = useState("");
+  const [vaultConfirmPwd, setVaultConfirmPwd] = useState("");
+  const [vaultLabel, setVaultLabel] = useState("");
+  const [vaultHitLabel, setVaultHitLabel] = useState("敏感");
+  // emotion=心签 | ledger=账本签(记一笔)
+  const [mode, setMode] = useState("emotion");
+  // 配图：上传后存 /uploads/ 相对路径，随心签一起保存
+  const [imageUrl, setImageUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    const params = Taro.getCurrentInstance().router.params || {};
+    const preset = params.preset;
+    if (preset) {
+      setContent(decodeURIComponent(preset));
+    }
+  }, []);
+
+  const checkVaultStatus = async () => {
+    try {
+      const status = await get("/vault/status", {}, { silent: true });
+      setVaultStep(status?.vault_set ? "unlock" : "setup");
+    } catch (err) {
+      setVaultStep("unlock");
+    }
+  };
+
+  const submit = async () => {
+    const text = content.trim();
+    if (!text && !imageUrl) {
+      Taro.showToast({ title: "请输入心签内容或配一张图", icon: "none" });
+      return;
+    }
+
+    if (text) {
+      const hitLabel = detectSensitive(text);
+      if (hitLabel) {
+        setVaultMode(true);
+        setVaultHitLabel(hitLabel);
+        setVaultLabel(`敏感信息 · ${hitLabel}`);
+        await checkVaultStatus();
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const density = Taro.getStorageSync("heart_response_density") || "light";
+      // 纯图片心签：后端 content 必填，无文字时用占位标记
+      const finalText = text || "[配图]";
+      const metadata = { response_density: density, ...(imageUrl ? { image_url: imageUrl } : {}) };
+      const note = await post("/notes", {
+        content: finalText,
+        plain_text: finalText,
+        source_type: mode,
+        metadata
+      });
+
+      try {
+        await post("/functions/analyzeHeartSign", {
+          note_id: note.id,
+          note_data: { plain_text: finalText, content: finalText, source_type: mode, metadata }
+        }, { silent: true, timeout: 25000 });
+      } catch (aiErr) {
+        console.error("analyzeHeartSign failed", aiErr);
+      }
+
+      Taro.showToast({ title: mode === "ledger" ? "账已记下" : "心签已保存", icon: "success" });
+      setTimeout(() => Taro.navigateBack(), 400);
+    } catch (err) {
+      Taro.showToast({ title: "保存失败", icon: "none" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const pickImage = () => {
+    Taro.chooseMedia({
+      count: 1,
+      mediaType: ["image"],
+      sourceType: ["album", "camera"],
+      sizeType: ["compressed"],
+      success: async (res) => {
+        const file = res.tempFiles?.[0];
+        if (!file?.tempFilePath) return;
+        setUploading(true);
+        Taro.showLoading({ title: "上传中" });
+        try {
+          const token = getToken();
+          const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+          const apiBase = rawApi.replace(/\/$/, "");
+          const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+          const uploadRes = await Taro.uploadFile({
+            url: uploadUrl,
+            filePath: file.tempFilePath,
+            name: "file",
+            header: token ? { Authorization: `Bearer ${token}` } : {},
+            timeout: 60000
+          });
+          const data = JSON.parse(uploadRes.data || "{}");
+          if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
+            throw new Error(data?.message || "上传失败");
+          }
+          setImageUrl(data.file_url);
+        } catch (err) {
+          Taro.showToast({ title: err?.message || "上传失败", icon: "none" });
+        } finally {
+          setUploading(false);
+          Taro.hideLoading();
+        }
+      },
+      fail: () => {}
+    });
+  };
+
+  const saveToVault = async () => {
+    const text = content.trim();
+    if (!text) return;
+
+    setLoading(true);
+    try {
+      const password = vaultStep === "setup" ? vaultNewPwd : vaultPwd;
+      if (vaultStep === "setup") {
+        if (vaultNewPwd.length < 4) {
+          Taro.showToast({ title: "密码至少 4 位", icon: "none" });
+          setLoading(false);
+          return;
+        }
+        if (vaultNewPwd !== vaultConfirmPwd) {
+          Taro.showToast({ title: "两次输入不一致", icon: "none" });
+          setLoading(false);
+          return;
+        }
+        await post("/vault/setup", { password: vaultNewPwd });
+      }
+
+      const created = await post("/vault", {
+        label: vaultLabel || "敏感信息",
+        value: text,
+        password
+      });
+
+      // 与 Web 端口径一致：同步落一条保险柜锁定心签（只写脱敏标题，原文只存保险柜密文，不进 AI 分析）
+      try {
+        const safeTitle = `敏感信息 · ${vaultHitLabel || "敏感"}`;
+        await post("/notes", {
+          content: safeTitle,
+          plain_text: safeTitle,
+          source_type: "vault",
+          ai_status: "completed",
+          metadata: {
+            is_vault: true,
+            vault_item_id: created?.id || null,
+            ai_analysis: {
+              title: `${vaultHitLabel || "敏感"}已加密存放`,
+              category: "保险柜",
+              is_vault: true,
+              source: "vault_fallback",
+              analyzed_at: new Date().toISOString()
+            }
+          }
+        });
+      } catch (e) {
+        console.error("vault note create failed", e);
+      }
+
+      Taro.showToast({ title: "已加密存入保险柜", icon: "success" });
+      setTimeout(() => Taro.navigateBack(), 600);
+    } catch (err) {
+      console.error("saveToVault failed", err);
+      const msg = String(err?.message || "");
+      Taro.showToast({
+        title: msg.includes("WRONG_PASSWORD") ? "密码错误" : msg.includes("VAULT_NOT_SET") ? "请先设置保险柜密码" : "保存失败",
+        icon: "none"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const insertLink = () => {
+    setContent((prev) => (prev ? prev + " https://" : "https://"));
+  };
+
+  const handleVoiceResult = (text) => {
+    setContent((prev) => (prev ? prev + " " + text : text));
+    setVoiceErrorCount(0);
+  };
+
+  const handleVoiceError = () => {
+    setVoiceErrorCount((c) => c + 1);
+    if (voiceErrorCount >= 1) {
+      Taro.showModal({
+        title: "语音输入提示",
+        content: "当前语音服务不太稳定，建议直接输入文字。如果一直无法使用，请检查微信公众平台「WechatSI」插件是否已添加。",
+        showCancel: false
+      });
+    }
+  };
+
+  return (
+    <View style={{ minHeight: "100vh", background: theme.paper, display: "flex", flexDirection: "column" }}>
+      <View
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "24rpx 28rpx",
+          borderBottom: `1rpx solid ${theme.border}`,
+          background: theme.paper
+        }}
+      >
+        <View onClick={() => Taro.navigateBack()}>
+          <Text style={{ fontSize: "30rpx", color: theme.inkSecondary }}>✕</Text>
+        </View>
+        <Text style={{ fontSize: "32rpx", fontWeight: 700, color: theme.inkSecondary }}>心签</Text>
+        <Button
+          size="mini"
+          loading={loading}
+          disabled={(!content.trim() && !imageUrl) || loading || uploading}
+          onClick={submit}
+          style={{
+            margin: 0,
+            padding: "0 24rpx",
+            height: "56rpx",
+            lineHeight: "56rpx",
+            background: (content.trim() || imageUrl) && !loading ? theme.primary : theme.border,
+            color: "#fff",
+            borderRadius: "999rpx",
+            fontSize: "26rpx"
+          }}
+        >
+          发送
+        </Button>
+      </View>
+
+      <View style={{ padding: "20rpx 28rpx" }}>
+        <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>
+          {mode === "ledger" ? "记一笔 —— 花了/赚了多少钱，随手丢给我" : "发给自己 —— 什么都可以说……"}
+        </Text>
+      </View>
+
+      <View style={{ display: "flex", gap: "12rpx", padding: "0 28rpx 16rpx" }}>
+        {[
+          { k: "emotion", l: "✦ 心签" },
+          { k: "ledger", l: "📒 记一笔" }
+        ].map((m) => {
+          const active = mode === m.k;
+          return (
+            <View
+              key={m.k}
+              onClick={() => setMode(m.k)}
+              style={{
+                padding: "8rpx 22rpx",
+                borderRadius: "999rpx",
+                border: `1rpx solid ${active ? theme.primary : theme.border}`,
+                background: active ? theme.primary : theme.card
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: active ? "#fff" : theme.inkTertiary }}>{m.l}</Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {imageUrl ? (
+        <View style={{ padding: "0 28rpx 16rpx" }}>
+          <View style={{ position: "relative", display: "inline-block" }}>
+            <Image
+              src={imageUrl.startsWith("http") ? imageUrl : `${(process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api").replace(/\/api\/?$/, "")}${imageUrl}`}
+              mode="aspectFill"
+              style={{ width: "200rpx", height: "200rpx", borderRadius: "16rpx", background: theme.paper }}
+            />
+            <View
+              onClick={() => setImageUrl("")}
+              style={{
+                position: "absolute",
+                top: "-12rpx",
+                right: "-12rpx",
+                width: "40rpx",
+                height: "40rpx",
+                borderRadius: "50%",
+                background: "rgba(0,0,0,0.55)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center"
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: "#fff", lineHeight: "40rpx" }}>✕</Text>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={{ flex: 1, padding: "0 28rpx" }}>
+        <Textarea
+          style={{
+            width: "100%",
+            height: "480rpx",
+            background: theme.card,
+            borderRadius: "18rpx",
+            padding: "28rpx",
+            fontSize: "32rpx",
+            color: theme.ink,
+            lineHeight: "54rpx",
+            boxSizing: "border-box",
+            border: `1rpx solid ${theme.border}`
+          }}
+          placeholder={mode === "ledger" ? "例如：午餐 25，打车 18，稿费 500……我帮你整理成账本" : "此刻的心情、刷到的好文章、怕忘的号码、想分享的瞬间……"}
+          value={content}
+          maxlength={2000}
+          disableDefaultPadding
+          showConfirmBar={false}
+          onInput={(e) => setContent(e.detail.value)}
+          onConfirm={submit}
+        />
+      </View>
+
+      <View
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "16rpx",
+          padding: "20rpx 28rpx 48rpx",
+          borderTop: `1rpx solid ${theme.border}`,
+          background: theme.paper
+        }}
+      >
+        <View
+          onClick={pickImage}
+          style={{
+            width: "64rpx",
+            height: "64rpx",
+            borderRadius: "16rpx",
+            background: theme.paper,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: `1rpx solid ${theme.border}`
+          }}
+        >
+          <Text style={{ fontSize: "30rpx", color: theme.inkTertiary }}>{uploading ? "…" : "📷"}</Text>
+        </View>
+        <View
+          onClick={insertLink}
+          style={{
+            width: "64rpx",
+            height: "64rpx",
+            borderRadius: "16rpx",
+            background: theme.paper,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: `1rpx solid ${theme.border}`
+          }}
+        >
+          <Text style={{ fontSize: "30rpx", color: theme.inkTertiary }}>🔗</Text>
+        </View>
+        <VoiceInput size={64} onResult={handleVoiceResult} onError={handleVoiceError} />
+        <Text style={{ marginLeft: "auto", fontSize: "22rpx", color: theme.inkQuaternary }}>语音 · 图片 · 链接 · 文字</Text>
+      </View>
+
+      {vaultMode && (
+        <View
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 100,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "40rpx"
+          }}
+          onClick={() => setVaultMode(false)}
+        >
+          <View
+            style={{
+              width: "100%",
+              maxWidth: "600rpx",
+              background: theme.card,
+              borderRadius: "24rpx",
+              padding: "40rpx",
+              boxSizing: "border-box"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.inkSecondary, marginBottom: "16rpx" }}>
+              检测到敏感信息
+            </Text>
+            <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx", marginBottom: "24rpx" }}>
+              存入加密保险柜后不会进入 AI 分析，查看需输入保险柜密码。
+            </Text>
+
+            <Input
+              style={{
+                width: "100%",
+                height: "88rpx",
+                background: theme.paper,
+                borderRadius: "12rpx",
+                padding: "0 24rpx",
+                fontSize: "30rpx",
+                color: theme.ink,
+                boxSizing: "border-box",
+                marginBottom: "16rpx",
+                border: `1rpx solid ${theme.border}`
+              }}
+              placeholder="标签，例如：Wi-Fi 密码"
+              value={vaultLabel}
+              onInput={(e) => setVaultLabel(e.detail.value)}
+            />
+
+            {vaultStep === "setup" && (
+              <>
+                <Input
+                  style={{
+                    width: "100%",
+                    height: "88rpx",
+                    background: theme.paper,
+                    borderRadius: "12rpx",
+                    padding: "0 24rpx",
+                    fontSize: "30rpx",
+                    color: theme.ink,
+                    boxSizing: "border-box",
+                    marginBottom: "16rpx",
+                    border: `1rpx solid ${theme.border}`
+                  }}
+                  password
+                  placeholder="设置保险柜密码（4 位以上）"
+                  value={vaultNewPwd}
+                  onInput={(e) => setVaultNewPwd(e.detail.value)}
+                />
+                <Input
+                  style={{
+                    width: "100%",
+                    height: "88rpx",
+                    background: theme.paper,
+                    borderRadius: "12rpx",
+                    padding: "0 24rpx",
+                    fontSize: "30rpx",
+                    color: theme.ink,
+                    boxSizing: "border-box",
+                    marginBottom: "24rpx",
+                    border: `1rpx solid ${theme.border}`
+                  }}
+                  password
+                  placeholder="再输入一次确认"
+                  value={vaultConfirmPwd}
+                  onInput={(e) => setVaultConfirmPwd(e.detail.value)}
+                />
+              </>
+            )}
+
+            {vaultStep === "unlock" && (
+              <Input
+                style={{
+                  width: "100%",
+                  height: "88rpx",
+                  background: theme.paper,
+                  borderRadius: "12rpx",
+                  padding: "0 24rpx",
+                  fontSize: "30rpx",
+                  color: theme.ink,
+                  boxSizing: "border-box",
+                  marginBottom: "24rpx",
+                  border: `1rpx solid ${theme.border}`
+                }}
+                password
+                placeholder="输入保险柜密码"
+                value={vaultPwd}
+                onInput={(e) => setVaultPwd(e.detail.value)}
+              />
+            )}
+
+            <View style={{ display: "flex", gap: "16rpx" }}>
+              <Button
+                size="mini"
+                onClick={() => setVaultMode(false)}
+                style={{
+                  flex: 1,
+                  height: "80rpx",
+                  lineHeight: "80rpx",
+                  background: theme.paper,
+                  color: theme.inkSecondary,
+                  borderRadius: "12rpx",
+                  fontSize: "28rpx",
+                  margin: 0,
+                  border: `1rpx solid ${theme.border}`
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                size="mini"
+                loading={loading}
+                disabled={loading}
+                onClick={saveToVault}
+                style={{
+                  flex: 1,
+                  height: "80rpx",
+                  lineHeight: "80rpx",
+                  background: theme.primary,
+                  color: "#fff",
+                  borderRadius: "12rpx",
+                  fontSize: "28rpx",
+                  margin: 0
+                }}
+              >
+                存入保险柜
+              </Button>
+            </View>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}

@@ -1,0 +1,986 @@
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import Taro, { useDidShow } from "@tarojs/taro";
+import { View, Text, ScrollView, Input, Button, Image } from "@tarojs/components";
+import { get, post, patch, del } from "@/utils/api";
+import { getToken, isDemoMode } from "@/utils/auth";
+import { ensureDemoSession } from "@/utils/demo";
+import SharePoster from "@/components/SharePoster";
+import ShareButton from "@/components/ShareButton";
+import { useShare } from "@/hooks/useShare";
+import VaultSheet from "@/components/VaultSheet";
+import ReviewDrawer from "@/components/ReviewDrawer";
+import RichText from "@/components/RichText";
+import theme from "@/components/tasks/theme";
+
+function AiBadge({ text = "AI 生成" }) {
+  return (
+    <View
+      style={{
+        padding: "2rpx 10rpx",
+        borderRadius: "8rpx",
+        background: "rgba(91,130,160,0.10)",
+        border: "1rpx solid rgba(91,130,160,0.20)"
+      }}
+    >
+      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
+    </View>
+  );
+}
+
+const DENSITY_KEY = "heart_response_density";
+
+const DENSITY_OPTIONS = [
+  { key: "full", label: "多陪我说说" },
+  { key: "light", label: "轻轻回应" },
+  { key: "mute", label: "只收不答" }
+];
+
+const FILTERS = [
+  { key: "all", label: "全部" },
+  { key: "emotion", label: "情绪签" },
+  { key: "inspiration", label: "灵感签" },
+  { key: "material", label: "资料签" },
+  { key: "memo", label: "备忘签" },
+  { key: "share", label: "分享签" },
+  { key: "ledger", label: "账本签" },
+  { key: "pinned", label: "已置顶" }
+];
+
+const TYPE_META = {
+  emotion: { label: "情绪", color: "#c97b8a", bg: "#fce8ec" },
+  inspiration: { label: "灵感", color: "#d97706", bg: "#fef3c7" },
+  material: { label: "资料", color: "#5b82a0", bg: "#e8f0f5" },
+  memo: { label: "备忘", color: "#8a7d6b", bg: "#f4f0ea" },
+  share: { label: "分享", color: "#6e8a73", bg: "#e8f5e9" },
+  ledger: { label: "账本", color: "#a08452", bg: "#f7efe4" }
+};
+
+const TYPE_ORDER = ["emotion", "inspiration", "material", "memo", "share", "ledger"];
+
+// 心签配图：metadata.image_url 可能是字符串或数组，返回可显示绝对地址
+function getNoteImage(note) {
+  const raw = note?.metadata?.image_url;
+  const rel = Array.isArray(raw) ? raw[0] : raw;
+  if (!rel || typeof rel !== "string") return "";
+  if (rel.startsWith("http")) return rel;
+  const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+  return rawApi.replace(/\/api\/?$/, "") + rel;
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return "凌晨好";
+  if (h < 9) return "早上好";
+  if (h < 12) return "上午好";
+  if (h < 14) return "中午好";
+  if (h < 18) return "下午好";
+  return "晚上好";
+}
+
+function dateLine() {
+  const now = new Date();
+  const week = ["日", "一", "二", "三", "四", "五", "六"][now.getDay()];
+  return `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, "0")}.${String(now.getDate()).padStart(2, "0")} · 星期${week}`;
+}
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const t = new Date(iso);
+  if (isNaN(t.getTime())) return "";
+  const now = new Date();
+  const dayDiff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000);
+  const hm = `${String(t.getHours()).padStart(2, "0")}:${String(t.getMinutes()).padStart(2, "0")}`;
+  if (dayDiff === 0) return `今天 ${hm}`;
+  if (dayDiff === 1) return `昨天 ${hm}`;
+  if (dayDiff < 7) return `${dayDiff} 天前 ${hm}`;
+  return `${t.getMonth() + 1}月${t.getDate()}日 ${hm}`;
+}
+
+function getNoteType(note) {
+  const st = note.source_type;
+  if (TYPE_META[st]) return st;
+  const cat = note.metadata?.ai_analysis?.category;
+  const map = { 情绪: "emotion", 灵感: "inspiration", 资料: "material", 备忘: "memo", 分享: "share", 账本: "ledger" };
+  if (map[cat]) return map[cat];
+  return "emotion";
+}
+
+function isPinned(note) {
+  return !!note.metadata?.pinned;
+}
+
+function getAiResponse(note) {
+  return note.metadata?.ai_analysis?.emotional_response || "";
+}
+
+function getTitle(note) {
+  const text = note.plain_text || note.content || "";
+  if (text.length <= 50) return null;
+  return note.title || null;
+}
+
+// 账本签：收支明细表 + 合计 + AI 吐槽式回应
+function LedgerCard({ ledger }) {
+  if (!ledger?.items?.length) return null;
+  const fmt = (n) => (Number(n) || 0).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  const expenseColor = "#b07d4f";
+  const incomeColor = "#4f8a7a";
+  return (
+    <View
+      style={{
+        marginTop: "4rpx",
+        marginBottom: "20rpx",
+        borderRadius: "16rpx",
+        border: "1rpx solid rgba(160,132,82,0.25)",
+        background: "rgba(247,239,228,0.6)",
+        padding: "20rpx"
+      }}
+    >
+      <Text style={{ fontSize: "22rpx", color: "#a08452", fontWeight: 600 }}>📒 账本明细</Text>
+      <View style={{ marginTop: "12rpx", borderRadius: "12rpx", border: "1rpx solid rgba(160,132,82,0.15)", background: "#fff", overflow: "hidden" }}>
+        {ledger.items.map((it, i) => (
+          <View
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              padding: "14rpx 20rpx",
+              borderTop: i > 0 ? "1rpx solid #f1f5f9" : "none"
+            }}
+          >
+            <Text style={{ flex: 1, fontSize: "25rpx", color: "#334155", marginRight: "12rpx" }} numberOfLines={1}>
+              {it.name || "一笔账"}
+            </Text>
+            {!!it.is_new && (
+              <Text
+                style={{
+                  fontSize: "18rpx",
+                  color: "#a08452",
+                  background: "#f7efe4",
+                  borderRadius: "8rpx",
+                  padding: "2rpx 10rpx",
+                  marginRight: "12rpx",
+                  flexShrink: 0
+                }}
+              >
+                新
+              </Text>
+            )}
+            <Text
+              style={{
+                fontSize: "20rpx",
+                color: "#94a3b8",
+                background: "#f8fafc",
+                borderRadius: "8rpx",
+                padding: "2rpx 10rpx",
+                marginRight: "12rpx",
+                flexShrink: 0
+              }}
+            >
+              {it.category || "其他"}
+            </Text>
+            <Text style={{ fontSize: "25rpx", fontWeight: 600, color: it.type === "income" ? incomeColor : expenseColor, flexShrink: 0 }}>
+              {it.type === "income" ? "+" : "-"}{fmt(it.amount)}
+            </Text>
+          </View>
+        ))}
+        <View
+          style={{
+            display: "flex",
+            alignItems: "center",
+            padding: "14rpx 20rpx",
+            borderTop: "1rpx solid rgba(160,132,82,0.2)",
+            background: "rgba(247,239,228,0.5)"
+          }}
+        >
+          <Text style={{ fontSize: "22rpx", color: "#64748b" }}>
+            支出 <Text style={{ color: expenseColor, fontWeight: 600 }}>{fmt(ledger.total_expense)}</Text>
+          </Text>
+          <Text style={{ fontSize: "22rpx", color: "#64748b", marginLeft: "20rpx" }}>
+            收入 <Text style={{ color: incomeColor, fontWeight: 600 }}>{fmt(ledger.total_income)}</Text>
+          </Text>
+          <Text style={{ fontSize: "22rpx", color: "#475569", marginLeft: "auto" }}>
+            结余 <Text style={{ color: "#1e293b", fontWeight: 700 }}>{fmt(ledger.balance)}</Text>
+          </Text>
+        </View>
+      </View>
+      {!!ledger.advice && (
+        <Text style={{ marginTop: "14rpx", fontSize: "24rpx", color: "#475569", lineHeight: "40rpx", fontStyle: "italic" }}>
+          {ledger.advice}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+export default function Notes() {
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const [posterNote, setPosterNote] = useState(null);
+  const [posterToken, setPosterToken] = useState("");
+  const [continueMap, setContinueMap] = useState({});
+  const [submittingId, setSubmittingId] = useState(null);
+  const [vaultVisible, setVaultVisible] = useState(false);
+  const [actionLoading, setActionLoading] = useState({});
+  const [reviewVisible, setReviewVisible] = useState(false);
+  const [density, setDensity] = useState(() => Taro.getStorageSync(DENSITY_KEY) || "light");
+  const [isGuest, setIsGuest] = useState(false);
+  const scrollRef = useRef(null);
+  // 一键转发：预取心签的公开分享 token（生成接口幂等），转发时朋友无需登录即可查看
+  const shareTokensRef = useRef({});
+  const sharePendingRef = useRef(new Set());
+
+  useShare({
+    title: "心栈心签 · 此刻的一点心情",
+    path: "pages/notes/index",
+    buildShare: (options) => {
+      if (options.from !== "button") return {};
+      const noteId = options.target?.dataset?.noteId;
+      if (!noteId) return {};
+      const note = notes.find((n) => n.id === noteId);
+      const raw = note ? (getTitle(note) || note.plain_text || note.content || "此刻的一点心情") : "此刻的一点心情";
+      const title = `心签 · ${String(raw).trim().slice(0, 18)}`;
+      const token = shareTokensRef.current[noteId];
+      return { title, path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${noteId}` };
+    }
+  });
+
+  useEffect(() => {
+    if (isGuest) return;
+    filteredNotes.slice(0, 30).forEach((n) => {
+      if (shareTokensRef.current[n.id] !== undefined || sharePendingRef.current.has(n.id)) return;
+      sharePendingRef.current.add(n.id);
+      post(`/public/share/generate/note/${n.id}`)
+        .then((s) => { shareTokensRef.current[n.id] = (s && s.token) || ""; })
+        .catch(() => { shareTokensRef.current[n.id] = ""; })
+        .finally(() => sharePendingRef.current.delete(n.id));
+    });
+  }, [filteredNotes, isGuest]);
+
+  const setDensityAndSave = (val) => {
+    setDensity(val);
+    Taro.setStorageSync(DENSITY_KEY, val);
+  };
+
+  const fetchNotes = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await get("/notes", { sort: "-updated_date", limit: 200 });
+      const list = Array.isArray(data) ? data : [];
+      setNotes(list);
+      // 账本签新并入的明细：本次会话保留「新」标识，后台静默清除，下次进入不再高亮
+      list.forEach((n) => {
+        const ledger = n.metadata?.ai_analysis?.ledger;
+        if (!ledger?.items?.some((it) => it.is_new)) return;
+        const items = ledger.items.map((it) => {
+          const { is_new, added_at, ...rest } = it;
+          return rest;
+        });
+        const metadata = { ...n.metadata, ai_analysis: { ...n.metadata.ai_analysis, ledger: { ...ledger, items } } };
+        patch(`/notes/${n.id}`, { metadata }).catch(() => {});
+      });
+    } catch (err) {
+      setNotes([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useDidShow(() => {
+    (async () => {
+      await ensureDemoSession();
+      const guest = !getToken() || isDemoMode();
+      setIsGuest(guest);
+      if (getToken()) fetchNotes();
+    })();
+  });
+
+  const filteredNotes = useMemo(() => {
+    let list = [...notes];
+    if (filter === "pinned") {
+      list = list.filter((n) => isPinned(n));
+    } else if (filter !== "all") {
+      list = list.filter((n) => getNoteType(n) === filter);
+    }
+    list.sort((a, b) => {
+      if (isPinned(a) !== isPinned(b)) return isPinned(a) ? -1 : 1;
+      // 按创建时间倒序：最新生成的心签排在最前（updated_date 会因对话/编辑变化，不用它排序）
+      return new Date(b.created_date) - new Date(a.created_date);
+    });
+    return list;
+  }, [notes, filter]);
+
+  const counts = useMemo(() => {
+    const c = { all: notes.length, pinned: notes.filter((n) => isPinned(n)).length };
+    FILTERS.forEach((f) => {
+      if (f.key !== "all" && f.key !== "pinned") {
+        c[f.key] = notes.filter((n) => getNoteType(n) === f.key).length;
+      }
+    });
+    return c;
+  }, [notes]);
+
+  const updateNoteMeta = async (note, patchMeta) => {
+    const current = note.metadata || {};
+    const next = { ...current, ...patchMeta };
+    await patch(`/notes/${note.id}`, { metadata: next });
+    setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, metadata: next } : n)));
+  };
+
+  const setActionLoad = (key, val) => {
+    setActionLoading((prev) => ({ ...prev, [key]: val }));
+  };
+
+  const togglePin = async (note, e) => {
+    e?.stopPropagation?.();
+    const key = `pin-${note.id}`;
+    setActionLoad(key, true);
+    try {
+      await updateNoteMeta(note, { pinned: !isPinned(note) });
+    } finally {
+      setActionLoad(key, false);
+    }
+  };
+
+  const deleteNote = async (note, e) => {
+    e?.stopPropagation?.();
+    const res = await Taro.showModal({ title: "确认删除", content: "删除后可在回收站找回，是否继续？" });
+    if (!res.confirm) return;
+    try {
+      await del(`/notes/${note.id}`);
+      setNotes((prev) => prev.filter((n) => n.id !== note.id));
+    } catch {}
+  };
+
+  const correctType = async (note, e) => {
+    e?.stopPropagation?.();
+    const current = getNoteType(note);
+    const idx = TYPE_ORDER.indexOf(current);
+    const nextType = TYPE_ORDER[(idx + 1) % TYPE_ORDER.length];
+    const key = `correct-${note.id}`;
+    setActionLoad(key, true);
+    try {
+      await patch(`/notes/${note.id}`, { source_type: nextType });
+      setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, source_type: nextType } : n)));
+      Taro.showToast({ title: `已改为${TYPE_META[nextType].label}签`, icon: "none" });
+    } finally {
+      setActionLoad(key, false);
+    }
+  };
+
+  const convertTask = async (note, e) => {
+    e?.stopPropagation?.();
+    const key = `task-${note.id}`;
+    setActionLoad(key, true);
+    try {
+      const text = note.plain_text || note.content || "";
+      const titleFallback = (getTitle(note) || text.slice(0, 30) || "心签转约定").slice(0, 60);
+
+      let parsed = null;
+      try {
+        parsed = await post("/functions/parseTaskInput", {
+          input: text,
+          date: new Date().toISOString().slice(0, 10)
+        }, { timeout: 10000 });
+      } catch (parseErr) {
+        console.error("parseTaskInput failed, use local fallback", parseErr);
+      }
+
+      // 兜底时间：当前中国时间 +1h / +1h5m
+      const now = new Date();
+      const pad2 = (n) => String(n).padStart(2, "0");
+      const toChinaISO = (d) => {
+        const y = d.getFullYear();
+        const mo = pad2(d.getMonth() + 1);
+        const day = pad2(d.getDate());
+        const h = pad2(d.getHours());
+        const m = pad2(d.getMinutes());
+        const s = pad2(d.getSeconds());
+        return `${y}-${mo}-${day}T${h}:${m}:${s}+08:00`;
+      };
+      const reminder = new Date(now.getTime() + 60 * 60 * 1000);
+      const end = new Date(reminder.getTime() + 5 * 60 * 1000);
+
+      const query = {
+        title: encodeURIComponent(parsed?.title || titleFallback),
+        description: encodeURIComponent(text),
+        raw_input: encodeURIComponent(text),
+        reminder_time: encodeURIComponent(parsed?.reminder_time || toChinaISO(reminder)),
+        end_time: encodeURIComponent(parsed?.end_time || toChinaISO(end)),
+        priority: ["urgent", "high", "medium", "low"].includes(parsed?.priority) ? parsed.priority : "medium",
+        category: ["work", "personal", "health", "study", "family", "shopping", "finance", "other"].includes(parsed?.category)
+          ? parsed.category
+          : "other",
+        note_id: note.id
+      };
+
+      const qs = Object.entries(query)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("&");
+      Taro.navigateTo({ url: `/pages/task-create/index?${qs}` });
+    } catch (err) {
+      console.error("convertTask failed", err);
+      Taro.showToast({ title: `转换失败：${err?.message || ""}`, icon: "none" });
+    } finally {
+      setActionLoad(key, false);
+    }
+  };
+
+  const addToKnowledge = async (note, e) => {
+    e?.stopPropagation?.();
+    const key = `kb-${note.id}`;
+    setActionLoad(key, true);
+    try {
+      await post("/knowledge-bases", {
+        title: getTitle(note) || (note.plain_text || note.content || "").slice(0, 60) || "心签沉淀",
+        content: note.plain_text || (note.content || "").replace(/<[^>]+>/g, "").trim() || "心签沉淀",
+        source_type: "note",
+        source_id: note.id,
+        tags: Array.isArray(note.tags) ? note.tags : [],
+        category: note.metadata?.ai_analysis?.category || "其他"
+      });
+      await updateNoteMeta(note, { in_knowledge_base: true });
+      Taro.showToast({ title: "已沉淀到知识库", icon: "success" });
+    } catch (err) {
+      console.error("addToKnowledge failed", err);
+      Taro.showToast({ title: "沉淀失败", icon: "none" });
+    } finally {
+      setActionLoad(key, false);
+    }
+  };
+
+  const shareNote = async (note, e) => {
+    e?.stopPropagation?.();
+    const key = `share-${note.id}`;
+    setActionLoad(key, true);
+    try {
+      const share = await post(`/public/share/generate/note/${note.id}`);
+      setPosterNote(note);
+      setPosterToken(share.token || "");
+    } catch {
+      Taro.showToast({ title: "分享生成失败", icon: "none" });
+    } finally {
+      setActionLoad(key, false);
+    }
+  };
+
+  const closePoster = () => {
+    setPosterNote(null);
+    setPosterToken("");
+  };
+
+  const goCreate = () => {
+    if (isGuest) {
+      Taro.navigateTo({ url: "/pages/login/index" });
+      return;
+    }
+    Taro.navigateTo({ url: "/pages/note-create/index" });
+  };
+
+  const setContinueText = (id, text) => {
+    setContinueMap((prev) => ({ ...prev, [id]: text }));
+  };
+
+  const submitContinue = async (note) => {
+    const text = String(continueMap[note.id] || "").trim();
+    if (!text) return;
+    setSubmittingId(note.id);
+    try {
+      const conversation = note.metadata?.conversation || [];
+      const userRounds = conversation.filter((m) => m.role === "user").length;
+      const round = userRounds + 1;
+      const res = await post("/functions/followupHeartSign", {
+        note_id: note.id,
+        text,
+        round,
+        density
+      });
+      const metaPatch = { conversation: res.conversation || [] };
+      if (res.closing) metaPatch.conversation_closed = true;
+      // 账本补录：后端已把新明细并入 ai_analysis.ledger，这里必须一并合入，
+      // 否则下一步 PATCH 会用本地旧 metadata 整体覆盖，把刚补录的账目抹掉
+      if (res.ledger) {
+        metaPatch.ai_analysis = { ...(note.metadata?.ai_analysis || {}), ledger: res.ledger };
+      }
+      await updateNoteMeta(note, metaPatch);
+      // 账单正文同步：本轮明细+新合计已由后端写库，本地同步刷新卡片文本
+      if (res.plain_text) {
+        setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, plain_text: res.plain_text, content: res.plain_text } : n)));
+      }
+      setContinueMap((prev) => ({ ...prev, [note.id]: "" }));
+    } catch {
+      Taro.showToast({ title: "发送失败", icon: "none" });
+    } finally {
+      setSubmittingId(null);
+    }
+  };
+
+  const renderGuestBanner = () => {
+    if (!isGuest) return null;
+    return (
+      <View
+        onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+        style={{
+          margin: "0 24rpx 16rpx",
+          padding: "18rpx 24rpx",
+          borderRadius: "12rpx",
+          background: "#fff8e6",
+          border: "1rpx solid #f5d78e",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}
+      >
+        <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>游客模式 · 登录后记录你的心签</Text>
+        <Text style={{ fontSize: "24rpx", color: theme.primary, fontWeight: 500 }}>去登录 →</Text>
+      </View>
+    );
+  };
+
+  const renderHeader = () => (
+    <View style={{ padding: "40rpx 32rpx 24rpx" }}>
+      <View style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <View>
+          <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "3rpx" }}>{dateLine()}</Text>
+        </View>
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+          <View
+            onClick={() => setReviewVisible(true)}
+            style={{
+              padding: "8rpx 16rpx",
+              borderRadius: "999rpx",
+              background: theme.primaryMist,
+              display: "flex",
+              alignItems: "center",
+              gap: "6rpx"
+            }}
+          >
+            <Text style={{ fontSize: "22rpx", color: theme.primary }}>回顾</Text>
+          </View>
+          <View
+            onClick={() => setVaultVisible(true)}
+            style={{
+              padding: "8rpx 16rpx",
+              borderRadius: "999rpx",
+              background: theme.primaryMist,
+              display: "flex",
+              alignItems: "center",
+              gap: "6rpx"
+            }}
+          >
+            <Text style={{ fontSize: "22rpx", color: theme.primary }}>🔒 保险柜</Text>
+          </View>
+        </View>
+      </View>
+      <View style={{ marginTop: "16rpx" }}>
+        <Text style={{ fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
+          {greeting()}。
+        </Text>
+      </View>
+      <View style={{ marginTop: "16rpx" }}>
+        <Text style={{ fontSize: "34rpx", fontWeight: 500, color: theme.inkSecondary, lineHeight: "52rpx" }}>
+          说给
+          <Text style={{ color: theme.primary }}>另一个自己</Text>
+          听。
+        </Text>
+      </View>
+      <View style={{ marginTop: "12rpx" }}>
+        <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, lineHeight: "42rpx" }}>
+          此刻的心情、刷到的好文章、怕忘的号码……丢进来就好。
+        </Text>
+      </View>
+      <View style={{ marginTop: "20rpx", display: "flex", gap: "10rpx", flexWrap: "wrap" }}>
+        {DENSITY_OPTIONS.map((d) => {
+          const active = density === d.key;
+          return (
+            <View
+              key={d.key}
+              onClick={() => setDensityAndSave(d.key)}
+              style={{
+                padding: "8rpx 18rpx",
+                borderRadius: "999rpx",
+                border: `1rpx solid ${active ? theme.primary : theme.border}`,
+                background: active ? theme.primary : theme.card
+              }}
+            >
+              <Text style={{ fontSize: "22rpx", color: active ? "#fff" : theme.inkTertiary }}>{d.label}</Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+
+  const renderFilters = () => (
+    <ScrollView scrollX showScrollbar={false} style={{ whiteSpace: "nowrap", padding: "0 24rpx 24rpx" }}>
+      <View style={{ display: "inline-flex", gap: "12rpx" }}>
+        {FILTERS.map((f) => {
+          const active = filter === f.key;
+          return (
+            <View
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "10rpx 22rpx",
+                borderRadius: "999rpx",
+                border: `1rpx solid ${active ? theme.primary : theme.border}`,
+                background: active ? theme.primary : theme.card
+              }}
+            >
+              <Text style={{ fontSize: "26rpx", color: active ? "#fff" : theme.inkTertiary }}>{f.label}</Text>
+              {counts[f.key] > 0 && (
+                <Text style={{ fontSize: "20rpx", color: active ? "rgba(255,255,255,0.8)" : theme.inkQuaternary, marginLeft: "8rpx" }}>
+                  {counts[f.key]}
+                </Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </ScrollView>
+  );
+
+  const renderEmpty = () => (
+    <View style={{ textAlign: "center", padding: "80rpx 40rpx" }}>
+      <View
+        style={{
+          width: "112rpx",
+          height: "112rpx",
+          margin: "0 auto 32rpx",
+          borderRadius: "50%",
+          background: theme.primaryMist,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
+        <Text style={{ fontSize: "56rpx", color: theme.primary }}>签</Text>
+      </View>
+      <Text style={{ fontSize: "34rpx", color: theme.inkSecondary, fontWeight: 700, marginBottom: "16rpx" }}>
+        {isGuest ? "登录后开启心签" : "这里还空着"}
+      </Text>
+      <Text style={{ fontSize: "28rpx", color: theme.inkTertiary, lineHeight: "48rpx" }}>
+        {isGuest ? "登录后开始记录" : ""}
+      </Text>
+      {isGuest ? (
+        <View
+          onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
+          style={{
+            display: "inline-block",
+            marginTop: "32rpx",
+            padding: "14rpx 36rpx",
+            borderRadius: "999rpx",
+            background: theme.primary
+          }}
+        >
+          <Text style={{ fontSize: "28rpx", color: "#fff" }}>去登录</Text>
+        </View>
+      ) : (
+        <View style={{ display: "flex", gap: "16rpx", justifyContent: "center", marginTop: "32rpx", flexWrap: "wrap" }}>
+          {["今天的心情有点复杂", "这篇文章讲得真好，收藏一下", "突然想到一个点子"].map((t) => (
+            <View
+              key={t}
+              onClick={() => Taro.navigateTo({ url: `/pages/note-create/index?preset=${encodeURIComponent(t)}` })}
+              style={{
+                padding: "12rpx 24rpx",
+                borderRadius: "999rpx",
+                border: `1rpx dashed ${theme.border}`,
+                background: theme.card
+              }}
+            >
+              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>{t}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+
+  const renderCard = (note) => {
+    const type = getNoteType(note);
+    const meta = TYPE_META[type] || TYPE_META.emotion;
+    const pinned = isPinned(note);
+    const response = getAiResponse(note);
+    const conversation = note.metadata?.conversation || [];
+    const converted = note.metadata?.converted_task;
+    const inKb = note.metadata?.in_knowledge_base;
+    const isCrisis = note.metadata?.is_crisis;
+
+    return (
+      <View
+        style={{
+          margin: "0 24rpx 28rpx",
+          borderRadius: "18rpx",
+          background: theme.card,
+          padding: "28rpx 28rpx 20rpx",
+          boxShadow: "0 2rpx 12rpx rgba(0,0,0,0.04)",
+          border: pinned ? `2rpx solid ${theme.primary}` : "1rpx solid transparent"
+        }}
+      >
+        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "20rpx", flexWrap: "wrap" }}>
+          <View style={{ padding: "4rpx 16rpx", borderRadius: "999rpx", background: meta.bg }}>
+            <Text style={{ fontSize: "22rpx", color: meta.color, fontWeight: 600 }}>{meta.label}签</Text>
+          </View>
+          {pinned && (
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: `1rpx solid ${theme.primary}` }}>
+              <Text style={{ fontSize: "20rpx", color: theme.primary }}>已置顶</Text>
+            </View>
+          )}
+          {converted && (
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: "1rpx solid #6e8a73" }}>
+              <Text style={{ fontSize: "20rpx", color: "#6e8a73" }}>已转约定</Text>
+            </View>
+          )}
+          {inKb && (
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: "1rpx solid #5b82a0" }}>
+              <Text style={{ fontSize: "20rpx", color: "#5b82a0" }}>已沉淀</Text>
+            </View>
+          )}
+          {isCrisis && (
+            <View style={{ padding: "4rpx 14rpx", borderRadius: "999rpx", border: "1rpx solid #db3356", background: "#fce8ec" }}>
+              <Text style={{ fontSize: "20rpx", color: "#db3356" }}>需要关注</Text>
+            </View>
+          )}
+          <Text style={{ marginLeft: "auto", fontSize: "20rpx", color: theme.inkQuaternary }}>{fmtTime(note.created_date)}</Text>
+        </View>
+
+        {getTitle(note) ? (
+          <Text style={{ fontSize: "32rpx", fontWeight: 700, color: theme.inkSecondary, marginBottom: "16rpx", lineHeight: "48rpx" }}>
+            {getTitle(note)}
+          </Text>
+        ) : null}
+
+        <View style={{ marginBottom: "20rpx" }}>
+          <RichText
+            text={note.plain_text || note.content || ""}
+            textStyle={{ fontSize: "30rpx", color: theme.ink, lineHeight: "50rpx", fontWeight: 500 }}
+            accent={theme.primary}
+            ink={theme.ink}
+          />
+        </View>
+
+        {getNoteImage(note) ? (
+          <Image
+            src={getNoteImage(note)}
+            mode="widthFix"
+            style={{ width: "100%", borderRadius: "14rpx", marginBottom: "20rpx", background: theme.paper }}
+            onClick={(e) => {
+              e?.stopPropagation?.();
+              Taro.previewImage({ urls: [getNoteImage(note)] });
+            }}
+          />
+        ) : null}
+
+        {type === "ledger" && <LedgerCard ledger={note.metadata?.ai_analysis?.ledger} />}
+
+        {response ? (
+          <View style={{ borderRadius: "12rpx", padding: "4rpx 0 16rpx", marginBottom: "12rpx" }}>
+            <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "10rpx" }}>
+              <AiBadge text="AI 回应" />
+            </View>
+            <RichText
+              text={response}
+              textStyle={{ fontSize: "28rpx", color: theme.water, lineHeight: "50rpx", fontStyle: "italic" }}
+              accent={theme.primary}
+              ink={theme.water}
+            />
+          </View>
+        ) : null}
+
+        {type !== "ledger" && note.metadata?.ai_analysis?.table_md ? (
+          <RichText
+            text={note.metadata.ai_analysis.table_md}
+            textStyle={{ fontSize: "26rpx", color: theme.inkSecondary, lineHeight: "44rpx" }}
+            accent={theme.primary}
+            ink={theme.inkSecondary}
+          />
+        ) : null}
+
+        {conversation.map((m, idx) => (
+          <View key={idx} style={{ marginBottom: "16rpx" }}>
+            <RichText
+              text={m.text}
+              textStyle={{
+                fontSize: "28rpx",
+                color: m.role === "user" ? theme.ink : theme.water,
+                lineHeight: "50rpx",
+                fontStyle: m.role === "user" ? "normal" : "italic",
+                fontWeight: m.role === "user" ? 500 : 400
+              }}
+              accent={theme.primary}
+              ink={m.role === "user" ? theme.ink : theme.water}
+            />
+          </View>
+        ))}
+
+        {note.metadata?.conversation_closed ? null : (
+          <View
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12rpx",
+              borderTop: `1rpx dashed ${theme.border}`,
+              paddingTop: "20rpx",
+              marginTop: "8rpx"
+            }}
+          >
+            <Input
+              style={{ flex: 1, fontSize: "28rpx", color: theme.ink, padding: "10rpx 0" }}
+              placeholder="继续聊聊…"
+              value={continueMap[note.id] || ""}
+              onInput={(e) => setContinueText(note.id, e.detail.value)}
+              confirmType="send"
+              onConfirm={() => submitContinue(note)}
+            />
+            <Button
+              size="mini"
+              loading={submittingId === note.id}
+              disabled={!continueMap[note.id]?.trim()}
+              onClick={() => submitContinue(note)}
+              style={{
+                background: theme.primary,
+                color: "#fff",
+                borderRadius: "10rpx",
+                fontSize: "24rpx",
+                margin: 0,
+                padding: "0 20rpx",
+                lineHeight: "56rpx",
+                height: "56rpx"
+              }}
+            >
+              发送
+            </Button>
+          </View>
+        )}
+
+        <View style={{ display: "flex", flexWrap: "wrap", gap: "8rpx", marginTop: "20rpx" }}>
+          <ActionBtn onClick={(e) => togglePin(note, e)} active={pinned} text={pinned ? "已置顶" : "置顶"} loading={actionLoading[`pin-${note.id}`]} />
+          <ActionBtn onClick={(e) => correctType(note, e)} text="分错了" loading={actionLoading[`correct-${note.id}`]} />
+          {!converted && <ActionBtn onClick={(e) => convertTask(note, e)} text="转约定" loading={actionLoading[`task-${note.id}`]} />}
+          {!inKb && <ActionBtn onClick={(e) => addToKnowledge(note, e)} text="沉淀" loading={actionLoading[`kb-${note.id}`]} />}
+          <ActionBtn onClick={(e) => shareNote(note, e)} text="签卡" loading={actionLoading[`share-${note.id}`]} />
+          <ShareButton theme={theme} data-note-id={note.id} />
+          <ActionBtn onClick={(e) => deleteNote(note, e)} text="删除" danger />
+        </View>
+      </View>
+    );
+  };
+
+  const goToNote = (note) => {
+    setFilter("all");
+    setTimeout(() => {
+      const id = note.id;
+      const el = Taro.createSelectorQuery().select(`#note-${id}`);
+      el.boundingClientRect((rect) => {
+        if (rect) scrollRef.current?.scrollTo?.({ top: rect.top, animated: true });
+      }).exec();
+    }, 100);
+  };
+
+  return (
+    <View style={{ minHeight: "100vh", background: theme.paper, paddingBottom: "140rpx" }}>
+      <ScrollView ref={scrollRef} scrollY style={{ height: "100vh" }}>
+        {renderHeader()}
+        {renderGuestBanner()}
+        {renderFilters()}
+        {loading && notes.length === 0 ? (
+          <View style={{ textAlign: "center", padding: "80rpx" }}>
+            <Text style={{ fontSize: "28rpx", color: theme.inkTertiary }}>加载中…</Text>
+          </View>
+        ) : null}
+        {!loading && filteredNotes.length === 0 ? renderEmpty() : filteredNotes.map((n) => <View key={n.id} id={`note-${n.id}`}>{renderCard(n)}</View>)}
+
+        <View
+          style={{
+            margin: "0 24rpx 24rpx",
+            padding: "18rpx 22rpx",
+            borderRadius: "14rpx",
+            background: "rgba(91,130,160,0.06)",
+            border: "1rpx solid rgba(91,130,160,0.12)",
+            display: "flex",
+            alignItems: "center"
+          }}
+        >
+          <View
+            style={{
+              width: "28rpx",
+              height: "28rpx",
+              borderRadius: "50%",
+              background: theme.water,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: "14rpx",
+              flexShrink: 0
+            }}
+          >
+            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
+          </View>
+          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
+            内容由 AI 生成，仅供参考
+          </Text>
+        </View>
+
+        <View style={{ height: "120rpx" }} />
+      </ScrollView>
+
+      <View
+        onClick={goCreate}
+        style={{
+          position: "fixed",
+          right: "40rpx",
+          bottom: "160rpx",
+          width: "100rpx",
+          height: "100rpx",
+          borderRadius: "50%",
+          background: theme.primary,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          boxShadow: "0 8rpx 24rpx rgba(56,72,119,0.28)"
+        }}
+      >
+        <Text style={{ fontSize: "56rpx", color: "#fff" }}>+</Text>
+      </View>
+
+      {posterNote && (
+        <SharePoster
+          visible
+          onClose={closePoster}
+          type="note"
+          noteType={getNoteType(posterNote)}
+          date={posterNote.created_date}
+          title={getTitle(posterNote) || "心签"}
+          description={posterNote.plain_text || posterNote.content || ""}
+          extra={getAiResponse(posterNote) || undefined}
+          image={getNoteImage(posterNote) || undefined}
+          shareToken={posterToken}
+        />
+      )}
+      <VaultSheet visible={vaultVisible} onClose={() => setVaultVisible(false)} theme={theme} />
+      <ReviewDrawer visible={reviewVisible} onClose={() => setReviewVisible(false)} notes={notes} onGoToNote={goToNote} theme={theme} />
+    </View>
+  );
+}
+
+function ActionBtn({ onClick, text, active, danger, loading }) {
+  return (
+    <View
+      onClick={loading ? undefined : onClick}
+      style={{
+        padding: "8rpx 16rpx",
+        borderRadius: "10rpx",
+        background: active ? theme.primary : theme.paper,
+        border: `1rpx solid ${theme.border}`,
+        opacity: loading ? 0.6 : 1
+      }}
+    >
+      <Text style={{ fontSize: "22rpx", color: danger ? "#db3356" : active ? "#fff" : theme.inkTertiary }}>
+        {loading ? "…" : text}
+      </Text>
+    </View>
+  );
+}

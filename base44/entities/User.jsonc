@@ -1,0 +1,80 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "assistant_name": {
+      "type": "string",
+      "description": "\u7528\u6237\u81ea\u5b9a\u4e49\u52a9\u624b\u6635\u79f0"
+    },
+    "avatar_url": {
+      "type": "string",
+      "description": "\u7528\u6237\u5934\u50cf URL"
+    },
+    "ai_credits": {
+      "type": "number",
+      "description": "AI \u70b9\u6570\u4f59\u989d"
+    },
+    "subscription_plan": {
+      "type": "string",
+      "enum": [
+        "free",
+        "pro",
+        "team"
+      ],
+      "default": "free"
+    },
+    "theme_preferences": {
+      "type": "object",
+      "description": "\u7528\u6237\u4e3b\u9898\u504f\u597d",
+      "properties": {
+        "primary_color": {
+          "type": "string"
+        },
+        "font_size": {
+          "type": "string",
+          "enum": [
+            "small",
+            "medium",
+            "large"
+          ]
+        },
+        "dark_mode": {
+          "type": "string",
+          "enum": [
+            "light",
+            "dark",
+            "system"
+          ],
+          "description": "\u5916\u89c2\u6a21\u5f0f\uff1a\u6d45\u8272/\u6df1\u8272/\u8ddf\u968f\u7cfb\u7edf\u3002\u672a\u8bbe\u7f6e\u65f6\u9ed8\u8ba4\u8ddf\u968f\u7cfb\u7edf\u3002"
+        }
+      }
+    },
+    "account_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "pending_deletion"
+      ],
+      "default": "active",
+      "description": "\u8d26\u53f7\u72b6\u6001\uff1a\u6b63\u5e38 / \u5f85\u5220\u9664"
+    },
+    "deletion_requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u7528\u6237\u53d1\u8d77\u5220\u9664\u8d26\u53f7\u7684\u65f6\u95f4"
+    },
+    "deletion_purge_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u6570\u636e\u5f7b\u5e95\u6e05\u9664\u7684\u9884\u5b9a\u65f6\u95f4\uff08\u6ce8\u9500\u540e 30 \u5929\uff09"
+    }
+  },
+  "required": [
+    "assistant_name",
+    "avatar_url",
+    "ai_credits",
+    "theme_preferences",
+    "deletion_requested_at",
+    "deletion_purge_at"
+  ]
+}

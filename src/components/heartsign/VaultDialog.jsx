@@ -1,0 +1,390 @@
+import React, { useState, useEffect, useRef } from "react";
+import { Lock, Plus, Trash2, Loader2, Inbox } from "lucide-react";
+import { toast } from "sonner";
+import { httpRequest, getAccessToken } from "@/api/httpClient";
+import { base44 } from "@/api/base44Client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+
+// 后端 /api/vault 实际行为（backend/src/routes/vault.js）：
+//   GET    /api/vault          → 200 { ok: true, count }（不返回任何柜内信息，仅探测可用性）
+//   POST   /api/vault/unlock   → 200 [{ id, label, value, created_date }]（服务端解密返回明文）
+//                                400 { error: 'VAULT_NOT_SET' } / 403 { error: 'WRONG_PASSWORD' }
+//   POST   /api/vault/setup    → { ok: true }，密码 ≥ 4 位
+//   POST   /api/vault          → 201 { id, label, created_date }，body { label, value, password }
+//   DELETE /api/vault/:id      → 204
+// 是否已设密码只能通过 unlock/新增返回的 VAULT_NOT_SET 判断，因此默认进 locked 态，命中后转 setup。
+// 高密级约定：关闭弹层即清空全部明文与密码（立即上锁）；柜内内容默认模糊打码，点「显示」15 秒内临时可见。
+
+function errCode(e) {
+  return e?.data?.error || "";
+}
+
+const REVEAL_MS = 15000; // 「显示」后临时可见时长，超时自动重新打码
+
+export default function VaultDialog({
+  open,
+  onOpenChange,
+  initialValue,
+  pendingNote,
+  onVaulted,
+  autoSave,        // { text, label } 自动保存模式：解锁/设置密码成功后自动加密存入并关闭
+  onAutoSaved,     // (item) => void 自动存入成功回调（父组件据此建锁定心签）
+  focusItemId,     // 解锁成功后自动「显示」该条目（锁定卡「查看」进入）
+}) {
+  const [status, setStatus] = useState("checking"); // checking | setup | locked | unlocked
+  const [items, setItems] = useState([]); // 解锁后的明文列表，关闭弹层即清空
+  const [password, setPassword] = useState(""); // 解锁密码（解锁后暂存内存，用于新增条目）
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showValues, setShowValues] = useState({});
+  const [addLabel, setAddLabel] = useState("");
+  const [addValue, setAddValue] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const revealTimers = useRef({}); // 条目 id -> 「显示」超时定时器
+
+  // 「显示」：临时可见，超时自动重新打码；关闭弹层时统一清理（立即上锁）
+  const revealItem = (id) => {
+    setShowValues((v) => ({ ...v, [id]: true }));
+    clearTimeout(revealTimers.current[id]);
+    revealTimers.current[id] = setTimeout(() => {
+      setShowValues((v) => ({ ...v, [id]: false }));
+    }, REVEAL_MS);
+  };
+  const hideItem = (id) => {
+    clearTimeout(revealTimers.current[id]);
+    setShowValues((v) => ({ ...v, [id]: false }));
+  };
+
+  // 解锁成功后的统一出口：自动存入（autoSave 模式）/ 查看定位（focusItemId）
+  const afterUnlocked = async (pwd, data) => {
+    setPassword(pwd);
+    setItems(Array.isArray(data) ? data : []);
+    setStatus("unlocked");
+    if (autoSave?.text && autoSave?.label) {
+      setAutoSaving(true);
+      try {
+        const created = await httpRequest("/api/vault", {
+          method: "POST",
+          body: { label: autoSave.label, value: autoSave.text, password: pwd },
+        });
+        toast.success("已自动加密存入保险柜");
+        onAutoSaved?.(created);
+        onOpenChange(false);
+      } catch (e) {
+        toast.error(e?.data?.error === "WRONG_PASSWORD"
+          ? "保险柜密码已变更，请重新解锁后手动存入"
+          : (e?.message || "自动存入失败，请手动存入"));
+      } finally {
+        setAutoSaving(false);
+      }
+      return;
+    }
+    if (focusItemId) {
+      revealItem(focusItemId);
+    }
+  };
+
+  // 打开时重置并探测登录态；关闭时清空内存中的明文与密码
+  useEffect(() => {
+    if (!open) return;
+    setStatus("checking");
+    setItems([]);
+    setPassword("");
+    setNewPwd("");
+    setConfirmPwd("");
+    setShowValues({});
+    setAutoSaving(false);
+    if (autoSave?.text) {
+      setAddLabel(autoSave.label || "");
+      setAddValue(autoSave.text);
+    } else {
+      setAddLabel(pendingNote ? (pendingNote.plain_text || "").slice(0, 20) : "");
+      setAddValue(pendingNote?.plain_text || initialValue || "");
+    }
+    if (!getAccessToken()) {
+      toast.error("请先登录后再使用保险柜");
+      onOpenChange(false);
+      return;
+    }
+    // GET /api/vault 不返回是否已设密码，仅用于确认后端可用；未设密码在解锁时经 VAULT_NOT_SET 转到 setup 态
+    httpRequest("/api/vault")
+      .then(() => setStatus("locked"))
+      .catch((e) => {
+        toast.error(e?.message || "保险柜暂不可用");
+        onOpenChange(false);
+      });
+
+  }, [open]);
+
+  // 关闭弹层立即上锁：清空内存中的明文、密码与「显示」定时器
+  useEffect(() => {
+    if (!open) {
+      setItems([]);
+      setPassword("");
+      setAutoSaving(false);
+      setShowValues({});
+      Object.values(revealTimers.current).forEach(clearTimeout);
+      revealTimers.current = {};
+    }
+  }, [open]);
+
+  const handleSetup = async () => {
+    if (newPwd.length < 4) {
+      toast.error("密码至少 4 位");
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error("两次输入的密码不一致");
+      return;
+    }
+    setLoading(true);
+    try {
+      await httpRequest("/api/vault/setup", { method: "POST", body: { password: newPwd } });
+      // 设置成功后直接用新密码解锁，一步进入已解锁态
+      const data = await httpRequest("/api/vault/unlock", { method: "POST", body: { password: newPwd } });
+      await afterUnlocked(newPwd, data);
+      if (!(autoSave?.text && autoSave?.label)) toast.success("保险柜已开启");
+    } catch (e) {
+      toast.error(e?.message || "设置失败，请重试");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnlock = async () => {
+    if (!password) return;
+    setLoading(true);
+    try {
+      const data = await httpRequest("/api/vault/unlock", { method: "POST", body: { password } });
+      await afterUnlocked(password, data);
+    } catch (e) {
+      if (errCode(e) === "VAULT_NOT_SET") {
+        setStatus("setup");
+      } else if (errCode(e) === "WRONG_PASSWORD") {
+        toast.error("密码错误，请重试");
+      } else {
+        toast.error(e?.message || "解锁失败，请重试");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdd = async () => {
+    const label = addLabel.trim();
+    const value = addValue.trim();
+    if (!label || !value) {
+      toast.error("请填写名称和内容");
+      return;
+    }
+    setAdding(true);
+    try {
+      const created = await httpRequest("/api/vault", {
+        method: "POST",
+        body: { label, value, password },
+      });
+      setItems((prev) => [{ ...created, value }, ...prev]);
+      setAddLabel("");
+      setAddValue("");
+      if (autoSave?.text) {
+        // 自动存入失败后的手动补存：同样回调父组件建锁定心签并关闭
+        toast.success("已加密存入保险柜");
+        onAutoSaved?.(created);
+        onOpenChange(false);
+      } else if (pendingNote?.id) {
+        // 移入心签：入库成功后软删原心签并通知父组件移除
+        await base44.entities.Note.update(pendingNote.id, { deleted_at: new Date().toISOString() });
+        onVaulted?.(pendingNote.id);
+        toast.success("已移入保险柜，原心签已删除");
+        onOpenChange(false);
+      } else {
+        toast.success("已存入保险柜");
+      }
+    } catch (e) {
+      toast.error(e?.message || "保存失败，请重试");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await httpRequest(`/api/vault/${id}`, { method: "DELETE" });
+      setItems((prev) => prev.filter((it) => it.id !== id));
+      toast.success("已删除");
+    } catch (e) {
+      toast.error("删除失败，请重试");
+    }
+  };
+
+  const inputCls = "w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-[#384877]/50 focus:ring-2 focus:ring-[#384877]/10 transition";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md rounded-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-slate-800">
+            <span className="w-6 h-6 rounded-lg bg-[#384877]/10 flex items-center justify-center">
+              <Lock className="w-3.5 h-3.5 text-[#384877]" />
+            </span>
+            保险柜
+          </DialogTitle>
+          <DialogDescription className="text-left">
+            {autoSave?.text
+              ? "检测到敏感信息。解锁后将自动加密存入保险柜，原文不会进入 AI 分析。"
+              : "敏感信息独立加密保存，密码仅用于加解密，不会上传明文密码。"}
+          </DialogDescription>
+        </DialogHeader>
+
+        {status === "checking" && (
+          <div className="flex items-center justify-center gap-2 py-10 text-slate-400 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" /> 检查中…
+          </div>
+        )}
+
+        {status === "setup" && (
+          <div className="space-y-3">
+            <p className="text-[13px] text-slate-600 leading-relaxed">
+              {autoSave?.text
+                ? "第一次使用保险柜，请设置一个独立密码（至少 4 位）。设置完成后，这条敏感信息将自动加密存入。"
+                : "第一次使用保险柜，请设置一个独立密码（至少 4 位）。密码用于加密你的敏感信息，请牢记。"}
+            </p>
+            <input
+              type="password"
+              value={newPwd}
+              onChange={(e) => setNewPwd(e.target.value)}
+              placeholder="设置密码（4 位以上）"
+              className={inputCls}
+            />
+            <input
+              type="password"
+              value={confirmPwd}
+              onChange={(e) => setConfirmPwd(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSetup()}
+              placeholder="再输入一次确认"
+              className={inputCls}
+            />
+            <button
+              onClick={handleSetup}
+              disabled={loading}
+              className="w-full py-2.5 rounded-xl bg-[#384877] hover:bg-[#2d3a5f] text-white text-sm font-medium transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+            >
+              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              设置并进入
+            </button>
+          </div>
+        )}
+
+        {status === "locked" && (
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleUnlock()}
+              placeholder={autoSave?.text ? "输入保险柜密码，解锁后自动存入" : "输入保险柜密码"}
+              className={inputCls}
+              autoFocus
+            />
+            <button
+              onClick={handleUnlock}
+              disabled={loading || !password}
+              className="w-full py-2.5 rounded-xl bg-[#384877] hover:bg-[#2d3a5f] text-white text-sm font-medium transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+            >
+              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              解锁
+            </button>
+          </div>
+        )}
+
+        {status === "unlocked" && (
+          <div className="space-y-3">
+            {autoSaving && (
+              <div className="flex items-center justify-center gap-2 py-2 text-[12px] text-slate-500">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> 正在自动加密存入…
+              </div>
+            )}
+            {pendingNote && (
+              <div className="rounded-xl border border-amber-200/70 bg-amber-50/70 px-3 py-2 text-[12px] text-amber-700">
+                正在将这条心签移入保险柜，存入后原文心签会被删除。
+              </div>
+            )}
+
+            {/* 新增 */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-slate-600">
+                <Plus className="w-3.5 h-3.5" /> 新增敏感信息
+              </div>
+              <input
+                value={addLabel}
+                onChange={(e) => setAddLabel(e.target.value)}
+                placeholder="名称，如：工商银行卡"
+                className={inputCls}
+              />
+              <textarea
+                value={addValue}
+                onChange={(e) => setAddValue(e.target.value)}
+                placeholder="内容，如：卡号 / 密码 / 证件号"
+                rows={2}
+                className={`${inputCls} resize-none`}
+              />
+              <button
+                onClick={handleAdd}
+                disabled={adding || autoSaving}
+                className="w-full py-2 rounded-lg bg-[#384877] hover:bg-[#2d3a5f] text-white text-xs font-medium transition disabled:opacity-60 flex items-center justify-center gap-1.5"
+              >
+                {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Lock className="w-3 h-3" />}
+                {pendingNote ? "存入保险柜并删除心签" : "加密存入"}
+              </button>
+            </div>
+
+            {/* 列表 */}
+            {items.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-slate-400 text-sm">
+                <Inbox className="w-6 h-6" /> 保险柜是空的
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-0.5">
+                {items.map((it) => (
+                  <div key={it.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-slate-700 flex-1 truncate">{it.label}</span>
+                      <button
+                        onClick={() => (showValues[it.id] ? hideItem(it.id) : revealItem(it.id))}
+                        className="text-[11px] text-[#384877] border border-[#384877]/25 rounded-md px-2 py-0.5 hover:bg-[#384877]/8 transition"
+                        title={showValues[it.id] ? "立即打码" : `临时可见 ${REVEAL_MS / 1000} 秒`}
+                      >
+                        {showValues[it.id] ? "隐藏" : "显示"}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(it.id)}
+                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                        title="删除"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {/* 全程模糊打码：点「显示」后临时可见，超时/关闭自动打码 */}
+                    <div className="mt-1 text-[12.5px] text-slate-500 break-all leading-relaxed">
+                      <span className={showValues[it.id] ? "transition" : "blur-[5px] select-none transition"}>
+                        {it.value}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

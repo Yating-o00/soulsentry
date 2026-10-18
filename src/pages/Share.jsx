@@ -276,9 +276,17 @@ export default function Share() {
           subtasks: updateSubtaskTree(prev.subtasks, subtaskId, result.task)
         }));
       } else {
-        setData((prev) => ({ ...prev, item: result.task }));
+        setData((prev) => ({
+          ...prev,
+          item: result.task,
+          ...(result.checkin_total !== undefined ? { checkin_total: result.checkin_total } : {})
+        }));
       }
-      toast.success(checked ? "已勾选" : "已取消勾选");
+      if (data?.item?.category === "checkin" && !subtaskId) {
+        toast.success(`已为 TA 打卡，累计 ${result.checkin_total} 次`);
+      } else {
+        toast.success(checked ? "已勾选" : "已取消勾选");
+      }
     } catch (err) {
       toast.error(err?.message || "操作失败");
     } finally {
@@ -455,6 +463,9 @@ export default function Share() {
 
   const isTask = data?.type === "task";
   const item = data?.item;
+  // 打卡类约定：扫码进入的访客点击"为 TA 打卡"= 打卡累计 +1，附言同步访客称呼
+  const isCheckinTask = isTask && item?.category === "checkin";
+  const checkinTotal = data?.checkin_total ?? 0;
   // 心签配图：分享落地页随签文一并展示
   const noteImage = !isTask && item ? noteFirstImage(item) : "";
   const comments = data?.comments || [];
@@ -644,17 +655,36 @@ export default function Share() {
                 <Separator />
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Checkbox
-                      id="main-task"
-                      checked={item.status === "completed"}
-                      onCheckedChange={(checked) => ensureNameThen(() => handleToggleTask(checked))}
-                      disabled={submitting}
-                    />
-                    <label htmlFor="main-task" className={`text-sm font-medium ${item.status === "completed" ? "text-slate-400 line-through" : "text-slate-800"}`}>
-                      {item.status === "completed" ? "已完成" : "标记为已完成"}
-                    </label>
-                  </div>
+                  {isCheckinTask ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        type="button"
+                        onClick={() => ensureNameThen(() => handleToggleTask(true))}
+                        disabled={submitting}
+                        className="rounded-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-5 hover:opacity-95"
+                      >
+                        {submitting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                        )}
+                        为 TA 打卡
+                      </Button>
+                      <span className="text-sm text-slate-500">已打卡 {checkinTotal} 次</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <Checkbox
+                        id="main-task"
+                        checked={item.status === "completed"}
+                        onCheckedChange={(checked) => ensureNameThen(() => handleToggleTask(checked))}
+                        disabled={submitting}
+                      />
+                      <label htmlFor="main-task" className={`text-sm font-medium ${item.status === "completed" ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                        {item.status === "completed" ? "已完成" : "标记为已完成"}
+                      </label>
+                    </div>
+                  )}
                   {item.status === "completed" && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
                 </div>
 
@@ -685,7 +715,7 @@ export default function Share() {
                 maxLength={50}
               />
               <p className="text-xs text-blue-600 mt-1.5">
-                不注册也可以勾选进度、留言，对方会立刻收到。
+                {isCheckinTask ? "不注册也可以帮 TA 打卡、留言，对方会立刻收到。" : "不注册也可以勾选进度、留言，对方会立刻收到。"}
               </p>
             </div>
           </CardContent>

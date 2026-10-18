@@ -310,6 +310,10 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         orderBy: { createdAt: "desc" },
         include: { user: true }
       });
+      // 打卡类约定：分享落地页需要展示累计打卡次数
+      const checkinTotal = item.category === "checkin"
+        ? await prisma.checkin.count({ where: { taskId: item.id } })
+        : null;
 
       return res.json({
         type: "task",
@@ -317,6 +321,7 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         owner_name: item.user?.displayName || "",
         is_owner: req.user?.id === item.userId,
         subtasks,
+        checkin_total: checkinTotal,
         comments: comments.map(serializeComment)
       });
     }
@@ -573,6 +578,61 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
     let updated;
     let targetTitle = item.title;
     let payload = { checked, status: nextStatus };
+
+    // 打卡类约定：扫码点"打卡" = 新增一次打卡记录（累计 +1），不完成约定。
+    // 访客填写的称呼同步进打卡附言，拥有者在赴约记录里能看到是谁帮 TA 打卡。
+    if (!subtaskId && item.category === "checkin") {
+      const total = await prisma.checkin.count({ where: { taskId: item.id } });
+      if (checked) {
+        const providedName = (parsed.data.visitor_name || "").trim();
+        const checkin = await prisma.checkin.create({
+          data: {
+            userId: item.userId,
+            taskId: item.id,
+            note: providedName ? `${providedName} 扫码打卡` : null,
+            source: "public_share"
+          }
+        });
+        const nextTotal = total + 1;
+
+        await prisma.sharedActionLog.create({
+          data: {
+            shareToken: req.params.token,
+            targetType: "task",
+            targetId: item.id,
+            visitorToken,
+            visitorName,
+            actionType: "checkin",
+            payload: { checkinId: checkin.id, total: nextTotal }
+          }
+        });
+
+        await notifyOwner(item.userId, {
+          type: "public_share_checkin",
+          title: "有人为你的约定打卡",
+          body: `${visitorName} 扫码为「${item.title}」打卡一次，已累计 ${nextTotal} 次`,
+          shareToken: req.params.token,
+          targetType: "task",
+          targetId: item.id,
+          visitorToken,
+          visitorName,
+          link: `/tasks?taskId=${item.id}`
+        });
+
+        return res.json({
+          task: serializeTask(item),
+          checkin_total: nextTotal,
+          visitor_token: visitorToken
+        });
+      }
+
+      // 打卡是只增的履约记录，取消勾选不改变任何状态，仅回传当前累计
+      return res.json({
+        task: serializeTask(item),
+        checkin_total: total,
+        visitor_token: visitorToken
+      });
+    }
 
     if (subtaskId) {
       // 支持任意层级的后代（含子约定下的从属小约定），只要属于分享的这棵约定树

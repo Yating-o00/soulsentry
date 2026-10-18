@@ -78,9 +78,14 @@ export default function CheckinShareCard({ task, onClose }) {
 function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl, onClose }) {
   const cardRef = useRef(null);
   const [exporting, setExporting] = useState(false);
+  const nowIso = new Date().toISOString();
+  // 打卡以天数计：精确到具体日期，并给出坚持天数，避免"2026.10—2026.10"这种同月区间
+  const dayCount = firstAt
+    ? Math.max(1, Math.floor((Date.now() - new Date(firstAt).getTime()) / 86400000) + 1)
+    : 0;
   const range = firstAt
-    ? `${formatShanghai(firstAt, "yyyy.MM")} — ${formatShanghai(new Date().toISOString(), "yyyy.MM")}`
-    : formatShanghai(new Date().toISOString(), "yyyy.MM");
+    ? `${formatShanghai(firstAt, "yyyy.M.d")} 起 · 第 ${dayCount} 天`
+    : formatShanghai(nowIso, "yyyy.M.d");
   const isMilestone = total > 0 && CHECKIN_MILESTONES.includes(total);
 
   const saveImage = async () => {
@@ -200,10 +205,12 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
           )}
 
           <p className="text-[11px] tracking-wider text-stone-400">约定 · {task.title}</p>
-          <h4 className="mt-1 text-[19px] font-bold leading-snug text-stone-800">
-            {total > 0 ? "每一次，都算数。" : "这一份约定，才刚刚开始。"}
-          </h4>
-          <p className="mt-1.5 text-[11px] tracking-wider text-stone-400">{range}</p>
+          {total === 0 && (
+            <h4 className="mt-1 text-[19px] font-bold leading-snug text-stone-800">
+              这一份约定，才刚刚开始。
+            </h4>
+          )}
+          <p className={`${total === 0 ? "mt-1.5" : "mt-2"} text-[11px] tracking-wider text-stone-400`}>{range}</p>
 
           {bestNote && (
             <p

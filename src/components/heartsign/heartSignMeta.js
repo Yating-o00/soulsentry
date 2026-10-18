@@ -69,14 +69,22 @@ export function normalizeNote(n) {
   };
 }
 
-// 签卡配图（取第一张）：metadata.image_url（小程序写入，字符串或数组）+ content 内嵌 <img>；
+// 签卡配图（取第一张）：附件图片（notes API 顶层 attachments / 公开接口 metadata.attachments）
+// + metadata.image_url（小程序写入，字符串或数组）+ content 内嵌 <img>；
 // 相对路径补全为当前源的同源绝对地址，保证 canvas 绘制导出不被跨域污染
 export function noteFirstImage(note) {
   const urls = [];
+  const push = (u) => { if (typeof u === "string" && u.trim()) urls.push(u.trim()); };
+  const atts = note?.attachments || note?.metadata?.attachments;
+  if (Array.isArray(atts)) {
+    for (const a of atts) {
+      const isImage = (a?.file_type || "").startsWith("image")
+        || /\.(png|jpe?g|gif|webp|avif|bmp)(\?|#|$)/i.test(a?.file_url || "");
+      if (isImage) push(a?.file_url);
+    }
+  }
   const raw = note?.metadata?.image_url;
-  (Array.isArray(raw) ? raw : [raw]).forEach((u) => {
-    if (typeof u === "string" && u.trim()) urls.push(u.trim());
-  });
+  (Array.isArray(raw) ? raw : [raw]).forEach(push);
   const html = note?.content || "";
   const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
   let m;

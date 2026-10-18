@@ -242,7 +242,9 @@ export default function Notes() {
       const raw = note ? (getTitle(note) || note.plain_text || note.content || "此刻的一点心情") : "此刻的一点心情";
       const title = `心签 · ${String(raw).trim().slice(0, 18)}`;
       const token = shareTokensRef.current[noteId];
-      return { title, path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${noteId}` };
+      // 有配图的心签：转发卡片直接展示图片（无图时不传，微信回落页面快照）
+      const imageUrl = note ? getNoteImage(note) || undefined : undefined;
+      return { title, path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${noteId}`, imageUrl };
     }
   });
 

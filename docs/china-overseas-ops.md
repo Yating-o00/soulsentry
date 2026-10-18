@@ -264,6 +264,20 @@ ls dist   # 必须确认有 index.html / assets / sw.js 再部署；dist 为空�
 sudo ./deploy.sh
 ```
 
+临时 git 分支中转（本地执行；注意 `git rm -rf --cached .` 只清暂存区，绝不能省略 `--cached`，否则会删除工作区全部源码）：
+
+```bash
+SHA=$(git rev-parse --short HEAD)
+git checkout --orphan "deploy-dist-$SHA"
+git rm -rf --cached .          # 只清索引，不动工作区文件
+cp /tmp/soulsentry-dist.tar.gz "dist-$SHA.tar.gz"
+git add "dist-$SHA.tar.gz" && git commit -m "dist $SHA"
+git push origin "deploy-dist-$SHA"
+git checkout china-standalone && git branch -D "deploy-dist-$SHA" && rm "dist-$SHA.tar.gz"
+# 服务器：git fetch origin deploy-dist-<SHA> && git show FETCH_HEAD:dist-<SHA>.tar.gz > /tmp/dist.tgz
+# 部署验证无误后清理：git push origin --delete deploy-dist-<SHA>
+```
+
 **方式 B：服务器构建（慢，约 15~25 分钟，需 swap）。** 网页终端易掉线，务必用 nohup：
 
 ```bash

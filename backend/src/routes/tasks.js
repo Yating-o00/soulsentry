@@ -169,6 +169,27 @@ function serializeTask(task) {
   };
 }
 
+// ── 子约定完成度 → 父约定进度条 ──
+// 父约定进度 = 其存活直接子约定中 DONE 的占比；子约定的完成/新建/删除/换父后调用。
+// 父约定已无存活子约定时不改写（保留人工设置的进度）；失败只告警，不影响主流程。
+async function syncParentProgress(parentId) {
+  if (!parentId) return;
+  try {
+    const children = await prisma.task.findMany({
+      where: { parentTaskId: parentId, deletedAt: null },
+      select: { status: true }
+    });
+    if (children.length === 0) return;
+    const done = children.filter((c) => c.status === "DONE").length;
+    await prisma.task.update({
+      where: { id: parentId },
+      data: { progress: Math.round((done / children.length) * 100) }
+    });
+  } catch (err) {
+    console.warn(`[tasks] 同步父约定进度失败 parent=${parentId}:`, err?.message || err);
+  }
+}
+
 function buildTaskCreateData(userId, payload) {
   const extraFields = getTaskExtraFields(payload);
   // 兜底：原文含重复语义而前端未显式传 repeat_rule 时自动识别——
@@ -369,6 +390,9 @@ tasksRouter.post("/", async (req, res) => {
     payload.data
   );
 
+  // 新建子约定会稀释父约定的完成比：进度条同步为重算后的值
+  await syncParentProgress(task.parentTaskId);
+
   // 主动检测可自动执行的部分，异步执行后待用户验收（不阻塞创建）
   void maybeAutoExecute(task, req.user.id, prisma);
 
@@ -406,6 +430,12 @@ tasksRouter.post("/batch", async (req, res) => {
 
     return created;
   });
+
+  // 批量创建的子约定同样驱动父约定进度条
+  const affectedParents = new Set(tasks.map((t) => t.parentTaskId).filter(Boolean));
+  for (const parentId of affectedParents) {
+    await syncParentProgress(parentId);
+  }
 
   // 内容安全：异步逐条 msgSecCheck——先返回创建结果，命中违规的约定自动隐藏
   tasks.forEach((task, idx) => {
@@ -496,6 +526,9 @@ tasksRouter.post("/:id/settle-knowledge", async (req, res) => {
       metadata: { ...(task.metadata || {}), settled_as_knowledge: true, knowledge_base_id: kb.id }
     }
   });
+
+  // 被沉淀的约定本身若是子约定，同样计入父约定进度条
+  await syncParentProgress(task.parentTaskId);
 
   return res.status(201).json({ knowledge_base_id: kb.id, task: serializeTask(updated) });
 });
@@ -760,6 +793,15 @@ tasksRouter.patch("/:id", async (req, res) => {
     }
   );
 
+  // 子约定的完成度进入父约定进度条：状态变更/删除/换父都会改变父约定的完成比；
+  // 换父时旧父约定也要重算（被摘走子约定后其完成比同样变化）。小程序等未自行回算进度的客户端由此兜底。
+  if (payload.data.status !== undefined || payload.data.deleted_at !== undefined || payload.data.parent_task_id !== undefined) {
+    await syncParentProgress(task.parentTaskId);
+    if (existing.parentTaskId && existing.parentTaskId !== task.parentTaskId) {
+      await syncParentProgress(existing.parentTaskId);
+    }
+  }
+
   // 标题/描述变更后重新检测可自动执行的部分（maybeAutoExecute 内部有去重）
   if (payload.data.title !== undefined || payload.data.description !== undefined) {
     void maybeAutoExecute(task, req.user.id, prisma);
@@ -813,6 +855,7 @@ tasksRouter.delete("/:id", async (req, res) => {
   });
 
   await prisma.task.delete({ where: { id: existing.id } });
+  await syncParentProgress(existing.parentTaskId);
   await createTaskChangeLog(
     req.user.id,
     existing,

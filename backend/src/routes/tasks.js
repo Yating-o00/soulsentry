@@ -215,6 +215,22 @@ function buildTaskCreateData(userId, payload) {
     return new Date(t);
   };
 
+  // 打卡约定未设定停止时间（无 end_time）时 = 开放式每日重复约定：
+  // 每天提醒打卡，打卡后由 /checkins 滚存到下一期；显式设置的 repeat_rule / end_time 优先
+  const openEndedCheckin = payload.category === "checkin" && !payload.end_time;
+  if (openEndedCheckin && (!extraFields.repeat_rule || extraFields.repeat_rule === "none")) {
+    extraFields.repeat_rule = "daily";
+  }
+
+  let reminderTime = keepTime(payload.reminder_time);
+  if (openEndedCheckin && !reminderTime) {
+    // 未设提醒时间的开放式打卡约定：默认每天 21:00 提醒，今天的已过则明天开始
+    const anchor = new Date();
+    anchor.setHours(21, 0, 0, 0);
+    if (anchor.getTime() <= Date.now()) anchor.setDate(anchor.getDate() + 1);
+    reminderTime = anchor;
+  }
+
   return {
     userId,
     title: title.slice(0, 120),
@@ -223,7 +239,7 @@ function buildTaskCreateData(userId, payload) {
     priority: payload.priority || "medium",
     category: payload.category,
     dueAt: keepTime(payload.due_at),
-    reminderTime: keepTime(payload.reminder_time),
+    reminderTime,
     endTime: keepTime(payload.end_time),
     isAllDay: Boolean(payload.is_all_day),
     parentTaskId: payload.parent_task_id || null,

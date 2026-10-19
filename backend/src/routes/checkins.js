@@ -2,11 +2,57 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { computeNextReminderTime } from "../lib/recurrence.js";
 
 /**
  * 约定打卡（Checkin）：同一个约定可多次打卡，每次可附带一句话或照片。
  * 打卡是"履约记录"，与"盖章完成"语义独立：打卡不完成约定，完成约定也不删打卡。
+ *
+ * 开放式打卡约定（category=checkin 且无 end_time）按每日重复约定运转：
+ * 打卡 = 记录"今天已打卡"并把已到期的排期滚到下一期（与 tasks.js PATCH 勾选完成的重复语义一致），
+ * 到点提醒/核对唤回/顺延唤回见 reminderSender 全链路对 recurrence_last_done 的静默处理。
  */
+
+function getTaskExtraFields(task) {
+  if (task?.metadata && typeof task.metadata === "object") {
+    return task.metadata._extraFields || {};
+  }
+  return {};
+}
+
+function buildTaskMetadataWithExtra(task, patch) {
+  const base = task?.metadata && typeof task.metadata === "object" ? { ...task.metadata } : {};
+  const prev = base._extraFields && typeof base._extraFields === "object" ? { ...base._extraFields } : {};
+  base._extraFields = { ...prev, ...patch };
+  return base;
+}
+
+// 打卡后滚存排期：返回给 prisma.task.update 的 data（无重复规则或已带停止时间时返回 null）
+function buildRollForwardData(task, now = new Date()) {
+  const extra = getTaskExtraFields(task);
+  const recurringRule = ["daily", "weekly", "monthly", "custom"].includes(extra.repeat_rule)
+    ? extra.repeat_rule
+    : (task.category === "checkin" && !task.endTime ? "daily" : null);
+  // 有停止时间的打卡约定 = 固定窗口挑战（如 21 天），不滚存，窗口语义保持不变
+  if (!recurringRule || task.endTime) return null;
+
+  const chinaToday = new Date(now.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const data = {
+    metadata: buildTaskMetadataWithExtra(task, {
+      recurrence_last_done: chinaToday,
+      recurrence_done_count: Number(extra.recurrence_done_count || 0) + 1,
+      // 已打卡：本期核对唤回即刻停止
+      recurrence_checkback_anchor: null,
+      recurrence_checkback_count: 0
+    })
+  };
+  // 当次提醒时间已过才需要推进；未到点的提醒保留原锚点，送达时由 cron 照常推进（今天已打卡会静默）
+  if (task.reminderTime && task.reminderTime.getTime() <= now.getTime()) {
+    const nextR = computeNextReminderTime(task.reminderTime, recurringRule, extra.custom_recurrence, now);
+    if (nextR) data.reminderTime = nextR;
+  }
+  return data;
+}
 export const checkinsRouter = Router();
 
 checkinsRouter.use(requireAuth);
@@ -85,6 +131,16 @@ checkinsRouter.post("/:id/checkins", async (req, res) => {
     });
   } catch (e) {
     console.warn("[checkins] behavior log failed:", e?.message || e);
+  }
+
+  // 开放式重复打卡约定：打卡即"今天已打卡"，排期滚到下一期（失败不阻断打卡响应）
+  try {
+    const rollForwardData = buildRollForwardData(task);
+    if (rollForwardData) {
+      await prisma.task.update({ where: { id: task.id }, data: rollForwardData });
+    }
+  } catch (e) {
+    console.warn("[checkins] recurrence roll-forward failed:", e?.message || e);
   }
 
   return res.status(201).json({

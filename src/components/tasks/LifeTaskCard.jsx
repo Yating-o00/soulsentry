@@ -36,6 +36,7 @@ import AutomationDetailDialog from "@/components/automation/AutomationDetailDial
 export default function LifeTaskCard({ 
   task, 
   subtasks = [],
+  subtaskTree = [],
   commentCount = 0,
   onComplete, 
   onEdit,
@@ -759,8 +760,8 @@ export default function LifeTaskCard({
                 {/* Completion Check & Time：打卡卡唯一的圈即打卡；其余卡保持原「完成」打勾圈，互斥不并存 */}
                 <div className="flex flex-col items-center justify-start gap-1 min-w-[3.5rem]">
                     {isCheckinTask ? (
-                        /* 打卡：同一个约定每做到一次点一次，累计次数与赴约记录 */
-                        <CheckinWidget task={task} completed={completed} />
+                        /* 打卡：同一个约定每做到一次点一次，累计次数与赴约记录；带子约定时可展开只读明细（含次级层级） */
+                        <CheckinWidget task={task} completed={completed} subtaskTree={subtaskTree} />
                     ) : (
                         <button
                             onClick={handleComplete}
@@ -1112,7 +1113,8 @@ export default function LifeTaskCard({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onEdit && onEdit();
+                      // 打开约定详情（子约定 tab）：子约定可勾选/编辑，评论、版本、历史等在并列 tab
+                      onViewTab && onViewTab("subtasks");
                     }}
                     className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
                   >

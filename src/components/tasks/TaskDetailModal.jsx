@@ -70,6 +70,14 @@ import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
 
+// 子约定只继承「未来的」时间安排：父约定时间已过时不带过来，
+// 否则新建子约定会立刻触发到点提醒 / 截止跟进 / 逾期衰减三连提醒
+function inheritFutureTime(iso) {
+  if (!iso) return undefined;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) && t > Date.now() ? iso : undefined;
+}
+
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
   const [newSubtask, setNewSubtask] = useState("");
@@ -295,8 +303,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             category: task.category,
             status: "pending",
             parent_task_id: task.id,
-            reminder_time: task.reminder_time,
-            end_time: task.end_time
+            reminder_time: inheritFutureTime(task.reminder_time),
+            end_time: inheritFutureTime(task.end_time)
           });
         }
         toast.success(`已生成 ${finalSubtasks.length} 个子约定`);
@@ -403,8 +411,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
       await createSubtaskMutation.mutateAsync({
         title: newSubtask,
         parent_task_id: task.id,
-        reminder_time: task.reminder_time,
-        end_time: task.end_time,
+        reminder_time: inheritFutureTime(task.reminder_time),
+        end_time: inheritFutureTime(task.end_time),
         category: task.category,
         priority: task.priority,
         status: "pending",
@@ -431,8 +439,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
       await createSubtaskMutation.mutateAsync({
         title,
         parent_task_id: insertParentId || task.id,
-        reminder_time: task.reminder_time,
-        end_time: task.end_time,
+        reminder_time: inheritFutureTime(task.reminder_time),
+        end_time: inheritFutureTime(task.end_time),
         category: task.category,
         priority: task.priority,
         status: "pending",
@@ -462,7 +470,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     try {
       await updateTaskMutation.mutateAsync({ id: editingChild.id, data: { title } });
       cancelEditChild();
-    } catch (_e) {}
+    } catch (_e) {
+      // 保存失败保持编辑态，由用户重试
+    }
   };
 
   const handleToggleSubtask = async (subtask) => {
@@ -509,13 +519,13 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
         const category = (typeof st === 'object' && st.category) ? st.category : enhancements.category;
         
         // Calculate reminder time if specific time is provided
-        let reminderTime = task.reminder_time;
+        let reminderTime = inheritFutureTime(task.reminder_time);
         if (typeof st === 'object' && st.time && task.reminder_time) {
             try {
                 const date = new Date(task.reminder_time);
                 const [h, m] = st.time.split(':');
                 date.setHours(parseInt(h), parseInt(m), 0);
-                reminderTime = date.toISOString();
+                reminderTime = inheritFutureTime(date.toISOString());
             } catch (e) {
                 console.error("Error setting subtask time", e);
             }
@@ -525,7 +535,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           title,
           parent_task_id: task.id,
           reminder_time: reminderTime,
-          end_time: task.end_time,
+          end_time: inheritFutureTime(task.end_time),
           category,
           priority,
           status: "pending",

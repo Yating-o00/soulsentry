@@ -2,11 +2,11 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers } from "lucide-react";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -16,6 +16,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import NotificationManager from "../components/notifications/NotificationManager";
 import MilestoneCard from "../components/tasks/MilestoneCard";
 import LifeTaskCard from "../components/tasks/LifeTaskCard";
+import { flattenSubtasks } from "@/components/checkins/subtaskTree";
 import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
@@ -33,6 +34,7 @@ let lastAnalyzeAt = 0;
 
 export default function Tasks() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState("overview"); // 'overview', 'milestone', 'life'
   const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
@@ -837,6 +839,7 @@ export default function Tasks() {
                     key={task.id}
                     task={task}
                     subtasks={getSubtasks(task.id)}
+                    subtaskTree={flattenSubtasks(getSubtasks, task.id)}
                     commentCount={commentCountMap[task.id] || 0}
                     isSelectionMode={isSelectionMode}
                     isSelected={selectedTaskIds.includes(task.id)}
@@ -912,12 +915,25 @@ export default function Tasks() {
                 });
               };
 
+              // 恢复为未完成：勾选图标即按钮，hover 变回旋箭头，点击后约定回到未完成列表
+              const restoreBtn = (task) => (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleComplete(task, allTasks, 'pending'); }}
+                  title="恢复为未完成"
+                  className="flex-shrink-0 mt-0.5 h-5 w-5 relative rounded-full hover:bg-emerald-50 transition-colors group/restore"
+                >
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500 group-hover/restore:opacity-0 transition-opacity" />
+                  <Undo2 className="w-5 h-5 text-[#384877] absolute inset-0 opacity-0 group-hover/restore:opacity-100 transition-opacity" />
+                </button>
+              );
+
               const renderSubRow = (task) => (
                 <div
                   key={task.id}
                   className="flex items-start gap-3 p-3 rounded-xl border bg-slate-50/60 border-slate-100"
                 >
-                  <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  {restoreBtn(task)}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-[10px] px-1.5 py-0.5 rounded-md border font-medium flex-shrink-0 bg-slate-100 text-slate-500 border-slate-200">
@@ -937,15 +953,15 @@ export default function Tasks() {
               const renderParentRow = (parent, childCount, isExpanded) => {
                 const hasChildren = childCount > 0;
                 return (
-                  <button
-                    type="button"
+                  <div
+                    role={hasChildren ? "button" : undefined}
                     onClick={() => hasChildren && toggleParent(parent.id)}
                     className={cn(
-                      "w-full flex items-start gap-3 p-3 rounded-xl border bg-white border-slate-200 text-left transition-colors",
+                      "w-full flex items-start gap-3 p-3 rounded-xl border bg-white border-slate-200 text-left transition-colors select-none",
                       hasChildren ? "hover:border-[#c7d2fe] hover:bg-[#eef2ff]/30 cursor-pointer" : "cursor-default"
                     )}
                   >
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                    {restoreBtn(parent)}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-[10px] px-1.5 py-0.5 rounded-md border font-medium flex-shrink-0 bg-[#eef2ff] text-[#384877] border-[#c7d2fe]">
@@ -970,7 +986,7 @@ export default function Tasks() {
                         isExpanded && "rotate-180"
                       )} />
                     )}
-                  </button>
+                  </div>
                 );
               };
 
@@ -1049,6 +1065,7 @@ export default function Tasks() {
       {sharingTask && sharingTask.category === 'checkin' ? (
         <CheckinShareCard
           task={sharingTask}
+          subtaskTree={flattenSubtasks(getSubtasks, sharingTask.id)}
           onClose={() => setSharingTask(null)}
         />
       ) : sharingTask ? (

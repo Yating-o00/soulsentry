@@ -203,6 +203,18 @@ function buildTaskCreateData(userId, payload) {
   }
   const title = String(payload.title || "").trim();
 
+  // 子约定的时间若早于现在（通常是前端继承自父约定的旧排期），一律不带入：
+  // 任务在提醒时刻之后才创建，旧提醒本就无法送达，否则创建当刻会被到点提醒 / 截止跟进 /
+  // 逾期衰减三个发送器各响一次（它们的去重标记互不相同），形成连续多次打扰
+  const isSubtask = Boolean(payload.parent_task_id);
+  const keepTime = (iso) => {
+    if (!iso) return null;
+    const t = new Date(iso).getTime();
+    if (isNaN(t)) return null;
+    if (isSubtask && t <= Date.now()) return null;
+    return new Date(t);
+  };
+
   return {
     userId,
     title: title.slice(0, 120),
@@ -210,9 +222,9 @@ function buildTaskCreateData(userId, payload) {
     status: toPrismaTaskStatus(payload.status),
     priority: payload.priority || "medium",
     category: payload.category,
-    dueAt: payload.due_at ? new Date(payload.due_at) : null,
-    reminderTime: payload.reminder_time ? new Date(payload.reminder_time) : null,
-    endTime: payload.end_time ? new Date(payload.end_time) : null,
+    dueAt: keepTime(payload.due_at),
+    reminderTime: keepTime(payload.reminder_time),
+    endTime: keepTime(payload.end_time),
     isAllDay: Boolean(payload.is_all_day),
     parentTaskId: payload.parent_task_id || null,
     gcalSyncEnabled: Boolean(payload.gcal_sync_enabled),

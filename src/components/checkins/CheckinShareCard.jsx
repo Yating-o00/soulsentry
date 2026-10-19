@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { formatShanghai } from "@/lib/timeCore";
 import html2canvas from "html2canvas";
-import { Download, Copy } from "lucide-react";
+import { Download, Copy, Check, ListChecks, EyeOff } from "lucide-react";
 import { buildApiUrl, httpRequest } from "@/api/httpClient";
 import { useCheckins } from "@/components/checkins/useCheckins";
 import QRCodeImage from "@/components/ui/QRCode";
@@ -27,8 +27,11 @@ export const MILESTONE_QUOTES = {
  * 打卡分享卡：品牌蓝极简设计，大数字成就陈述 + 最佳附言/照片 + 公开二维码（扫码匿名留言）。
  * 支持保存图片与复制图片（剪贴板不可用时自动降级为下载）。
  * 自取自打数据，分享菜单与里程碑弹层共用。
+ * 约定带子约定时，可在卡片上一并完整呈现子约定树（含次级及以下层级，按层级缩进；生成图前可开关），
+ * 清单过长时还可一键隐藏已完成的子约定（头部仍保留 n/m 总览）。
+ * 卡片过高时弹层可滚动查看（导出图始终完整），二维码区收敛为紧凑尺寸。
  */
-export default function CheckinShareCard({ task, onClose }) {
+export default function CheckinShareCard({ task, subtaskTree = [], onClose }) {
   const { data } = useCheckins(task.id);
   const total = data?.total ?? 0;
   const firstAt = data?.first_at;
@@ -65,6 +68,7 @@ export default function CheckinShareCard({ task, onClose }) {
   return (
     <ShareCardOverlay
       task={task}
+      subtaskTree={subtaskTree}
       total={total}
       firstAt={firstAt}
       bestNote={bestNote}
@@ -75,9 +79,13 @@ export default function CheckinShareCard({ task, onClose }) {
   );
 }
 
-function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl, onClose }) {
+function ShareCardOverlay({ task, subtaskTree = [], total, firstAt, bestNote, bestPhoto, shareUrl, onClose }) {
   const cardRef = useRef(null);
   const [exporting, setExporting] = useState(false);
+  const [showSubtasks, setShowSubtasks] = useState(subtaskTree.length > 0);
+  const [hideDone, setHideDone] = useState(false);
+  const subDone = subtaskTree.filter((s) => s.status === "completed").length;
+  const visibleTree = hideDone ? subtaskTree.filter((s) => s.status !== "completed") : subtaskTree;
   const nowIso = new Date().toISOString();
   // 打卡以天数计：精确到具体日期，并给出坚持天数，避免"2026.10—2026.10"这种同月区间
   const dayCount = firstAt
@@ -144,15 +152,16 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex flex-col items-center justify-center gap-4 bg-stone-900/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[80] overflow-y-auto bg-stone-900/50 backdrop-blur-sm"
       onClick={(e) => { e.stopPropagation(); onClose(); }}
     >
-      <div
-        ref={cardRef}
-        onClick={(e) => e.stopPropagation()}
-        className="w-[320px] overflow-hidden rounded-[24px] bg-white text-left shadow-2xl"
-        style={{ fontFamily: "inherit" }}
-      >
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 p-4">
+        <div
+          ref={cardRef}
+          onClick={(e) => e.stopPropagation()}
+          className="w-[320px] overflow-hidden rounded-[24px] bg-white text-left shadow-2xl"
+          style={{ fontFamily: "inherit" }}
+        >
         {/* 头部：品牌深蓝渐变 + 大数字成就陈述 */}
         <div
           className="relative px-6 pt-5 pb-7"
@@ -205,6 +214,50 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
           )}
 
           <p className="text-[11px] tracking-wider text-stone-400">约定 · {task.title}</p>
+          {showSubtasks && subtaskTree.length > 0 && (
+            <div
+              className="mt-3 rounded-2xl border px-3 py-2.5"
+              style={{ borderColor: CHECKIN_BRAND_TINT, background: "#F7F9FE" }}
+            >
+              <p className="text-[10px] font-semibold tracking-wide" style={{ color: CHECKIN_BRAND_PRIMARY }}>
+                子约定 · 已完成 {subDone}/{subtaskTree.length}
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {visibleTree.map((s) => {
+                  const done = s.status === "completed";
+                  return (
+                    <li
+                      key={s.id}
+                      className="flex items-center gap-1.5 text-[11px] leading-snug"
+                      style={{ paddingLeft: (s.depth || 0) * 12 }}
+                    >
+                      <span
+                        className="flex h-3 w-3 flex-shrink-0 items-center justify-center rounded-full border"
+                        style={
+                          done
+                            ? { background: "#22c55e", borderColor: "#22c55e", color: "#ffffff" }
+                            : { borderColor: "#d6d3d1", color: "#a8a29e" }
+                        }
+                      >
+                        {done && <Check className="h-2 w-2" />}
+                      </span>
+                      <span
+                        className="min-w-0 truncate"
+                        style={{ color: done ? "#a8a29e" : "#44403c" }}
+                      >
+                        {s.title}
+                      </span>
+                    </li>
+                  );
+                })}
+                {visibleTree.length === 0 && (
+                  <li className="text-[10px]" style={{ color: "#a8a29e" }}>
+                    {subtaskTree.length} 条子约定已全部完成
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
           {total === 0 && (
             <h4 className="mt-1 text-[19px] font-bold leading-snug text-stone-800">
               这一份约定，才刚刚开始。
@@ -227,12 +280,12 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
 
         {/* 底部：二维码（扫码匿名留言），文字单行对齐 */}
         <div
-          className="flex items-center gap-3 border-t px-6 py-4"
+          className="flex items-center gap-3 border-t px-6 py-3"
           style={{ borderColor: CHECKIN_BRAND_TINT, background: "#F7F9FE" }}
         >
           {shareUrl ? (
-            <div className="rounded-lg border bg-white p-1.5" style={{ borderColor: CHECKIN_BRAND_TINT }}>
-              <QRCodeImage value={shareUrl} size={176} alt="扫码匿名留言" className="h-[72px] w-[72px]" />
+            <div className="rounded-lg border bg-white p-1" style={{ borderColor: CHECKIN_BRAND_TINT }}>
+              <QRCodeImage value={shareUrl} size={120} alt="扫码匿名留言" className="h-12 w-12" />
             </div>
           ) : null}
           <p className="whitespace-nowrap text-[10px] text-stone-500">
@@ -241,28 +294,57 @@ function ShareCardOverlay({ task, total, firstAt, bestNote, bestPhoto, shareUrl,
         </div>
       </div>
 
-      <div className="flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={saveImage}
-          disabled={exporting}
-          className={exportBtnClass}
-          style={{ background: `linear-gradient(90deg, ${CHECKIN_BRAND_PRIMARY}, ${CHECKIN_BRAND_SECONDARY})`, boxShadow: "0 10px 24px -8px rgba(56,72,119,.5)" }}
-        >
-          <Download className="h-4 w-4" />
-          {exporting ? "生成中…" : "保存图片"}
-        </button>
-        <button
-          onClick={copyImage}
-          disabled={exporting}
-          className={exportBtnClass}
-          style={{ background: "linear-gradient(90deg, #4a5f94, #6b83b8)", boxShadow: "0 10px 24px -8px rgba(56,72,119,.4)" }}
-        >
-          <Copy className="h-4 w-4" />
-          {exporting ? "生成中…" : "复制图片"}
-        </button>
-        <button onClick={onClose} className="px-2 py-3 text-[13px] text-stone-300 hover:text-stone-100">
-          关闭
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-3 pb-2" onClick={(e) => e.stopPropagation()}>
+          {subtaskTree.length > 0 && (
+            <button
+              onClick={() => setShowSubtasks((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors"
+              style={
+                showSubtasks
+                  ? { borderColor: CHECKIN_BRAND_PRIMARY, background: CHECKIN_BRAND_PRIMARY, color: "#ffffff" }
+                  : { borderColor: "rgba(255,255,255,.5)", background: "transparent", color: "rgba(255,255,255,.85)" }
+              }
+            >
+              <ListChecks className="h-3.5 w-3.5" />
+              卡片含子约定
+            </button>
+          )}
+          {subtaskTree.length > 0 && subDone > 0 && (
+            <button
+              onClick={() => setHideDone((v) => !v)}
+              className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] transition-colors"
+              style={
+                hideDone
+                  ? { borderColor: "#57534e", background: "#57534e", color: "#ffffff" }
+                  : { borderColor: "rgba(255,255,255,.5)", background: "transparent", color: "rgba(255,255,255,.85)" }
+              }
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              隐藏已完成
+            </button>
+          )}
+          <button
+            onClick={saveImage}
+            disabled={exporting}
+            className={exportBtnClass}
+            style={{ background: `linear-gradient(90deg, ${CHECKIN_BRAND_PRIMARY}, ${CHECKIN_BRAND_SECONDARY})`, boxShadow: "0 10px 24px -8px rgba(56,72,119,.5)" }}
+          >
+            <Download className="h-4 w-4" />
+            {exporting ? "生成中…" : "保存图片"}
+          </button>
+          <button
+            onClick={copyImage}
+            disabled={exporting}
+            className={exportBtnClass}
+            style={{ background: "linear-gradient(90deg, #4a5f94, #6b83b8)", boxShadow: "0 10px 24px -8px rgba(56,72,119,.4)" }}
+          >
+            <Copy className="h-4 w-4" />
+            {exporting ? "生成中…" : "复制图片"}
+          </button>
+          <button onClick={onClose} className="px-2 py-3 text-[13px] text-stone-300 hover:text-stone-100">
+            关闭
+          </button>
+        </div>
       </div>
     </div>
   );

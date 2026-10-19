@@ -1,6 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import LifeTaskCard from "./LifeTaskCard";
+import { flattenSubtasks } from "@/components/checkins/subtaskTree";
 
 /**
  * 智能分组容器 - 显示一组通过AI规则归类的约定
@@ -68,6 +69,7 @@ export default function SmartGroupSection({
             key={task.id}
             task={task}
             subtasks={getSubtasks(task.id)}
+            subtaskTree={flattenSubtasks(getSubtasks, task.id)}
             commentCount={commentCountMap[task.id] || 0}
             isSelectionMode={isSelectionMode}
             isSelected={selectedTaskIds.includes(task.id)}

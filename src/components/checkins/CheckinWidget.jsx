@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShanghai } from "@/lib/timeCore";
-import { X, Footprints, Camera } from "lucide-react";
+import { X, Footprints, Camera, ListChecks, ChevronDown, ChevronUp, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildApiUrl } from "@/api/httpClient";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   useCheckins,
   useCreateCheckin,
@@ -23,6 +24,7 @@ import CheckinShareCard, {
  * - 点一下 = 一次打卡（最便捷），随后可补一句话或一张照片，也可以什么都不留
  * - 累计次数实时翻转，里程碑（1/7/21/50/100/365 次）弹出成就卡，可生成分享卡
  * - 「赴约记录」抽屉：每一次打卡的时间、附言、照片
+ * - 约定带子约定时，打卡按钮下方可展开只读的子约定明细（标题 + 完成状态）
  */
 
 function checkinReply(total, note) {
@@ -40,7 +42,7 @@ function checkinReply(total, note) {
   return pool[total % pool.length];
 }
 
-export default function CheckinWidget({ task, completed = false }) {
+export default function CheckinWidget({ task, completed = false, subtaskTree = [] }) {
   const { data } = useCheckins(task.id, { enabled: !completed });
   const createMut = useCreateCheckin(task.id);
   const patchMut = usePatchCheckin(task.id);
@@ -54,10 +56,12 @@ export default function CheckinWidget({ task, completed = false }) {
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [milestone, setMilestone] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const total = data?.total ?? 0;
   const firstAt = data?.first_at;
   const items = useMemo(() => data?.items || [], [data]);
+  const subDone = subtaskTree.filter((s) => s.status === "completed").length;
 
   const doCheckin = () => {
     if (completed || createMut.isPending) return;
@@ -126,43 +130,95 @@ export default function CheckinWidget({ task, completed = false }) {
 
   return (
     <>
-      <button
-        onClick={doCheckin}
-        disabled={completed || createMut.isPending}
-        title={checkinTitle}
-        className={cn(
-          "relative w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300",
-          completed
-            ? "border-stone-100 bg-stone-50 text-stone-300 cursor-not-allowed"
-            : justDone
-              ? "border-transparent bg-gradient-to-br from-[#3b5aa2] to-[#384877] text-white shadow-lg shadow-[#384877]/30"
-              : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF] hover:shadow-lg hover:shadow-[#384877]/15 hover:-translate-y-0.5"
-        )}
-      >
-        <Footprints className={cn("w-5 h-5", justDone && "hidden")} />
-        {/* 打卡完成 = 盖下一枚「如约」印记，而非普通对勾 */}
-        <span
-          className={cn("hidden text-[8px] font-bold leading-none text-white select-none", justDone && "inline-flex")}
-          style={{ writingMode: "vertical-rl", letterSpacing: "0.1em" }}
-        >
-          如约
-        </span>
-        {!justDone && !completed && (
-          <span
-            className="absolute inset-0 rounded-full border-2 border-[#8fa3cf] animate-ping opacity-30 pointer-events-none"
-            style={{ animationDuration: "2.8s" }}
-          />
-        )}
-      </button>
-      {metaText && (
+      <div className="relative flex flex-col items-center gap-1">
         <button
-          onClick={() => setTimelineOpen(true)}
-          title="查看赴约记录"
-          className="text-[10px] whitespace-nowrap text-center text-[#384877] hover:text-[#2d3a5f] underline-offset-2 hover:underline"
+          onClick={doCheckin}
+          disabled={completed || createMut.isPending}
+          title={checkinTitle}
+          className={cn(
+            "relative w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300",
+            completed
+              ? "border-stone-100 bg-stone-50 text-stone-300 cursor-not-allowed"
+              : justDone
+                ? "border-transparent bg-gradient-to-br from-[#3b5aa2] to-[#384877] text-white shadow-lg shadow-[#384877]/30"
+                : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF] hover:shadow-lg hover:shadow-[#384877]/15 hover:-translate-y-0.5"
+          )}
         >
-          {metaText}
+          <Footprints className={cn("w-5 h-5", justDone && "hidden")} />
+          {/* 打卡完成 = 盖下一枚「如约」印记，而非普通对勾 */}
+          <span
+            className={cn("hidden text-[8px] font-bold leading-none text-white select-none", justDone && "inline-flex")}
+            style={{ writingMode: "vertical-rl", letterSpacing: "0.1em" }}
+          >
+            如约
+          </span>
+          {!justDone && !completed && (
+            <span
+              className="absolute inset-0 rounded-full border-2 border-[#8fa3cf] animate-ping opacity-30 pointer-events-none"
+              style={{ animationDuration: "2.8s" }}
+            />
+          )}
         </button>
-      )}
+        {metaText && (
+          <button
+            onClick={() => setTimelineOpen(true)}
+            title="查看赴约记录"
+            className="text-[10px] whitespace-nowrap text-center text-[#384877] hover:text-[#2d3a5f] underline-offset-2 hover:underline"
+          >
+            {metaText}
+          </button>
+        )}
+        {subtaskTree.length > 0 && (
+          <Popover open={detailOpen} onOpenChange={setDetailOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                title="展开子约定明细"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] whitespace-nowrap transition-colors",
+                  detailOpen
+                    ? "border-[#c9d5ef] bg-[#EEF2FF] text-[#2d3a5f]"
+                    : "border-transparent text-[#384877] hover:text-[#2d3a5f] hover:bg-[#EEF2FF]"
+                )}
+              >
+                <ListChecks className="w-3 h-3" />
+                子约定 {subDone}/{subtaskTree.length}
+                {detailOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={6} className="w-60 rounded-2xl bg-white p-3">
+              <p className="mb-2 text-[10px] font-medium tracking-wide" style={{ color: CHECKIN_BRAND_PRIMARY }}>
+                子约定 · 已完成 {subDone}/{subtaskTree.length}
+              </p>
+              <ul className="max-h-64 space-y-1.5 overflow-y-auto">
+                {subtaskTree.map((s) => {
+                  const done = s.status === "completed";
+                  return (
+                    <li key={s.id} className="flex items-start gap-2" style={{ paddingLeft: (s.depth || 0) * 14 }}>
+                      <span
+                        className={cn(
+                          "mt-0.5 flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded-full border",
+                          done ? "border-green-500 bg-green-500 text-white" : "border-stone-300 bg-white"
+                        )}
+                      >
+                        {done && <Check className="w-2 h-2" />}
+                      </span>
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 truncate text-xs",
+                          done ? "text-stone-400 line-through" : "text-stone-700"
+                        )}
+                      >
+                        {s.title}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </PopoverContent>
+          </Popover>
+        )}
+      </div>
 
       {/* 附言弹层：点完打卡后 optionally 留一句话/一张照片 */}
       {pending && (
@@ -333,6 +389,7 @@ export default function CheckinWidget({ task, completed = false }) {
       {shareOpen && (
         <CheckinShareCard
           task={task}
+          subtaskTree={subtaskTree}
           onClose={() => { setShareOpen(false); setMilestone(null); }}
         />
       )}

@@ -3,9 +3,10 @@ import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Zap, Loader2, Link2, PlusCircle, ArrowRight, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { routeCaptureIntent, CAPTURE_KINDS } from "@/lib/captureRouter";
+import { routeCaptureIntent, CAPTURE_KINDS, isAgreementPlan } from "@/lib/captureRouter";
 import { isAgentCommand, AGENT_EXAMPLES } from "@/lib/agentRunner";
 import AgentRunPanel from "@/components/agent/AgentRunPanel";
+import { planAgreement } from "@/lib/agreementPlanner";
 
 export const CAPTURE_EVENT = "unified-capture";
 export const CAPTURE_FOCUS_EVENT = "unified-capture-focus";
@@ -45,6 +46,10 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
     try {
       if (kind === "weave") {
         await runWeave(input);
+      } else if (kind === "agreement_plan") {
+        toast.info("正在整体规划，可能需要几十秒…");
+        setWeaveResult(await planAgreement(input));
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
       } else {
         window.dispatchEvent(new CustomEvent(CAPTURE_EVENT, { detail: { kind, text: input } }));
         toast.success(CAPTURE_KINDS[kind].hint, { icon: "✨" });
@@ -59,7 +64,7 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
   const handleSubmit = async () => {
     const input = text.trim();
     if (!input || phase) return;
-    if (isAgentCommand(input)) { setAgentCmd(input); setText(""); setWeaveResult(null); setRoutedTo(null); return; }
+    if (isAgentCommand(input) && !isAgreementPlan(input)) { setAgentCmd(input); setText(""); setWeaveResult(null); setRoutedTo(null); return; }
     setPhase("routing");
     setWeaveResult(null);
     setLastInput(input);

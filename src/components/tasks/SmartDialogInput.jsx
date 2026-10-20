@@ -423,7 +423,7 @@ ${timeCtx.promptSnippet}
       ...(lastLocationCtx?.coords ? { coords: lastLocationCtx.coords } : {})
     };
 
-    // 把 time_reasoning 作为 ai_context_summary 透传，让灵魂哨兵卡片能展示
+    // 把 time_reasoning 作为 ai_context_summary 透传，让心栈卡片能展示
     const enriched = normalizeTaskTime({
       ...draft,
       title: finalTitle,

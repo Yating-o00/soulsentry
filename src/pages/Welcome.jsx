@@ -404,7 +404,7 @@ ${textToAnalyze}
                   <img src="/icon-512.png" alt="心栈" className="w-full h-full object-cover" />
                 </div>
                 <h1 className="text-5xl font-bold bg-gradient-to-r from-[#384877] via-[#3b5aa2] to-purple-600 bg-clip-text text-transparent mb-4">
-                  灵魂哨兵
+                  心栈
                 </h1>
                 <p className="text-xl text-slate-500 mb-8 font-light tracking-wide">
                   坚定守护，适时轻唤 - 你的心灵存放站

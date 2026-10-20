@@ -1,4 +1,5 @@
 import { invokeKimiText } from "../lib/kimi.js";
+import { renderInsightsForPrompt } from "./planInsights.js";
 
 // 智能约定规划：把「一类要做的事」（如"一周的英语学习"）落成
 // 母约定 + 每天具体执行/提醒时刻的子约定。
@@ -134,7 +135,7 @@ export function buildFallbackPlan({ goal, horizonDays, dailyMinutes, now = new D
   return { parent, children };
 }
 
-export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], now = new Date() } = {}) {
+export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], insights = null, now = new Date() } = {}) {
   const ctx = {
     goal: String(goal || "").trim().slice(0, 80),
     horizonDays: clampInt(horizonDays, 2, 30, 7),
@@ -181,18 +182,21 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
   };
 
   const busyBlocks = Array.isArray(existing) ? existing.slice(0, 40) : [];
+  const insightsText = renderInsightsForPrompt(insights);
   const prompt = `用户想规划一件事：「${ctx.goal}」
 规划参数：共 ${ctx.horizonDays} 天（从 ${today} 算起），每天累计约 ${ctx.dailyMinutes} 分钟。
 用户偏好：${String(preferences || "无额外偏好").slice(0, 200)}
 ${busyBlocks.length ? `用户已有安排（避开这些时段）：\n${JSON.stringify(busyBlocks)}` : "用户当前无已知占用。"}
-
+${insightsText ? `用户个性化参考（来自其历史数据，仅作排期参考，用户明确偏好永远优先）：\n${insightsText}\n` : ""}
 请生成母约定和逐日子约定。硬性要求：
 1. 今天是中国时间 ${today} ${chinaNowTime()}，今天的条目必须晚于当前时间至少 30 分钟；其它日期避开 23:00-7:00。
 2. 每天累计不超过 ${ctx.dailyMinutes} 分钟；条目之间留至少 10 分钟间隔；同一天最多 3 条。
 3. 内容按天递进（由易到难/由概到细），每满 7 天至少留 1 天缓冲或复盘，不要把缓冲日排满。
 4. 时刻尽量贴合生活习惯（学习类优先上午或晚间，健身类避开饭后立即）。
 5. 计划包含多类内容时必须分组（plan_group）：如健身计划分「日常训练」「周末强化」「饮食配合」，备考计划分「每日刷题」「周末模考」「错题复盘」；同一组共用一个简洁组名（≤8字），不要逐条变化。每天要坚持做完并打卡留痕的项标 kind=checkin（如每日跑步/每日背单词）；一次性大项、准备工作、周末加练等用 task（默认）。饮食类条目排进餐点时刻；纯指导性文字（食谱/注意事项）写进该条 description 或 note，不要单独占条。
-6. 严格返回 JSON。`;
+6. 每条 description 必须写清可执行动作与量化标准（如「慢跑 3 公里或 30 分钟，前后各 5 分钟拉伸」），拒绝空话；优先把每日项排在用户历史活跃时段内，活跃时段与偏好冲突时以偏好为准。
+7. 若用户近30天完成率低于 50%：首周总量减半起步、间隔日安排，给习惯养成留余地；若规划窗口内某天的已有占用接近或超过每天预算，当天减量或只排 1 条。若用户已有内容重合的打卡约定，排期避开其提醒时刻，并在相关条目的 note 里提示「可与《约定名》一起打卡」。
+8. 严格返回 JSON。`;
 
   try {
     const { data, usage } = await Promise.race([

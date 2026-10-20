@@ -4,6 +4,7 @@ import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
 import { planCommitmentWithKimi, buildFallbackPlan } from "./planCommitment.js";
+import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
 // AI 负责理解意图（立约定 / 记心签 / 存链接 / 网页办事 / 闲聊），
@@ -654,18 +655,37 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             title: String(t.title || "").slice(0, 30)
           }))
           .filter((b) => b.date);
+        // 个性化输入：历史活跃时段/完成率/既有打卡约定/窗口负载（只读，失败不影响规划）
+        const insights = await buildPlanInsights({ userId, prisma, busyTasks: existing }).catch((e) => {
+          console.warn("[flowChat] 规划画像构建失败:", e?.message || e);
+          return null;
+        });
+        // 近期执行力偏低时自动降档起步（用户明确要的量不再加码）
+        let dailyMinutes = req.daily_minutes || undefined;
+        if (dailyMinutes && insights?.subtaskDoneRate30d !== null && insights?.subtaskDoneRate30d !== undefined
+          && insights.subtaskDoneRate30d < 0.5) {
+          dailyMinutes = Math.max(15, Math.round(dailyMinutes * 0.7));
+        }
         const planned = await planCommitmentWithKimi({
           goal: req.goal,
           horizonDays: req.horizon_days || undefined,
-          dailyMinutes: req.daily_minutes || undefined,
+          dailyMinutes,
           preferences: req.preferences,
-          existing
+          existing,
+          insights
         });
         out.extracted.plan = {
           parent: planned.parent,
           children: planned.children,
           source: planned.source || "ai"
         };
+        // 用了个性化排期就让用户感知到「这是为你调的」
+        if (planned.source !== "fallback" && insights) {
+          const note = renderInsightsForPrompt(insights)
+            ? `（这次的安排参考了你的习惯${insights.activeWindows.length ? `：你多在 ${insights.activeWindows.join("、")} 行动` : ""}${insights.subtaskDoneRate30d !== null ? `，近期完成率 ${Math.round(insights.subtaskDoneRate30d * 100)}%` : ""}，不合适随时说，我重排）`
+            : "";
+          if (note) out.reply = `${out.reply}${note}`;
+        }
         // 两次 AI 调用（对话+规划）的用量合并结算
         if (planned.usage && out.usage) {
           out.usage = {

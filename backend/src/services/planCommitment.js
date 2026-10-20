@@ -78,6 +78,8 @@ function normalizePlan(raw, ctx) {
     const startD = new Date(startMs + 8 * 3600 * 1000);
     const start = startD.toISOString().slice(11, 16);
     const end = new Date(startMs + finalDuration * 60000 + 8 * 3600 * 1000).toISOString().slice(11, 16);
+    const kind = item.kind === "checkin" ? "checkin" : "task";
+    const planGroup = String(item.plan_group || "").trim().replace(/\s+/g, "").slice(0, 12) || "每日安排";
     children.push({
       title,
       description: String(item.description || "").trim().slice(0, 300) || null,
@@ -85,7 +87,9 @@ function normalizePlan(raw, ctx) {
       start_time: start,
       end_time: end,
       duration_minutes: finalDuration,
-      note: String(item.note || "").trim().slice(0, 120) || null
+      note: String(item.note || "").trim().slice(0, 120) || null,
+      kind,
+      plan_group: planGroup
     });
     if (children.length >= horizonDays * 4) break;
   }
@@ -122,7 +126,9 @@ export function buildFallbackPlan({ goal, horizonDays, dailyMinutes, now = new D
       start_time: start,
       end_time: end,
       duration_minutes: minutes,
-      note: null
+      note: null,
+      kind: "task",
+      plan_group: "每日安排"
     });
   }
   return { parent, children };
@@ -154,7 +160,7 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
       },
       children: {
         type: "array",
-        description: `子约定清单：覆盖 ${today} 起共 ${ctx.horizonDays} 天，每天1-3条，总条数≤${ctx.horizonDays * 3}`,
+        description: `子约定清单：覆盖 ${today} 起共 ${ctx.horizonDays} 天，每天1-3条，总条数≤${ctx.horizonDays * 3}；复合计划须按内容分组（plan_group）并标注条目类型（kind）`,
         items: {
           type: "object",
           properties: {
@@ -163,7 +169,9 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
             date: { type: "string", description: `YYYY-MM-DD，范围 ${today} ~ ${chinaToday(ctx.horizonDays - 1)}` },
             start_time: { type: "string", description: "HH:MM，24小时制" },
             duration_minutes: { type: "number", description: `10-240，当天累计≤${ctx.dailyMinutes}分钟` },
-            note: { type: "string", description: "可选，执行小提示" }
+            note: { type: "string", description: "可选，执行小提示" },
+            kind: { type: "string", enum: ["checkin", "task"], description: "checkin=每日坚持、做完要打卡留痕的项（如跑步/练琴）；task=普通定时项（默认）" },
+            plan_group: { type: "string", description: "内容分组名，≤8字，如「日常训练」「周末强化」「饮食配合」；同类项同组" }
           },
           required: ["title", "date", "start_time", "duration_minutes"]
         }
@@ -183,7 +191,8 @@ ${busyBlocks.length ? `用户已有安排（避开这些时段）：\n${JSON.str
 2. 每天累计不超过 ${ctx.dailyMinutes} 分钟；条目之间留至少 10 分钟间隔；同一天最多 3 条。
 3. 内容按天递进（由易到难/由概到细），每满 7 天至少留 1 天缓冲或复盘，不要把缓冲日排满。
 4. 时刻尽量贴合生活习惯（学习类优先上午或晚间，健身类避开饭后立即）。
-5. 严格返回 JSON。`;
+5. 计划包含多类内容时必须分组（plan_group）：如健身计划分「日常训练」「周末强化」「饮食配合」，备考计划分「每日刷题」「周末模考」「错题复盘」；同一组共用一个简洁组名（≤8字），不要逐条变化。每天要坚持做完并打卡留痕的项标 kind=checkin（如每日跑步/每日背单词）；一次性大项、准备工作、周末加练等用 task（默认）。饮食类条目排进餐点时刻；纯指导性文字（食谱/注意事项）写进该条 description 或 note，不要单独占条。
+6. 严格返回 JSON。`;
 
   try {
     const { data, usage } = await Promise.race([

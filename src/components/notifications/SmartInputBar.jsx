@@ -390,6 +390,7 @@ export default function SmartInputBar() {
           category: plan.parent.category || "personal",
           priority: plan.parent.priority || "medium",
           status: "pending",
+          tags: ["智能规划"],
         });
         if (children.length > 0) {
           await base44.entities.Task.bulkCreate(children.map((c) => ({
@@ -401,6 +402,9 @@ export default function SmartInputBar() {
             reminder_time: `${c.date}T${c.start_time}:00+08:00`,
             end_time: `${c.date}T${c.end_time}:00+08:00`,
             tags: ["智能规划"],
+            // 规划结构透传给卡片：分组渲染 + 打卡项识别（服务端收进 metadata._extraFields 后平铺回读）
+            plan_kind: c.kind || "task",
+            plan_group: c.plan_group || "每日安排",
           })));
         }
         planChildCount = children.length;
@@ -635,9 +639,7 @@ export default function SmartInputBar() {
                   {pending.type === "plan" && pending.plan && (() => {
                     const plan = pending.plan;
                     const children = Array.isArray(plan.children) ? plan.children : [];
-                    const byDay = {};
-                    children.forEach((c) => { (byDay[c.date] = byDay[c.date] || []).push(c); });
-                    const days = Object.keys(byDay).sort();
+                    const days = [...new Set(children.map((c) => c.date))].sort();
                     const totalMin = children.reduce((s, c) => s + (Number(c.duration_minutes) || 0), 0);
                     const avgMin = days.length ? Math.round(totalMin / days.length) : 0;
                     const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
@@ -672,26 +674,54 @@ export default function SmartInputBar() {
                         </div>
                         {days.length > 0 && (
                           <div className="mt-2.5 rounded-lg border px-3 py-2.5" style={{ borderColor: C.hairline, background: "#ffffff" }}>
-                            {days.map((d, di) => {
-                              const dt = dayOf(d);
-                              return (
-                                <div key={d} className={di > 0 ? "mt-2.5 border-t pt-2.5" : ""} style={di > 0 ? { borderColor: C.hairline } : undefined}>
-                                  <p className="text-[11.5px] font-medium" style={{ color: C.sentinel }}>
-                                    {dt ? `周${WEEK[dt.getDay()]} ${dt.getMonth() + 1}-${String(dt.getDate()).padStart(2, "0")}` : d}
-                                  </p>
-                                  <div className="mt-1 flex flex-col gap-1">
-                                    {byDay[d].map((c, i) => (
-                                      <div key={i} className="flex items-baseline gap-2 text-[12.5px] leading-relaxed">
-                                        <span className="shrink-0 tabular-nums" style={{ color: C.ink4 }}>
-                                          {c.start_time}–{c.end_time}
-                                        </span>
-                                        <span className="min-w-0 break-words" style={{ color: C.ink }}>{c.title}</span>
-                                      </div>
-                                    ))}
+                            {(() => {
+                              const byGroup = {};
+                              children.forEach((c) => {
+                                const g = String(c.plan_group || "每日安排");
+                                (byGroup[g] = byGroup[g] || []).push(c);
+                              });
+                              const groupNames = Object.keys(byGroup);
+                              const multiGroup = groupNames.length > 1;
+                              return groupNames.map((g, gi) => {
+                                const gChildren = byGroup[g];
+                                const gByDay = {};
+                                gChildren.forEach((c) => { (gByDay[c.date] = gByDay[c.date] || []).push(c); });
+                                const gDays = Object.keys(gByDay).sort();
+                                const checkinCount = gChildren.filter((c) => c.kind === "checkin").length;
+                                return (
+                                  <div key={g} className={gi > 0 ? "mt-2.5 border-t pt-2.5" : ""} style={gi > 0 ? { borderColor: C.hairline } : undefined}>
+                                    {multiGroup && (
+                                      <p className="text-[11px] font-semibold mb-1" style={{ color: C.sentinel }}>
+                                        {g} · {gChildren.length} 条{checkinCount > 0 ? ` · ${checkinCount} 项打卡` : ""}
+                                      </p>
+                                    )}
+                                    {gDays.map((d, di) => {
+                                      const dt = dayOf(d);
+                                      return (
+                                        <div key={d} className={di > 0 ? "mt-2" : ""}>
+                                          <p className="text-[11.5px] font-medium" style={{ color: C.sentinel }}>
+                                            {dt ? `周${WEEK[dt.getDay()]} ${dt.getMonth() + 1}-${String(dt.getDate()).padStart(2, "0")}` : d}
+                                          </p>
+                                          <div className="mt-1 flex flex-col gap-1">
+                                            {gByDay[d].map((c, i) => (
+                                              <div key={i} className="flex items-baseline gap-1.5 text-[12.5px] leading-relaxed">
+                                                <span className="shrink-0 tabular-nums" style={{ color: C.ink4 }}>
+                                                  {c.start_time}–{c.end_time}
+                                                </span>
+                                                <span className="shrink-0 text-[11px]" title={c.kind === "checkin" ? "打卡项：做完点一下留痕" : "定时项"}>
+                                                  {c.kind === "checkin" ? "👣" : "⏱️"}
+                                                </span>
+                                                <span className="min-w-0 break-words" style={{ color: C.ink }}>{c.title}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                         <p className="mt-2 text-[11.5px]" style={{ color: C.ink3 }}>

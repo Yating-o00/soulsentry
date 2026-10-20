@@ -172,7 +172,7 @@ function serializeTask(task) {
 // ── 子约定完成度 → 父约定进度条 ──
 // 父约定进度 = 其存活直接子约定中 DONE 的占比；子约定的完成/新建/删除/换父后调用。
 // 父约定已无存活子约定时不改写（保留人工设置的进度）；失败只告警，不影响主流程。
-async function syncParentProgress(parentId) {
+export async function syncParentProgress(parentId) {
   if (!parentId) return;
   try {
     const children = await prisma.task.findMany({

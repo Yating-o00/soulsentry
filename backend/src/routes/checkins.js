@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { computeNextReminderTime } from "../lib/recurrence.js";
+import { syncParentProgress } from "./tasks.js";
 
 /**
  * 约定打卡（Checkin）：同一个约定可多次打卡，每次可附带一句话或照片。
@@ -141,6 +142,21 @@ checkinsRouter.post("/:id/checkins", async (req, res) => {
     }
   } catch (e) {
     console.warn("[checkins] recurrence roll-forward failed:", e?.message || e);
+  }
+
+  // 智能规划的打卡子约定（单日固定窗口）：打卡即完成当次——置 DONE 并回算父约定进度。
+  // 开放式打卡约定没有父约定、不带 plan_kind，走上面的滚存逻辑，互不影响。
+  try {
+    const extra = getTaskExtraFields(task);
+    if (task.parentTaskId && extra.plan_kind === "checkin" && task.status !== "DONE") {
+      await prisma.task.update({
+        where: { id: task.id },
+        data: { status: "DONE", completedAt: new Date() },
+      });
+      await syncParentProgress(task.parentTaskId);
+    }
+  } catch (e) {
+    console.warn("[checkins] plan child complete failed:", e?.message || e);
   }
 
   return res.status(201).json({

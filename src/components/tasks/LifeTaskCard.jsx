@@ -30,8 +30,35 @@ import LongTermProgressBar from "@/components/tasks/LongTermProgressBar";
 import HorizonProgressBadge from "@/components/tasks/HorizonProgressBadge";
 import PriorityQuickMenu from "@/components/tasks/PriorityQuickMenu";
 import CheckinWidget from "@/components/checkins/CheckinWidget";
+import { useCreateCheckin } from "@/components/checkins/useCheckins";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
+
+// 智能规划打卡子约定的行内打卡按钮：点一下 = 一次履约留痕，服务端同时置该项完成并回算父进度
+function PlanCheckinButton({ subtask }) {
+  const createCheckin = useCreateCheckin(subtask.id);
+  return (
+    <button
+      type="button"
+      title="做完点一下打卡"
+      disabled={createCheckin.isPending}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (createCheckin.isPending) return;
+        createCheckin.mutate({ source: "plan_child" }, {
+          onSuccess: () => toast.success("打卡成功，又赴约一次～"),
+          onError: () => toast.error("打卡没成功，再点一下试试"),
+        });
+      }}
+      className={cn(
+        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border mt-0.5 transition-colors",
+        "bg-amber-50 border-amber-300 text-amber-600 hover:bg-amber-100"
+      )}
+    >
+      {createCheckin.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Footprints className="w-3 h-3" />}
+    </button>
+  );
+}
 
 export default function LifeTaskCard({ 
   task, 
@@ -62,6 +89,53 @@ export default function LifeTaskCard({
     setCompleted(isRecurringTask ? !!task.done_today : task.status === 'completed');
   }, [task.done_today, task.status, isRecurringTask]);
   const [expanded, setExpanded] = useState(false);
+  // 智能规划母卡：子约定按 plan_group 分组折叠。null = 自动（含今天的组、以及首个有待办项的组展开）
+  const [collapsedGroups, setCollapsedGroups] = useState(null);
+  // —— 智能规划分组渲染：子约定带 plan_kind/plan_group 时，母卡按组动态展示（时刻/打卡项/组进度） ——
+  const planMode = !isSelectionMode && subtasks.some((s) => s.plan_kind || s.plan_group);
+  const nowIso = new Date().toISOString();
+  const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
+  const planGroups = planMode
+    ? Object.values(
+        subtasks.reduce((acc, s) => {
+          const g = String(s.plan_group || "每日安排");
+          (acc[g] = acc[g] || { name: g, items: [] }).items.push(s);
+          return acc;
+        }, {})
+      )
+        .map((g) => ({
+          ...g,
+          items: g.items.slice().sort((a, b) => String(a.reminder_time || "").localeCompare(String(b.reminder_time || ""))),
+        }))
+        .sort((a, b) => String(a.items[0]?.reminder_time || "").localeCompare(String(b.items[0]?.reminder_time || "")))
+    : [];
+  const defaultOpenGroup = (() => {
+    if (planGroups.length === 0) return null;
+    const todayGroup = planGroups.find((g) => g.items.some((s) => s.reminder_time && isSameShanghaiDay(s.reminder_time, nowIso)));
+    if (todayGroup) return todayGroup.name;
+    const pendingGroup = planGroups.find((g) => g.items.some((s) => s.status !== "completed"));
+    return (pendingGroup || planGroups[0]).name;
+  })();
+  const isPlanGroupCollapsed = (name) =>
+    collapsedGroups ? collapsedGroups.has(name) : name !== defaultOpenGroup && planGroups.length > 1;
+  const togglePlanGroup = (name) => {
+    setCollapsedGroups((prev) => {
+      const base = prev || new Set(planGroups.filter((g) => planGroups.length > 1 && g.name !== defaultOpenGroup).map((g) => g.name));
+      const next = new Set(base);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+  // 子约定日期标签：今天不显示，其它日期显示「M·d 周X」（按北京时间、与时区无关）
+  const subtaskDateLabel = (iso) => {
+    if (!iso || isSameShanghaiDay(iso, nowIso)) return "";
+    const dateStr = toShanghaiDateStr(iso) || "";
+    const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const wdNum = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).getUTCDay() : -1;
+    return `${formatShanghai(iso, "M·d")}${wdNum >= 0 ? ` 周${WEEK_CN[wdNum]}` : ""}`;
+  };
+  const isSubtaskOverdue = (s) => s.status !== "completed" && s.end_time && new Date(s.end_time).getTime() < Date.now();
   const [showAttachDialog, setShowAttachDialog] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   // 自动执行区块：本地状态覆盖（验收后 done / 批准·重试后 running）与"我来接管"忽略标记
@@ -1041,74 +1115,167 @@ export default function LifeTaskCard({
                 </div>
             )}
 
-            {/* Subtasks Section — 默认直接在卡片上预览前 3 条，其余展开查看 */}
+            {/* Subtasks Section — 普通约定默认预览前 3 条；智能规划（子约定带 plan_group/plan_kind）按组动态展示 */}
             {subtasks.length > 0 && (
               <div className="border-t border-stone-100 mt-3">
                 <div className="pt-3 space-y-2">
-                  {(expanded ? subtasks : subtasks.slice(0, 3)).map((subtask) => {
-                    const subSelected = isSelectionMode && Array.isArray(selectedTaskIds) && selectedTaskIds.includes(subtask.id);
-                    return (
-                    <div
-                      key={subtask.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (isSelectionMode) {
-                          onToggleSelection && onToggleSelection(subtask.id);
-                        } else {
-                          onToggleSubtask && onToggleSubtask(subtask);
-                        }
-                      }}
-                      className={cn(
-                        "flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
-                        subtask.status === 'completed' && !isSelectionMode && "opacity-60",
-                        subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
+                  {planMode ? (
+                    <>
+                      {planGroups.map((g) => {
+                        const collapsed = isPlanGroupCollapsed(g.name);
+                        const doneCount = g.items.filter((s) => s.status === "completed").length;
+                        const hasToday = g.items.some((s) => s.reminder_time && isSameShanghaiDay(s.reminder_time, nowIso));
+                        return (
+                          <div key={g.name} className="rounded-xl bg-stone-50 border border-stone-100 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); togglePlanGroup(g.name); }}
+                              className="w-full flex items-center gap-1.5 px-2.5 py-2 text-left hover:bg-stone-100/60 transition-colors"
+                            >
+                              {collapsed
+                                ? <ChevronRight className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" />
+                                : <ChevronDown className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" />}
+                              <span className="text-[12.5px] font-medium text-stone-700">{g.name}</span>
+                              {hasToday && (
+                                <span className="rounded-full px-1.5 py-0.5 text-[10px] bg-[var(--sentinel)]/10 text-[var(--sentinel)]">今日</span>
+                              )}
+                              <span className="ml-auto text-[11px] text-stone-400 tabular-nums flex-shrink-0">{doneCount}/{g.items.length}</span>
+                            </button>
+                            {!collapsed && (
+                              <div className="px-2 pb-2 space-y-1.5">
+                                {g.items.map((subtask) => {
+                                  const isCheckinChild = subtask.plan_kind === "checkin";
+                                  const overdue = isSubtaskOverdue(subtask);
+                                  const dateLabel = subtaskDateLabel(subtask.reminder_time);
+                                  return (
+                                    <div
+                                      key={subtask.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        // 打卡项未完成时点击行不勾完成（点脚印打卡）；已完成行的点击允许回退
+                                        if (!(isCheckinChild && subtask.status !== "completed")) {
+                                          onToggleSubtask && onToggleSubtask(subtask);
+                                        }
+                                      }}
+                                      className={cn(
+                                        "flex items-start gap-2.5 p-2 rounded-lg transition-all bg-white border border-stone-100 hover:border-stone-300",
+                                        subtask.status === "completed" && "opacity-60"
+                                      )}
+                                    >
+                                      {isCheckinChild && subtask.status !== "completed" ? (
+                                        <PlanCheckinButton subtask={subtask} />
+                                      ) : (
+                                        <div className={cn(
+                                          "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
+                                          subtask.status === "completed"
+                                            ? "bg-green-500 border-green-500 text-white"
+                                            : "border-stone-300 bg-white"
+                                        )}>
+                                          {subtask.status === "completed" && <Check className="w-3 h-3" />}
+                                        </div>
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <span className={cn(
+                                          "text-sm block",
+                                          subtask.status === "completed" ? "text-stone-400 line-through" : "text-stone-700"
+                                        )}>
+                                          {subtask.title}
+                                        </span>
+                                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                          {subtask.reminder_time && (
+                                            <span className={cn(
+                                              "inline-flex items-center gap-0.5 text-[11px] tabular-nums",
+                                              overdue ? "text-red-500 font-medium" : "text-stone-400"
+                                            )}>
+                                              <Clock className="w-3 h-3" />
+                                              {dateLabel && <span>{dateLabel}&nbsp;</span>}
+                                              {formatShanghaiTime(subtask.reminder_time)}
+                                              {subtask.end_time ? `–${formatShanghaiTime(subtask.end_time)}` : ""}
+                                            </span>
+                                          )}
+                                          <SubtaskContextBadges subtask={subtask} />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <div className="text-xs text-stone-400 px-2 py-1">
+                        子约定 {subtasks.filter((s) => s.status === "completed").length}/{subtasks.length}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {(expanded ? subtasks : subtasks.slice(0, 3)).map((subtask) => {
+                        const subSelected = isSelectionMode && Array.isArray(selectedTaskIds) && selectedTaskIds.includes(subtask.id);
+                        return (
+                        <div
+                          key={subtask.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isSelectionMode) {
+                              onToggleSelection && onToggleSelection(subtask.id);
+                            } else {
+                              onToggleSubtask && onToggleSubtask(subtask);
+                            }
+                          }}
+                          className={cn(
+                            "flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
+                            subtask.status === 'completed' && !isSelectionMode && "opacity-60",
+                            subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
+                            isSelectionMode
+                              ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
+                              : (subtask.status === 'completed'
+                                  ? "bg-green-500 border-green-500 text-white"
+                                  : "border-stone-300 bg-white")
+                          )}>
+                            {isSelectionMode
+                              ? (subSelected && <Check className="w-3 h-3" />)
+                              : (subtask.status === 'completed' && <Check className="w-3 h-3" />)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className={cn(
+                              "text-sm block",
+                              subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
+                            )}>
+                              {subtask.title}
+                            </span>
+                            <SubtaskContextBadges subtask={subtask} />
+                          </div>
+                        </div>
+                        );
+                      })}
+                      {subtasks.length > 3 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpanded(!expanded);
+                          }}
+                          className="w-full flex items-center justify-center gap-1 text-xs text-stone-500 hover:text-stone-700 px-2 py-1 rounded-md hover:bg-stone-50 transition-colors"
+                        >
+                          <span>
+                            {expanded ? '收起子约定' : `展开全部 ${subtasks.length} 个子约定`}
+                            <span className="ml-1 text-stone-400">
+                              ({subtasks.filter(s => s.status === 'completed').length}/{subtasks.length})
+                            </span>
+                          </span>
+                          <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
+                        </button>
                       )}
-                    >
-                      <div className={cn(
-                        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
-                        isSelectionMode
-                          ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
-                          : (subtask.status === 'completed'
-                              ? "bg-green-500 border-green-500 text-white"
-                              : "border-stone-300 bg-white")
-                      )}>
-                        {isSelectionMode
-                          ? (subSelected && <Check className="w-3 h-3" />)
-                          : (subtask.status === 'completed' && <Check className="w-3 h-3" />)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <span className={cn(
-                          "text-sm block",
-                          subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
-                        )}>
-                          {subtask.title}
-                        </span>
-                        <SubtaskContextBadges subtask={subtask} />
-                      </div>
-                    </div>
-                    );
-                  })}
-                  {subtasks.length > 3 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpanded(!expanded);
-                      }}
-                      className="w-full flex items-center justify-center gap-1 text-xs text-stone-500 hover:text-stone-700 px-2 py-1 rounded-md hover:bg-stone-50 transition-colors"
-                    >
-                      <span>
-                        {expanded ? '收起子约定' : `展开全部 ${subtasks.length} 个子约定`}
-                        <span className="ml-1 text-stone-400">
-                          ({subtasks.filter(s => s.status === 'completed').length}/{subtasks.length})
-                        </span>
-                      </span>
-                      <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
-                    </button>
-                  )}
-                  {subtasks.length <= 3 && (
-                    <div className="text-xs text-stone-400 px-2 py-1">
-                      子约定 {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length}
-                    </div>
+                      {subtasks.length <= 3 && (
+                        <div className="text-xs text-stone-400 px-2 py-1">
+                          子约定 {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length}
+                        </div>
+                      )}
+                    </>
                   )}
                   <button
                     onClick={(e) => {

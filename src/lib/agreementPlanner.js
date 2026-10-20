@@ -69,15 +69,22 @@ ${busy}
   });
 
   await base44.entities.Task.bulkCreate(
-    steps.map((s) => ({
-      title: s.title,
-      description: s.detail || "",
+    steps.map((s) => {
+      const fmt = (v) => new Date(v).toLocaleString("zh-CN", { month: "numeric", day: "numeric", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+      const endOk = !isNaN(new Date(s.end_time));
+      const when = endOk ? `${fmt(s.start_time)} – ${new Date(s.end_time).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false })}` : fmt(s.start_time);
+      return {
+      title: `${s.title}（${fmt(s.start_time)}）`,
+      description: `⏰ 执行时间：${when}｜提前 10 分钟及到点提醒\n${s.detail || ""}`,
+      notification_channels: ["in_app", "browser"],
+      reminder_sent: false,
+      advance_alert_sent: false,
       category,
       parent_task_id: parent.id,
       reminder_time: iso(s.start_time),
       end_time: isNaN(new Date(s.end_time)) ? undefined : iso(s.end_time),
       advance_reminders: [10],
-    }))
+    }; })
   );
 
   return { task_id: parent.id, mode: "created", message: `已规划「${plan.title}」· ${steps.length} 个子约定已落到具体时刻` };

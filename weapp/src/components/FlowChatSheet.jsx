@@ -17,8 +17,16 @@ const MIST = "#eef0f5";
 const HEART = "#e8a5a5";
 const HEART_BG = "#fce8ec";
 
-const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接" };
-const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗" };
+const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划" };
+const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️" };
+const WEEK_LABEL = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+// 规划提案按天分组的行标题：周X MM-DD（date 为服务端清洗过的 YYYY-MM-DD）
+function planDayLabel(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00+08:00`);
+  if (isNaN(d.getTime())) return dateStr || "";
+  return `${WEEK_LABEL[d.getDay()]} ${String(dateStr).slice(5)}`;
+}
 const CATEGORY_LABEL = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
   family: "家庭", shopping: "购物", finance: "财务", other: "其他"
@@ -328,6 +336,7 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
     setCreating(true);
     try {
       let doneLabel = "";
+      let planChildCount = 0;
       if (pending.type === "task") {
         // 详情保底：AI 未返回 description 时，用首条用户输入（通常是语音原文）作为约定详情
         const firstUserText = messages.find((m) => m.role === "user")?.content || "";
@@ -357,11 +366,46 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
           tags: ["外部信息", "链接"]
         }, { silent: true });
         doneLabel = "链接";
+      } else if (pending.type === "plan") {
+        const pl = pending.plan || {};
+        const p = pl.parent || {};
+        const children = Array.isArray(pl.children) ? pl.children : [];
+        const parentCategory = p.category || "personal";
+        const parentPriority = p.priority || "medium";
+        const parentTask = await post("/tasks", {
+          title: p.title,
+          description: p.description || undefined,
+          category: parentCategory,
+          priority: parentPriority,
+          status: "pending"
+        }, { silent: true });
+        const parentId = parentTask?.id || parentTask?.data?.id;
+        for (const c of children) {
+          await post("/tasks", {
+            title: c.title,
+            description: c.description || undefined,
+            category: parentCategory,
+            priority: parentPriority,
+            parent_task_id: parentId,
+            reminder_time: `${c.date}T${c.start_time}:00+08:00`,
+            end_time: `${c.date}T${c.end_time}:00+08:00`,
+            tags: ["智能规划"]
+          }, { silent: true });
+        }
+        Taro.eventCenter.trigger("task:subtasks-changed", { taskId: parentId });
+        Taro.showToast({ title: `已生成母约定和 ${children.length} 条子约定`, icon: "success" });
+        doneLabel = p.title;
+        planChildCount = children.length;
       } else {
         return;
       }
       const isBrowserTask = pending.type === "task" && /https?:\/\//i.test(pending.description || messages.find((m) => m.role === "user")?.content || "");
-      setMessages((m) => [...m, { role: "assistant", content: isBrowserTask ? `「${doneLabel}」已为你记下了 ✓ 浏览器小助手开始帮你办这件事，进度和结果在守护记录里随时看～` : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？` }]);
+      const doneContent = planChildCount
+        ? `「${doneLabel}」的智能规划已生成 ✓ 共 ${planChildCount} 条子约定排在接下来的日子里，点开母约定可以随时调整，也可以让我重新规划～`
+        : isBrowserTask
+          ? `「${doneLabel}」已为你记下了 ✓ 浏览器小助手开始帮你办这件事，进度和结果在守护记录里随时看～`
+          : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？`;
+      setMessages((m) => [...m, { role: "assistant", content: doneContent }]);
       setPending(null);
       onCreated?.();
     } catch (err) {
@@ -678,6 +722,55 @@ export default function FlowChatSheet({ visible, seedText, onClose, onCreated })
                 {pending.type === "link" && (
                   <Text style={{ fontSize: "24rpx", color: T.inkTertiary, lineHeight: "38rpx", wordBreak: "break-all" }}>{pending.text}</Text>
                 )}
+                {pending.type === "plan" && (() => {
+                  const pl = pending.plan || {};
+                  const p = pl.parent || {};
+                  const children = Array.isArray(pl.children) ? pl.children : [];
+                  const groups = [];
+                  children.forEach((c) => {
+                    const last = groups[groups.length - 1];
+                    if (last && last.date === c.date) last.items.push(c);
+                    else groups.push({ date: c.date, items: [c] });
+                  });
+                  const totalMin = children.reduce((s, c) => s + (Number(c.duration_minutes) || 0), 0);
+                  const avgMin = groups.length ? Math.round(totalMin / groups.length) : 0;
+                  return (
+                    <>
+                      <Text style={{ fontSize: "30rpx", fontWeight: 500, color: T.ink, wordBreak: "break-all" }}>{p.title}</Text>
+                      {p.description && (
+                        <Text style={{ fontSize: "22rpx", color: T.inkTertiary, lineHeight: "34rpx", marginTop: "8rpx", wordBreak: "break-all" }}>
+                          {p.description.slice(0, 60)}
+                        </Text>
+                      )}
+                      <View style={{ marginTop: "14rpx" }}>
+                        {groups.map((g) => (
+                          <View
+                            key={g.date}
+                            style={{ padding: "12rpx 16rpx", borderRadius: "12rpx", background: MIST, marginBottom: "10rpx" }}
+                          >
+                            <Text style={{ fontSize: "22rpx", fontWeight: 500, color: T.primary }}>{planDayLabel(g.date)}</Text>
+                            {g.items.map((c, i) => (
+                              <Text
+                                key={`${g.date}-${i}`}
+                                style={{ fontSize: "22rpx", color: T.inkSecondary, lineHeight: "36rpx", marginTop: i === 0 ? "6rpx" : "0", display: "block" }}
+                              >
+                                {c.start_time}–{c.end_time}　{c.title}
+                              </Text>
+                            ))}
+                          </View>
+                        ))}
+                      </View>
+                      <Text style={{ fontSize: "20rpx", color: T.inkQuaternary, marginTop: "4rpx", display: "block" }}>
+                        共 {groups.length} 天 {children.length} 条 · 日均约 {avgMin} 分钟
+                      </Text>
+                      {pl.source === "fallback" && (
+                        <Text style={{ fontSize: "20rpx", color: T.inkQuaternary, lineHeight: "30rpx", marginTop: "6rpx", display: "block" }}>
+                          AI 暂不可用，这是保守排期，确认后可随时让我重新规划
+                        </Text>
+                      )}
+                    </>
+                  );
+                })()}
 
                 <View style={{ display: "flex", alignItems: "center", marginTop: "18rpx" }}>
                   <View

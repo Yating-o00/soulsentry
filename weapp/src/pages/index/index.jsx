@@ -1,9 +1,12 @@
 import { useEffect } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text } from "@tarojs/components";
+import { useShare, APP_SHARE_TITLE } from "@/hooks/useShare";
 
 // 启动页：不做登录拦截，直接进入「心流」首页（游客可逛全部功能，触发写操作再引导登录）
 export default function Index() {
+  useShare({ title: APP_SHARE_TITLE, path: "pages/index/index" });
+
   useEffect(() => {
     Taro.switchTab({ url: "/pages/flow/index" });
   }, []);

@@ -1,0 +1,205 @@
+import { invokeKimiText } from "../lib/kimi.js";
+
+// 智能约定规划：把「一类要做的事」（如"一周的英语学习"）落成
+// 母约定 + 每天具体执行/提醒时刻的子约定。
+// 只产出未来时刻（今天从当前时间+30分钟起排），由 /api/chat 的 plan 意图调用。
+// Kimi 失败或超时返回本地兜底计划，保证对话链路不中断。
+
+const CATEGORIES = ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"];
+const PRIORITIES = ["high", "medium", "low"];
+
+const DAY_MS = 86400000;
+const MIN_SLOT_MS = 30 * 60000; // 今天第一条至少排在 now+30min，给创建/提醒链路留余量
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
+// 北京时区日期/时刻（用户语境全部按 +08:00）
+function chinaToday(offsetDays = 0) {
+  const d = new Date(Date.now() + 8 * 3600 * 1000 + offsetDays * DAY_MS);
+  return d.toISOString().slice(0, 10);
+}
+
+function chinaNowTime() {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(11, 16);
+}
+
+function clampInt(value, min, max, fallback) {
+  const n = Number.parseInt(value, 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]?\d|2[0-3]):([0-5]\d)$/;
+
+function roundUp5(ms) {
+  return Math.ceil(ms / 300000) * 300000;
+}
+
+function normalizePlan(raw, ctx) {
+  const { goal, horizonDays, dailyMinutes } = ctx;
+  if (!raw || typeof raw !== "object") return null;
+
+  const parentRaw = raw.parent && typeof raw.parent === "object" ? raw.parent : {};
+  const parent = {
+    title: String(parentRaw.title || goal || "智能规划").trim().slice(0, 60) || "智能规划",
+    description: String(parentRaw.description || `「${goal}」的智能约定规划：共 ${horizonDays} 天，每天约 ${dailyMinutes} 分钟。`).slice(0, 300),
+    category: CATEGORIES.includes(parentRaw.category) ? parentRaw.category : "personal",
+    priority: PRIORITIES.includes(parentRaw.priority) ? parentRaw.priority : "medium"
+  };
+
+  const today = chinaToday();
+  const horizonEnd = chinaToday(horizonDays - 1);
+  const minStartMs = Date.now() + MIN_SLOT_MS;
+  const perDay = new Map(); // date -> 累计分钟
+
+  const children = [];
+  for (const item of Array.isArray(raw.children) ? raw.children : []) {
+    if (!item || typeof item !== "object") continue;
+    const title = String(item.title || "").trim().slice(0, 60);
+    const date = String(item.date || "").trim();
+    const startTime = String(item.start_time || "").trim();
+    if (!title || !DATE_RE.test(date) || date < today || date > horizonEnd) continue;
+    if (!TIME_RE.test(startTime)) continue;
+
+    let startMs = new Date(`${date}T${startTime}:00+08:00`).getTime();
+    // 今天已过的时刻顺延到 now+30min（对齐 5 分钟），其它日期不动
+    if (date === today && startMs < minStartMs) startMs = roundUp5(minStartMs);
+    const duration = clampInt(item.duration_minutes, 10, 240, Math.min(60, dailyMinutes));
+    const dayUsed = perDay.get(date) || 0;
+    // 单日总量超出预算：压缩本条时长，实在放不下就丢弃
+    const room = dailyMinutes - dayUsed;
+    if (room < 10) continue;
+    const finalDuration = Math.min(duration, room);
+    perDay.set(date, dayUsed + finalDuration);
+
+    const startD = new Date(startMs + 8 * 3600 * 1000);
+    const start = startD.toISOString().slice(11, 16);
+    const end = new Date(startMs + finalDuration * 60000 + 8 * 3600 * 1000).toISOString().slice(11, 16);
+    children.push({
+      title,
+      description: String(item.description || "").trim().slice(0, 300) || null,
+      date,
+      start_time: start,
+      end_time: end,
+      duration_minutes: finalDuration,
+      note: String(item.note || "").trim().slice(0, 120) || null
+    });
+    if (children.length >= horizonDays * 4) break;
+  }
+
+  if (children.length === 0) return null;
+  children.sort((a, b) => `${a.date}T${a.start_time}`.localeCompare(`${b.date}T${b.start_time}`));
+  return { parent, children };
+}
+
+// 本地兜底：Kimi 不可用时按通用模板排期——每天 1 条（每满 7 天留 1 天缓冲），默认 19:30
+export function buildFallbackPlan({ goal, horizonDays, dailyMinutes, now = new Date() } = {}) {
+  const g = String(goal || "新的计划").trim().slice(0, 40) || "新的计划";
+  const days = clampInt(horizonDays, 2, 30, 7);
+  const minutes = clampInt(dailyMinutes, 15, 180, 30);
+  const parent = {
+    title: `${g}（${days}天计划）`.slice(0, 60),
+    description: `「${g}」的${days}天智能规划：每天约 ${minutes} 分钟，由兜底模板生成，可继续提偏好让我重排。`.slice(0, 300),
+    category: "personal",
+    priority: "medium"
+  };
+  const children = [];
+  const minStartMs = roundUp5(now.getTime() + MIN_SLOT_MS);
+  for (let i = 0; i < days; i += 1) {
+    if (days > 6 && (i + 1) % 7 === 0) continue; // 每第 7 天留白缓冲
+    const date = chinaToday(i);
+    let startMs = new Date(`${date}T19:30:00+08:00`).getTime();
+    if (i === 0 && startMs < minStartMs) startMs = minStartMs;
+    const start = new Date(startMs + 8 * 3600 * 1000).toISOString().slice(11, 16);
+    const end = new Date(startMs + minutes * 60000 + 8 * 3600 * 1000).toISOString().slice(11, 16);
+    children.push({
+      title: `${g} · 第${i + 1}天`,
+      description: `第 ${i + 1} 天 / 共 ${days} 天，建议 ${minutes} 分钟`.slice(0, 300),
+      date,
+      start_time: start,
+      end_time: end,
+      duration_minutes: minutes,
+      note: null
+    });
+  }
+  return { parent, children };
+}
+
+export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], now = new Date() } = {}) {
+  const ctx = {
+    goal: String(goal || "").trim().slice(0, 80),
+    horizonDays: clampInt(horizonDays, 2, 30, 7),
+    dailyMinutes: clampInt(dailyMinutes, 15, 180, 30)
+  };
+  if (!ctx.goal) {
+    return { ...buildFallbackPlan({ goal: "新的计划", ...ctx, now }), source: "fallback" };
+  }
+
+  const today = chinaToday();
+  const schema = {
+    type: "object",
+    properties: {
+      parent: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "母约定标题，≤20字，不含天数" },
+          description: { type: "string", description: "一两句话说明这个规划的目标与节奏" },
+          category: { type: "string", enum: CATEGORIES },
+          priority: { type: "string", enum: PRIORITIES }
+        },
+        required: ["title", "description", "category", "priority"]
+      },
+      children: {
+        type: "array",
+        description: `子约定清单：覆盖 ${today} 起共 ${ctx.horizonDays} 天，每天1-3条，总条数≤${ctx.horizonDays * 3}`,
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "≤20字，含当天内容要点，如「背单词 40 个」" },
+            description: { type: "string", description: "这一条具体做什么" },
+            date: { type: "string", description: `YYYY-MM-DD，范围 ${today} ~ ${chinaToday(ctx.horizonDays - 1)}` },
+            start_time: { type: "string", description: "HH:MM，24小时制" },
+            duration_minutes: { type: "number", description: `10-240，当天累计≤${ctx.dailyMinutes}分钟` },
+            note: { type: "string", description: "可选，执行小提示" }
+          },
+          required: ["title", "date", "start_time", "duration_minutes"]
+        }
+      }
+    },
+    required: ["parent", "children"]
+  };
+
+  const busyBlocks = Array.isArray(existing) ? existing.slice(0, 40) : [];
+  const prompt = `用户想规划一件事：「${ctx.goal}」
+规划参数：共 ${ctx.horizonDays} 天（从 ${today} 算起），每天累计约 ${ctx.dailyMinutes} 分钟。
+用户偏好：${String(preferences || "无额外偏好").slice(0, 200)}
+${busyBlocks.length ? `用户已有安排（避开这些时段）：\n${JSON.stringify(busyBlocks)}` : "用户当前无已知占用。"}
+
+请生成母约定和逐日子约定。硬性要求：
+1. 今天是中国时间 ${today} ${chinaNowTime()}，今天的条目必须晚于当前时间至少 30 分钟；其它日期避开 23:00-7:00。
+2. 每天累计不超过 ${ctx.dailyMinutes} 分钟；条目之间留至少 10 分钟间隔；同一天最多 3 条。
+3. 内容按天递进（由易到难/由概到细），每满 7 天至少留 1 天缓冲或复盘，不要把缓冲日排满。
+4. 时刻尽量贴合生活习惯（学习类优先上午或晚间，健身类避开饭后立即）。
+5. 严格返回 JSON。`;
+
+  try {
+    const { data, usage } = await Promise.race([
+      invokeKimiText({
+        prompt,
+        systemPrompt: "你是 SoulSentry 的约定规划师。把用户的一类长期目标拆成母约定 + 每天具体时刻的子约定。只输出符合 schema 的 JSON，不要输出其他内容。",
+        responseJsonSchema: schema,
+        maxTokens: 2000,
+        withUsage: true
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 15000))
+    ]);
+    const plan = normalizePlan(data, ctx);
+    if (plan) return { ...plan, usage };
+  } catch (err) {
+    console.warn("[planCommitment] Kimi 规划失败，使用兜底模板:", err?.message || err);
+  }
+  return { ...buildFallbackPlan({ ...ctx, now }), source: "fallback" };
+}

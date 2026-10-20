@@ -353,6 +353,32 @@ tasksRouter.get("/", async (req, res) => {
   if (req.query.category) where.category = String(req.query.category);
   if (req.query.status) where.status = toPrismaTaskStatus(req.query.status);
 
+  // 时间范围查询（日程占用）：start/end 为 ISO 时间，命中 reminderTime/dueAt 落在 [start, end) 的约定；
+  // 用于规划避障等场景，需包含各级子约定，故不显式过滤 parentTaskId。
+  // 容忍未编码的 "+"（URL 规范里 + 会被解码成空格）
+  const parseRangeDate = (v) => {
+    if (v === undefined || v === null || v === "") return null;
+    const d = new Date(String(v).replace(" ", "+"));
+    return isNaN(d.getTime()) ? null : d;
+  };
+  const rangeStart = parseRangeDate(req.query.start);
+  const rangeEnd = parseRangeDate(req.query.end);
+  if (rangeStart && !isNaN(rangeStart.getTime()) && rangeEnd && !isNaN(rangeEnd.getTime())) {
+    delete where.parentTaskId;
+    const rangeCond = [
+      { reminderTime: { gte: rangeStart, lt: rangeEnd } },
+      { dueAt: { gte: rangeStart, lt: rangeEnd } }
+    ];
+    // 与「共有约定」的 OR 条件共存：原 OR 收进 AND，避免相互覆盖
+    if (Array.isArray(where.OR)) {
+      where.AND = [{ OR: where.OR }, { OR: rangeCond }];
+      delete where.OR;
+    } else {
+      where.OR = rangeCond;
+    }
+    if (!req.query.status) where.status = { notIn: ["DONE", "ARCHIVED"] };
+  }
+
   // 默认不返回已删除任务，避免前端删除后“视觉上消失但刷新又回来”
   if (req.query.deleted_at === undefined) {
     where.deletedAt = null;

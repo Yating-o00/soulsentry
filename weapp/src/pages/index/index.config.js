@@ -1,3 +1,5 @@
 export default {
-  navigationBarTitleText: "SoulSentry"
+  navigationBarTitleText: "SoulSentry",
+  enableShareAppMessage: true,
+  enableShareTimeline: true
 };

@@ -32,6 +32,7 @@ const chatBodySchema = z.object({
  * POST /api/chat
  * 心流对话：客户端持有完整对话历史，服务端调用 AI 理解意图，
  * 返回 { reply, extracted, agent? } —— extracted 为用户确认后要生成的约定/心签/链接提案；
+ * type=plan 时为智能约定规划：extracted.plan = { parent, children[] }（母约定+逐日具体时刻的子约定），
  * agent 非空表示浏览器小助手已出发（{ executionId, status }），客户端轮询 agent-state 获取进度与结果。
  */
 chatRouter.post("/", async (req, res) => {

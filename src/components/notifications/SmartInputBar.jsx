@@ -21,8 +21,8 @@ const C = {
   recordingBorder: "#e8a5a5",
 };
 
-const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接" };
-const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗" };
+const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划" };
+const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️" };
 const HEART_TYPE_LABEL = { emotion: "情绪签", inspiration: "灵感签", material: "资料签", memo: "备忘录", share: "分享签", ledger: "账本签" };
 const CATEGORY_LABEL = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
@@ -36,6 +36,7 @@ const SAMPLES = [
   { text: '帮我回复明天给王总的邮件', exec: true },
   { text: '明早7点飞深圳' },
   { text: '今晚8点给妈妈打电话' },
+  { text: '帮我规划一周的英语学习，每天半小时' },
   { text: '突然想去看看海' },
   { text: '今天有点累，但很踏实' }
 ];
@@ -326,6 +327,7 @@ export default function SmartInputBar() {
     setCreating(true);
     try {
       let doneLabel = "";
+      let planChildCount = 0; // 智能规划：已生成的子约定条数（成功提示用）
       // 详情保底：AI 未返回 description 时，用首条用户输入作为约定详情
       const firstUserText = messages.find((m) => m.role === "user")?.content || "";
       if (pending.type === "task") {
@@ -377,15 +379,46 @@ export default function SmartInputBar() {
           tags: ["外部信息", "链接"],
         });
         doneLabel = "链接";
+      } else if (pending.type === "plan") {
+        const plan = pending.plan;
+        if (!plan?.parent) return;
+        const children = Array.isArray(plan.children) ? plan.children : [];
+        // 先建母约定，再把子约定批量挂到它名下（bulkCreate → POST /api/tasks/batch）
+        const parent = await base44.entities.Task.create({
+          title: plan.parent.title,
+          description: plan.parent.description || pending.plan_request?.goal || "",
+          category: plan.parent.category || "personal",
+          priority: plan.parent.priority || "medium",
+          status: "pending",
+        });
+        if (children.length > 0) {
+          await base44.entities.Task.bulkCreate(children.map((c) => ({
+            title: c.title,
+            description: c.description || "",
+            category: plan.parent.category || "personal",
+            priority: plan.parent.priority || "medium",
+            parent_task_id: parent.id,
+            reminder_time: `${c.date}T${c.start_time}:00+08:00`,
+            end_time: `${c.date}T${c.end_time}:00+08:00`,
+            tags: ["智能规划"],
+          })));
+        }
+        planChildCount = children.length;
+        doneLabel = plan.parent.title;
       } else {
         return;
       }
       const isBrowserTask = pending.type === "task" && /https?:\/\//i.test(pending.description || firstUserText);
-      setMessages((m) => [...m, { role: "assistant", content: isBrowserTask ? `「${doneLabel}」已为你记下了 ✓ 浏览器小助手开始帮你办这件事，进度和结果在守护记录里随时看～` : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？` }]);
+      const confirmMsg = pending.type === "plan"
+        ? `已生成母约定「${doneLabel}」和 ${planChildCount} 条子约定 ✓ 到点我会轻轻唤你～`
+        : isBrowserTask
+          ? `「${doneLabel}」已为你记下了 ✓ 浏览器小助手开始帮你办这件事，进度和结果在守护记录里随时看～`
+          : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？`;
+      setMessages((m) => [...m, { role: "assistant", content: confirmMsg }]);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
       queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-      setEcho({ kind: pending.type === 'task' ? 'task' : 'note', title: doneLabel });
+      setEcho({ kind: pending.type === 'task' || pending.type === 'plan' ? 'task' : 'note', title: doneLabel });
       setPending(null);
     } catch (err) {
       toast.error(err?.message || "生成失败，请再试一次");
@@ -599,6 +632,79 @@ export default function SmartInputBar() {
                       </div>
                     </>
                   )}
+                  {pending.type === "plan" && pending.plan && (() => {
+                    const plan = pending.plan;
+                    const children = Array.isArray(plan.children) ? plan.children : [];
+                    const byDay = {};
+                    children.forEach((c) => { (byDay[c.date] = byDay[c.date] || []).push(c); });
+                    const days = Object.keys(byDay).sort();
+                    const totalMin = children.reduce((s, c) => s + (Number(c.duration_minutes) || 0), 0);
+                    const avgMin = days.length ? Math.round(totalMin / days.length) : 0;
+                    const WEEK = ["日", "一", "二", "三", "四", "五", "六"];
+                    const dayOf = (d) => {
+                      const dt = new Date(`${d}T00:00:00`);
+                      return isNaN(dt.getTime()) ? null : dt;
+                    };
+                    return (
+                      <>
+                        <p className="mt-2 break-words text-[15px] font-medium" style={{ color: C.ink }}>{plan.parent?.title}</p>
+                        {plan.parent?.description && (
+                          <p className="mt-1 line-clamp-2 break-words text-[12px] leading-relaxed" style={{ color: C.ink3 }}>
+                            {plan.parent.description.slice(0, 60)}
+                          </p>
+                        )}
+                        <div className="mt-2.5 flex flex-wrap gap-1.5">
+                          {plan.parent?.category && (
+                            <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
+                              {CATEGORY_LABEL[plan.parent.category] || plan.parent.category}
+                            </span>
+                          )}
+                          {pending.plan_request?.horizon_days > 0 && (
+                            <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
+                              🗓️ {pending.plan_request.horizon_days} 天
+                            </span>
+                          )}
+                          {pending.plan_request?.daily_minutes > 0 && (
+                            <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
+                              ⏱️ 每天约 {pending.plan_request.daily_minutes} 分钟
+                            </span>
+                          )}
+                        </div>
+                        {days.length > 0 && (
+                          <div className="mt-2.5 rounded-lg border px-3 py-2.5" style={{ borderColor: C.hairline, background: "#ffffff" }}>
+                            {days.map((d, di) => {
+                              const dt = dayOf(d);
+                              return (
+                                <div key={d} className={di > 0 ? "mt-2.5 border-t pt-2.5" : ""} style={di > 0 ? { borderColor: C.hairline } : undefined}>
+                                  <p className="text-[11.5px] font-medium" style={{ color: C.sentinel }}>
+                                    {dt ? `周${WEEK[dt.getDay()]} ${dt.getMonth() + 1}-${String(dt.getDate()).padStart(2, "0")}` : d}
+                                  </p>
+                                  <div className="mt-1 flex flex-col gap-1">
+                                    {byDay[d].map((c, i) => (
+                                      <div key={i} className="flex items-baseline gap-2 text-[12.5px] leading-relaxed">
+                                        <span className="shrink-0 tabular-nums" style={{ color: C.ink4 }}>
+                                          {c.start_time}–{c.end_time}
+                                        </span>
+                                        <span className="min-w-0 break-words" style={{ color: C.ink }}>{c.title}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <p className="mt-2 text-[11.5px]" style={{ color: C.ink3 }}>
+                          共 {days.length} 天 {children.length} 条 · 日均约 {avgMin} 分钟
+                        </p>
+                        {plan.source === "fallback" && (
+                          <p className="mt-1 text-[11px] leading-relaxed" style={{ color: C.ink4 }}>
+                            AI 暂不可用，这是保守排期，确认后可随时让我重新规划
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                   {pending.type === "heart" && (
                     <p className="mt-2 break-words text-[14px] leading-relaxed" style={{ color: C.ink }}>{pending.content}</p>
                   )}

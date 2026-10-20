@@ -3,6 +3,7 @@ import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
+import { planCommitmentWithKimi, buildFallbackPlan } from "./planCommitment.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
 // AI 负责理解意图（立约定 / 记心签 / 存链接 / 网页办事 / 闲聊），
@@ -59,6 +60,23 @@ function sanitizeExtracted(raw) {
     const text = trim(raw.text, 500);
     if (!text || !URL_RE.test(text)) return null;
     return { type: "link", text };
+  }
+  if (type === "plan") {
+    // 智能约定规划：goal 必填；天数/时长可缺省（缺省时反问一个关键问题，由 prompt 约束）
+    const req = raw.plan_request && typeof raw.plan_request === "object" ? raw.plan_request : {};
+    const goal = trim(req.goal, 80);
+    if (!goal) return null;
+    const horizon = Number(req.horizon_days);
+    const daily = Number(req.daily_minutes);
+    return {
+      type: "plan",
+      plan_request: {
+        goal,
+        horizon_days: Number.isFinite(horizon) ? Math.min(30, Math.max(2, Math.round(horizon))) : null,
+        daily_minutes: Number.isFinite(daily) ? Math.min(180, Math.max(15, Math.round(daily))) : null,
+        preferences: trim(req.preferences, 200) || null
+      }
+    };
   }
   return null;
 }
@@ -117,6 +135,18 @@ function parseCnAmount(raw) {
 const LATER_REMIND_RE = /提醒我|记得|别忘了|以后再|到时(候)?再/;
 const NOW_BROWSE_RE = /(?:帮我|给我|麻烦|请问|帮).{0,12}(?:查|搜|看|找|订|预约)|(?:查|搜)一下?(?:天气|资料|信息|价格|股价|机票|火车票|高铁|余票|快递|物流|酒店|路线|成绩|排名)|订(?:机票|火车票|高铁票|酒店|门票|外卖)|点外卖|天气怎么(?:样|的)|气温/;
 const BROWSE_URL_INTENT_RE = /打开|帮我|查|搜|填|预约|订|报名|提交|看看|找|下载|登录/;
+
+// 智能约定规划意图（兜底路径用：Kimi 不在线但用户想要一份计划）
+const PLAN_INTENT_RE = /(?:帮我|给我|想|要|打算|准备|来)?\s*(?:智能)?(?:规划|安排|制定?)\s*(?:一个|一份|个|份)?[^。,.，]{0,24}(?:计划|方案|安排)|(?:一周|两周|三周|\d+\s*(?:天|周|个月|月))[^。,.，]{0,16}(?:计划|规划|安排|打卡|挑战|坚持)/;
+function extractPlanGoal(text) {
+  const cleaned = String(text || "")
+    .replace(/^(?:帮我|给我|我想|我要|我想要|我想想|请|麻烦|想要|打算|准备|来)\s*/, "")
+    .replace(/(?:帮我)?\s*(?:智能)?(?:规划|安排|制定?)/, "")
+    .replace(/^(?:一个|一份|个|份)\s*/, "")
+    .replace(/[。！!？?~～\s]+$/, "")
+    .trim();
+  return (cleaned || String(text || "").trim()).slice(0, 40);
+}
 
 function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
   const t = String(lastUserText || "").trim();
@@ -408,7 +438,7 @@ const RESPONSE_SCHEMA = {
       type: ["object", "null"],
       description: "从对话中提取的待确认内容；信息不足或纯聊天时为 null",
       properties: {
-        type: { type: "string", enum: ["task", "heart", "link"] },
+        type: { type: "string", enum: ["task", "heart", "link", "plan"] },
         title: { type: "string" },
         description: { type: "string" },
         content: { type: "string" },
@@ -416,7 +446,17 @@ const RESPONSE_SCHEMA = {
         category: { type: "string", enum: CATEGORIES },
         heart_category: { type: "string", enum: ["emotion", "inspiration", "material", "memo", "share", "ledger"], description: "心签子类型（情绪/灵感/资料/备忘/分享/账本）；用户纠正心签分类时更新为目标类型，平时可省略" },
         priority: { type: "string", enum: PRIORITIES },
-        due_at: { type: "string", description: "ISO8601 带 +08:00 时区，如 2026-09-24T15:00:00+08:00" }
+        due_at: { type: "string", description: "ISO8601 带 +08:00 时区，如 2026-09-24T15:00:00+08:00" },
+        plan_request: {
+          type: ["object", "null"],
+          description: "type=plan 时的规划请求：用户提出一类需要多天持续做的事，由系统排期后生成提案；不需要时为 null",
+          properties: {
+            goal: { type: "string", description: "一句话概括要规划的目标，如「一周英语学习」" },
+            horizon_days: { type: ["number", "null"], description: "计划总天数；推断不出为 null" },
+            daily_minutes: { type: ["number", "null"], description: "每天可投入分钟数；推断不出为 null" },
+            preferences: { type: ["string", "null"], description: "用户对时段/节奏的偏好，如「早上」「下班后」" }
+          }
+        }
       }
     }
   },
@@ -450,6 +490,7 @@ ${buildMessagesBlock(messages)}${attachmentCtx}
 - type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。用户明确说「打卡/签到」，或想长期重复坚持同一件事（如每天跑步、每日阅读、练琴打卡），category 用 checkin（打卡约定，每次做到点一下记一次）。
 - type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
+- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划（"改成早上"/"每天加到一小时"）时更新 plan_request。
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。
 
@@ -580,6 +621,65 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000))
     ]);
 
+    // —— 智能约定规划：调规划器（注入已有安排避障），把逐日执行计划填进提案 ——
+    // plan 字段由服务端生成，不落模型之手；每次带最新 plan_request 重排，确认/改期都走这里
+    if (out.extracted?.type === "plan" && out.extracted.plan_request && userId && prisma) {
+      try {
+        const req = out.extracted.plan_request;
+        const horizon = req.horizon_days || 7;
+        const dayMs = 86400000;
+        const start = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+        const end = new Date(Date.now() + 8 * 3600 * 1000 + (horizon + 1) * dayMs).toISOString().slice(0, 10);
+        const rangeStart = new Date(`${start}T00:00:00+08:00`);
+        const rangeEnd = new Date(`${end}T00:00:00+08:00`);
+        const busyTasks = await prisma.task.findMany({
+          where: {
+            userId,
+            deletedAt: null,
+            status: { notIn: ["DONE", "ARCHIVED"] },
+            OR: [
+              { reminderTime: { gte: rangeStart, lt: rangeEnd } },
+              { dueAt: { gte: rangeStart, lt: rangeEnd } }
+            ]
+          },
+          select: { title: true, reminderTime: true, endTime: true, dueAt: true },
+          take: 50
+        });
+        const toCn = (d) => new Date(d.getTime() + 8 * 3600 * 1000).toISOString();
+        const existing = busyTasks
+          .map((t) => ({
+            date: (t.reminderTime || t.dueAt) ? toCn(t.reminderTime || t.dueAt).slice(0, 10) : null,
+            start: t.reminderTime ? toCn(t.reminderTime).slice(11, 16) : null,
+            end: t.endTime ? toCn(t.endTime).slice(11, 16) : null,
+            title: String(t.title || "").slice(0, 30)
+          }))
+          .filter((b) => b.date);
+        const planned = await planCommitmentWithKimi({
+          goal: req.goal,
+          horizonDays: req.horizon_days || undefined,
+          dailyMinutes: req.daily_minutes || undefined,
+          preferences: req.preferences,
+          existing
+        });
+        out.extracted.plan = {
+          parent: planned.parent,
+          children: planned.children,
+          source: planned.source || "ai"
+        };
+        // 两次 AI 调用（对话+规划）的用量合并结算
+        if (planned.usage && out.usage) {
+          out.usage = {
+            prompt_tokens: (out.usage.prompt_tokens || 0) + (planned.usage.prompt_tokens || 0),
+            completion_tokens: (out.usage.completion_tokens || 0) + (planned.usage.completion_tokens || 0),
+            total_tokens: (out.usage.total_tokens || 0) + (planned.usage.total_tokens || 0)
+          };
+        }
+      } catch (planErr) {
+        console.warn("[flowChat] 规划失败:", planErr?.message || planErr);
+        out.reply = `${out.reply}（排期这一步没成功，跟我说「重新规划」再试一次？）`;
+      }
+    }
+
     // AI 调用成功：按真实 token 用量结算（1 点/1000 token，最少 1 点）；余额竞态只记警告不阻断
     if (userId && prisma && out.usage) {
       try {
@@ -653,6 +753,20 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           source: "fallback"
         };
       }
+    }
+
+    // Kimi 不在线但用户想要规划：兜底模板直接给一份保守计划，确认即可落库
+    if (PLAN_INTENT_RE.test(lastUser?.content || "")) {
+      const planned = buildFallbackPlan({ goal: extractPlanGoal(lastUser.content) });
+      return {
+        reply: `AI 暂时有点累，我先用保守模板帮你排了「${planned.parent.title}」：共 ${planned.children.length} 条子约定，今晚 19:30 起每天一条。点确认就生成；想要更贴合你的排期，晚点跟我说「重新规划」。`,
+        extracted: {
+          type: "plan",
+          plan_request: { goal: planned.parent.title, horizon_days: 7, daily_minutes: 30, preferences: null },
+          plan: { parent: planned.parent, children: planned.children, source: "fallback" }
+        },
+        source: "fallback"
+      };
     }
 
     const extracted = raw && raw !== "__reject__" ? sanitizeExtracted(raw) : null;

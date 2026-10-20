@@ -37,6 +37,7 @@ import { Trash2, MessageSquarePlus, Search, Archive as ArchiveBoxIcon } from "lu
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
 import GlobalSearch from "@/components/search/GlobalSearch";
 import CreditsBadge from "@/components/credits/CreditsBadge";
+import xinzhanLogo from "./assets/xinzhan-logo.png";
 
 const getNavigationItems = (t) => [
   {
@@ -86,8 +87,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
       <SidebarHeader className="border-b border-slate-200/50 p-6">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 flex-shrink-0">
-              <Bell className="w-5 h-5 text-white" />
+            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 flex-shrink-0 overflow-hidden">
+              <img
+                src={xinzhanLogo}
+                alt={t('soulSentry')}
+                className="w-full h-full object-cover mix-blend-screen"
+              />
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent whitespace-nowrap">

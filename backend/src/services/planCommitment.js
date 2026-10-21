@@ -362,44 +362,54 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
 
   const busyBlocks = Array.isArray(existing) ? existing.slice(0, 40) : [];
   const insightsText = renderInsightsForPrompt(insights);
-  const prompt = `用户想规划一件事：「${ctx.goal}」
-规划参数：共 ${ctx.horizonDays} 天（从 ${today} 算起），每天累计约 ${ctx.dailyMinutes} 分钟。
-用户偏好：${String(preferences || "无额外偏好").slice(0, 200)}
-${busyBlocks.length ? `用户已有安排（避开这些时段）：\n${JSON.stringify(busyBlocks)}` : "用户当前无已知占用。"}
-${insightsText ? `用户个性化参考（来自其历史数据，仅作排期参考，用户明确偏好永远优先）：\n${insightsText}\n` : ""}
-请生成母约定和「日型模板」（不要逐日展开，2-5 条）。硬性要求：
-1. 今天是中国时间 ${today} ${chinaNowTime()}，今天会执行的时刻必须晚于当前时间至少 30 分钟；其它日期避开 23:00-7:00。
-2. 同一天被多条模板命中的累计时长不超过 ${ctx.dailyMinutes} 分钟；每满 7 天留 1 天缓冲（不用排模板）。
-3. 内容分组：健身类如「日常训练」「周末强化」「饮食配合」，学习类如「每日刷题」「周末模考」；同类共用一个组名。每日坚持做完并打卡留痕的项标 kind=checkin；一次性大项/准备工作用 task。饮食类排进餐点时刻。
-4. description 写清可执行动作与量化标准，≤30 字；note ≤20 字；weekly_progression 能写「每周+N分钟」就写数字形式。
-5. 优先把每日项排在用户历史活跃时段内，冲突时以用户明确偏好为准。若用户近30天完成率低于 50%，首周模板时长减半起步。
-6. 严格返回 JSON，不要输出 JSON 之外的任何文字。`;
+  const prompt = `规划一件事：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。
+偏好：${String(preferences || "无").slice(0, 120)}
+${busyBlocks.length ? `已有安排（避开）：${JSON.stringify(busyBlocks)}` : ""}
+${insightsText ? `个性化参考（历史数据，偏好优先）：\n${insightsText}\n` : ""}
+输出母约定 + 2-5 个日型模板（勿逐日展开）。要求：
+1. 今天时刻须晚于 ${chinaNowTime()} 30 分钟以上；避开 23:00-7:00。
+2. 同天多模板累计≤${ctx.dailyMinutes} 分钟；每满 7 天留 1 天缓冲。
+3. 按内容分组（如 日常训练/周末强化/饮食配合），组名≤8字；每日坚持项 kind=checkin，其余 task；饮食排进餐点。
+4. description ≤30字含量化标准（如「慢跑3公里」）；weekly_progression 写「每周+N分钟」形式。
+5. 优先排用户活跃时段；近30天完成率<50%则首周时长减半。
+6. 只输出 JSON。`;
 
-  try {
-    const { data, usage } = await Promise.race([
-      invokeKimiText({
-        prompt,
-        systemPrompt: "你是 SoulSentry 的约定规划师。把用户的长期目标拆成母约定 + 2-5 个日型模板（按工作日/周末/内容类型区分）。只输出符合 schema 的 JSON，直接给出结果，不要做长篇推理。",
-        responseJsonSchema: schema,
-        maxTokens: 4000,
-        fetchTimeout: 75000,
-        withUsage: true
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 60000))
-    ]);
+  let lastErr = null;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const { data, usage } = await Promise.race([
+        invokeKimiText({
+          prompt,
+          systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，直接给结果，不要长篇推理。",
+          responseJsonSchema: schema,
+          maxTokens: 4000,
+          fetchTimeout: 75000,
+          withUsage: true
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 60000))
+      ]);
 
-    // 主路径：日型模板 → 本地展开
-    if (data && Array.isArray(data.patterns)) {
-      const parent = normalizeParent(data.parent && typeof data.parent === "object" ? data.parent : {}, ctx);
-      const patterns = normalizePatterns(data.patterns, ctx);
-      const expanded = expandPatterns(patterns, ctx);
-      if (expanded) return { parent, children: expanded.children, patterns, usage };
+      // 主路径：日型模板 → 本地展开
+      if (data && typeof data === "object") {
+        const unwrapped = unwrapPlan(data);
+        const rawPatterns = Array.isArray(data.patterns) ? data.patterns
+          : Array.isArray(unwrapped?.patterns) ? unwrapped.patterns : null;
+        if (rawPatterns) {
+          const parent = normalizeParent(unwrapped.parent && typeof unwrapped.parent === "object" ? unwrapped.parent : {}, ctx);
+          const patterns = normalizePatterns(rawPatterns, ctx);
+          const expanded = expandPatterns(patterns, ctx);
+          if (expanded) return { parent, children: expanded.children, patterns, usage };
+        }
+        // 兼容路径：模型直接给了逐日 children
+        const legacy = normalizePlan(data, ctx);
+        if (legacy) return { ...legacy, patterns: null, usage };
+      }
+      lastErr = new Error("模型返回缺少可用模板");
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[planCommitment] 第 ${attempt} 次规划失败:`, err?.message || err);
     }
-    // 兼容路径：模型直接给了逐日 children
-    const legacy = normalizePlan(data, ctx);
-    if (legacy) return { ...legacy, patterns: null, usage };
-  } catch (err) {
-    console.warn("[planCommitment] Kimi 规划失败，使用兜底模板:", err?.message || err);
   }
+  console.warn("[planCommitment] 规划失败，使用兜底模板:", lastErr?.message || lastErr);
   return { ...buildFallbackPlan({ ...ctx, insights, now }), source: "fallback", patterns: null };
 }

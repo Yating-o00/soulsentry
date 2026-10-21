@@ -231,10 +231,10 @@ ${insightsText ? `用户个性化参考（来自其历史数据，仅作排期�
         systemPrompt: "你是 SoulSentry 的约定规划师。把用户的一类长期目标拆成母约定 + 每天具体时刻的子约定。只输出符合 schema 的 JSON，不要输出其他内容；不要做长篇推理思考，直接给出排期结果。",
         responseJsonSchema: schema,
         maxTokens: 16000,
-        fetchTimeout: 110000,
+        fetchTimeout: 90000,
         withUsage: true
       }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 115000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 70000))
     ]);
     const plan = normalizePlan(data, ctx);
     if (plan) return { ...plan, usage };

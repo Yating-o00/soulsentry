@@ -51,7 +51,7 @@ chatRouter.post("/", async (req, res) => {
         agentExecutionId: parsed.data.agent_execution_id || null,
         attachments: parsed.data.attachments || []
       }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("CHAT_HANDLER_TIMEOUT")), 25000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("CHAT_HANDLER_TIMEOUT")), 100000))
     ]);
     res.json(result);
   } catch (err) {

@@ -34,29 +34,84 @@ import { useCreateCheckin } from "@/components/checkins/useCheckins";
 import TaskMemoryInsight from "@/components/memory/TaskMemoryInsight";
 import AutomationDetailDialog from "@/components/automation/AutomationDetailDialog";
 
-// 智能规划打卡子约定的行内打卡按钮：点一下 = 一次履约留痕，服务端同时置该项完成并回算父进度
-function PlanCheckinButton({ subtask }) {
+// 智能规划打卡子约定行：打卡项未完成时，点击整行 = 履约打卡（同左侧脚印按钮，
+// 服务端同时置该项完成并回算父进度）；已完成行的点击回退完成状态
+function PlanSubtaskRow({ subtask, overdue, dateLabel, onToggleSubtask }) {
   const createCheckin = useCreateCheckin(subtask.id);
+  const unfinishedCheckin = subtask.plan_kind === "checkin" && subtask.status !== "completed";
+
+  const doCheckin = () => {
+    if (createCheckin.isPending) return;
+    createCheckin.mutate({ source: "plan_child" }, {
+      onSuccess: () => toast.success("打卡成功，又赴约一次～"),
+      onError: () => toast.error("打卡没成功，再点一下试试"),
+    });
+  };
+
   return (
-    <button
-      type="button"
-      title="做完点一下打卡"
-      disabled={createCheckin.isPending}
+    <div
       onClick={(e) => {
         e.stopPropagation();
-        if (createCheckin.isPending) return;
-        createCheckin.mutate({ source: "plan_child" }, {
-          onSuccess: () => toast.success("打卡成功，又赴约一次～"),
-          onError: () => toast.error("打卡没成功，再点一下试试"),
-        });
+        if (unfinishedCheckin) {
+          doCheckin();
+        } else {
+          onToggleSubtask && onToggleSubtask(subtask);
+        }
       }}
       className={cn(
-        "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border mt-0.5 transition-colors",
-        "bg-amber-50 border-amber-300 text-amber-600 hover:bg-amber-100"
+        "flex items-start gap-2.5 p-2 rounded-lg transition-all bg-white border border-stone-100 hover:border-stone-300",
+        subtask.status === "completed" && "opacity-60"
       )}
     >
-      {createCheckin.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Footprints className="w-3 h-3" />}
-    </button>
+      {unfinishedCheckin ? (
+        <button
+          type="button"
+          title="做完点一下打卡"
+          disabled={createCheckin.isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            doCheckin();
+          }}
+          className={cn(
+            "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 border mt-0.5 transition-colors",
+            "bg-amber-50 border-amber-300 text-amber-600 hover:bg-amber-100"
+          )}
+        >
+          {createCheckin.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Footprints className="w-3 h-3" />}
+        </button>
+      ) : (
+        <div className={cn(
+          "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
+          subtask.status === "completed"
+            ? "bg-green-500 border-green-500 text-white"
+            : "border-stone-300 bg-white"
+        )}>
+          {subtask.status === "completed" && <Check className="w-3 h-3" />}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <span className={cn(
+          "text-sm block",
+          subtask.status === "completed" ? "text-stone-400 line-through" : "text-stone-700"
+        )}>
+          {subtask.title}
+        </span>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {subtask.reminder_time && (
+            <span className={cn(
+              "inline-flex items-center gap-0.5 text-[11px] tabular-nums",
+              overdue ? "text-red-500 font-medium" : "text-stone-400"
+            )}>
+              <Clock className="w-3 h-3" />
+              {dateLabel && <span>{dateLabel}&nbsp;</span>}
+              {formatShanghaiTime(subtask.reminder_time)}
+              {subtask.end_time ? `–${formatShanghaiTime(subtask.end_time)}` : ""}
+            </span>
+          )}
+          <SubtaskContextBadges subtask={subtask} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1143,62 +1198,15 @@ export default function LifeTaskCard({
                             </button>
                             {!collapsed && (
                               <div className="px-2 pb-2 space-y-1.5">
-                                {g.items.map((subtask) => {
-                                  const isCheckinChild = subtask.plan_kind === "checkin";
-                                  const overdue = isSubtaskOverdue(subtask);
-                                  const dateLabel = subtaskDateLabel(subtask.reminder_time);
-                                  return (
-                                    <div
-                                      key={subtask.id}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        // 打卡项未完成时点击行不勾完成（点脚印打卡）；已完成行的点击允许回退
-                                        if (!(isCheckinChild && subtask.status !== "completed")) {
-                                          onToggleSubtask && onToggleSubtask(subtask);
-                                        }
-                                      }}
-                                      className={cn(
-                                        "flex items-start gap-2.5 p-2 rounded-lg transition-all bg-white border border-stone-100 hover:border-stone-300",
-                                        subtask.status === "completed" && "opacity-60"
-                                      )}
-                                    >
-                                      {isCheckinChild && subtask.status !== "completed" ? (
-                                        <PlanCheckinButton subtask={subtask} />
-                                      ) : (
-                                        <div className={cn(
-                                          "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
-                                          subtask.status === "completed"
-                                            ? "bg-green-500 border-green-500 text-white"
-                                            : "border-stone-300 bg-white"
-                                        )}>
-                                          {subtask.status === "completed" && <Check className="w-3 h-3" />}
-                                        </div>
-                                      )}
-                                      <div className="flex-1 min-w-0">
-                                        <span className={cn(
-                                          "text-sm block",
-                                          subtask.status === "completed" ? "text-stone-400 line-through" : "text-stone-700"
-                                        )}>
-                                          {subtask.title}
-                                        </span>
-                                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                          {subtask.reminder_time && (
-                                            <span className={cn(
-                                              "inline-flex items-center gap-0.5 text-[11px] tabular-nums",
-                                              overdue ? "text-red-500 font-medium" : "text-stone-400"
-                                            )}>
-                                              <Clock className="w-3 h-3" />
-                                              {dateLabel && <span>{dateLabel}&nbsp;</span>}
-                                              {formatShanghaiTime(subtask.reminder_time)}
-                                              {subtask.end_time ? `–${formatShanghaiTime(subtask.end_time)}` : ""}
-                                            </span>
-                                          )}
-                                          <SubtaskContextBadges subtask={subtask} />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
+                                {g.items.map((subtask) => (
+                                  <PlanSubtaskRow
+                                    key={subtask.id}
+                                    subtask={subtask}
+                                    overdue={isSubtaskOverdue(subtask)}
+                                    dateLabel={subtaskDateLabel(subtask.reminder_time)}
+                                    onToggleSubtask={onToggleSubtask}
+                                  />
+                                ))}
                               </div>
                             )}
                           </div>

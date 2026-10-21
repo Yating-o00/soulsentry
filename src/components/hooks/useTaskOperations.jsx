@@ -17,7 +17,7 @@ export function useTaskOperations() {
     onMutate: ({ id, data }) => {
       // 乐观更新：立即把新字段写入缓存，让依赖 ['tasks'] 的 useMemo
       // (例如 pages/Tasks 的智能分组) 立刻按新时间/状态重新分类
-      queryClient.setQueryData(['tasks'], (oldData) => {
+      queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
         if (!Array.isArray(oldData)) return oldData;
         return oldData.map(t => t.id === id ? { ...t, ...data } : t);
       });
@@ -121,7 +121,7 @@ export function useTaskOperations() {
     
     // 乐观更新 - 立即更新UI，无需等待服务器响应
     const optimisticStatus = isRecurring && newStatus === 'completed' ? 'pending' : newStatus;
-    queryClient.setQueryData(['tasks'], (oldData) => {
+    queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
       if (!Array.isArray(oldData)) return oldData;
       return oldData.map(t =>
         t.id === task.id
@@ -164,7 +164,7 @@ export function useTaskOperations() {
       const subtasks = allTasks.filter(t => t.parent_task_id === task.id && t.status !== 'completed');
       if (subtasks.length > 0) {
          // Optimistically update subtasks in UI
-         queryClient.setQueryData(['tasks'], (oldData) => {
+         queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
             if (!Array.isArray(oldData)) return oldData;
             const subtaskIds = new Set(subtasks.map(s => s.id));
             return oldData.map(t => {
@@ -341,7 +341,7 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
     
     // 乐观更新子任务
-    queryClient.setQueryData(['tasks'], (oldData) => {
+    queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
       if (!Array.isArray(oldData)) return oldData;
       return oldData.map(t => 
         t.id === subtask.id 
@@ -350,7 +350,7 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
       );
     });
 
-    queryClient.setQueryData(['subtasks', subtask.parent_task_id], (oldData) => {
+    queryClient.setQueriesData({ queryKey: ['subtasks'] }, (oldData) => {
       if (!oldData) return oldData;
       return oldData.map(t => 
         t.id === subtask.id 

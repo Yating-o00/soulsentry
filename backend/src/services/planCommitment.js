@@ -327,6 +327,8 @@ export function parseMinutesText(text) {
   if (/一小时|一个钟头/.test(t)) return 60;
   if (/两小时|两个钟头/.test(t)) return 120;
   if (/三小时/.test(t)) return 180;
+  const bare = /^(\d{1,3})$/.exec(t);
+  if (bare) return clampInt(bare[1], 1, 240, null);
   return null;
 }
 
@@ -430,7 +432,7 @@ export function extractAdjustmentsFromText(text) {
   if (dur && /加到|增加|延长|调到|改到|减到|缩到|提到|升到/.test(t)) {
     const target = dur[1] || "全部";
     const mins = parseMinutesText(dur[0].slice(dur[1] ? dur[1].length : 0));
-    if (mins) out.push({ target, field: "duration", value: String(mins) });
+    if (mins) out.push({ target, field: "duration", value: `${mins}分钟` });
   }
   const clock = /(周末|周六|周日|工作日|每天|日常|全部|所有)?[^。！？\n]{0,10}?(改到|调到|放到|挪到)\s*(早上|上午|中午|下午|晚上|晚间|睡前|\d{1,2}[:：点]\d{0,2})/.exec(t);
   if (clock) {

@@ -39,9 +39,26 @@ function roundUp5(ms) {
   return Math.ceil(ms / 300000) * 300000;
 }
 
+// 模型偶尔不照 schema 返回：解包常见包装形态，尽量抢救出 parent/children
+function unwrapPlan(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  if (raw.parent && Array.isArray(raw.children)) return raw;
+  for (const key of ["plan", "result", "data", "schedule", "方案"]) {
+    const inner = raw[key];
+    if (inner && typeof inner === "object" && (inner.parent || Array.isArray(inner.children))) return inner;
+  }
+  if (Array.isArray(raw)) return { parent: {}, children: raw };
+  const vals = Object.values(raw);
+  if (vals.length > 0 && vals.every((v) => Array.isArray(v))) {
+    return { parent: {}, children: vals.flat() };
+  }
+  return raw;
+}
+
 function normalizePlan(raw, ctx) {
   const { goal, horizonDays, dailyMinutes } = ctx;
   if (!raw || typeof raw !== "object") return null;
+  raw = unwrapPlan(raw);
 
   const parentRaw = raw.parent && typeof raw.parent === "object" ? raw.parent : {};
   const parent = {
@@ -59,16 +76,16 @@ function normalizePlan(raw, ctx) {
   const children = [];
   for (const item of Array.isArray(raw.children) ? raw.children : []) {
     if (!item || typeof item !== "object") continue;
-    const title = String(item.title || "").trim().slice(0, 60);
-    const date = String(item.date || "").trim();
-    const startTime = String(item.start_time || "").trim();
+    const title = String(item.title || item.content || "").trim().slice(0, 60);
+    const date = String(item.date || item.day || "").trim();
+    const startTime = String(item.start_time || item.time || item.start || "").trim();
     if (!title || !DATE_RE.test(date) || date < today || date > horizonEnd) continue;
     if (!TIME_RE.test(startTime)) continue;
 
     let startMs = new Date(`${date}T${startTime}:00+08:00`).getTime();
     // 今天已过的时刻顺延到 now+30min（对齐 5 分钟），其它日期不动
     if (date === today && startMs < minStartMs) startMs = roundUp5(minStartMs);
-    const duration = clampInt(item.duration_minutes, 10, 240, Math.min(60, dailyMinutes));
+    const duration = clampInt(item.duration_minutes ?? item.duration ?? item.minutes, 10, 240, Math.min(60, dailyMinutes));
     const dayUsed = perDay.get(date) || 0;
     // 单日总量超出预算：压缩本条时长，实在放不下就丢弃
     const room = dailyMinutes - dayUsed;

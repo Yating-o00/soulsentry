@@ -380,10 +380,11 @@ ${insightsText ? `个性化参考（历史数据，偏好优先）：\n${insight
       const { data, usage } = await Promise.race([
         invokeKimiText({
           prompt,
-          systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，直接给结果，不要长篇推理。",
+          systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,
-          maxTokens: 4000,
-          fetchTimeout: 75000,
+          model: "kimi-k2.7-code-highspeed",
+          maxTokens: 8000,
+          fetchTimeout: 60000,
           withUsage: true
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 60000))

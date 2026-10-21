@@ -131,20 +131,20 @@ export async function buildPlanInsights({ userId, prisma, busyTasks = [] } = {})
   };
 }
 
-// 把 insights 对象渲染成注入规划 prompt 的文本段（无数据项不渲染）
+// 把 insights 对象渲染成注入规划 prompt 的文本段（无数据项不渲染；容忍部分字段缺失）
 export function renderInsightsForPrompt(insights) {
   if (!insights) return "";
   const lines = [];
-  if (insights.activeWindows.length > 0) {
+  if ((insights.activeWindows?.length ?? 0) > 0) {
     lines.push(`- 历史活跃时段（近90天打卡行为）：${insights.activeWindows.join("、")}`);
   }
-  if (insights.subtaskDoneRate30d !== null) {
+  if (insights.subtaskDoneRate30d !== null && insights.subtaskDoneRate30d !== undefined) {
     lines.push(`- 近30天子约定完成率：${Math.round(insights.subtaskDoneRate30d * 100)}%（低于50%说明近期偏吃力）`);
   }
-  if (insights.topHabitTitles.length > 0) {
+  if ((insights.topHabitTitles?.length ?? 0) > 0) {
     lines.push(`- 近30天打卡最多的约定：${insights.topHabitTitles.join("、")}`);
   }
-  if (insights.existingCheckins.length > 0) {
+  if ((insights.existingCheckins?.length ?? 0) > 0) {
     const desc = insights.existingCheckins
       .map((c) => (c.hour !== null && c.hour !== undefined ? `${c.title}（约${c.hour}点提醒）` : c.title))
       .join("、");

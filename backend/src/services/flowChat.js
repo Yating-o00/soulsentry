@@ -685,8 +685,9 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
         // 用了个性化排期就让用户感知到「这是为你调的」
         if (planned.source !== "fallback" && insights) {
+          const activeWindows = Array.isArray(insights.activeWindows) ? insights.activeWindows : [];
           const note = renderInsightsForPrompt(insights)
-            ? `（这次的安排参考了你的习惯${insights.activeWindows.length ? `：你多在 ${insights.activeWindows.join("、")} 行动` : ""}${insights.subtaskDoneRate30d !== null ? `，近期完成率 ${Math.round(insights.subtaskDoneRate30d * 100)}%` : ""}，不合适随时说，我重排）`
+            ? `（这次的安排参考了你的习惯${activeWindows.length ? `：你多在 ${activeWindows.join("、")} 行动` : ""}${insights.subtaskDoneRate30d !== null && insights.subtaskDoneRate30d !== undefined ? `，近期完成率 ${Math.round(insights.subtaskDoneRate30d * 100)}%` : ""}，不合适随时说，我重排）`
             : "";
           if (note) out.reply = `${out.reply}${note}`;
         }

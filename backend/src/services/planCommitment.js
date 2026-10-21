@@ -214,7 +214,7 @@ ${insightsText ? `用户个性化参考（来自其历史数据，仅作排期�
         maxTokens: 4000,
         withUsage: true
       }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 15000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 30000))
     ]);
     const plan = normalizePlan(data, ctx);
     if (plan) return { ...plan, usage };

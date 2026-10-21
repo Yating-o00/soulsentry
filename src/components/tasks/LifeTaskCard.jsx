@@ -50,6 +50,7 @@ function PlanSubtaskRow({ subtask, overdue, dateLabel, onToggleSubtask }) {
 
   return (
     <div
+      data-no-drag
       onClick={(e) => {
         e.stopPropagation();
         if (unfinishedCheckin) {
@@ -286,6 +287,12 @@ export default function LifeTaskCard({
   const dragEnabled = !isSelectionMode && !!onReparent;
 
   const handleDragStart = (e) => {
+    // 从按钮/链接/输入框/子约定行发起的拖动一律取消：
+    // 可拖拽卡片上手滑轻微移动会把「点击」变成拖拽并吞掉点击事件（表现为有时点了没反应）
+    if (e.target.closest?.('button, a, input, textarea, select, [data-no-drag]')) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('text/task-id', task.id);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -1222,6 +1229,7 @@ export default function LifeTaskCard({
                         const subSelected = isSelectionMode && Array.isArray(selectedTaskIds) && selectedTaskIds.includes(subtask.id);
                         return (
                         <div
+                          data-no-drag
                           key={subtask.id}
                           onClick={(e) => {
                             e.stopPropagation();

@@ -8,7 +8,7 @@
   - 前端/后端代码：`/opt/soulsentry/china-app`
   - 前端静态文件：`/var/www/soulsentry`
   - 后端服务：`soulsentry-backend.service`
-  - Nginx 配置：`/etc/nginx/conf.d/soulsentry.conf`
+  - Nginx 配置：`/etc/nginx/sites-enabled/default`（注意：是实体文件，与 `sites-available` 没有软链，改 available 不生效；改完 `sudo nginx -t && sudo systemctl reload nginx`）
 
 ## 2. 域名与路由
 
@@ -247,6 +247,8 @@ npx prisma db push --accept-data-loss
 ### 6.3 前端更新（重点）
 
 `deploy.sh` 默认 `SKIP_FRONTEND_BUILD=1`：不在服务器构建前端，直接使用 `china-app/dist/` 发布到 `/var/www/soulsentry`。而 `dist` 在 `.gitignore` 里、不进 git——**只改前端代码时，照 6.1 部署完页面不会变化**（2026-10-17 曾因默认参数部署导致前端无更新）。前端有改动时，二选一：
+
+> 2026-10-21 起 nginx 已对 `/`、`/index.html`、`/sw.js` 返回 `Cache-Control: no-cache, must-revalidate`，`/assets/` 返回 `public, max-age=31536000, immutable`（配置在 `sites-enabled/default`）：发版后普通刷新即拿新版本，浏览器不再启发式缓存入口文件。
 
 **方式 A（推荐）：本机构建，上传产物。** 服务器内存小，本机构建快且不会压垮机器：
 

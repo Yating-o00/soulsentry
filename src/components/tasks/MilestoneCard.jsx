@@ -67,6 +67,11 @@ export default function MilestoneCard({
   const dragEnabled = !isSelectionMode && !!onReparent;
 
   const handleDragStart = (e) => {
+    // 从按钮/子约定行发起的拖动一律取消：避免手滑把「点击」变成拖拽、点击事件被吞掉
+    if (e.target.closest?.('button, a, input, textarea, select, [data-no-drag]')) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('text/task-id', task.id);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -448,6 +453,7 @@ export default function MilestoneCard({
               const subSelected = isSelectionMode && Array.isArray(selectedTaskIds) && selectedTaskIds.includes(subtask.id);
               return (
               <div
+                data-no-drag
                 key={subtask.id}
                 onClick={(e) => {
                   e.stopPropagation();

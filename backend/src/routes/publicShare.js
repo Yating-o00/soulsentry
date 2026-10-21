@@ -32,6 +32,8 @@ function serializeTask(task) {
     gcal_sync_enabled: task.gcalSyncEnabled,
     progress: task.progress,
     completed_at: task.completedAt,
+    // 重复约定：今天是否已打卡（按北京日期），与主站 serializeTask 口径一致
+    done_today: extraFields.recurrence_last_done === new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10),
     deleted_at: task.deletedAt,
     tags: task.tags,
     reminder_strategy: task.reminderStrategy,

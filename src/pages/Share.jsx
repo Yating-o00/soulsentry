@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import {
   MessageSquare,
   Send,
@@ -69,13 +70,13 @@ function SharedSubtaskItem({ sub, onToggle, submitting }) {
       <div className="flex items-center gap-3">
         <Checkbox
           id={`subtask-${sub.id}`}
-          checked={sub.status === "completed"}
+          checked={isTaskEffectivelyCompleted(sub)}
           onCheckedChange={(checked) => onToggle(!!checked, sub.id)}
           disabled={submitting}
         />
         <label
           htmlFor={`subtask-${sub.id}`}
-          className={`text-sm ${sub.status === "completed" ? "text-slate-400 line-through" : "text-slate-700"}`}
+          className={`text-sm ${isTaskEffectivelyCompleted(sub) ? "text-slate-400 line-through" : "text-slate-700"}`}
         >
           {sub.title}
         </label>
@@ -676,16 +677,16 @@ export default function Share() {
                     <div className="flex items-center gap-3">
                       <Checkbox
                         id="main-task"
-                        checked={item.status === "completed"}
+                        checked={isTaskEffectivelyCompleted(item)}
                         onCheckedChange={(checked) => ensureNameThen(() => handleToggleTask(checked))}
                         disabled={submitting}
                       />
-                      <label htmlFor="main-task" className={`text-sm font-medium ${item.status === "completed" ? "text-slate-400 line-through" : "text-slate-800"}`}>
-                        {item.status === "completed" ? "已完成" : "标记为已完成"}
+                      <label htmlFor="main-task" className={`text-sm font-medium ${isTaskEffectivelyCompleted(item) ? "text-slate-400 line-through" : "text-slate-800"}`}>
+                        {isTaskEffectivelyCompleted(item) ? "已完成" : "标记为已完成"}
                       </label>
                     </div>
                   )}
-                  {item.status === "completed" && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
+                  {isTaskEffectivelyCompleted(item) && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
                 </div>
 
                 {subtasks.length > 0 && (

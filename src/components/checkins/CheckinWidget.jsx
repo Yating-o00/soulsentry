@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShanghai } from "@/lib/timeCore";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import { X, Footprints, Camera, ListChecks, ChevronDown, ChevronUp, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildApiUrl } from "@/api/httpClient";
@@ -61,7 +62,7 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
   const total = data?.total ?? 0;
   const firstAt = data?.first_at;
   const items = useMemo(() => data?.items || [], [data]);
-  const subDone = subtaskTree.filter((s) => s.status === "completed").length;
+  const subDone = subtaskTree.filter(isTaskEffectivelyCompleted).length;
 
   const doCheckin = () => {
     if (completed || createMut.isPending) return;
@@ -192,7 +193,7 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
               </p>
               <ul className="max-h-64 space-y-1.5 overflow-y-auto">
                 {subtaskTree.map((s) => {
-                  const done = s.status === "completed";
+                  const done = isTaskEffectivelyCompleted(s);
                   return (
                     <li key={s.id} className="flex items-start gap-2" style={{ paddingLeft: (s.depth || 0) * 14 }}>
                       <span

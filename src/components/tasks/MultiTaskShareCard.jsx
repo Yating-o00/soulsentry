@@ -10,6 +10,7 @@ import html2canvas from "html2canvas";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Circle } from "lucide-react";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 
 const PRESET_HEADERS = [
   "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=800&q=80",
@@ -177,7 +178,7 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
 
   const handleCopyText = () => {
     const text = `【约定清单】\n\n` + tasks.map((t, i) => {
-        const status = t.status === 'completed' ? '✅' : '⭕';
+        const status = isTaskEffectivelyCompleted(t) ? '✅' : '⭕';
         const time = t.reminder_time ? ` [${format(new Date(t.reminder_time), "MM-dd HH:mm")}]` : '';
         return `${i + 1}. ${t.title}${time} ${status}`;
     }).join('\n') + `\n\n来自「SoulSentry」`;
@@ -263,11 +264,11 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                             {tasks.map((task, idx) => (
                                 <React.Fragment key={task.id}>
                                 <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs text-white flex-shrink-0 ${task.status === 'completed' ? 'bg-green-500' : 'bg-slate-400'}`}>
+                                    <div className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center text-xs text-white flex-shrink-0 ${isTaskEffectivelyCompleted(task) ? 'bg-green-500' : 'bg-slate-400'}`}>
                                         {idx + 1}
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <div className={`font-medium text-base mb-1 ${task.status === 'completed' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                                        <div className={`font-medium text-base mb-1 ${isTaskEffectivelyCompleted(task) ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
                                             {task.title}
                                         </div>
                                         
@@ -300,7 +301,7 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                                             )}
                                         </div>
                                     </div>
-                                    {task.status === 'completed' && (
+                                    {isTaskEffectivelyCompleted(task) && (
                                         <div className="text-green-600 text-xs font-bold px-2 py-1 bg-green-50 rounded-lg">完成</div>
                                     )}
                                 </div>
@@ -310,12 +311,12 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                                     <div className="ml-11 mt-2 mb-4 space-y-1">
                                         {allSubtasks[task.id].map((st, sIdx) => (
                                             <div key={st.id} className="flex items-center gap-2 text-sm text-slate-600">
-                                                {st.status === 'completed' ? (
+                                                {isTaskEffectivelyCompleted(st) ? (
                                                     <Check className="w-3.5 h-3.5 text-green-500" />
                                                 ) : (
                                                     <Circle className="w-3.5 h-3.5 text-slate-300" />
                                                 )}
-                                                <span className={st.status === 'completed' ? 'line-through text-slate-400' : ''}>
+                                                <span className={isTaskEffectivelyCompleted(st) ? 'line-through text-slate-400' : ''}>
                                                     {st.title}
                                                 </span>
                                             </div>

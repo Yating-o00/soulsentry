@@ -17,6 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import html2canvas from "html2canvas";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import QRCodeImage from "@/components/ui/QRCode";
 import { httpRequest } from "@/api/httpClient";
 import { invokeAI } from "@/components/utils/aiHelper";
@@ -224,7 +225,7 @@ export default function TaskShareCard({ task, open, onClose }) {
     enabled: !!task?.dependencies?.length,
   });
 
-  const completedSubtasks = subtasks.filter(s => s.status === "completed").length;
+  const completedSubtasks = subtasks.filter(isTaskEffectivelyCompleted).length;
   const progress = subtasks.length > 0 ? Math.round((completedSubtasks / subtasks.length) * 100) : 100;
 
   const taskUrl = typeof window !== 'undefined' 
@@ -463,16 +464,16 @@ ${task.description ? `📝 ${task.description}\n` : ''}
 🏷️ 类别：${categoryLabel.zh}
 ⚡ 优先级：${priorityLabel.zh}
 📊 完成进度：${progress}%
-${task.status === "completed" ? "✅ 已完成" : "🔵 进行中"}
+${isTaskEffectivelyCompleted(task) ? "✅ 已完成" : "🔵 进行中"}
 ${subtasks.length > 0 ? `\n📌 子约定清单 (${completedSubtasks}/${subtasks.length}):\n${subtasks.map((s, i) => {
   const title = s.title || '';
   const titleMatch = title.match(/^(\d+)\.\s*/);
   const cleanTitle = titleMatch ? title.replace(/^\d+\.\s*/, '') : title;
   const childLines = (childMap[s.id] || []).map((c) => {
     const childTitle = (c.title || '').replace(/^\d+\.\s*/, '');
-    return `   └ ${childTitle} ${c.status === "completed" ? "✅" : "⭕"}`;
+    return `   └ ${childTitle} ${isTaskEffectivelyCompleted(c) ? "✅" : "⭕"}`;
   });
-  return [`${i + 1}. ${cleanTitle} ${s.status === "completed" ? "✅" : "⭕"}`, ...childLines].join('\n');
+  return [`${i + 1}. ${cleanTitle} ${isTaskEffectivelyCompleted(s) ? "✅" : "⭕"}`, ...childLines].join('\n');
 }).join('\n')}` : ''}
 
 🔗 查看详情：
@@ -852,7 +853,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                         </div>
                         <div className="space-y-2">
                          {displayedSubtasks.map((subtask, index) => {
-                            const isCompleted = subtask.status === "completed";
+                            const isCompleted = isTaskEffectivelyCompleted(subtask);
                             const title = subtask.title || '';
                             const cleanTitle = title.replace(/^\d+\.\s*/, '');
                             const lastLog = getSubtaskLastLog(subtask.id);
@@ -878,7 +879,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                                 {childMap[subtask.id]?.length > 0 && (
                                   <div className="ml-7 mt-1 space-y-1.5 border-l border-slate-200 pl-3">
                                     {childMap[subtask.id].map((child) => {
-                                      const childCompleted = child.status === "completed";
+                                      const childCompleted = isTaskEffectivelyCompleted(child);
                                       const childTitle = (child.title || '').replace(/^\d+\.\s*/, '');
                                       return (
                                         <div key={child.id} className="flex items-start gap-2">
@@ -947,7 +948,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
                   </div>
 
                   {/* 完成印章 */}
-                  {task.status === "completed" && (
+                  {isTaskEffectivelyCompleted(task) && (
                     <div className="absolute bottom-24 right-8 transform rotate-[-15deg] opacity-90 pointer-events-none">
                       <div className="w-32 h-32 border-4 border-green-600 rounded-full flex items-center justify-center p-2" style={{ maskImage: 'url("data:image/svg+xml;base64,...")' }}> {/* 模拟印章纹理可用CSS实现，这里简化 */}
                          <div className="w-full h-full border-2 border-green-600 rounded-full flex flex-col items-center justify-center text-green-600">

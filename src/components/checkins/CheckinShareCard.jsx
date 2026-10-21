@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { formatShanghai } from "@/lib/timeCore";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import html2canvas from "html2canvas";
 import { Download, Copy, Check, ListChecks, EyeOff } from "lucide-react";
 import { buildApiUrl, httpRequest } from "@/api/httpClient";
@@ -84,8 +85,8 @@ function ShareCardOverlay({ task, subtaskTree = [], total, firstAt, bestNote, be
   const [exporting, setExporting] = useState(false);
   const [showSubtasks, setShowSubtasks] = useState(subtaskTree.length > 0);
   const [hideDone, setHideDone] = useState(false);
-  const subDone = subtaskTree.filter((s) => s.status === "completed").length;
-  const visibleTree = hideDone ? subtaskTree.filter((s) => s.status !== "completed") : subtaskTree;
+  const subDone = subtaskTree.filter(isTaskEffectivelyCompleted).length;
+  const visibleTree = hideDone ? subtaskTree.filter((s) => !isTaskEffectivelyCompleted(s)) : subtaskTree;
   const nowIso = new Date().toISOString();
   // 打卡以天数计：精确到具体日期，并给出坚持天数，避免"2026.10—2026.10"这种同月区间
   const dayCount = firstAt
@@ -224,7 +225,7 @@ function ShareCardOverlay({ task, subtaskTree = [], total, firstAt, bestNote, be
               </p>
               <ul className="mt-1.5 space-y-1">
                 {visibleTree.map((s) => {
-                  const done = s.status === "completed";
+                  const done = isTaskEffectivelyCompleted(s);
                   return (
                     <li
                       key={s.id}

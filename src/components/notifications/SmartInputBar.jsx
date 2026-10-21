@@ -237,6 +237,7 @@ export default function SmartInputBar() {
   const callAI = async (msgs, lastExtracted, atts = []) => {
     setBusy(true);
     try {
+      // 规划类请求服务端要走 对话+画像+规划器 三段，最多约 45s，给足 60s 避免误报走神
       const res = await withTimeout(httpRequest("/api/chat", {
         method: "POST",
         body: {
@@ -245,7 +246,7 @@ export default function SmartInputBar() {
           agent_execution_id: agentExecId || undefined,
           attachments: atts.length ? atts.map((a) => ({ url: a.url, name: a.name, type: a.type, size: a.size })) : undefined
         }
-      }));
+      }), 60000);
       const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
       setMessages([...msgs, { role: "assistant", content: reply }]);
       // 打卡意图兜底：用户原话明确要打卡/签到时，约定提案直接归为打卡类别（与 AI 分类结果无关）

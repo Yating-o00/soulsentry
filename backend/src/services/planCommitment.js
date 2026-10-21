@@ -1,5 +1,4 @@
 import { invokeKimiText } from "../lib/kimi.js";
-import { renderInsightsForPrompt } from "./planInsights.js";
 
 // 智能约定规划：把「一类要做的事」（如"两周的健身计划"）落成母约定 + 逐日子约定。
 // 架构：AI 只生成 2-5 个「日型模板」（工作日/周末/饮食等），服务端本地展开为逐日计划——
@@ -361,18 +360,23 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
   };
 
   const busyBlocks = Array.isArray(existing) ? existing.slice(0, 40) : [];
-  const insightsText = renderInsightsForPrompt(insights);
-  const prompt = `规划一件事：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。
-偏好：${String(preferences || "无").slice(0, 120)}
-${busyBlocks.length ? `已有安排（避开）：${JSON.stringify(busyBlocks)}` : ""}
-${insightsText ? `个性化参考（历史数据，偏好优先）：\n${insightsText}\n` : ""}
-输出母约定 + 2-5 个日型模板（勿逐日展开）。要求：
-1. 今天时刻须晚于 ${chinaNowTime()} 30 分钟以上；避开 23:00-7:00。
-2. 同天多模板累计≤${ctx.dailyMinutes} 分钟；每满 7 天留 1 天缓冲。
-3. 按内容分组（如 日常训练/周末强化/饮食配合），组名≤8字；每日坚持项 kind=checkin，其余 task；饮食排进餐点。
-4. description ≤30字含量化标准（如「慢跑3公里」）；weekly_progression 写「每周+N分钟」形式。
-5. 优先排用户活跃时段；近30天完成率<50%则首周时长减半。
-6. 只输出 JSON。`;
+  // 个性化信号压成一行一条的短句：prompt 越长模型推理越深，实测短 prompt 5s 可出完整模板
+  const bits = [];
+  if (Array.isArray(insights?.activeWindows) && insights.activeWindows.length > 0) {
+    bits.push(`活跃时段参考：${insights.activeWindows.join("、")}`);
+  }
+  if (insights?.subtaskDoneRate30d !== null && insights?.subtaskDoneRate30d !== undefined) {
+    bits.push(`近30天完成率 ${Math.round(insights.subtaskDoneRate30d * 100)}%${insights.subtaskDoneRate30d < 0.5 ? "（偏低，首周请减量起步）" : ""}`);
+  }
+  if (Array.isArray(insights?.existingCheckins) && insights.existingCheckins.length > 0) {
+    bits.push(`已有打卡约定：${insights.existingCheckins.map((c) => (c.hour !== null && c.hour !== undefined ? `${c.title}(${c.hour}点)` : c.title)).join("、")}（内容重合请避开其时刻）`);
+  }
+  if (busyBlocks.length > 0) {
+    bits.push(`已有安排（避开这些时段）：${JSON.stringify(busyBlocks).slice(0, 300)}`);
+  }
+  const prompt = `用户想规划：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。偏好：${String(preferences || "无").slice(0, 100)}
+${bits.join("\n")}
+不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（≤30字，含量化标准如「慢跑3公里」）、note（可选≤20字）、weekly_progression（可选，写「每周+N分钟」形式）。每满 7 天留 1 天缓冲不用排。直接输出 JSON。`;
 
   let lastErr = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {

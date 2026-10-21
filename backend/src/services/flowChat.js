@@ -3,7 +3,7 @@ import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
-import { planCommitmentWithKimi, buildFallbackPlan } from "./planCommitment.js";
+import { planCommitmentWithKimi, reexpandPlan, buildFallbackPlan } from "./planCommitment.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
@@ -627,6 +627,19 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     if (out.extracted?.type === "plan" && out.extracted.plan_request && userId && prisma) {
       try {
         const req = out.extracted.plan_request;
+
+        // —— 反问门控：关键参数缺失时不烧规划调用，先问清楚（多轮对话把需求明确，一次只问一个） ——
+        const missingQuestion = !req.horizon_days
+          ? "这个计划想坚持多少天？比如 7 天、14 天或 21 天～"
+          : !req.daily_minutes
+            ? "每天大概能投入多少分钟？我按这个强度来排～"
+            : null;
+        if (missingQuestion) {
+          // 对话模型已被要求提问；兜底保证 reply 里确实有问题
+          if (!out.reply.includes("？") && !out.reply.includes("?")) {
+            out.reply = `${out.reply} ${missingQuestion}`;
+          }
+        } else {
         const horizon = req.horizon_days || 7;
         const dayMs = 86400000;
         const start = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -666,38 +679,70 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           && insights.subtaskDoneRate30d < 0.5) {
           dailyMinutes = Math.max(15, Math.round(dailyMinutes * 0.7));
         }
-        const planned = await planCommitmentWithKimi({
-          goal: req.goal,
-          horizonDays: req.horizon_days || undefined,
-          dailyMinutes,
-          preferences: req.preferences,
-          existing,
-          insights
-        });
-        out.extracted.plan = {
-          parent: planned.parent,
-          children: planned.children,
-          source: planned.source || "ai"
-        };
-        // 降级模板要让用户知情（区别于 throw 路径的提示，内部兜底只标 source）
-        if (planned.source === "fallback") {
-          out.reply = `${out.reply}（这次排期没连上 AI，先给了保守模板；跟我说「重新规划」出正式版～）`;
+
+        // —— 快速路径：同一目标 + 已有日型模板 + 参数级调整 → 本地秒级重排，不调用 AI ——
+        const prev = lastExtracted && lastExtracted.type === "plan" ? lastExtracted : null;
+        const prevReq = prev?.plan_request;
+        const prevPatterns = Array.isArray(prev?.plan?.patterns) && prev.plan.patterns.length > 0 ? prev.plan.patterns : null;
+        const sameGoal = prevReq && String(prevReq.goal || "") === String(req.goal || "");
+        let planned = null;
+        if (prevPatterns && sameGoal) {
+          planned = reexpandPlan(prevPatterns, {
+            goal: req.goal,
+            horizonDays: req.horizon_days || prevReq.horizon_days,
+            dailyMinutes: req.daily_minutes || prevReq.daily_minutes,
+            preferences: req.preferences || prevReq.preferences,
+            insights,
+            baseDailyMinutes: prevReq.daily_minutes
+          });
+          if (planned) {
+            out.extracted.plan = {
+              parent: planned.parent,
+              children: planned.children,
+              patterns: prevPatterns,
+              source: "ai"
+            };
+            out.reply = `${out.reply}（已按你最新的要求重排好啦，看看这次的安排～）`;
+          }
+        }
+
+        // —— 全量路径：日型模板规划（AI 约 8-15s） ——
+        if (!planned) {
+          planned = await planCommitmentWithKimi({
+            goal: req.goal,
+            horizonDays: req.horizon_days || undefined,
+            dailyMinutes,
+            preferences: req.preferences,
+            existing,
+            insights
+          });
+          out.extracted.plan = {
+            parent: planned.parent,
+            children: planned.children,
+            patterns: planned.patterns || null,
+            source: planned.source || "ai"
+          };
+          // 降级模板要让用户知情（区别于 throw 路径的提示，内部兜底只标 source）
+          if (planned.source === "fallback") {
+            out.reply = `${out.reply}（这次排期没连上 AI，先给了保守模板；跟我说「重新规划」出正式版～）`;
+          }
+          // 两次 AI 调用（对话+规划）的用量合并结算
+          if (planned.usage && out.usage) {
+            out.usage = {
+              prompt_tokens: (out.usage.prompt_tokens || 0) + (planned.usage.prompt_tokens || 0),
+              completion_tokens: (out.usage.completion_tokens || 0) + (planned.usage.completion_tokens || 0),
+              total_tokens: (out.usage.total_tokens || 0) + (planned.usage.total_tokens || 0)
+            };
+          }
         }
         // 用了个性化排期就让用户感知到「这是为你调的」
-        if (planned.source !== "fallback" && insights) {
+        if (out.extracted.plan?.source !== "fallback" && insights) {
           const activeWindows = Array.isArray(insights.activeWindows) ? insights.activeWindows : [];
           const note = renderInsightsForPrompt(insights)
             ? `（这次的安排参考了你的习惯${activeWindows.length ? `：你多在 ${activeWindows.join("、")} 行动` : ""}${insights.subtaskDoneRate30d !== null && insights.subtaskDoneRate30d !== undefined ? `，近期完成率 ${Math.round(insights.subtaskDoneRate30d * 100)}%` : ""}，不合适随时说，我重排）`
             : "";
           if (note) out.reply = `${out.reply}${note}`;
         }
-        // 两次 AI 调用（对话+规划）的用量合并结算
-        if (planned.usage && out.usage) {
-          out.usage = {
-            prompt_tokens: (out.usage.prompt_tokens || 0) + (planned.usage.prompt_tokens || 0),
-            completion_tokens: (out.usage.completion_tokens || 0) + (planned.usage.completion_tokens || 0),
-            total_tokens: (out.usage.total_tokens || 0) + (planned.usage.total_tokens || 0)
-          };
         }
       } catch (planErr) {
         console.warn("[flowChat] 规划失败:", planErr?.message || planErr);

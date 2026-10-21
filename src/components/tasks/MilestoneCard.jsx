@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -465,7 +466,7 @@ export default function MilestoneCard({
                 }}
                 className={cn(
                   "group flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all bg-white border border-stone-200 hover:border-blue-300",
-                  subtask.status === 'completed' && !isSelectionMode && "opacity-60",
+                  isTaskEffectivelyCompleted(subtask) && !isSelectionMode && "opacity-60",
                   subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
                 )}
               >
@@ -473,18 +474,18 @@ export default function MilestoneCard({
                   "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
                   isSelectionMode
                     ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
-                    : (subtask.status === 'completed'
+                    : (isTaskEffectivelyCompleted(subtask)
                         ? "bg-green-500 border-green-500 text-white"
                         : "border-stone-300 bg-white group-hover:border-blue-400")
                 )}>
                   {isSelectionMode
                     ? (subSelected && <Check className="w-3 h-3" />)
-                    : (subtask.status === 'completed' && <Check className="w-3 h-3" />)}
+                    : (isTaskEffectivelyCompleted(subtask) && <Check className="w-3 h-3" />)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className={cn(
                     "text-sm block",
-                    subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
+                    isTaskEffectivelyCompleted(subtask) ? "text-stone-400 line-through" : "text-stone-700"
                   )}>
                     {subtask.title}
                   </span>

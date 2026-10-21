@@ -8,6 +8,7 @@ import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
 import { trackHabit, trackOutcome } from "@/lib/personalDataEngine";
+import { isRecurringTask, isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 
 export function useTaskOperations() {
   const queryClient = useQueryClient();
@@ -337,31 +338,27 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
   };
 
   const handleSubtaskToggle = async (subtask, allTasks = []) => {
-    const newStatus = subtask.status === "completed" ? "pending" : "completed";
+    // 重复约定按 done_today 判断当前是否已完成（打卡不杀系列，status 保持活跃）
+    const newStatus = isTaskEffectivelyCompleted(subtask) ? "pending" : "completed";
     const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
-    
-    // 乐观更新子任务
-    queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
-      if (!Array.isArray(oldData)) return oldData;
-      return oldData.map(t => 
-        t.id === subtask.id 
-          ? { ...t, status: newStatus, completed_at: completedAt }
-          : t
-      );
-    });
 
-    queryClient.setQueriesData({ queryKey: ['subtasks'] }, (oldData) => {
-      if (!oldData) return oldData;
-      return oldData.map(t => 
-        t.id === subtask.id 
-          ? { ...t, status: newStatus, completed_at: completedAt }
+    // 乐观更新子任务
+    const applyToggle = (oldData) => {
+      if (!Array.isArray(oldData)) return oldData;
+      return oldData.map(t =>
+        t.id === subtask.id
+          ? isRecurringTask(t)
+            ? { ...t, done_today: newStatus === "completed" }
+            : { ...t, status: newStatus, completed_at: completedAt }
           : t
       );
-    });
-    
+    };
+    queryClient.setQueriesData({ queryKey: ['tasks'] }, applyToggle);
+    queryClient.setQueriesData({ queryKey: ['subtasks'] }, applyToggle);
+
     await updateTaskMutation.mutateAsync({
       id: subtask.id,
-      data: { 
+      data: {
         status: newStatus,
         completed_at: completedAt
       }
@@ -371,7 +368,7 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
       const siblings = allTasks.filter((t) => t.parent_task_id === subtask.parent_task_id);
       const completedCount = siblings.reduce((acc, s) => {
           if (s.id === subtask.id) return acc + (newStatus === "completed" ? 1 : 0);
-          return acc + (s.status === "completed" ? 1 : 0);
+          return acc + (isTaskEffectivelyCompleted(s) ? 1 : 0);
       }, 0);
       
       const progress = siblings.length > 0 ? Math.round((completedCount / siblings.length) * 100) : 0;

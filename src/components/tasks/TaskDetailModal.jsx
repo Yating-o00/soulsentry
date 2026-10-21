@@ -69,6 +69,7 @@ import LocationReminderSettings from "@/components/notifications/LocationReminde
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
+import { isRecurringTask, isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 
 // 子约定只继承「未来的」时间安排：父约定时间已过时不带过来，
 // 否则新建子约定会立刻触发到点提醒 / 截止跟进 / 逾期衰减三连提醒
@@ -475,27 +476,51 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     }
   };
 
+  // 重复约定的勾选口径见 @/lib/taskStatus：打卡不杀系列，完成状态看 done_today
+  const isRecurringItem = isRecurringTask;
+  const isEffectivelyCompleted = isTaskEffectivelyCompleted;
+
   const handleToggleSubtask = async (subtask) => {
-    const newStatus = subtask.status === "completed" ? "pending" : "completed";
-    await updateTaskMutation.mutateAsync({
-      id: subtask.id,
-      data: { 
-        status: newStatus,
-        completed_at: newStatus === "completed" ? new Date().toISOString() : null
-      }
+    const newStatus = isEffectivelyCompleted(subtask) ? "pending" : "completed";
+    const completedAt = newStatus === "completed" ? new Date().toISOString() : null;
+
+    // 乐观更新：勾选状态立即上屏，不等服务器往返
+    queryClient.setQueriesData({ queryKey: ['subtasks'] }, (oldData) => {
+      if (!Array.isArray(oldData)) return oldData;
+      return oldData.map(t =>
+        t.id === subtask.id
+          ? isRecurringItem(t)
+            ? { ...t, done_today: newStatus === "completed" }
+            : { ...t, status: newStatus, completed_at: completedAt }
+          : t
+      );
     });
 
-    // Update parent task progress
-    const total = subtasks.length;
-    const completed = subtasks.filter(s => 
-      s.id === subtask.id ? newStatus === "completed" : s.status === "completed"
-    ).length;
-    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+    try {
+      await updateTaskMutation.mutateAsync({
+        id: subtask.id,
+        data: {
+          status: newStatus,
+          completed_at: completedAt
+        }
+      });
 
-    await updateTaskMutation.mutateAsync({
-      id: task.id,
-      data: { progress }
-    });
+      // Update parent task progress（重复约定按 done_today 计入完成数）
+      const total = subtasks.length;
+      const completedCount = subtasks.filter(s =>
+        s.id === subtask.id ? newStatus === "completed" : isEffectivelyCompleted(s)
+      ).length;
+      const progress = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+
+      await updateTaskMutation.mutateAsync({
+        id: task.id,
+        data: { progress }
+      });
+    } catch (_e) {
+      queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.error("勾选没成功，再点一下试试");
+    }
   };
 
   const handleEnhanceApply = async (enhancements) => {
@@ -1090,7 +1115,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -100 }}
                       className={`flex flex-col p-3.5 rounded-xl border transition-all hover:shadow-sm ${
-                        subtask.status === "completed"
+                        isEffectivelyCompleted(subtask)
                           ? "bg-slate-50 border-slate-200"
                           : "bg-white border-[#d6dcf0] hover:border-[#384877]/40"
                       }`}
@@ -1098,7 +1123,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       <div className="flex items-center gap-3">
                         <div onClick={(e) => e.stopPropagation()}>
                           <Checkbox
-                            checked={subtask.status === "completed"}
+                            checked={isEffectivelyCompleted(subtask)}
                             onCheckedChange={() => handleToggleSubtask(subtask)}
                             onClick={(e) => e.stopPropagation()}
                             className="h-5 w-5"
@@ -1106,7 +1131,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                         </div>
                         <span
                           className={`flex-1 text-[15px] ${
-                            subtask.status === "completed"
+                            isEffectivelyCompleted(subtask)
                               ? "line-through text-slate-400"
                               : "text-slate-900"
                           }`}
@@ -1177,14 +1202,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                             <div
                               key={child.id}
                               className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border ${
-                                child.status === "completed"
+                                isEffectivelyCompleted(child)
                                   ? "bg-slate-50 border-slate-100"
                                   : "bg-[#f7f8fd] border-[#e3e8f5]"
                               }`}
                             >
                               <div onClick={(e) => e.stopPropagation()}>
                                 <Checkbox
-                                  checked={child.status === "completed"}
+                                  checked={isEffectivelyCompleted(child)}
                                   onCheckedChange={() => handleToggleSubtask(child)}
                                   onClick={(e) => e.stopPropagation()}
                                   className="h-4 w-4"
@@ -1207,7 +1232,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                                   onClick={() => startEditChild(child)}
                                   title="点击修改"
                                   className={`flex-1 text-[13px] cursor-text ${
-                                    child.status === "completed" ? "line-through text-slate-400" : "text-slate-700"
+                                    isEffectivelyCompleted(child) ? "line-through text-slate-400" : "text-slate-700"
                                   }`}
                                 >
                                   {child.title}

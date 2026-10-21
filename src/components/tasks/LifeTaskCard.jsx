@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import { 
   Check, Clock, MapPin, Repeat, MoreHorizontal, 
   ShoppingBag, Zap, Navigation, Footprints,
@@ -61,7 +62,7 @@ function PlanSubtaskRow({ subtask, overdue, dateLabel, onToggleSubtask }) {
       }}
       className={cn(
         "flex items-start gap-2.5 p-2 rounded-lg transition-all bg-white border border-stone-100 hover:border-stone-300",
-        subtask.status === "completed" && "opacity-60"
+        isTaskEffectivelyCompleted(subtask) && "opacity-60"
       )}
     >
       {unfinishedCheckin ? (
@@ -83,17 +84,17 @@ function PlanSubtaskRow({ subtask, overdue, dateLabel, onToggleSubtask }) {
       ) : (
         <div className={cn(
           "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
-          subtask.status === "completed"
+          isTaskEffectivelyCompleted(subtask)
             ? "bg-green-500 border-green-500 text-white"
             : "border-stone-300 bg-white"
         )}>
-          {subtask.status === "completed" && <Check className="w-3 h-3" />}
+          {isTaskEffectivelyCompleted(subtask) && <Check className="w-3 h-3" />}
         </div>
       )}
       <div className="flex-1 min-w-0">
         <span className={cn(
           "text-sm block",
-          subtask.status === "completed" ? "text-stone-400 line-through" : "text-stone-700"
+          isTaskEffectivelyCompleted(subtask) ? "text-stone-400 line-through" : "text-stone-700"
         )}>
           {subtask.title}
         </span>
@@ -1185,7 +1186,7 @@ export default function LifeTaskCard({
                     <>
                       {planGroups.map((g) => {
                         const collapsed = isPlanGroupCollapsed(g.name);
-                        const doneCount = g.items.filter((s) => s.status === "completed").length;
+                        const doneCount = g.items.filter(isTaskEffectivelyCompleted).length;
                         const hasToday = g.items.some((s) => s.reminder_time && isSameShanghaiDay(s.reminder_time, nowIso));
                         return (
                           <div key={g.name} className="rounded-xl bg-stone-50 border border-stone-100 overflow-hidden">
@@ -1220,7 +1221,7 @@ export default function LifeTaskCard({
                         );
                       })}
                       <div className="text-xs text-stone-400 px-2 py-1">
-                        子约定 {subtasks.filter((s) => s.status === "completed").length}/{subtasks.length}
+                        子约定 {subtasks.filter(isTaskEffectivelyCompleted).length}/{subtasks.length}
                       </div>
                     </>
                   ) : (
@@ -1241,7 +1242,7 @@ export default function LifeTaskCard({
                           }}
                           className={cn(
                             "flex items-start gap-3 p-2.5 rounded-xl cursor-pointer transition-all bg-stone-50 border border-stone-100 hover:border-stone-300",
-                            subtask.status === 'completed' && !isSelectionMode && "opacity-60",
+                            isTaskEffectivelyCompleted(subtask) && !isSelectionMode && "opacity-60",
                             subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
                           )}
                         >
@@ -1249,18 +1250,18 @@ export default function LifeTaskCard({
                             "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors border mt-0.5",
                             isSelectionMode
                               ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
-                              : (subtask.status === 'completed'
+                              : (isTaskEffectivelyCompleted(subtask)
                                   ? "bg-green-500 border-green-500 text-white"
                                   : "border-stone-300 bg-white")
                           )}>
                             {isSelectionMode
                               ? (subSelected && <Check className="w-3 h-3" />)
-                              : (subtask.status === 'completed' && <Check className="w-3 h-3" />)}
+                              : (isTaskEffectivelyCompleted(subtask) && <Check className="w-3 h-3" />)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <span className={cn(
                               "text-sm block",
-                              subtask.status === 'completed' ? "text-stone-400 line-through" : "text-stone-700"
+                              isTaskEffectivelyCompleted(subtask) ? "text-stone-400 line-through" : "text-stone-700"
                             )}>
                               {subtask.title}
                             </span>
@@ -1280,7 +1281,7 @@ export default function LifeTaskCard({
                           <span>
                             {expanded ? '收起子约定' : `展开全部 ${subtasks.length} 个子约定`}
                             <span className="ml-1 text-stone-400">
-                              ({subtasks.filter(s => s.status === 'completed').length}/{subtasks.length})
+                              ({subtasks.filter(isTaskEffectivelyCompleted).length}/{subtasks.length})
                             </span>
                           </span>
                           <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
@@ -1288,7 +1289,7 @@ export default function LifeTaskCard({
                       )}
                       {subtasks.length <= 3 && (
                         <div className="text-xs text-stone-400 px-2 py-1">
-                          子约定 {subtasks.filter(s => s.status === 'completed').length}/{subtasks.length}
+                          子约定 {subtasks.filter(isTaskEffectivelyCompleted).length}/{subtasks.length}
                         </div>
                       )}
                     </>

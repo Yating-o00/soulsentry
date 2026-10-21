@@ -3,7 +3,7 @@ import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
-import { planCommitmentWithKimi, reexpandPlan, buildFallbackPlan } from "./planCommitment.js";
+import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, buildFallbackPlan } from "./planCommitment.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
@@ -455,7 +455,20 @@ const RESPONSE_SCHEMA = {
             goal: { type: "string", description: "一句话概括要规划的目标，如「一周英语学习」" },
             horizon_days: { type: ["number", "null"], description: "计划总天数；推断不出为 null" },
             daily_minutes: { type: ["number", "null"], description: "每天可投入分钟数；推断不出为 null" },
-            preferences: { type: ["string", "null"], description: "用户对时段/节奏的偏好，如「早上」「下班后」" }
+            preferences: { type: ["string", "null"], description: "用户对时段/节奏的偏好，如「早上」「下班后」" },
+            adjustments: {
+              type: ["array", "null"],
+              description: "用户在调整已有规划时的定向修改（保持 goal/horizon/daily 不变，把修改写这里，可多条）：target=作用对象（周末/工作日/每天/周六/组名如「力量」），field=duration|start_time|content|note，value=新值（如「60分钟」「19:30」「新的内容描述」）",
+              items: {
+                type: "object",
+                properties: {
+                  target: { type: "string", description: "周末|工作日|每天|全部|周一..周日|组名关键词" },
+                  field: { type: "string", enum: ["duration", "start_time", "content", "note"] },
+                  value: { type: "string", description: "如「60分钟」「一小时」「19:30」「早上」「慢跑5公里」" }
+                },
+                required: ["target", "field", "value"]
+              }
+            }
           }
         }
       }
@@ -491,7 +504,7 @@ ${buildMessagesBlock(messages)}${attachmentCtx}
 - type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。用户明确说「打卡/签到」，或想长期重复坚持同一件事（如每天跑步、每日阅读、练琴打卡），category 用 checkin（打卡约定，每次做到点一下记一次）。
 - type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
-- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划（"改成早上"/"每天加到一小时"）时更新 plan_request。
+- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。
 
@@ -680,13 +693,55 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           dailyMinutes = Math.max(15, Math.round(dailyMinutes * 0.7));
         }
 
-        // —— 快速路径：同一目标 + 已有日型模板 + 参数级调整 → 本地秒级重排，不调用 AI ——
+        // —— 快速路径 A：定向调整（「周末加到一小时」）→ 补丁模板 + 本地秒级重排，不调 AI ——
         const prev = lastExtracted && lastExtracted.type === "plan" ? lastExtracted : null;
         const prevReq = prev?.plan_request;
         const prevPatterns = Array.isArray(prev?.plan?.patterns) && prev.plan.patterns.length > 0 ? prev.plan.patterns : null;
         const sameGoal = prevReq && String(prevReq.goal || "") === String(req.goal || "");
+        const lastUserText = [...safeMessages].reverse().find((m) => m.role === "user")?.content || "";
+        const modelAdjustments = Array.isArray(req.adjustments) && req.adjustments.length > 0 ? req.adjustments : null;
+        const textAdjustments = !modelAdjustments && prevPatterns && sameGoal ? extractAdjustmentsFromText(lastUserText) : null;
+        const adjustments = modelAdjustments || textAdjustments;
         let planned = null;
-        if (prevPatterns && sameGoal) {
+        let adjustedPatterns = null;
+        if (!planned && prevPatterns && sameGoal && adjustments?.length) {
+          const patched = applyPlanAdjustments(prevPatterns, adjustments);
+          if (patched.applied.length > 0) {
+            adjustedPatterns = patched.patterns;
+            // 显式调大的时长不能被原每日预算压回：预算抬到模板实际所需
+            const budget = Math.max(
+              req.daily_minutes || prevReq.daily_minutes || 30,
+              requiredBudget(adjustedPatterns)
+            );
+            planned = reexpandPlan(adjustedPatterns, {
+              goal: req.goal,
+              horizonDays: req.horizon_days || prevReq.horizon_days,
+              dailyMinutes: budget,
+              preferences: req.preferences || prevReq.preferences,
+              insights,
+              baseDailyMinutes: budget
+            });
+            if (planned) {
+              out.extracted.plan = {
+                parent: planned.parent,
+                children: planned.children,
+                patterns: adjustedPatterns,
+                source: "ai"
+              };
+              const missedNote = patched.missed.length > 0
+                ? `；没匹配到「${patched.missed.map((m2) => m2.target).join("、")}」对应的安排，可以再说具体点`
+                : "";
+              out.reply = `${out.reply}（已更新：${patched.applied.slice(0, 4).join("；")}${missedNote}）`;
+            }
+          } else {
+            // 没听懂改哪里：不弹空卡，追问清楚
+            out.extracted = null;
+            out.reply = `${out.reply}（没太听懂要改哪一项安排，告诉我是「周末/工作日/每天」还是具体哪组内容？）`;
+          }
+        }
+
+        // —— 快速路径 B：整体参数变化（时段/天数/时长）→ 本地秒级重排 ——
+        if (!planned && !adjustments?.length && prevPatterns && sameGoal) {
           planned = reexpandPlan(prevPatterns, {
             goal: req.goal,
             horizonDays: req.horizon_days || prevReq.horizon_days,
@@ -699,7 +754,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             out.extracted.plan = {
               parent: planned.parent,
               children: planned.children,
-              patterns: prevPatterns,
+              patterns: adjustedPatterns || prevPatterns,
               source: "ai"
             };
             out.reply = `${out.reply}（已按你最新的要求重排好啦，看看这次的安排～）`;
@@ -736,7 +791,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           }
         }
         // 用了个性化排期就让用户感知到「这是为你调的」
-        if (out.extracted.plan?.source !== "fallback" && insights) {
+        if (out.extracted?.plan?.source !== "fallback" && insights) {
           const activeWindows = Array.isArray(insights.activeWindows) ? insights.activeWindows : [];
           const note = renderInsightsForPrompt(insights)
             ? `（这次的安排参考了你的习惯${activeWindows.length ? `：你多在 ${activeWindows.join("、")} 行动` : ""}${insights.subtaskDoneRate30d !== null && insights.subtaskDoneRate30d !== undefined ? `，近期完成率 ${Math.round(insights.subtaskDoneRate30d * 100)}%` : ""}，不合适随时说，我重排）`
@@ -747,6 +802,10 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       } catch (planErr) {
         console.warn("[flowChat] 规划失败:", planErr?.message || planErr);
         out.reply = `${out.reply}（排期这一步没成功，跟我说「重新规划」再试一次？）`;
+      }
+      // 规划内容缺失（反问中/调整未识别/生成失败）时降级为纯对话，绝不弹空的「将要生成智能规划」卡片
+      if (out.extracted?.type === "plan" && !out.extracted.plan) {
+        out.extracted = null;
       }
     }
 

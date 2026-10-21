@@ -77,7 +77,7 @@ const WEEKDAY_TOKEN_MAP = {
   sun: 0, sunday: 0, 周日: 0, 星期日: 0, 周天: 0
 };
 
-function appliesToMatcher(appliesTo) {
+function appliesToMatcher(appliesTo, { defaultDaily = true } = {}) {
   const text = String(appliesTo || "daily").toLowerCase();
   const tokens = text.split(/[,，、\s/|]+/).filter(Boolean);
   const days = new Set();
@@ -85,7 +85,7 @@ function appliesToMatcher(appliesTo) {
   let weekday = false;
   let weekend = false;
   for (const t of tokens) {
-    if (["daily", "每天", "每日", "天天", "all"].includes(t)) daily = true;
+    if (["daily", "每天", "每日", "天天", "all", "全部", "所有", "整体"].includes(t)) daily = true;
     else if (["weekday", "工作日", "平时"].includes(t)) weekday = true;
     else if (["weekend", "周末", "休息日"].includes(t)) weekend = true;
     else if (WEEKDAY_TOKEN_MAP[t] !== undefined) days.add(WEEKDAY_TOKEN_MAP[t]);
@@ -95,7 +95,8 @@ function appliesToMatcher(appliesTo) {
     if (days.has(dayOfWeek)) return true;
     if (weekday && dayOfWeek >= 1 && dayOfWeek <= 5) return true;
     if (weekend && (dayOfWeek === 0 || dayOfWeek === 6)) return true;
-    return days.size === 0 && !weekday && !weekend; // 完全没识别出时按每天
+    // 模板适用日缺省时按每天；调整目标的匹配缺省按"不匹配"（交给组名模糊兜底）
+    return defaultDaily && days.size === 0 && !weekday && !weekend;
   };
 }
 
@@ -310,6 +311,132 @@ export function reexpandPlan(patterns, { goal, horizonDays, dailyMinutes, prefer
   const expanded = expandPatterns(adjusted, ctx);
   if (!expanded) return null;
   return { parent: normalizeParent({}, ctx), children: expanded.children };
+}
+
+// ── 定向调整：「周末加到一小时」「改到晚上」这类语义 → 补丁日型模板 ──
+// 文本分钟数解析：一小时/60分钟/半个钟头/一个半小时 → 分钟
+export function parseMinutesText(text) {
+  const t = String(text || "").replace(/\s+/g, "");
+  if (!t) return null;
+  let m = /(\d+)\s*分钟/.exec(t);
+  if (m) return clampInt(m[1], 1, 240, null);
+  m = /(\d+)\s*(小时|钟头)/.exec(t);
+  if (m) return clampInt(Number(m[1]) * 60, 1, 240, null);
+  if (/一个半小时/.test(t)) return 90;
+  if (/半小时|半个钟头/.test(t)) return 30;
+  if (/一小时|一个钟头/.test(t)) return 60;
+  if (/两小时|两个钟头/.test(t)) return 120;
+  if (/三小时/.test(t)) return 180;
+  return null;
+}
+
+function parseClockText(text) {
+  const m = /([01]?\d|2[0-3])[:：.]([0-5]\d)/.exec(String(text || ""));
+  if (m) return `${String(m[1]).padStart(2, "0")}:${m[2]}`;
+  const h = /([01]?\d|2[0-3])\s*点/.exec(String(text || ""));
+  if (h) return `${String(h[1]).padStart(2, "0")}:00`;
+  return null;
+}
+
+// target（周末/工作日/每天/周六/组名…）能命中哪些模板：按"适用日重叠"判定
+function matchTargetIndexes(patterns, target) {
+  const targetMatcher = appliesToMatcher(target, { defaultDaily: false });
+  const matched = [];
+  for (let i = 0; i < patterns.length; i += 1) {
+    const pm = appliesToMatcher(patterns[i].applies_to);
+    let overlap = false;
+    for (let d = 0; d < 7; d += 1) {
+      if (targetMatcher(d) && pm(d)) { overlap = true; break; }
+    }
+    if (overlap) matched.push(i);
+  }
+  // 组名模糊兜底：如 target 是「力量」「有氧」
+  if (matched.length === 0) {
+    const t = String(target || "");
+    if (t) {
+      for (let i = 0; i < patterns.length; i += 1) {
+        if (String(patterns[i].plan_group).includes(t) || String(patterns[i].title).includes(t)) matched.push(i);
+      }
+    }
+  }
+  return matched;
+}
+
+// 应用结构化调整，返回补丁后的模板 + 人类可读的应用清单 + 未命中的调整
+export function applyPlanAdjustments(patterns, adjustments = []) {
+  const next = patterns.map((p) => ({ ...p }));
+  const applied = [];
+  const missed = [];
+  for (const adj of Array.isArray(adjustments) ? adjustments : []) {
+    if (!adj || typeof adj !== "object") continue;
+    const target = String(adj.target || "全部");
+    const field = String(adj.field || "duration");
+    const value = String(adj.value ?? "");
+    const idxs = matchTargetIndexes(next, target);
+    if (idxs.length === 0) { missed.push(adj); continue; }
+    for (const i of idxs) {
+      const p = next[i];
+      if (field === "duration") {
+        const mins = parseMinutesText(value);
+        if (!mins) { missed.push(adj); continue; }
+        const old = p.duration_minutes;
+        p.duration_minutes = clampInt(mins, 10, 240, old);
+        applied.push(`${p.title} ${old}→${p.duration_minutes}分钟`);
+        if (p.description && Math.abs(p.duration_minutes - old) / Math.max(old, 1) > 0.2 && !p.description.includes("时长已调整")) {
+          p.description = `${p.description}（时长已调整为 ${p.duration_minutes} 分钟）`.slice(0, 300);
+        }
+      } else if (field === "start_time") {
+        const clock = parseClockText(value) || (() => {
+          const fake = targetHourFromPreferences(value, null);
+          return fake !== null ? `${String(fake).padStart(2, "0")}:00` : null;
+        })();
+        if (!clock) { missed.push(adj); continue; }
+        applied.push(`${p.title} 时刻→${clock}`);
+        p.start_time = clock;
+      } else if (field === "content") {
+        if (!value.trim()) { missed.push(adj); continue; }
+        p.description = value.trim().slice(0, 300);
+        applied.push(`${p.title} 内容已更新`);
+      } else if (field === "note") {
+        p.note = value.trim().slice(0, 120) || null;
+        applied.push(`${p.title} 提示已更新`);
+      } else {
+        missed.push(adj);
+      }
+    }
+  }
+  return { patterns: next, applied, missed };
+}
+
+// 展开所需的最小每日预算（防止显式调大的时长被原预算压回）
+export function requiredBudget(patterns) {
+  let max = 0;
+  for (let d = 0; d < 7; d += 1) {
+    let sum = 0;
+    for (const p of patterns) {
+      if (appliesToMatcher(p.applies_to)(d)) sum += p.duration_minutes;
+    }
+    max = Math.max(max, sum);
+  }
+  return max;
+}
+
+// 本地兜底语义提取：模型没抽出 adjustments 时，用正则抓「对象+时长/时刻」
+export function extractAdjustmentsFromText(text) {
+  const t = String(text || "");
+  if (!t) return null;
+  const out = [];
+  const dur = /(周末|周六和周日|周六|周日|工作日|周一到周五|工作日|每天|日常|全部|所有)?[^。！？\n]{0,14}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
+  if (dur && /加到|增加|延长|调到|改到|减到|缩到|提到|升到/.test(t)) {
+    const target = dur[1] || "全部";
+    const mins = parseMinutesText(dur[0].slice(dur[1] ? dur[1].length : 0));
+    if (mins) out.push({ target, field: "duration", value: String(mins) });
+  }
+  const clock = /(周末|周六|周日|工作日|每天|日常|全部|所有)?[^。！？\n]{0,10}?(改到|调到|放到|挪到)\s*(早上|上午|中午|下午|晚上|晚间|睡前|\d{1,2}[:：点]\d{0,2})/.exec(t);
+  if (clock) {
+    out.push({ target: clock[1] || "全部", field: "start_time", value: clock[3] });
+  }
+  return out.length > 0 ? out : null;
 }
 
 export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], insights = null, now = new Date() } = {}) {

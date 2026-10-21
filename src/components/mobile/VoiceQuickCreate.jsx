@@ -4,6 +4,7 @@ import { Mic, MicOff, Loader2, X, Sparkles, Check } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
 import { invokeAI } from "@/components/utils/aiHelper";
+import { buildApiUrl, getAccessToken } from "@/api/httpClient";
 import { toast } from "sonner";
 import {
   getTimeContextForAI, normalizeTaskTime, parseAsShanghai,
@@ -92,6 +93,10 @@ function resolveNaturalLanguageTime(text, aiReminderTime) {
  * 注意：移动端 Web Speech API 必须由用户手势触发，因此弹窗打开后
  * 不自动录音，需要用户点击麦克风按钮才开始。每次点击都创建新的
  * recognition 实例，避免旧实例状态腐烂导致首次点击无响应。
+ *
+ * 国内网络下 Web Speech API 依赖境外识别服务（Android Chrome 表现为
+ * 「开始说话」但永远无结果），因此提供录音兜底：getUserMedia 采集
+ * PCM 并重采样为 16k WAV，上传后端走阿里云一句话识别。
  */
 export default function VoiceQuickCreate({ open, onClose }) {
   const queryClient = useQueryClient();
@@ -100,35 +105,57 @@ export default function VoiceQuickCreate({ open, onClose }) {
   const [transcript, setTranscript] = useState("");
   const [interim, setInterim] = useState("");
   const [supported, setSupported] = useState(true);
+  // stt = 浏览器在线识别；record = 录音上传识别（国内网络兜底）
+  const [mode, setMode] = useState("stt");
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const recognitionRef = useRef(null);
+  const sttWatchdogRef = useRef(null);
+  const audioRef = useRef(null); // { stream, ctx, source, processor, chunks: Float32Array[] }
 
-  // 只检测设备是否支持语音识别，不预先创建实例
+  // 只检测设备是否支持语音识别，不预先创建实例；不支持则直接进录音模式
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     setSupported(!!SpeechRecognition);
+    if (!SpeechRecognition) setMode("record");
   }, []);
 
   // 关闭弹窗时停止录音并清空文案
   useEffect(() => {
     if (!open) {
       stopRecognition();
+      stopMediaRecording();
       setTranscript("");
       setIsProcessing(false);
+      setIsTranscribing(false);
     }
   }, [open]);
 
+  const clearSttWatchdog = () => {
+    if (sttWatchdogRef.current) {
+      clearTimeout(sttWatchdogRef.current);
+      sttWatchdogRef.current = null;
+    }
+  };
+
   const stopRecognition = () => {
     setIsRecording(false);
+    clearSttWatchdog();
     try {
       recognitionRef.current?.stop();
     } catch (e) { /* noop */ }
     recognitionRef.current = null;
   };
 
+  const switchToRecordMode = (reason) => {
+    stopRecognition();
+    setMode("record");
+    if (reason) toast.info(reason);
+  };
+
   const startRecording = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      toast.error("当前浏览器不支持语音识别");
+      switchToRecordMode("当前浏览器不支持在线识别，已切换为录音识别");
       return;
     }
 
@@ -151,6 +178,7 @@ export default function VoiceQuickCreate({ open, onClose }) {
         else interimText += text;
       }
       if (finalText) {
+        clearSttWatchdog(); // 有结果说明链路可用，撤掉看门狗
         setTranscript((prev) => prev + finalText);
         setInterim("");
       } else if (interimText) {
@@ -159,12 +187,23 @@ export default function VoiceQuickCreate({ open, onClose }) {
     };
 
     recognition.onerror = (event) => {
-      if (event.error === "not-allowed") toast.error("请允许麦克风权限");
+      if (event.error === "not-allowed") {
+        toast.error("请允许麦克风权限");
+        setIsRecording(false);
+        clearSttWatchdog();
+        return;
+      }
       if (event.error === "aborted") return;
+      clearSttWatchdog();
       setIsRecording(false);
+      // 国内网络典型表现：在线识别服务连不上，自动降级录音识别
+      if (event.error === "network" || event.error === "service-not-allowed") {
+        switchToRecordMode("在线识别不可用，已切换为录音识别");
+      }
     };
 
     recognition.onend = () => {
+      clearSttWatchdog();
       // 用户手动停止时 isRecording 已为 false；若识别自己断了则同步状态
       setIsRecording((rec) => {
         if (rec) {
@@ -181,14 +220,147 @@ export default function VoiceQuickCreate({ open, onClose }) {
       recognition.start();
       setIsRecording(true);
       toast.success("🎤 开始说话…");
+      // 看门狗：6 秒内没有任何最终结果，按国内网络不可用处理，降级录音
+      clearSttWatchdog();
+      sttWatchdogRef.current = setTimeout(() => {
+        setIsRecording(false);
+        try { recognition.stop(); } catch (e) { /* noop */ }
+        switchToRecordMode("未识别到语音，已切换为录音识别");
+      }, 6000);
     } catch (e) {
       toast.error("麦克风启动失败，请重试");
       setIsRecording(false);
+      clearSttWatchdog();
     }
+  };
+
+  // ── 录音兜底：getUserMedia → 重采样 16k 单声道 PCM → WAV → 后端识别 ──
+  const stopMediaRecording = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    audioRef.current = null;
+    try { a.processor.disconnect(); } catch (e) { /* noop */ }
+    try { a.source.disconnect(); } catch (e) { /* noop */ }
+    try { a.stream.getTracks().forEach((t) => t.stop()); } catch (e) { /* noop */ }
+    try { a.ctx.close(); } catch (e) { /* noop */ }
+    setIsRecording(false);
+  };
+
+  const startMediaRecording = async () => {
+    if (audioRef.current || isTranscribing) return;
+    setTranscript("");
+    setInterim("");
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
+    } catch (e) {
+      toast.error("无法访问麦克风，请检查权限设置");
+      return;
+    }
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    await ctx.resume();
+    const source = ctx.createMediaStreamSource(stream);
+    // ScriptProcessor 已废弃但全平台可用；录音时长仅数秒，性能足够
+    const processor = ctx.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    processor.onaudioprocess = (e) => {
+      chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(ctx.destination);
+    audioRef.current = { stream, ctx, source, processor, chunks, sampleRate: ctx.sampleRate };
+    setIsRecording(true);
+    toast.success("🎤 开始录音，说完再点一次停止");
+  };
+
+  // Float32 重采样到 16k 并打包 WAV（16bit 单声道），阿里云一句话识别直接可用
+  const encodeWav16k = (chunks, inputRate) => {
+    const targetRate = 16000;
+    const total = chunks.reduce((n, c) => n + c.length, 0);
+    const merged = new Float32Array(total);
+    let offset = 0;
+    chunks.forEach((c) => { merged.set(c, offset); offset += c.length; });
+    const step = inputRate / targetRate;
+    const outLen = Math.floor(total / step);
+    const pcm = new Int16Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const pos = i * step;
+      const i0 = Math.floor(pos);
+      const i1 = Math.min(i0 + 1, total - 1);
+      const frac = pos - i0;
+      const v = merged[i0] * (1 - frac) + merged[i1] * frac;
+      pcm[i] = Math.max(-1, Math.min(1, v)) * 32767;
+    }
+    const buffer = new ArrayBuffer(44 + pcm.length * 2);
+    const view = new DataView(buffer);
+    const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + pcm.length * 2, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, targetRate, true);
+    view.setUint32(28, targetRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, pcm.length * 2, true);
+    new Int16Array(buffer, 44).set(pcm);
+    return new Blob([buffer], { type: "audio/wav" });
+  };
+
+  const stopMediaRecordingAndTranscribe = async () => {
+    const a = audioRef.current;
+    if (!a) return;
+    const { chunks, sampleRate } = a;
+    stopMediaRecording();
+    const totalSamples = chunks.reduce((n, c) => n + c.length, 0);
+    // AudioContext 启动会有一小段空数据，真实录音至少几百毫秒
+    if (totalSamples < sampleRate * 0.3) {
+      toast.error("录音太短，请长按多说一点");
+      return;
+    }
+    const wav = encodeWav16k(chunks, sampleRate);
+    setIsTranscribing(true);
+    try {
+      const resp = await fetch(buildApiUrl("/api/voice/transcribe?format=wav&sample_rate=16000"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          ...(getAccessToken() ? { Authorization: `Bearer ${getAccessToken()}` } : {})
+        },
+        body: wav
+      });
+      if (resp.status === 501) {
+        toast.error("语音服务未开通，请联系管理员配置");
+        setIsTranscribing(false);
+        return;
+      }
+      if (!resp.ok) {
+        toast.error("识别失败，请再试一次");
+        setIsTranscribing(false);
+        return;
+      }
+      const data = await resp.json();
+      const text = (data.text || "").trim();
+      if (!text) {
+        toast.error("没听清内容，请再录一次");
+        setIsTranscribing(false);
+        return;
+      }
+      setTranscript((prev) => (prev ? prev + " " + text : text));
+      toast.success("识别成功，检查一下内容");
+    } catch (e) {
+      toast.error("识别服务暂不可用，请稍后再试");
+    }
+    setIsTranscribing(false);
   };
 
   const handleGenerate = async () => {
     stopRecognition();
+    stopMediaRecording();
     const text = transcript.trim();
     if (!text) {
       toast.error("未检测到语音内容");
@@ -281,7 +453,7 @@ ${timeCtx.promptSnippet}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => { stopRecognition(); onClose(); }}
+            onClick={() => { stopRecognition(); stopMediaRecording(); onClose(); }}
             className="md:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm"
           />
           <motion.div
@@ -297,61 +469,89 @@ ${timeCtx.promptSnippet}
                 <h3 className="font-bold text-slate-800 text-base">语音一键生成约定</h3>
               </div>
               <button
-                onClick={() => { stopRecognition(); onClose(); }}
+                onClick={() => { stopRecognition(); stopMediaRecording(); onClose(); }}
                 className="p-2 rounded-full hover:bg-slate-100 text-slate-400 no-min-size"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {!supported ? (
-              <div className="text-center py-8 text-slate-500 text-sm">
-                当前浏览器不支持语音识别，请使用 Chrome 或 Safari。
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-5">
-                <button
-                  onClick={isRecording ? stopRecognition : startRecording}
-                  disabled={isProcessing}
-                  className={`h-24 w-24 rounded-full flex items-center justify-center text-white shadow-lg transition-all no-min-size ${
-                    isRecording
-                      ? "bg-red-500 animate-pulse shadow-red-500/30"
-                      : "bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-[#384877]/30"
-                  }`}
-                >
-                  {isProcessing ? (
-                    <Loader2 className="w-10 h-10 animate-spin" />
-                  ) : isRecording ? (
-                    <MicOff className="w-10 h-10" />
-                  ) : (
-                    <Mic className="w-10 h-10" />
-                  )}
-                </button>
+            <div className="flex flex-col items-center gap-5">
+              <button
+                onClick={() => {
+                  if (isProcessing || isTranscribing) return;
+                  if (mode === "record") {
+                    if (isRecording) stopMediaRecordingAndTranscribe();
+                    else startMediaRecording();
+                  } else {
+                    isRecording ? stopRecognition() : startRecording();
+                  }
+                }}
+                disabled={isProcessing || isTranscribing}
+                className={`h-24 w-24 rounded-full flex items-center justify-center text-white shadow-lg transition-all no-min-size ${
+                  isRecording
+                    ? "bg-red-500 animate-pulse shadow-red-500/30"
+                    : "bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-[#384877]/30"
+                }`}
+              >
+                {isProcessing || isTranscribing ? (
+                  <Loader2 className="w-10 h-10 animate-spin" />
+                ) : isRecording ? (
+                  <MicOff className="w-10 h-10" />
+                ) : (
+                  <Mic className="w-10 h-10" />
+                )}
+              </button>
 
-                <div className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 min-h-[80px] text-center text-slate-600 text-sm">
-                  {transcript || interim ? (
-                    <>
-                      {transcript}
-                      {interim && <span className="text-slate-400"> {interim}</span>}
-                    </>
-                  ) : (
-                    isRecording ? "正在聆听，请说出你的约定…" : "点击麦克风开始说话"
-                  )}
-                </div>
-
-                <button
-                  onClick={handleGenerate}
-                  disabled={isProcessing || !transcript.trim()}
-                  className="w-full h-12 rounded-2xl bg-[#384877] hover:bg-[#2c3b63] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-40 transition-colors"
-                >
-                  {isProcessing ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> AI 生成中…</>
-                  ) : (
-                    <><Check className="w-5 h-5" /> 一键生成约定</>
-                  )}
-                </button>
+              <div className="text-xs text-slate-400 -mt-2">
+                {mode === "record"
+                  ? (isRecording ? "录音中…说完再点一次停止" : "点击麦克风录音，自动识别文字")
+                  : (isRecording ? "正在聆听，请说出你的约定…" : "点击麦克风开始说话")}
               </div>
-            )}
+
+              <div className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 min-h-[80px] text-center text-slate-600 text-sm">
+                {transcript || interim ? (
+                  <>
+                    {transcript}
+                    {interim && <span className="text-slate-400"> {interim}</span>}
+                  </>
+                ) : (
+                  isRecording
+                    ? (mode === "record" ? "正在录音…" : "正在聆听，请说出你的约定…")
+                    : "点击麦克风开始说话"
+                )}
+              </div>
+
+              {supported && (
+                <button
+                  onClick={() => {
+                    if (mode === "record") {
+                      stopMediaRecording();
+                      setMode("stt");
+                    } else {
+                      switchToRecordMode();
+                    }
+                  }}
+                  className="text-xs text-[#384877]/70 underline underline-offset-2 no-min-size"
+                >
+                  {mode === "record" ? "在线识别可用？切换回在线识别" : "识别不到？改用录音识别"}
+                </button>
+              )}
+
+              <button
+                onClick={handleGenerate}
+                disabled={isProcessing || isTranscribing || !transcript.trim()}
+                className="w-full h-12 rounded-2xl bg-[#384877] hover:bg-[#2c3b63] text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-40 transition-colors"
+              >
+                {isProcessing ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /> AI 生成中…</>
+                ) : isTranscribing ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /> 识别中…</>
+                ) : (
+                  <><Check className="w-5 h-5" /> 一键生成约定</>
+                )}
+              </button>
+            </div>
           </motion.div>
         </>
       )}

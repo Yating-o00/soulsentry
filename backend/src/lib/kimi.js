@@ -146,7 +146,13 @@ export async function callKimiChat({
           const content = data.choices?.[0]?.message?.content || "";
           // JSON 模式下内容不合法（个别模型会无视 response_format 输出自由文本或被截断）：
           // 视为本次失败，换下一个候选模型/端点重试，而不是直接把坏内容抛给调用方
-          if (responseJsonSchema && content) {
+          if (responseJsonSchema) {
+            if (!content) {
+              lastStatus = 200;
+              lastErrorText = "RESPONSE_EMPTY";
+              console.log(`[callKimiChat] empty content: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, finish=${data.choices?.[0]?.finish_reason}`);
+              continue;
+            }
             try {
               parseModelJson(content);
             } catch {
@@ -199,7 +205,9 @@ export async function callKimiChat({
   const error = new Error(
     lastErrorText === "RESPONSE_NOT_JSON"
       ? "Kimi 返回内容不是合法 JSON"
-      : `Kimi API error ${lastStatus}: ${lastErrorText}`
+      : lastErrorText === "RESPONSE_EMPTY"
+        ? "Kimi 返回空内容（输出预算可能被推理耗尽，请调大 maxTokens 或重试）"
+        : `Kimi API error ${lastStatus}: ${lastErrorText}`
   );
   error.status = 502;
   throw error;

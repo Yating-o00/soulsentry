@@ -382,10 +382,10 @@ ${insightsText ? `用户个性化参考（来自其历史数据，仅作排期�
         systemPrompt: "你是 SoulSentry 的约定规划师。把用户的长期目标拆成母约定 + 2-5 个日型模板（按工作日/周末/内容类型区分）。只输出符合 schema 的 JSON，直接给出结果，不要做长篇推理。",
         responseJsonSchema: schema,
         maxTokens: 4000,
-        fetchTimeout: 30000,
+        fetchTimeout: 75000,
         withUsage: true
       }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 35000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 60000))
     ]);
 
     // 主路径：日型模板 → 本地展开

@@ -100,8 +100,15 @@ function normalizePlan(raw, ctx) {
   return { parent, children };
 }
 
-// 本地兜底：Kimi 不可用时按通用模板排期——每天 1 条（每满 7 天留 1 天缓冲），默认 19:30
-export function buildFallbackPlan({ goal, horizonDays, dailyMinutes, now = new Date() } = {}) {
+// 本地兜底：Kimi 不可用时按通用模板排期。时刻优先取用户历史活跃时段（逐日轮换），其次 19:30
+function slotFromInsights(insights, i) {
+  const windows = Array.isArray(insights?.activeWindows) ? insights.activeWindows : [];
+  const m = windows.length ? /^(\d{1,2}):00/.exec(windows[i % windows.length]) : null;
+  const hour = m ? Math.min(22, Math.max(7, Number(m[1]))) : 19;
+  return `${String(hour).padStart(2, "0")}:30`;
+}
+
+export function buildFallbackPlan({ goal, horizonDays, dailyMinutes, insights = null, now = new Date() } = {}) {
   const g = String(goal || "新的计划").trim().slice(0, 40) || "新的计划";
   const days = clampInt(horizonDays, 2, 30, 7);
   const minutes = clampInt(dailyMinutes, 15, 180, 30);
@@ -116,7 +123,7 @@ export function buildFallbackPlan({ goal, horizonDays, dailyMinutes, now = new D
   for (let i = 0; i < days; i += 1) {
     if (days > 6 && (i + 1) % 7 === 0) continue; // 每第 7 天留白缓冲
     const date = chinaToday(i);
-    let startMs = new Date(`${date}T19:30:00+08:00`).getTime();
+    let startMs = new Date(`${date}T${slotFromInsights(insights, i)}:00+08:00`).getTime();
     if (i === 0 && startMs < minStartMs) startMs = minStartMs;
     const start = new Date(startMs + 8 * 3600 * 1000).toISOString().slice(11, 16);
     const end = new Date(startMs + minutes * 60000 + 8 * 3600 * 1000).toISOString().slice(11, 16);
@@ -142,7 +149,7 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
     dailyMinutes: clampInt(dailyMinutes, 15, 180, 30)
   };
   if (!ctx.goal) {
-    return { ...buildFallbackPlan({ goal: "新的计划", ...ctx, now }), source: "fallback" };
+    return { ...buildFallbackPlan({ goal: "新的计划", ...ctx, insights, now }), source: "fallback" };
   }
 
   const today = chinaToday();
@@ -194,17 +201,17 @@ ${insightsText ? `用户个性化参考（来自其历史数据，仅作排期�
 3. 内容按天递进（由易到难/由概到细），每满 7 天至少留 1 天缓冲或复盘，不要把缓冲日排满。
 4. 时刻尽量贴合生活习惯（学习类优先上午或晚间，健身类避开饭后立即）。
 5. 计划包含多类内容时必须分组（plan_group）：如健身计划分「日常训练」「周末强化」「饮食配合」，备考计划分「每日刷题」「周末模考」「错题复盘」；同一组共用一个简洁组名（≤8字），不要逐条变化。每天要坚持做完并打卡留痕的项标 kind=checkin（如每日跑步/每日背单词）；一次性大项、准备工作、周末加练等用 task（默认）。饮食类条目排进餐点时刻；纯指导性文字（食谱/注意事项）写进该条 description 或 note，不要单独占条。
-6. 每条 description 必须写清可执行动作与量化标准（如「慢跑 3 公里或 30 分钟，前后各 5 分钟拉伸」），拒绝空话；优先把每日项排在用户历史活跃时段内，活跃时段与偏好冲突时以偏好为准。
+6. 每条 description 必须写清可执行动作与量化标准（如「慢跑 3 公里或 30 分钟，前后各 5 分钟拉伸」），拒绝空话；description 控制在 40 字内、note 控制在 20 字内，不要输出 JSON 之外的任何解释文字，以免超长被截断。优先把每日项排在用户历史活跃时段内，活跃时段与偏好冲突时以偏好为准。
 7. 若用户近30天完成率低于 50%：首周总量减半起步、间隔日安排，给习惯养成留余地；若规划窗口内某天的已有占用接近或超过每天预算，当天减量或只排 1 条。若用户已有内容重合的打卡约定，排期避开其提醒时刻，并在相关条目的 note 里提示「可与《约定名》一起打卡」。
 8. 严格返回 JSON。`;
 
   try {
-    const { data, usage } = await Promise.race([
+      const { data, usage } = await Promise.race([
       invokeKimiText({
         prompt,
         systemPrompt: "你是 SoulSentry 的约定规划师。把用户的一类长期目标拆成母约定 + 每天具体时刻的子约定。只输出符合 schema 的 JSON，不要输出其他内容。",
         responseJsonSchema: schema,
-        maxTokens: 2000,
+        maxTokens: 4000,
         withUsage: true
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 15000))
@@ -214,5 +221,5 @@ ${insightsText ? `用户个性化参考（来自其历史数据，仅作排期�
   } catch (err) {
     console.warn("[planCommitment] Kimi 规划失败，使用兜底模板:", err?.message || err);
   }
-  return { ...buildFallbackPlan({ ...ctx, now }), source: "fallback" };
+  return { ...buildFallbackPlan({ ...ctx, insights, now }), source: "fallback" };
 }

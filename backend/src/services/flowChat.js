@@ -679,6 +679,10 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           children: planned.children,
           source: planned.source || "ai"
         };
+        // 降级模板要让用户知情（区别于 throw 路径的提示，内部兜底只标 source）
+        if (planned.source === "fallback") {
+          out.reply = `${out.reply}（这次排期没连上 AI，先给了保守模板；跟我说「重新规划」出正式版～）`;
+        }
         // 用了个性化排期就让用户感知到「这是为你调的」
         if (planned.source !== "fallback" && insights) {
           const note = renderInsightsForPrompt(insights)

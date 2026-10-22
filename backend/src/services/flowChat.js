@@ -809,6 +809,42 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       }
     }
 
+    // —— 本地兜底（不依赖对话模型的理解）：上轮有规划模板且本轮输入是定向调整语句时直接应用 ——
+    // 对话模型偶尔把「周六改到早上9点」当闲聊；只要语义明确，本地接管，保证随机应变
+    {
+      const prevExt = lastExtracted && lastExtracted.type === "plan" ? lastExtracted : null;
+      const prevPats = Array.isArray(prevExt?.plan?.patterns) && prevExt.plan.patterns.length > 0 ? prevExt.plan.patterns : null;
+      const usablePlanThisTurn = out.extracted?.type === "plan" && !!out.extracted?.plan;
+      const lastText = [...safeMessages].reverse().find((m) => m.role === "user")?.content || "";
+      if (!usablePlanThisTurn && prevPats && prevExt?.plan_request) {
+        const textAdj = extractAdjustmentsFromText(lastText);
+        if (textAdj?.length) {
+          const patched = applyPlanAdjustments(prevPats, textAdj);
+          if (patched.applied.length > 0) {
+            const budget = Math.max(prevExt.plan_request.daily_minutes || 30, requiredBudget(patched.patterns));
+            const re = reexpandPlan(patched.patterns, {
+              goal: prevExt.plan_request.goal,
+              horizonDays: prevExt.plan_request.horizon_days || 7,
+              dailyMinutes: budget,
+              preferences: prevExt.plan_request.preferences,
+              baseDailyMinutes: budget
+            });
+            if (re) {
+              out.extracted = {
+                type: "plan",
+                plan_request: { ...prevExt.plan_request, adjustments: null },
+                plan: { parent: re.parent, children: re.children, patterns: patched.patterns, source: "ai" }
+              };
+              const missedNote = patched.missed.length > 0
+                ? `；没匹配到「${patched.missed.map((m2) => m2.target).join("、")}」`
+                : "";
+              out.reply = `好的，已替你更新：${patched.applied.slice(0, 4).join("；")}${missedNote}，看看新安排～`;
+            }
+          }
+        }
+      }
+    }
+
     // AI 调用成功：按真实 token 用量结算（1 点/1000 token，最少 1 点）；余额竞态只记警告不阻断
     if (userId && prisma && out.usage) {
       try {

@@ -605,8 +605,8 @@ export default function SmartInputBar() {
                 </div>
               )}
 
-              {/* 提案卡片：确认后才生成 */}
-              {pending && !busy && (
+              {/* 提案卡片：确认后才生成（plan 类型必须有规划内容才渲染，防空卡） */}
+              {pending && !busy && !(pending.type === "plan" && !pending.plan) && (
                 <div className="mb-3 w-full rounded-xl border p-4" style={{ borderColor: C.hairline, background: "#fbfcfc" }}>
                   <div className="flex items-center gap-2">
                     <span className="text-[15px]">{TYPE_ICON[pending.type] || "📝"}</span>

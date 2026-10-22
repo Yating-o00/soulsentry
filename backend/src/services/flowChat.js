@@ -524,7 +524,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
 7. 严格返回 JSON，不要输出其他内容。`,
     responseJsonSchema: RESPONSE_SCHEMA,
     temperature: 0.7,
-    maxTokens: 800,
+    maxTokens: 4000,
     withUsage: true
   });
 

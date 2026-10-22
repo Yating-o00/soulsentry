@@ -176,6 +176,22 @@ export function expandPatterns(patterns, ctx) {
         plan_group: p.plan_group
       });
     }
+    // 覆盖兜底：模型返回的模板适用日可能漏天，非缓冲日没有任何条目时给一条轻量恢复安排，保证每天都看得见
+    if (dayItems.length === 0) {
+      const restMs = new Date(`${date}T20:00:00+08:00`).getTime();
+      const startMs = date === today && restMs < minStartMs ? roundUp5(minStartMs) : restMs;
+      children.push({
+        title: "轻松恢复",
+        description: "今天没有专项安排，散步或拉伸 15 分钟保持节奏即可",
+        date,
+        start_time: hm(startMs),
+        end_time: hm(startMs + 15 * 60000),
+        duration_minutes: 15,
+        note: null,
+        kind: "task",
+        plan_group: "缓冲调整"
+      });
+    }
   }
   if (children.length === 0) return null;
   children.sort((a, b) => `${a.date}T${a.start_time}`.localeCompare(`${b.date}T${b.start_time}`));
@@ -539,7 +555,7 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
   }
   const prompt = `用户想规划：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。偏好：${String(preferences || "无").slice(0, 100)}
 ${bits.join("\n")}
-不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（≤30字，含量化标准如「慢跑3公里」）、note（可选≤20字）、weekly_progression（可选，写「每周+N分钟」形式）。每满 7 天留 1 天缓冲不用排。直接输出 JSON。`;
+不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合；所有模板的适用日合起来必须覆盖规划期每一天，不要漏天）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（≤30字，含量化标准如「慢跑3公里」）、note（可选≤20字）、weekly_progression（可选，写「每周+N分钟」形式）。每满 7 天留 1 天缓冲不用排。直接输出 JSON。`;
 
   let lastErr = null;
   for (let attempt = 1; attempt <= 2; attempt += 1) {

@@ -356,13 +356,25 @@ function matchTargetIndexes(patterns, target) {
     }
     if (overlap) matched.push(i);
   }
-  // 组名模糊兜底：如 target 是「力量」「有氧」
+  // 组名/标题模糊兜底（字符重合度），命中冲突时取最高分的一个，避免「跑步」同时改掉慢跑和长跑
   if (matched.length === 0) {
-    const t = String(target || "");
+    const t = String(target || "").replace(/[的\s]/g, "");
     if (t) {
+      let best = -1;
+      let bestScore = 0.49;
+      let bestExact = false;
       for (let i = 0; i < patterns.length; i += 1) {
-        if (String(patterns[i].plan_group).includes(t) || String(patterns[i].title).includes(t)) matched.push(i);
+        const hay = `${patterns[i].plan_group}${patterns[i].title}`;
+        const exact = hay.includes(t) || (patterns[i].title && t.includes(patterns[i].title));
+        const chars = [...new Set(t)];
+        const score = chars.length > 0 ? chars.filter((c) => hay.includes(c)).length / chars.length : 0;
+        if ((exact && !bestExact) || (exact === bestExact && score > bestScore)) {
+          best = i;
+          bestScore = score;
+          bestExact = exact;
+        }
       }
+      if (best >= 0) matched.push(best);
     }
   }
   return matched;
@@ -445,15 +457,20 @@ export function extractAdjustmentsFromText(text) {
   const t = String(text || "");
   if (!t) return null;
   const out = [];
-  const dur = /(周末|周六和周日|周六|周日|工作日|周一到周五|工作日|每天|日常|全部|所有)?[^。！？\n]{0,14}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
-  if (dur && /加到|增加|延长|调到|改到|减到|缩到|提到|升到/.test(t)) {
-    const target = dur[1] || "全部";
-    const mins = parseMinutesText(dur[0].slice(dur[1] ? dur[1].length : 0));
+  const dur = /(?:(周末|周六和周日|周六|周日|工作日|周一到周五|每天|日常|全部|所有)|([一-龥]{2,8}?))[^。！？\n]{0,10}?(?:加到|增加|延长|调到|减到|缩到|提到|升到)[^。！？\n]{0,6}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
+  if (dur) {
+    const target = dur[1] || dur[2] || "全部";
+    const mins = parseMinutesText(dur[0].slice((dur[1] || dur[2] || "").length));
     if (mins) out.push({ target, field: "duration", value: `${mins}分钟` });
   }
   const clock = /(周末|周六|周日|工作日|每天|日常|全部|所有)?[^。！？\n]{0,10}?(改到|调到|放到|挪到)\s*((?:(?:早上|上午|中午|下午|晚上|晚间|睡前)\s*)?[0-9]{1,2}\s*(?:[:：点]\s*(?:[0-5]\d|半)|[:：点])?|早上|上午|中午|下午|晚上|晚间|睡前)/.exec(t);
   if (clock) {
     out.push({ target: clock[1] || "全部", field: "start_time", value: clock[3] });
+  }
+  // 「把跑步换成游泳」「把自重训练改成瑜伽」→ 内容替换
+  const swap = /把(.{1,12}?)(?:换成|改成|替换成|变为)(.{1,24})/.exec(t);
+  if (swap) {
+    out.push({ target: swap[1].trim(), field: "content", value: swap[2].trim() });
   }
   return out.length > 0 ? out : null;
 }

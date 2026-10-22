@@ -630,9 +630,20 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
 
   try {
     if (!safeMessages.length || !lastUser) throw new Error("empty messages");
+    // 注入对话的提案上下文要瘦身：逐日 children 又长又干扰理解，模板(patterns)才是调整的核心上下文
+    const dialogueLastExtracted = lastExtracted?.type === "plan" && lastExtracted?.plan
+      ? {
+          ...lastExtracted,
+          plan: {
+            parent: lastExtracted.plan.parent,
+            patterns: lastExtracted.plan.patterns,
+            source: lastExtracted.plan.source
+          }
+        }
+      : lastExtracted;
     const out = await Promise.race([
-      chatWithKimi({ messages: safeMessages, lastExtracted, attachmentCtx }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 15000))
+      chatWithKimi({ messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 30000))
     ]);
 
     // —— 智能约定规划：调规划器（注入已有安排避障），把逐日执行计划填进提案 ——
@@ -930,6 +941,41 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           plan_request: { goal: planned.parent.title, horizon_days: 7, daily_minutes: 30, preferences: null },
           plan: { parent: planned.parent, children: planned.children, source: "fallback" }
         },
+        source: "fallback"
+      };
+    }
+
+    // 规划上下文中的定向调整：即使对话模型超时/没听懂，本地也直接接管，保证随机应变
+    if (lastExtracted?.type === "plan" && Array.isArray(lastExtracted.plan?.patterns) && lastExtracted.plan.patterns.length > 0) {
+      const textAdj = extractAdjustmentsFromText(lastUser?.content || "");
+      if (textAdj?.length) {
+        const patched = applyPlanAdjustments(lastExtracted.plan.patterns, textAdj);
+        if (patched.applied.length > 0) {
+          const budget = Math.max(lastExtracted.plan_request?.daily_minutes || 30, requiredBudget(patched.patterns));
+          const re = reexpandPlan(patched.patterns, {
+            goal: lastExtracted.plan_request?.goal || "智能规划",
+            horizonDays: lastExtracted.plan_request?.horizon_days || 7,
+            dailyMinutes: budget,
+            preferences: lastExtracted.plan_request?.preferences,
+            baseDailyMinutes: budget
+          });
+          if (re) {
+            return {
+              reply: `好的，已替你更新：${patched.applied.slice(0, 4).join("；")}${patched.missed.length > 0 ? `；没匹配到「${patched.missed.map((m2) => m2.target).join("、")}」` : ""}～`,
+              extracted: {
+                type: "plan",
+                plan_request: { ...lastExtracted.plan_request, adjustments: null },
+                plan: { parent: re.parent, children: re.children, patterns: patched.patterns, source: "ai" }
+              },
+              source: "fallback"
+            };
+          }
+        }
+      }
+      // 正在调整规划但语义没匹配上：给上下文提示，而不是泛泛的"我在听"
+      return {
+        reply: "我在听～我们正在调整你的规划，可以直接说具体修改，比如「周末加到一小时」「把跑步换成游泳」「改到晚上八点半」；或者说「重新规划」让我整体重排一份。",
+        extracted: null,
         source: "fallback"
       };
     }

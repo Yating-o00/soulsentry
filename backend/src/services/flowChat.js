@@ -711,7 +711,8 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         const sameGoal = prevReq && String(prevReq.goal || "") === String(req.goal || "");
         const lastUserText = [...safeMessages].reverse().find((m) => m.role === "user")?.content || "";
         const modelAdjustments = Array.isArray(req.adjustments) && req.adjustments.length > 0 ? req.adjustments : null;
-        const textAdjustments = !modelAdjustments && prevPatterns && sameGoal ? extractAdjustmentsFromText(lastUserText) : null;
+        // 文本兜底始终计算：带范围词的调整语句优先按定向修改处理，防止模型误判成整体时长变更
+        const textAdjustments = prevPatterns && sameGoal ? extractAdjustmentsFromText(lastUserText) : null;
         const adjustments = modelAdjustments || textAdjustments;
         let planned = null;
         let adjustedPatterns = null;

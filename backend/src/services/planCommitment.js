@@ -473,9 +473,15 @@ export function extractAdjustmentsFromText(text) {
   const t = String(text || "");
   if (!t) return null;
   const out = [];
-  const dur = /(?:(周末|周六和周日|周六|周日|工作日|周一到周五|每天|日常|全部|所有)|([一-龥]{2,8}?))[^。！？\n]{0,10}?(?:加到|增加|延长|调到|减到|缩到|提到|升到)[^。！？\n]{0,6}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
+  const dur = /(?:(周末|周六和周日|周六|周日|工作日|周一到周五|每天|日常|全部|所有)|([一-龥]{2,8}?))[^。！？\n]{0,10}?(?:加到|增加|延长|调到|减到|缩到|提到|升到|改成)[^。！？\n]{0,6}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
   if (dur) {
-    const target = dur[1] || dur[2] || "全部";
+    let target = dur[1] || "";
+    if (!target) {
+      // 未知对象：清掉口语前缀后仍无意义（单字/时长时间类）→ 按全局处理
+      const raw = String(dur[2] || "").replace(/^把/, "");
+      target = raw.length >= 2 && !/时[长间]$|整体/.test(raw) ? raw : "全部";
+    }
+    if (/时长|时间|每天|整体|所有/.test(target)) target = "全部";
     const mins = parseMinutesText(dur[0].slice((dur[1] || dur[2] || "").length));
     if (mins) out.push({ target, field: "duration", value: `${mins}分钟` });
   }
@@ -483,9 +489,9 @@ export function extractAdjustmentsFromText(text) {
   if (clock) {
     out.push({ target: clock[1] || "全部", field: "start_time", value: clock[3] });
   }
-  // 「把跑步换成游泳」「把自重训练改成瑜伽」→ 内容替换
+  // 「把跑步换成游泳」「把自重训练改成瑜伽」→ 内容替换（值若是时长数字则不按内容处理）
   const swap = /把(.{1,12}?)(?:换成|改成|替换成|变为)(.{1,24})/.exec(t);
-  if (swap) {
+  if (swap && !/(\d+|一|两|半)[\s]*(?:个)?(?:半)?(?:小时|钟头|分钟)/.test(swap[2])) {
     out.push({ target: swap[1].trim(), field: "content", value: swap[2].trim() });
   }
   return out.length > 0 ? out : null;

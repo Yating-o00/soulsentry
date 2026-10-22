@@ -110,6 +110,7 @@ export default function SmartInputBar() {
   const taRef = useRef(null);
   const threadRef = useRef(null);
   const recognitionRef = useRef(null);
+  const confirmedPlanRef = useRef(null); // 已确认生成的智能规划 {id, goal}：同一规划再确认时原地更新，不重复建母约定
   const queryClient = useQueryClient();
 
   const stopAgentPoll = () => {
@@ -318,6 +319,7 @@ export default function SmartInputBar() {
     if (!pending || busy) return;
     const last = pending;
     setPending(null);
+    confirmedPlanRef.current = null;
     const msgs = [...messages, { role: "user", content: "这个不对，我想改一下" }];
     setMessages(msgs);
     callAI(msgs, last);
@@ -384,29 +386,51 @@ export default function SmartInputBar() {
         const plan = pending.plan;
         if (!plan?.parent) return;
         const children = Array.isArray(plan.children) ? plan.children : [];
-        // 先建母约定，再把子约定批量挂到它名下（bulkCreate → POST /api/tasks/batch）
-        const parent = await base44.entities.Task.create({
-          title: plan.parent.title,
-          description: plan.parent.description || pending.plan_request?.goal || "",
+        const goalKey = pending.plan_request?.goal || plan.parent.title;
+        const childPayload = (parentId) => children.map((c) => ({
+          title: c.title,
+          description: c.description || "",
           category: plan.parent.category || "personal",
           priority: plan.parent.priority || "medium",
-          status: "pending",
+          parent_task_id: parentId,
+          reminder_time: `${c.date}T${c.start_time}:00+08:00`,
+          end_time: `${c.date}T${c.end_time}:00+08:00`,
           tags: ["智能规划"],
-        });
-        if (children.length > 0) {
-          await base44.entities.Task.bulkCreate(children.map((c) => ({
-            title: c.title,
-            description: c.description || "",
+          // 规划结构透传给卡片：分组渲染 + 打卡项识别（服务端收进 metadata._extraFields 后平铺回读）
+          plan_kind: c.kind || "task",
+          plan_group: c.plan_group || "每日安排",
+        }));
+        const existing = confirmedPlanRef.current && confirmedPlanRef.current.goal === goalKey ? confirmedPlanRef.current : null;
+        if (existing) {
+          // 同一规划的再确认（多轮调整后的新版本）：原地更新——更新母约定、清掉旧子约定、重建新子约定
+          await base44.entities.Task.update(existing.id, {
+            title: plan.parent.title,
+            description: plan.parent.description || goalKey,
             category: plan.parent.category || "personal",
             priority: plan.parent.priority || "medium",
-            parent_task_id: parent.id,
-            reminder_time: `${c.date}T${c.start_time}:00+08:00`,
-            end_time: `${c.date}T${c.end_time}:00+08:00`,
+          });
+          const all = await base44.entities.Task.list("-created_date", 500);
+          const oldChildren = all.filter((t) => t.parent_task_id === existing.id && !t.deleted_at);
+          for (const c of oldChildren) {
+            await base44.entities.Task.delete(c.id);
+          }
+          if (children.length > 0) {
+            await base44.entities.Task.bulkCreate(childPayload(existing.id));
+          }
+        } else {
+          // 先建母约定，再把子约定批量挂到它名下（bulkCreate → POST /api/tasks/batch）
+          const parent = await base44.entities.Task.create({
+            title: plan.parent.title,
+            description: plan.parent.description || goalKey,
+            category: plan.parent.category || "personal",
+            priority: plan.parent.priority || "medium",
+            status: "pending",
             tags: ["智能规划"],
-            // 规划结构透传给卡片：分组渲染 + 打卡项识别（服务端收进 metadata._extraFields 后平铺回读）
-            plan_kind: c.kind || "task",
-            plan_group: c.plan_group || "每日安排",
-          })));
+          });
+          if (children.length > 0) {
+            await base44.entities.Task.bulkCreate(childPayload(parent.id));
+          }
+          confirmedPlanRef.current = { id: parent.id, goal: goalKey };
         }
         planChildCount = children.length;
         doneLabel = plan.parent.title;
@@ -469,6 +493,7 @@ export default function SmartInputBar() {
     setLiveOpen(false);
     setMessages([]);
     setPending(null);
+    confirmedPlanRef.current = null;
   };
 
   const handlePaste = (e) => {

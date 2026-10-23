@@ -335,24 +335,24 @@ export function generateNoteCover({ content = "", typeLabel = "心签", typeColo
       ctx.font = `500 14px ${FONT}`;
       ctx.fillStyle = typeColor;
       const typeWidth = ctx.measureText(typeLabel).width;
-      ctx.fillText(typeLabel, pad, 118);
+      ctx.fillText(typeLabel, pad, 112);
       ctx.fillStyle = INK_FAINT;
-      ctx.fillText(dateStr ? ` · ${dateStr}` : "", pad + typeWidth, 118);
+      ctx.fillText(dateStr ? ` · ${dateStr}` : "", pad + typeWidth, 112);
 
-      // 签的正文（主角）：有回应时限 4 行，无回应可到 6 行
-      const maxLines = response ? 4 : 6;
-      ctx.font = `500 22px ${FONT}`;
+      // 签的正文（主角）：大字报式排版，缩略图里也能读清；有回应时限 2 行，无回应 3 行
+      const maxLines = response ? 2 : 3;
+      ctx.font = `600 32px ${FONT}`;
       ctx.fillStyle = INK;
       const contentLines = wrapTextEllipsis(ctx, text, W - pad * 2, maxLines);
-      let y = 162;
+      let y = 158;
       contentLines.forEach((line) => {
         ctx.fillText(line, pad, y);
-        y += 36;
+        y += 50;
       });
 
       // 心栈回应（AI 共情一句话）
       if (response) {
-        const ruleY = y + 8;
+        const ruleY = y + 4;
         ctx.strokeStyle = "rgba(47,58,85,0.16)";
         ctx.lineWidth = 0.75;
         ctx.beginPath();
@@ -361,11 +361,11 @@ export function generateNoteCover({ content = "", typeLabel = "心签", typeColo
         ctx.stroke();
         ctx.fillStyle = INK_FAINT;
         ctx.font = `500 12px ${FONT}`;
-        ctx.fillText("—— 心栈回应", pad, ruleY + 18);
+        ctx.fillText("—— 心栈回应", pad, ruleY + 16);
         ctx.fillStyle = INK_SOFT;
         ctx.font = `400 17px ${FONT}`;
         const respLines = wrapTextEllipsis(ctx, response, W - pad * 2, 2);
-        let ry = ruleY + 44;
+        let ry = ruleY + 40;
         respLines.forEach((line) => {
           ctx.fillText(line, pad, ry);
           ry += 28;

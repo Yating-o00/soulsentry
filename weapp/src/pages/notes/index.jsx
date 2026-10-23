@@ -564,6 +564,8 @@ export default function Notes() {
       <View style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <View>
           <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "3rpx" }}>{dateLine()}</Text>
+          {/* 版本标记：用于确认手机端运行的是最新体验版，确认后可移除 */}
+          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "6rpx" }}>v2.1.6</Text>
         </View>
         <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
           <View

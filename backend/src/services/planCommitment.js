@@ -172,13 +172,13 @@ export function expandPatterns(patterns, ctx) {
     // 北京日期的星期：必须用纯日期计算（date T00:00+08:00 的 UTC 时刻是前一日 16:00，getUTCDay 会错位一天）
     const [yy, mm, dd] = date.split("-").map(Number);
     const dayOfWeek = new Date(Date.UTC(yy, mm - 1, dd)).getUTCDay();
-    // 缓冲日固定按周对齐在周日：按"第 7 天"留白会随起点漂移（周五起点时周四被整天空掉）
-    if (horizonDays > 6 && dayOfWeek === 0 && date !== today) continue;
     const weekIndex = Math.floor(i / 7);
     const dayItems = matchers
       .filter(({ match }) => match(dayOfWeek))
       .map(({ p, step }) => ({ p, step }))
       .sort((a, b) => a.p.start_time.localeCompare(b.p.start_time));
+    // 缓冲日固定对齐周日，但只在该周没有为周日安排内容时才留白——周末模板明确覆盖周日就不能悄悄吃掉
+    if (horizonDays > 6 && dayOfWeek === 0 && date !== today && dayItems.length === 0) continue;
 
     let used = 0;
     let cursorMs = 0; // 同一天多条时保持先后次序与 10 分钟间隔（今天顺延后会用到）
@@ -604,9 +604,12 @@ export function extractAdjustmentsFromText(text) {
   const t = String(text || "");
   if (!t) return null;
   const out = [];
+  // 句首「将/把/给 + 星期词」：目标对象明确在句首时钉住，防止正则从句首匹配把星期词吞进通配间隙
+  const leadDay = /^\s*(?:将|把|给|让|帮)?\s*(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|每日|日常|全部|所有)/.exec(t);
+  const pinnedTarget = leadDay ? leadDay[1] : null;
   const dur = /(?:(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|日常|全部|所有)|([一-龥]{2,8}?))[^。！？\n]{0,10}?(加到|增加|加强|加长|延长|调到|减到|缩到|提到|升到|改成|设为|设置为|到)[^。！？\n]{0,6}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
   if (dur) {
-    let target = dur[1] || "";
+    let target = dur[1] || pinnedTarget || "";
     if (!target) {
       // 未知对象：清掉口语前缀后仍无意义（单字/时长时间类）→ 按全局处理
       const raw = String(dur[2] || "").replace(/^把/, "");
@@ -620,9 +623,9 @@ export function extractAdjustmentsFromText(text) {
       out.push({ target, field: "duration", value: additive ? `+${mins}分钟` : `${mins}分钟` });
     }
   }
-  const clock = /(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|日常|全部|所有)?[^。！？\n]{0,10}?(改到|调到|放到|挪到)\s*((?:(?:早上|上午|中午|下午|晚上|晚间|睡前)\s*)?[0-9]{1,2}\s*(?:[-—~～到至]\s*[0-9]{1,2}\s*)?(?:[:：点]\s*(?:[0-5]\d|半)|[:：点])?|早上|上午|中午|下午|晚上|晚间|睡前)/.exec(t);
+  const clock = /(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|日常|全部|所有)?[^。！？\n]{0,10}?(调整到|调整至|改到|调到|放到|挪到)\s*((?:(?:早上|上午|中午|下午|晚上|晚间|睡前)\s*)?[0-9]{1,2}\s*(?:[-—~～到至]\s*[0-9]{1,2}\s*)?(?:[:：点]\s*(?:[0-5]\d|半)|[:：点])?|早上|上午|中午|下午|晚上|晚间|睡前)/.exec(t);
   if (clock) {
-    out.push({ target: clock[1] || "全部", field: "start_time", value: clock[3] });
+    out.push({ target: clock[1] || pinnedTarget || "全部", field: "start_time", value: clock[3] });
   }
   // 「把跑步换成游泳」「把自重训练改成瑜伽」→ 内容替换（值若是时长数字则不按内容处理）
   const swap = /把(.{1,12}?)(?:换成|改成|替换成|变为)(.{1,24})/.exec(t);

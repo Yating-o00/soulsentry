@@ -80,6 +80,7 @@ export default function CheckinCard({
   onCheckinDoneToday,
   onSnooze,
   onSubtaskToggle,
+  onSharePrepare,
 }) {
   // 子约定较多时默认折叠已完成，露出待办的；可手动展开
   const [hideDoneSubs, setHideDoneSubs] = useState(null);
@@ -419,8 +420,11 @@ export default function CheckinCard({
           <ShareButton
             theme={theme}
             text="转发"
-            data-task-id={task.id}
             style={{ padding: "4rpx 14rpx", fontSize: "20rpx" }}
+            onClick={(e) => {
+              e?.stopPropagation?.();
+              onSharePrepare?.(task);
+            }}
           />
           <Text
             onClick={handleSnooze}

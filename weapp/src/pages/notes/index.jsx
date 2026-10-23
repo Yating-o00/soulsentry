@@ -240,6 +240,8 @@ export default function Notes() {
   // 心签转发封面（imageUrl）：数据到位后预生成缓存，生成完成触发重渲染写入按钮 data-*
   const noteCoversRef = useRef({});
   const [coverTick, setCoverTick] = useState(0);
+  // 点击转发按钮瞬间写入的分享载荷，buildShare 随即读取（不依赖 dataset/查找时序）
+  const pendingShareRef = useRef(null);
   // 兜底封面：签卡 canvas 未就绪时也不回落到白屏页面快照
   const FALLBACK_COVER = "https://www.xinzhan-soulsentry.cn/note-share-default.png";
 
@@ -247,16 +249,17 @@ export default function Notes() {
     title: "心栈心签 · 此刻的一点心情",
     path: "pages/notes/index",
     buildShare: (options) => {
-      if (options.from !== "button") return {};
-      const noteId = options.target?.dataset?.noteId;
-      if (!noteId) return {};
-      const note = notes.find((n) => n.id === noteId);
-      const raw = note ? shareNoteText(note) : "此刻的一点心情";
-      const title = `心签 · ${raw.slice(0, 48)}`;
-      const token = shareTokensRef.current[noteId];
-      // 封面优先级：配图 > 品牌签卡封面（正文点名呈现） > 线上默认签卡（绝不白屏快照）
-      const imageUrl = note ? (getNoteImage(note) || noteCoversRef.current[noteId]?.path || FALLBACK_COVER) : FALLBACK_COVER;
-      return { title, path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${noteId}`, imageUrl };
+      // 按钮转发：读取点击按钮瞬间写入的载荷（onClick 先于 onShareAppMessage 触发，
+      // 标题/封面/路径全部现取，不依赖 dataset 传参与 find 查找的时序）
+      if (options.from === "button") {
+        const payload = pendingShareRef.current;
+        pendingShareRef.current = null;
+        if (payload) return payload;
+        return {};
+      }
+      // 右上角菜单转发：清空残留，回落默认分享语
+      pendingShareRef.current = null;
+      return {};
     }
   });
 
@@ -902,11 +905,18 @@ export default function Notes() {
           <ActionBtn onClick={(e) => shareNote(note, e)} text="签卡" loading={actionLoading[`share-${note.id}`]} />
           <ShareButton
             theme={theme}
-            data-note-id={note.id}
-            // 分享载荷直接渲染进按钮 dataset（useShare 优先取 ds），
-            // 封面生成完成后经 coverTick 重渲染自动带上，不依赖点击时刻的 ref 时序
-            data-share-title={`心签 · ${shareNoteText(note).slice(0, 48)}`}
-            data-share-image-url={getNoteImage(note) || noteCoversRef.current[note.id]?.path || FALLBACK_COVER}
+            onClick={(e) => {
+              e?.stopPropagation?.();
+              // 点击瞬间把这条签的完整分享载荷写入注册表，
+              // useShare 的 buildShare 随即读取（onClick 先于分享面板回调触发）
+              pendingShareRef.current = {
+                title: `心签 · ${shareNoteText(note).slice(0, 48)}`,
+                imageUrl: getNoteImage(note) || noteCoversRef.current[note.id]?.path || FALLBACK_COVER,
+                path: shareTokensRef.current[note.id]
+                  ? `pages/share/index?token=${shareTokensRef.current[note.id]}`
+                  : `pages/note-detail/index?id=${note.id}`
+              };
+            }}
           />
           <ActionBtn onClick={(e) => deleteNote(note, e)} text="删除" danger />
         </View>

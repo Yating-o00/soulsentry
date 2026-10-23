@@ -93,6 +93,7 @@ export default function PromiseCard({
   onShare,
   onDelegate,
   onExecRun,
+  onSharePrepare,
 }) {
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
   // 重复约定永不显示逾期，改显「规则 · 倒计时」徽标
@@ -505,8 +506,11 @@ export default function PromiseCard({
             </Text>
             <ShareButton
               theme={theme}
-              data-task-id={task.id}
               style={{ padding: "4rpx 14rpx", fontSize: "20rpx" }}
+              onClick={(e) => {
+                e?.stopPropagation?.();
+                onSharePrepare?.(task);
+              }}
             />
             {overdue && (
               <Text

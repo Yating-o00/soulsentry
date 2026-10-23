@@ -138,45 +138,62 @@ export default function Tasks() {
   const checkinFetchedRef = useRef(new Set());
   // 打卡约定的转发封面图（imageUrl）：数据到位后预生成缓存，分享时同步取用
   const shareCoversRef = useRef({});
+  // 点击转发按钮瞬间写入的分享载荷，buildShare 随即读取（不依赖 dataset 传参与查找时序）
+  const pendingShareRef = useRef(null);
+
+  // 点击卡片「转发」时现取这条约定的分享载荷（标题/封面/路径）
+  const prepareTaskShare = (task) => {
+    if (!task) return;
+    const token = shareTokensRef.current[task.id];
+    const path = token ? `pages/share/index?token=${token}` : `pages/task-detail/index?id=${task.id}`;
+    // 打卡约定：转发卡片标题 + 品牌蓝封面图直接呈现打卡情况
+    if (task.category === "checkin") {
+      const total = checkinTotalsRef.current[task.id] ?? 0;
+      const t = String(task.title || "打卡约定").trim();
+      const tree = buildSubTree(task.id);
+      const subs = subtaskMap[task.id] || [];
+      const subDone = subs.filter((s) => s.status === "completed" || s.status === "done").length;
+      const { doneTodayItems, newTodayItems } = countTodayActivity(tree);
+      const parts = [];
+      if (task.done_today) parts.push("今日已打卡");
+      parts.push(`累计赴约 ${total} 次`);
+      if (subs.length > 0) parts.push(`子约定 ${subDone}/${subs.length}`);
+      // 当日在约定卡片上做的事直接点名：✓ 今日勾掉的子约定、＋ 今日新增的子约定
+      if (doneTodayItems.length > 0) {
+        const names = doneTodayItems.slice(0, 2).map((s) => s.title).join("、");
+        parts.push(`今日完成 ${names}${doneTodayItems.length > 2 ? ` 等${doneTodayItems.length}项` : ""}`);
+      }
+      if (newTodayItems.length > 0) {
+        const names = newTodayItems.slice(0, 2).map((s) => s.title).join("、");
+        parts.push(`新增 ${names}${newTodayItems.length > 2 ? ` 等${newTodayItems.length}项` : ""}`);
+      }
+      pendingShareRef.current = {
+        title: `打卡约定「${t.slice(0, 12)}」：${parts.join(" · ")}`.slice(0, 60),
+        path,
+        imageUrl: shareCoversRef.current[task.id]?.path || undefined,
+      };
+      return;
+    }
+    pendingShareRef.current = {
+      title: `约定 · ${String(task.title || "和自己的一个约定").trim().slice(0, 18)}`,
+      path,
+    };
+  };
 
   useShare({
     title: "心栈约定 · 和自己的一个约定",
     path: "pages/tasks/index",
     buildShare: (options) => {
-      if (options.from !== "button") return {};
-      const taskId = options.target?.dataset?.taskId;
-      if (!taskId) return {};
-      const task = tasks.find((t) => t.id === taskId);
-      const token = shareTokensRef.current[taskId];
-      const path = token ? `pages/share/index?token=${token}` : `pages/task-detail/index?id=${taskId}`;
-      // 打卡约定：转发卡片标题 + 品牌蓝封面图直接呈现打卡情况
-      if (task?.category === "checkin") {
-        const total = checkinTotalsRef.current[taskId] ?? 0;
-        const t = String(task.title || "打卡约定").trim();
-        const tree = buildSubTree(taskId);
-        const subs = subtaskMap[taskId] || [];
-        const subDone = subs.filter((s) => s.status === "completed" || s.status === "done").length;
-        const { doneTodayItems, newTodayItems } = countTodayActivity(tree);
-        const parts = [];
-        if (task.done_today) parts.push("今日已打卡");
-        parts.push(`累计赴约 ${total} 次`);
-        if (subs.length > 0) parts.push(`子约定 ${subDone}/${subs.length}`);
-        // 当日在约定卡片上做的事直接点名：✓ 今日勾掉的子约定、＋ 今日新增的子约定
-        if (doneTodayItems.length > 0) {
-          const names = doneTodayItems.slice(0, 2).map((s) => s.title).join("、");
-          parts.push(`今日完成 ${names}${doneTodayItems.length > 2 ? ` 等${doneTodayItems.length}项` : ""}`);
-        }
-        if (newTodayItems.length > 0) {
-          const names = newTodayItems.slice(0, 2).map((s) => s.title).join("、");
-          parts.push(`新增 ${names}${newTodayItems.length > 2 ? ` 等${newTodayItems.length}项` : ""}`);
-        }
-        return {
-          title: `打卡约定「${t.slice(0, 12)}」：${parts.join(" · ")}`.slice(0, 60),
-          path,
-          imageUrl: shareCoversRef.current[taskId]?.path || undefined,
-        };
+      // 按钮转发：读取点击按钮瞬间写入的载荷（onClick 先于 onShareAppMessage 触发）
+      if (options.from === "button") {
+        const payload = pendingShareRef.current;
+        pendingShareRef.current = null;
+        if (payload) return payload;
+        return {};
       }
-      return { title: `约定 · ${String(task?.title || "和自己的一个约定").trim().slice(0, 18)}`, path };
+      // 右上角菜单转发：清空残留，回落默认分享语
+      pendingShareRef.current = null;
+      return {};
     }
   });
 
@@ -735,6 +752,7 @@ export default function Tasks() {
                           onCheckinDoneToday={handleCheckinDoneToday}
                           onSnooze={setSnoozeTask}
                           onSubtaskToggle={handleSubtaskToggle}
+                          onSharePrepare={prepareTaskShare}
                         />
                       ) : (
                         <PromiseCard
@@ -749,6 +767,7 @@ export default function Tasks() {
                           onExecRun={handleExecRun}
                           onSubtaskToggle={handleSubtaskToggle}
                           onShare={handleShare}
+                          onSharePrepare={prepareTaskShare}
                         />
                       )}
                     </View>

@@ -458,13 +458,15 @@ const RESPONSE_SCHEMA = {
             preferences: { type: ["string", "null"], description: "用户对时段/节奏的偏好，如「早上」「下班后」" },
             adjustments: {
               type: ["array", "null"],
-              description: "用户在调整已有规划时的定向修改（保持 goal/horizon/daily 不变，把修改写这里，可多条）：target=作用对象（周末/工作日/每天/周六/组名如「力量」），field=duration|start_time|content|note，value=新值（如「60分钟」「19:30」「新的内容描述」）",
+              description: "用户在调整已有规划时的定向修改（保持 goal/horizon/daily 不变，把修改写这里，可多条）：target=作用对象（周末/工作日/每天/周六/组名如「力量」），field=duration|start_time|content|note|add，value=新值（如「60分钟」「19:30」「新的内容描述」；field=add 时 value=新项名称如「瑜伽」）",
               items: {
                 type: "object",
                 properties: {
                   target: { type: "string", description: "周末|工作日|每天|全部|周一..周日|组名关键词" },
-                  field: { type: "string", enum: ["duration", "start_time", "content", "note"] },
-                  value: { type: "string", description: "如「60分钟」「一小时」「19:30」「早上」「慢跑5公里」" }
+                  field: { type: "string", enum: ["duration", "start_time", "content", "note", "add"] },
+                  value: { type: "string", description: "如「60分钟」「一小时」「19:30」「早上」「慢跑5公里」；field=add 时为新项名称如「瑜伽」" },
+                  start_time: { type: ["string", "null"], description: "field=add 时新项的开始时刻，HH:MM 或「下午3点」这类口语" },
+                  duration_minutes: { type: ["number", "null"], description: "field=add 时新项的分钟数，如 30" }
                 },
                 required: ["target", "field", "value"]
               }
@@ -504,7 +506,7 @@ ${buildMessagesBlock(messages)}${attachmentCtx}
 - type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。用户明确说「打卡/签到」，或想长期重复坚持同一件事（如每天跑步、每日阅读、练琴打卡），category 用 checkin（打卡约定，每次做到点一下记一次）。
 - type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
-- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。
+- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。用户想在规划里新增一项（如"周六下午3点加半小时瑜伽""每天加冥想"）时用 field="add"，value=新项名称（如"瑜伽"），并带上 start_time（如"15:00"）与 duration_minutes（如 30），target 为适用日。
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。
 

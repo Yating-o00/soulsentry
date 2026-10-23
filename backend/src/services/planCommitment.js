@@ -417,6 +417,27 @@ function parseClockValue(text) {
   return clock ? { clock, spanMinutes: null } : null;
 }
 
+// 「下午3点」「19:30」「8-9点」「睡前」→ { clock: "HH:MM", spanMinutes }；12小时制+时段词自动转 24 小时制
+function normalizeClockPhrase(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return { clock: null, spanMinutes: null };
+  let parsed = parseClockValue(value);
+  if (!parsed) {
+    const fake = targetHourFromPreferences(value, null);
+    if (fake !== null) parsed = { clock: `${String(fake).padStart(2, "0")}:00`, spanMinutes: null };
+  }
+  if (!parsed) return { clock: null, spanMinutes: null };
+  let [hh, mm] = parsed.clock.split(":").map(Number);
+  // 12 小时制 + 时段词 → 24 小时制（晚上7点→19:00，中午1点→13:00? 按口语中午=12点档）
+  if (/晚上|晚间|夜里|夜/.test(value) && hh < 12) hh += 12;
+  else if (/下午|午后/.test(value) && hh < 12) hh += 12;
+  else if (/中午|午间/.test(value) && hh <= 11) hh = 12;
+  return {
+    clock: `${String(Math.min(23, hh)).padStart(2, "0")}:${String(mm).padStart(2, "0")}`,
+    spanMinutes: parsed.spanMinutes
+  };
+}
+
 // target（周末/工作日/每天/周六/组名…）能命中哪些模板：按"适用日重叠"判定
 function matchTargetIndexes(patterns, target) {
   const targetMatcher = appliesToMatcher(target, { defaultDaily: false });
@@ -463,6 +484,47 @@ export function applyPlanAdjustments(patterns, adjustments = []) {
     const target = String(adj.target || "全部");
     const field = String(adj.field || "duration");
     const value = String(adj.value ?? "");
+    // 「周六下午3点加半小时瑜伽」→ 在规划里新增一项（不需要匹配既有模板）
+    if (field === "add") {
+      const title = value.replace(/[吧呢哦哈呀啊]+$/, "").trim().slice(0, 16);
+      if (!title) { missed.push(adj); continue; }
+      const tDays = explicitDaySet(target);
+      const applies = tDays.size > 0 ? serializeDaySet(tDays) : "daily";
+      const normClock = normalizeClockPhrase(adj.start_time ?? "");
+      const start = normClock.clock || "19:30";
+      const span = normClock.spanMinutes;
+      const rawDur = Number(adj.duration_minutes);
+      const dur = Number.isFinite(rawDur) && rawDur > 0
+        ? clampInt(rawDur, 10, 240, 30)
+        : clampInt(parseMinutesText(String(adj.duration_minutes || "")) || span || 30, 10, 240, 30);
+      // 已有同名/相互包含且适用日重叠的模板 → 更新它，避免同一项被加两遍
+      const existingIdx = next.findIndex((p2) => {
+        const sameName = p2.title === title
+          || (p2.title && (p2.title.includes(title) || title.includes(p2.title)));
+        if (!sameName) return false;
+        if (tDays.size === 0) return true;
+        const pDays = explicitDaySet(p2.applies_to);
+        return [...tDays].some((d) => pDays.has(d));
+      });
+      if (existingIdx >= 0) {
+        next[existingIdx] = { ...next[existingIdx], start_time: start, duration_minutes: dur };
+        applied.push(`${next[existingIdx].title} 已更新为 ${start}·${dur}分钟`);
+      } else {
+        next.push({
+          plan_group: title.slice(0, 8) || "加练安排",
+          kind: "checkin",
+          applies_to: applies,
+          start_time: start,
+          duration_minutes: dur,
+          title,
+          description: null,
+          note: null,
+          weekly_progression: ""
+        });
+        applied.push(`新增 ${title}（${applies} ${start}·${dur}分钟）`);
+      }
+      continue;
+    }
     const idxs = matchTargetIndexes(next, target);
     if (idxs.length === 0) { missed.push(adj); continue; }
     // 目标日是模板适用日的严格子集（「周六」命中 weekend/daily 模板）→ 拆出子模板只改目标日，其余日保持原样
@@ -501,24 +563,14 @@ export function applyPlanAdjustments(patterns, adjustments = []) {
           }
         }
       } else if (field === "start_time") {
-        let parsedClock = parseClockValue(value);
-        if (!parsedClock) {
-          const fake = targetHourFromPreferences(value, null);
-          if (fake !== null) parsedClock = { clock: `${String(fake).padStart(2, "0")}:00`, spanMinutes: null };
-        }
-        if (!parsedClock) { missed.push(adj); continue; }
-        let [hh, mm] = parsedClock.clock.split(":").map(Number);
-        // 12 小时制 + 时段词 → 24 小时制（晚上7点→19:00，中午1点→13:00? 按口语中午=12点档）
-        if (/晚上|晚间|夜里|夜/.test(value) && hh < 12) hh += 12;
-        else if (/下午|午后/.test(value) && hh < 12) hh += 12;
-        else if (/中午|午间/.test(value) && hh <= 11) hh = 12;
-        const clock = `${String(Math.min(23, hh)).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
-        p.start_time = clock;
+        const normClock = normalizeClockPhrase(value);
+        if (!normClock.clock) { missed.push(adj); continue; }
+        p.start_time = normClock.clock;
         // 「改到 8-9 点」这类区间：跨度即时长
-        if (parsedClock.spanMinutes) {
-          p.duration_minutes = clampInt(parsedClock.spanMinutes, 10, 240, p.duration_minutes);
+        if (normClock.spanMinutes) {
+          p.duration_minutes = clampInt(normClock.spanMinutes, 10, 240, p.duration_minutes);
         }
-        applied.push(`${scopeTag}${p.title} 时刻→${clock}${parsedClock.spanMinutes ? ` 时长→${p.duration_minutes}分钟` : ""}`);
+        applied.push(`${scopeTag}${p.title} 时刻→${normClock.clock}${normClock.spanMinutes ? ` 时长→${p.duration_minutes}分钟` : ""}`);
       } else if (field === "content") {
         if (!value.trim()) { missed.push(adj); continue; }
         p.description = value.trim().slice(0, 300);
@@ -576,6 +628,36 @@ export function extractAdjustmentsFromText(text) {
   const swap = /把(.{1,12}?)(?:换成|改成|替换成|变为)(.{1,24})/.exec(t);
   if (swap && !/(\d+|一|两|半)[\s]*(?:个)?(?:半)?(?:小时|钟头|分钟)/.test(swap[2])) {
     out.push({ target: swap[1].trim(), field: "content", value: swap[2].trim() });
+  }
+  // 「周六下午3点加半小时瑜伽」「每天睡前加15分钟冥想」→ 在规划里新增一项（已有提取都没命中时才尝试，防误伤）
+  if (out.length === 0) {
+    const add = /(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|每日|日常|全部|所有)?\s*(?:的)?\s*((?:(?:早上|早晨|上午|中午|午间|下午|午后|晚上|晚间|夜里|睡前|凌晨)\s*)?(?:[0-9]{1,2}\s*(?:[:：]\s*[0-5]\d|[:：点]\s*(?:[0-5]\d|半)|点|[:：]))?)?\s*(?:加上?|再加|增加|来)\s*(?:(\d+|一|两|半|一个半)\s*(?:个)?(?:半)?(小时|钟头|分钟))?\s*([一-龥a-zA-Z][一-龥a-zA-Z0-9·]{1,11})$/.exec(t.trim());
+    if (add) {
+      const target = add[1] || "每天";
+      const timePhrase = (add[2] || "").trim();
+      const durMins = add[3] && add[4] ? parseMinutesText(`${add[3]}${add[4]}`) : null;
+      let title = (add[5] || "").trim()
+        .replace(/^(的|点|个|一[个次组套]?)(?=[一-龥a-zA-Z])/, "")
+        .replace(/[吧呢哦哈呀啊]+$/, "")
+        .trim()
+        .slice(0, 16);
+      const hasSignal = Boolean(add[1] || timePhrase || durMins);
+      const badTitle = !title
+        || /^(小时|分钟|钟头|一|两|半|个|到|至|成|为|给|把|让)$/.test(title)
+        || /[加改调到换成把让]$/.test(title)
+        || /[到至成为]/.test(title)
+        || /^(我|你|他|她|它|这|那|它)/.test(title);
+      if (hasSignal && !badTitle) {
+        const normClock = normalizeClockPhrase(timePhrase);
+        out.push({
+          target,
+          field: "add",
+          value: title,
+          start_time: normClock.clock || undefined,
+          duration_minutes: durMins || normClock.spanMinutes || undefined
+        });
+      }
+    }
   }
   return out.length > 0 ? out : null;
 }

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import Taro, { useShareAppMessage } from "@tarojs/taro";
-import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
-import { get, post } from "@/utils/api";
+import { View, Text, Input, Button, ScrollView, Image } from "@tarojs/components";
+import { get, post, absoluteUrl } from "@/utils/api";
 import { isLoggedIn } from "@/utils/auth";
+import { milestoneQuote } from "@/components/tasks/checkinMeta";
 
 const BASE_API = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
 const VISITOR_NAME_KEY = "ss_visitor_name";
@@ -79,8 +80,13 @@ export default function Share() {
 
   useShareAppMessage(() => {
     const item = share?.item || {};
+    const total = share?.checkins?.total;
+    // 打卡约定：转发卡片标题直接带上累计赴约次数
+    const title = item.category === "checkin" && total
+      ? `「${String(item.title || "打卡约定").slice(0, 14)}」已赴约 ${total} 次`
+      : (item.title ? `邀你一起守护：${item.title}` : "SoulSentry 分享");
     return {
-      title: item.title ? `邀你一起守护：${item.title}` : "SoulSentry 分享",
+      title,
       path: `/pages/share/index?token=${token}`
     };
   });
@@ -269,7 +275,9 @@ export default function Share() {
   const item = share.item || {};
   const subtasks = share.subtasks || [];
   const comments = share.comments || [];
+  const checkins = share.checkins || null;
   const isCompleted = item.status === "completed" || item.status === "done";
+  const isCheckinTask = isTask && item.category === "checkin";
 
   return (
     <View className="ss-page">
@@ -285,13 +293,76 @@ export default function Share() {
 
           {isTask && (
             <Button
-              className={`ss-btn ${isCompleted ? "ss-btn-plain" : ""}`}
+              className={`ss-btn ${isCheckinTask ? "" : (isCompleted ? "ss-btn-plain" : "")}`}
               onClick={() => handleToggle(!isCompleted)}
             >
-              {isCompleted ? "标记为未完成" : "标记为已完成"}
+              {isCheckinTask
+                ? (item.done_today ? "今日已打卡 · 再记一次" : "打卡")
+                : (isCompleted ? "标记为未完成" : "标记为已完成")}
             </Button>
           )}
         </View>
+
+        {/* 打卡约定：直接呈现打卡内容——累计次数、最近赴约（附言/照片）与鼓励的话 */}
+        {isCheckinTask && checkins && (() => {
+          const total = checkins.total ?? 0;
+          const firstAt = checkins.first_at;
+          const items = checkins.items || [];
+          const dayCount = firstAt
+            ? Math.max(1, Math.floor((Date.now() - new Date(firstAt).getTime()) / 86400000) + 1)
+            : 0;
+          return (
+            <View className="ss-card" style={{ background: "linear-gradient(150deg, #f8faff 0%, #ffffff 55%)", border: "1rpx solid #c9d5ef" }}>
+              <View style={{ display: "flex", alignItems: "baseline", gap: "12rpx" }}>
+                <Text style={{ fontSize: "64rpx", fontWeight: 800, color: "#384877", lineHeight: "76rpx" }}>{total}</Text>
+                <Text style={{ fontSize: "26rpx", color: "#384877", letterSpacing: "6rpx" }}>次 赴 约</Text>
+                {item.done_today && (
+                  <View style={{ marginLeft: "auto", background: "#e8f7ee", border: "1rpx solid #b7e4c7", padding: "4rpx 14rpx", borderRadius: "8rpx" }}>
+                    <Text style={{ fontSize: "20rpx", color: "#1f9d55" }}>今日已打卡</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={{ display: "block", fontSize: "22rpx", color: "#9ca0a8", marginTop: "6rpx" }}>
+                {firstAt ? `从 ${new Date(firstAt).getFullYear()}年${new Date(firstAt).getMonth() + 1}月${new Date(firstAt).getDate()}日 起 · 第 ${dayCount} 天` : "刚刚开始"}
+              </Text>
+
+              {items.length > 0 && (
+                <View style={{ marginTop: "20rpx", borderTop: "1rpx dashed #e8ecef", paddingTop: "20rpx" }}>
+                  {items.map((c) => {
+                    const d = new Date(c.created_at);
+                    const timeStr = isNaN(d.getTime())
+                      ? ""
+                      : `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                    return (
+                      <View key={c.id} style={{ display: "flex", gap: "18rpx", padding: "14rpx 0", borderBottom: "1rpx solid #eef0f3" }}>
+                        <View style={{ width: "14rpx", height: "14rpx", borderRadius: "50%", background: "#3b5aa2", marginTop: "12rpx", flexShrink: 0 }} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={{ fontSize: "22rpx", color: "#9ca0a8" }}>{timeStr}</Text>
+                          {c.note ? (
+                            <View style={{ marginTop: "8rpx", background: "#ffffff", border: "1rpx solid #e8ecef", borderRadius: "12rpx", padding: "14rpx 18rpx" }}>
+                              <Text style={{ fontSize: "27rpx", color: "#3a3a3c", lineHeight: "40rpx" }}>{c.note}</Text>
+                            </View>
+                          ) : null}
+                          {c.photo_url ? (
+                            <Image
+                              src={absoluteUrl(c.photo_url)}
+                              mode="aspectFill"
+                              style={{ marginTop: c.note ? "12rpx" : "8rpx", width: "240rpx", height: "180rpx", borderRadius: "12rpx", background: "#f2f3f5" }}
+                            />
+                          ) : null}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+
+              <Text style={{ display: "block", marginTop: "20rpx", fontSize: "24rpx", color: "#384877", fontWeight: 500 }}>
+                ——心栈记 · {milestoneQuote(total)}
+              </Text>
+            </View>
+          );
+        })()}
 
         {isTask && subtasks.length > 0 && (
           <View className="ss-card">

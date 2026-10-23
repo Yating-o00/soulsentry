@@ -3,6 +3,7 @@ import Taro from "@tarojs/taro";
 import { View, Text, Button, Image } from "@tarojs/components";
 import createQRCode from "@/lib/qrcode";
 import { get } from "@/utils/api";
+import { MILESTONE_QUOTES } from "@/components/tasks/checkinMeta";
 
 const BASE_WIDTH = 640;
 const THEME = "#384877";
@@ -214,7 +215,7 @@ function measureLayout(ctx, title, description, extra, subtasks, isNote) {
   };
 }
 
-export default function SharePoster({ visible, onClose, type, title, description, extra, subtasks = [], shareToken, canvasId, noteType, date, image }) {
+export default function SharePoster({ visible, onClose, type, title, description, extra, subtasks = [], shareToken, canvasId, noteType, date, image, checkin }) {
   const [posterUrl, setPosterUrl] = useState("");
   const [generating, setGenerating] = useState(false);
   const [canvasSize, setCanvasSize] = useState({ width: BASE_WIDTH, height: 960 });
@@ -232,6 +233,8 @@ export default function SharePoster({ visible, onClose, type, title, description
       return;
     }
     if (!shareToken || generatedRef.current) return;
+    // 打卡海报依赖累计次数：等页面取到打卡数据（或失败兜底）再绘制
+    if (type === "checkin" && !checkin) return;
     generatedRef.current = true;
 
     Taro.nextTick(() => {
@@ -241,7 +244,7 @@ export default function SharePoster({ visible, onClose, type, title, description
     return () => {
       generatedRef.current = false;
     };
-  }, [visible, shareToken]);
+  }, [visible, shareToken, type, checkin]);
 
   const generatePoster = () => {
     if (generatingRef.current) return;
@@ -276,6 +279,19 @@ export default function SharePoster({ visible, onClose, type, title, description
       // 先用一个临时 canvas 测量布局
       const measureCanvas = createOffscreenCanvas(widthPx, 3000);
       const measureCtx = measureCanvas.getContext("2d");
+
+      // 打卡分享卡：品牌蓝渐变头部 + 大数字「N 次赴约」+ 子约定 + 附言/金句 + 二维码
+      if (type === "checkin") {
+        const layout = measureCheckinLayout(measureCtx, title, subtasks, checkin);
+        const totalHeight = Math.round(widthPx * (layout.totalHeight / BASE_WIDTH));
+        setCanvasSize({ width: widthPx, height: totalHeight });
+        const canvas = createOffscreenCanvas(widthPx, totalHeight);
+        const ctx = canvas.getContext("2d");
+        drawCheckinPoster(ctx, widthPx, totalHeight, layout, link);
+        exportCanvas(canvas, widthPx, totalHeight);
+        return;
+      }
+
       const layout = measureLayout(measureCtx, title, description, extra, subtasks, isNote);
       const totalHeight = Math.round(widthPx * (layout.totalHeight / BASE_WIDTH));
 
@@ -663,6 +679,245 @@ export default function SharePoster({ visible, onClose, type, title, description
 
     if (link) {
       drawQRCode(ctx, link, qrX, qrY, qrSize);
+    }
+  };
+
+  // ===== 打卡分享卡（与 Web 端 CheckinShareCard 同款版式） =====
+
+  const CHECKIN_LAYOUT = {
+    pad: 48,
+    headerH: 330,
+    bodyPadTop: 40,
+    titleFont: 32,
+    titleLineH: 50,
+    titleMaxLines: 3,
+    metaFont: 18,
+    subtaskFont: 22,
+    subtaskLineH: 40,
+    subtaskBulletOffset: 32,
+    subtaskMaxCount: 8,
+    noteFont: 20,
+    noteLineH: 34,
+    noteMaxLines: 3,
+    quoteFont: 20,
+    quoteLineH: 32,
+    quoteMaxLines: 2,
+    sectionGap: 28,
+    footerFont: 22,
+    footerTipFont: 16,
+    qrSize: 110,
+    bottomPad: 44
+  };
+  const POSTER_FONT = '"PingFang SC", "Microsoft YaHei", Arial, sans-serif';
+
+  const formatCnDate = (iso) => {
+    const d = iso ? new Date(iso) : new Date();
+    if (isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  };
+
+  const measureCheckinLayout = (ctx, posterTitle, posterSubtasks, posterCheckin) => {
+    const L = CHECKIN_LAYOUT;
+    let y = L.headerH + L.bodyPadTop;
+
+    ctx.font = `700 ${L.titleFont}px ${POSTER_FONT}`;
+    const titleLines = wrapText(ctx, String(posterTitle || "未命名").trim(), BASE_WIDTH - L.pad * 2).slice(0, L.titleMaxLines);
+    y += titleLines.length * L.titleLineH;
+
+    const allSubs = posterSubtasks || [];
+    const subMeta = [];
+    if (allSubs.length > 0) {
+      y += L.sectionGap;
+      y += L.metaFont + 14;
+      allSubs.slice(0, L.subtaskMaxCount).forEach((sub) => {
+        ctx.font = `${L.subtaskFont}px ${POSTER_FONT}`;
+        const lines = wrapText(ctx, sub.title, BASE_WIDTH - L.pad * 2 - L.subtaskBulletOffset).slice(0, 2);
+        subMeta.push({ ...sub, lines });
+        y += lines.length * L.subtaskLineH + 10;
+      });
+    }
+
+    y += L.sectionGap;
+    y += L.metaFont + 12;
+
+    const note = posterCheckin?.note || null;
+    let noteLines = [];
+    if (note) {
+      ctx.font = `${L.noteFont}px ${POSTER_FONT}`;
+      noteLines = wrapText(ctx, `「${note}」`, BASE_WIDTH - L.pad * 2).slice(0, L.noteMaxLines);
+      y += noteLines.length * L.noteLineH + 10;
+    }
+
+    y += L.sectionGap;
+    ctx.font = `500 ${L.quoteFont}px ${POSTER_FONT}`;
+    const total0 = posterCheckin?.total ?? 0;
+    const quoteLines = wrapText(ctx, `——心栈记 · ${MILESTONE_QUOTES[total0] || "每一次都算数。"}`, BASE_WIDTH - L.pad * 2).slice(0, L.quoteMaxLines);
+    y += quoteLines.length * L.quoteLineH + 14;
+
+    y += L.sectionGap;
+    y += L.qrSize;
+    y += L.bottomPad;
+
+    return {
+      totalHeight: y,
+      titleLines,
+      subMeta,
+      noteLines,
+      quoteLines,
+      totalCount: allSubs.length,
+      doneCount: allSubs.filter((t) => t.status === "completed" || t.status === "done").length,
+      total: total0,
+      firstAt: posterCheckin?.first_at || null
+    };
+  };
+
+  const drawCheckinPoster = (ctx, W, H, layout, posterLink) => {
+    const L = CHECKIN_LAYOUT;
+    const s = W / BASE_WIDTH;
+    const pad = L.pad * s;
+    const total = layout.total;
+    const firstAt = layout.firstAt;
+    const dayCount = firstAt
+      ? Math.max(1, Math.floor((Date.now() - new Date(firstAt).getTime()) / 86400000) + 1)
+      : 0;
+
+    ctx.textBaseline = "top";
+
+    // 白底圆角
+    ctx.fillStyle = "#ffffff";
+    roundRect(ctx, 0, 0, W, H, 20 * s);
+    ctx.fill();
+
+    // 头部品牌蓝渐变
+    const headerH = L.headerH * s;
+    const grd = ctx.createLinearGradient(0, 0, W, headerH);
+    grd.addColorStop(0, "#2d3a5f");
+    grd.addColorStop(0.5, "#384877");
+    grd.addColorStop(1, "#3b5aa2");
+    ctx.fillStyle = grd;
+    roundRectTop(ctx, 0, 0, W, headerH, 20 * s);
+    ctx.fill();
+
+    // 品牌行 + 如约印章
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.font = `${Math.round(20 * s)}px ${POSTER_FONT}`;
+    ctx.fillText("心栈 SOULSENTRY", pad, 36 * s);
+
+    const sealR = 26 * s;
+    const sealX = W - pad - sealR;
+    const sealY = 54 * s;
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = Math.max(1, 2 * s);
+    ctx.beginPath();
+    ctx.arc(sealX, sealY, sealR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, s);
+    ctx.beginPath();
+    ctx.arc(sealX, sealY, sealR - 6 * s, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.font = `700 ${Math.round(15 * s)}px ${POSTER_FONT}`;
+    ctx.textAlign = "center";
+    ctx.fillText("如", sealX, sealY - 15 * s);
+    ctx.fillText("约", sealX, sealY + 2 * s);
+
+    // 大数字成就陈述
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    if (total > 0) {
+      ctx.font = `800 ${Math.round(88 * s)}px ${POSTER_FONT}`;
+      ctx.fillText(String(total), W / 2, 92 * s);
+      ctx.fillStyle = "rgba(255,255,255,0.78)";
+      ctx.font = `${Math.round(22 * s)}px ${POSTER_FONT}`;
+      ctx.fillText("次  赴  约", W / 2, 212 * s);
+    } else {
+      ctx.font = `800 ${Math.round(48 * s)}px ${POSTER_FONT}`;
+      ctx.fillText("第一次", W / 2, 112 * s);
+      ctx.fillStyle = "rgba(255,255,255,0.78)";
+      ctx.font = `${Math.round(20 * s)}px ${POSTER_FONT}`;
+      ctx.fillText("赴 约 · 从 这 里 开 始", W / 2, 198 * s);
+    }
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.font = `${Math.round(16 * s)}px ${POSTER_FONT}`;
+    ctx.fillText(`${total > 0 ? `第 ${total} 次 · ` : ""}${formatCnDate(new Date().toISOString())}`, pad, headerH - 42 * s);
+
+    // 主体
+    let y = headerH + L.bodyPadTop * s;
+    ctx.fillStyle = "#111827";
+    ctx.font = `700 ${Math.round(L.titleFont * s)}px ${POSTER_FONT}`;
+    layout.titleLines.forEach((line, i) => ctx.fillText(line, pad, y + i * L.titleLineH * s));
+    y += layout.titleLines.length * L.titleLineH * s;
+
+    if (layout.totalCount > 0) {
+      y += L.sectionGap * s;
+      ctx.fillStyle = "#384877";
+      ctx.font = `600 ${Math.round(L.metaFont * s)}px ${POSTER_FONT}`;
+      ctx.fillText(`子约定 · 已完成 ${layout.doneCount}/${layout.totalCount}`, pad, y);
+      y += (L.metaFont + 14) * s;
+      layout.subMeta.forEach((sub) => {
+        const done = sub.status === "completed" || sub.status === "done";
+        ctx.beginPath();
+        ctx.arc(pad + 8 * s, y + 14 * s, 7 * s, 0, Math.PI * 2);
+        if (done) {
+          ctx.fillStyle = "#10b981";
+          ctx.fill();
+        } else {
+          ctx.strokeStyle = "#d1d5db";
+          ctx.lineWidth = Math.max(1, 2 * s);
+          ctx.stroke();
+        }
+        ctx.fillStyle = done ? "#6b7280" : "#374151";
+        ctx.font = `${Math.round(L.subtaskFont * s)}px ${POSTER_FONT}`;
+        sub.lines.forEach((line, i) => ctx.fillText(line, pad + L.subtaskBulletOffset * s, y + i * L.subtaskLineH * s));
+        y += sub.lines.length * L.subtaskLineH * s + 10 * s;
+      });
+    }
+
+    y += L.sectionGap * s;
+    ctx.fillStyle = "#9ca3af";
+    ctx.font = `${Math.round(L.metaFont * s)}px ${POSTER_FONT}`;
+    ctx.fillText(firstAt ? `${formatDateTime(firstAt)} 起 · 第 ${dayCount} 天` : formatDateTime(new Date().toISOString()), pad, y);
+    y += (L.metaFont + 12) * s;
+
+    if (layout.noteLines.length > 0) {
+      ctx.fillStyle = "#4b5563";
+      ctx.font = `${Math.round(L.noteFont * s)}px ${POSTER_FONT}`;
+      layout.noteLines.forEach((line, i) => ctx.fillText(line, pad, y + i * L.noteLineH * s));
+      y += layout.noteLines.length * L.noteLineH * s + 10 * s;
+    }
+
+    y += L.sectionGap * s;
+    ctx.fillStyle = "#384877";
+    ctx.font = `500 ${Math.round(L.quoteFont * s)}px ${POSTER_FONT}`;
+    layout.quoteLines.forEach((line, i) => ctx.fillText(line, pad, y + i * L.quoteLineH * s));
+    y += layout.quoteLines.length * L.quoteLineH * s + 14 * s;
+
+    // 底栏：品牌语 + 二维码
+    y += L.sectionGap * s;
+    ctx.strokeStyle = "rgba(0,0,0,0.06)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(W - pad, y);
+    ctx.stroke();
+    y += 24 * s;
+
+    ctx.fillStyle = "#111827";
+    ctx.font = `${Math.round(L.footerFont * s)}px ${POSTER_FONT}`;
+    ctx.fillText("心栈 SoulSentry", pad, y);
+    ctx.fillStyle = "#9ca3af";
+    ctx.font = `${Math.round(L.footerTipFont * s)}px ${POSTER_FONT}`;
+    ctx.fillText("扫码赴约 · 无需登录 · 匿名留言", pad, y + (L.footerFont + 6) * s);
+
+    const qrSize = L.qrSize * s;
+    const qrX = W - pad - qrSize;
+    const qrY = y - 4 * s;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(qrX - 8 * s, qrY - 8 * s, qrSize + 16 * s, qrSize + 16 * s);
+    if (posterLink) {
+      drawQRCode(ctx, posterLink, qrX, qrY, qrSize);
     }
   };
 

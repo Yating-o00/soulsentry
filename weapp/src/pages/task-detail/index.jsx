@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, Input, Button, ScrollView } from "@tarojs/components";
-import { get, post, patch, del } from "@/utils/api";
+import { View, Text, Input, Button, ScrollView, Image } from "@tarojs/components";
+import { get, post, patch, del, absoluteUrl } from "@/utils/api";
 import { useShare } from "@/hooks/useShare";
+import { CHECKIN_MILESTONES, checkinEncourage, milestoneQuote } from "@/components/tasks/checkinMeta";
 
 const statusLabel = {
   pending: "待办",
@@ -30,6 +31,9 @@ export default function TaskDetail() {
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [changeLogs, setChangeLogs] = useState([]);
   const [membersInfo, setMembersInfo] = useState(null);
+  // 打卡约定：累计次数与赴约记录时间线
+  const [checkinData, setCheckinData] = useState(null);
+  const [checkinBusy, setCheckinBusy] = useState(false);
 
   const taskId = Taro.getCurrentInstance().router.params.id;
 
@@ -50,6 +54,15 @@ export default function TaskDetail() {
     try {
       const taskData = await get(`/tasks/${taskId}`);
       setTask(taskData);
+
+      // 打卡约定：拉取累计次数与赴约记录（内容、鼓励的话、打卡情况同页呈现）
+      if (taskData?.category === "checkin") {
+        get(`/tasks/${taskId}/checkins`, { limit: 50 })
+          .then((d) => setCheckinData(d))
+          .catch(() => setCheckinData({ total: 0, first_at: null, items: [] }));
+      } else {
+        setCheckinData(null);
+      }
 
       const allSubs = await fetchSubtasksRecursive(taskId);
       setSubtasks(allSubs);
@@ -97,6 +110,38 @@ export default function TaskDetail() {
       notifySubtasksChanged();
     } catch (err) {
       // handled globally
+    }
+  };
+
+  // 打卡：点 👣 = 一次赴约；服务端记录并把开放式打卡约定的排期滚到下一期
+  const doCheckin = async () => {
+    if (!taskId || checkinBusy) return;
+    if (task?.done_today) {
+      Taro.showToast({ title: "今日已赴约，明天再来", icon: "none" });
+      return;
+    }
+    setCheckinBusy(true);
+    try {
+      const res = await post(`/tasks/${taskId}/checkins`, {});
+      const total = res?.total ?? 0;
+      setCheckinData((prev) => ({
+        total,
+        first_at: res?.first_at || prev?.first_at || null,
+        items: prev?.items || [],
+      }));
+      setTask((prev) => (prev ? { ...prev, done_today: true } : prev));
+      notifySubtasksChanged();
+      Taro.showToast({
+        title: CHECKIN_MILESTONES.includes(total) ? `第 ${total} 次赴约 · ${milestoneQuote(total)}` : `第 ${total} 次赴约`,
+        icon: "none",
+        duration: 2600,
+      });
+      // 打卡后刷新记录时间线与约定状态
+      fetchAll();
+    } catch (err) {
+      // handled globally
+    } finally {
+      setCheckinBusy(false);
     }
   };
 
@@ -257,6 +302,18 @@ export default function TaskDetail() {
     subtask_deleted: "删除了子约定"
   };
 
+  const fmtCheckinTime = (iso) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  };
+
+  const fmtCheckinDay = (iso) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  };
+
   if (loading && !task) {
     return (
       <View className="ss-page">
@@ -307,6 +364,94 @@ export default function TaskDetail() {
             </Button>
           )}
         </View>
+
+        {task.category === "checkin" && checkinData && (() => {
+          const total = checkinData.total ?? 0;
+          const firstAt = checkinData.first_at;
+          const items = checkinData.items || [];
+          const doneToday = Boolean(task.done_today);
+          const dayCount = firstAt
+            ? Math.max(1, Math.floor((Date.now() - new Date(firstAt).getTime()) / 86400000) + 1)
+            : 0;
+          return (
+            <View className="ss-card" style={{ background: "linear-gradient(150deg, #f8faff 0%, #ffffff 55%)", border: "1rpx solid #c9d5ef" }}>
+              <View style={{ display: "flex", alignItems: "center", gap: "24rpx" }}>
+                <View
+                  onClick={doCheckin}
+                  style={{
+                    width: "130rpx",
+                    height: "130rpx",
+                    borderRadius: "50%",
+                    border: doneToday ? "none" : "2rpx solid #c9d5ef",
+                    background: doneToday ? "linear-gradient(140deg, #3b5aa2, #384877)" : "#ffffff",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    boxShadow: doneToday ? "0 10rpx 30rpx rgba(56,72,119,0.3)" : "none",
+                    opacity: checkinBusy ? 0.7 : 1,
+                  }}
+                >
+                  {doneToday ? (
+                    <Text style={{ color: "#ffffff", fontSize: "28rpx", fontWeight: 700, letterSpacing: "2rpx" }}>如约</Text>
+                  ) : (
+                    <Text style={{ fontSize: "60rpx", lineHeight: "70rpx" }}>👣</Text>
+                  )}
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ display: "flex", alignItems: "baseline", gap: "12rpx", flexWrap: "wrap" }}>
+                    <Text style={{ fontSize: "36rpx", fontWeight: 700, color: "#384877" }}>已打卡 {total} 次</Text>
+                    {doneToday && (
+                      <View style={{ background: "#e8f7ee", border: "1rpx solid #b7e4c7", padding: "2rpx 12rpx", borderRadius: "6rpx" }}>
+                        <Text style={{ fontSize: "20rpx", color: "#1f9d55" }}>今日已打卡</Text>
+                      </View>
+                    )}
+                  </View>
+                  {firstAt ? (
+                    <Text style={{ display: "block", fontSize: "22rpx", color: "#9ca0a8", marginTop: "8rpx" }}>
+                      从 {fmtCheckinDay(firstAt)} 开始 · 第 {dayCount} 天
+                    </Text>
+                  ) : null}
+                  <Text style={{ display: "block", fontSize: "22rpx", color: "#3b5aa2", marginTop: "10rpx", lineHeight: "32rpx" }}>
+                    {checkinEncourage(total)}
+                  </Text>
+                </View>
+              </View>
+
+              {/* 打卡情况：赴约记录时间线 */}
+              <View style={{ marginTop: "28rpx", borderTop: "1rpx dashed #e8ecef", paddingTop: "24rpx" }}>
+                <View className="ss-section-title" style={{ marginBottom: "8rpx" }}>赴约记录</View>
+                {items.length === 0 ? (
+                  <View className="ss-empty" style={{ padding: "20rpx 0" }}>还没有记录，点上方小脚印开始第一次打卡</View>
+                ) : (
+                  items.map((c) => (
+                    <View key={c.id} style={{ display: "flex", gap: "18rpx", padding: "16rpx 0", borderBottom: "1rpx solid #eef0f3" }}>
+                      <View style={{ width: "16rpx", display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, paddingTop: "10rpx" }}>
+                        <View style={{ width: "14rpx", height: "14rpx", borderRadius: "50%", background: "#3b5aa2" }} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={{ fontSize: "22rpx", color: "#9ca0a8" }}>{fmtCheckinTime(c.created_at)}</Text>
+                        {c.note ? (
+                          <View style={{ marginTop: "8rpx", background: "#ffffff", border: "1rpx solid #e8ecef", borderRadius: "12rpx", padding: "16rpx 20rpx" }}>
+                            <Text style={{ fontSize: "27rpx", color: "#3a3a3c", lineHeight: "40rpx" }}>{c.note}</Text>
+                          </View>
+                        ) : null}
+                        {c.photo_url ? (
+                          <Image
+                            src={absoluteUrl(c.photo_url)}
+                            mode="aspectFill"
+                            style={{ marginTop: c.note ? "12rpx" : "8rpx", width: "260rpx", height: "200rpx", borderRadius: "12rpx", background: "#f2f3f5" }}
+                          />
+                        ) : null}
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+            </View>
+          );
+        })()}
 
         <View className="ss-card">
           <View className="ss-section-title">子约定</View>

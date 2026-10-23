@@ -62,6 +62,15 @@ function serializeNote(note) {
   };
 }
 
+function serializeCheckin(checkin) {
+  return {
+    id: checkin.id,
+    note: checkin.note,
+    photo_url: checkin.photoUrl,
+    created_at: checkin.createdAt?.toISOString?.() || null,
+  };
+}
+
 function serializeComment(comment) {
   const visitorName = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
   return {
@@ -317,6 +326,28 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         ? await prisma.checkin.count({ where: { taskId: item.id } })
         : null;
 
+      // 打卡类约定：分享落地页需要展示累计打卡次数与最近赴约内容（附言/照片）
+      let checkinPayload = null;
+      if (item.category === "checkin") {
+        const [recent, first] = await Promise.all([
+          prisma.checkin.findMany({
+            where: { taskId: item.id },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+          }),
+          prisma.checkin.findFirst({
+            where: { taskId: item.id },
+            orderBy: { createdAt: "asc" },
+            select: { createdAt: true },
+          }),
+        ]);
+        checkinPayload = {
+          total: checkinTotal ?? recent.length,
+          first_at: first?.createdAt?.toISOString?.() || null,
+          items: recent.map(serializeCheckin),
+        };
+      }
+
       return res.json({
         type: "task",
         item: serializeTask(item),
@@ -324,6 +355,7 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         is_owner: req.user?.id === item.userId,
         subtasks,
         checkin_total: checkinTotal,
+        checkins: checkinPayload,
         comments: comments.map(serializeComment)
       });
     }

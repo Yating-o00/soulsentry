@@ -69,6 +69,15 @@ export function request(options = {}) {
     });
 }
 
+// 相对路径媒体（打卡照片等）→ 绝对 URL，供 <Image>/canvas 使用
+export function absoluteUrl(path) {
+  const p = String(path || "").trim();
+  if (!p) return "";
+  if (p.startsWith("http")) return p;
+  const origin = BASE_API.replace(/\/api\/?$/, "");
+  return p.startsWith("/") ? origin + p : `${origin}/${p}`;
+}
+
 export function get(url, params = {}, options = {}) {
   const query = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== null)

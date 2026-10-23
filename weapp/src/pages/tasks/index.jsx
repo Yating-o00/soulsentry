@@ -9,6 +9,8 @@ import ShareButton from "@/components/ShareButton";
 import { useShare } from "@/hooks/useShare";
 import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
+import CheckinCard from "@/components/tasks/CheckinCard";
+import { MILESTONE_QUOTES } from "@/components/tasks/checkinMeta";
 import { SnoozeSheet, ExecPreview } from "@/components/tasks/Sheets";
 import EvolutionRail, { computeEvolution } from "@/components/tasks/EvolutionRail";
 import DailyReviewSheet from "@/components/tasks/DailyReviewSheet";
@@ -84,6 +86,7 @@ export default function Tasks() {
   const [reviewTask, setReviewTask] = useState(null);
   const [posterTask, setPosterTask] = useState(null);
   const [posterToken, setPosterToken] = useState("");
+  const [posterCheckin, setPosterCheckin] = useState(null);
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [showDailyReview, setShowDailyReview] = useState(false);
@@ -129,6 +132,10 @@ export default function Tasks() {
   // 一键转发：预取约定的公开分享 token（生成接口幂等），转发给朋友无需登录即可查看
   const shareTokensRef = useRef({});
   const sharePendingRef = useRef(new Set());
+  // 打卡约定的累计次数：卡片展示 + 微信转发卡片标题「已赴约 N 次」
+  const [checkinMetaMap, setCheckinMetaMap] = useState({});
+  const checkinTotalsRef = useRef({});
+  const checkinFetchedRef = useRef(new Set());
 
   useShare({
     title: "心栈约定 · 和自己的一个约定",
@@ -140,7 +147,16 @@ export default function Tasks() {
       const task = tasks.find((t) => t.id === taskId);
       const title = `约定 · ${String(task?.title || "和自己的一个约定").trim().slice(0, 18)}`;
       const token = shareTokensRef.current[taskId];
-      return { title, path: token ? `pages/share/index?token=${token}` : `pages/task-detail/index?id=${taskId}` };
+      const path = token ? `pages/share/index?token=${token}` : `pages/task-detail/index?id=${taskId}`;
+      // 打卡约定：转发卡片直接带上累计赴约次数
+      if (task?.category === "checkin") {
+        const total = checkinTotalsRef.current[taskId];
+        return {
+          title: total ? `「${String(task.title || "打卡约定").trim().slice(0, 14)}」已赴约 ${total} 次` : `打卡约定 · ${String(task.title || "").trim().slice(0, 14)}`,
+          path,
+        };
+      }
+      return { title, path };
     }
   });
 
@@ -153,6 +169,18 @@ export default function Tasks() {
         .then((s) => { shareTokensRef.current[t.id] = (s && s.token) || ""; })
         .catch(() => { shareTokensRef.current[t.id] = ""; })
         .finally(() => sharePendingRef.current.delete(t.id));
+    });
+    // 打卡约定：预取累计次数（卡片展示 + 转发标题），失败静默不影响卡片
+    tasks.filter((t) => t.category === "checkin").slice(0, 20).forEach((t) => {
+      if (checkinFetchedRef.current.has(t.id)) return;
+      checkinFetchedRef.current.add(t.id);
+      get(`/tasks/${t.id}/checkins`, { limit: 1 })
+        .then((d) => {
+          const meta = { total: d?.total ?? 0, first_at: d?.first_at || null };
+          checkinTotalsRef.current[t.id] = meta.total;
+          setCheckinMetaMap((prev) => ({ ...prev, [t.id]: meta }));
+        })
+        .catch(() => { checkinFetchedRef.current.delete(t.id); });
     });
   }, [tasks, isGuest]);
 
@@ -360,6 +388,28 @@ export default function Tasks() {
     }
   };
 
+  // 打卡约定：点 👣 = 一次赴约（服务端记录打卡并把排期滚到下一期，done_today 置真）
+  const handleCheckin = async (task) => {
+    try {
+      const res = await post(`/tasks/${task.id}/checkins`, {});
+      const total = res?.total ?? 0;
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done_today: true } : t)));
+      setCheckinMetaMap((prev) => ({
+        ...prev,
+        [task.id]: { total, first_at: res?.first_at || prev[task.id]?.first_at || null },
+      }));
+      checkinTotalsRef.current[task.id] = total;
+      showToast(MILESTONE_QUOTES[total] ? `第 ${total} 次赴约 · ${MILESTONE_QUOTES[total]}` : `第 ${total} 次赴约`);
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  const handleCheckinDoneToday = (task) => {
+    showToast("今日已赴约 · 点卡片可查看打卡记录");
+    Taro.navigateTo({ url: `/pages/task-detail/index?id=${task.id}` });
+  };
+
   const handleSnoozeConfirm = async (_task, payload) => {
     try {
       await patch(`/tasks/${_task.id}`, {
@@ -455,6 +505,22 @@ export default function Tasks() {
       const share = await post(`/public/share/generate/task/${task.id}`);
       setPosterTask(task);
       setPosterToken(share.token || "");
+      setPosterCheckin(null);
+      if (task.category === "checkin") {
+        // 打卡分享卡：取累计次数与最近一条附言，海报上直接呈现打卡内容
+        get(`/tasks/${task.id}/checkins`, { limit: 20 })
+          .then((d) => {
+            const note = (d?.items || []).find((c) => c.note)?.note || null;
+            setPosterCheckin({ total: d?.total ?? 0, first_at: d?.first_at || null, note });
+          })
+          .catch(() => {
+            setPosterCheckin({
+              total: checkinTotalsRef.current[task.id] || 0,
+              first_at: checkinMetaMap[task.id]?.first_at || null,
+              note: null
+            });
+          });
+      }
     } catch (err) {
       Taro.showToast({ title: "分享生成失败", icon: "none" });
     }
@@ -463,6 +529,7 @@ export default function Tasks() {
   const closePoster = () => {
     setPosterTask(null);
     setPosterToken("");
+    setPosterCheckin(null);
   };
 
   return (
@@ -602,19 +669,33 @@ export default function Tasks() {
                       key={task.id}
                       className={`promise-card-slot${collapsingIds.has(task.id) ? " collapsing" : ""}`}
                     >
-                      <PromiseCard
-                        task={task}
-                        analysis={mergeAnalysis(task, analysisMap[task.id])}
-                        subtasks={subtaskMap[task.id] || []}
-                        index={i}
-                        onComplete={handleComplete}
-                        onSnooze={setSnoozeTask}
-                        onReview={setReviewTask}
-                        onDelegate={handleDelegate}
-                        onExecRun={handleExecRun}
-                        onSubtaskToggle={handleSubtaskToggle}
-                        onShare={handleShare}
-                      />
+                      {task.category === "checkin" ? (
+                        <CheckinCard
+                          task={task}
+                          analysis={mergeAnalysis(task, analysisMap[task.id])}
+                          subtasks={subtaskMap[task.id] || []}
+                          checkinMeta={checkinMetaMap[task.id]}
+                          onCheckin={handleCheckin}
+                          onCheckinDoneToday={handleCheckinDoneToday}
+                          onSnooze={setSnoozeTask}
+                          onSubtaskToggle={handleSubtaskToggle}
+                          onShare={handleShare}
+                        />
+                      ) : (
+                        <PromiseCard
+                          task={task}
+                          analysis={mergeAnalysis(task, analysisMap[task.id])}
+                          subtasks={subtaskMap[task.id] || []}
+                          index={i}
+                          onComplete={handleComplete}
+                          onSnooze={setSnoozeTask}
+                          onReview={setReviewTask}
+                          onDelegate={handleDelegate}
+                          onExecRun={handleExecRun}
+                          onSubtaskToggle={handleSubtaskToggle}
+                          onShare={handleShare}
+                        />
+                      )}
                     </View>
                   ))}
                 </View>
@@ -738,13 +819,14 @@ export default function Tasks() {
       <SharePoster
         visible={Boolean(posterTask)}
         onClose={closePoster}
-        type="task"
+        type={posterTask?.category === "checkin" ? "checkin" : "task"}
         title={posterTask?.title}
         description={posterTask?.description}
         extra={posterTask?.end_time ? `截止时间：${formatDateTime(posterTask.end_time)}` : ""}
         subtasks={subtaskMap[posterTask?.id] || []}
         shareToken={posterToken}
         canvasId="taskShareCanvas"
+        checkin={posterTask?.category === "checkin" ? posterCheckin : null}
       />
     </View>
   );

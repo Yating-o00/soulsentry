@@ -16,7 +16,12 @@ export default function NoteDetail() {
       if (!note) return {};
       // 直接呈现签的内容：优先纯文本、去掉换行；无内容时回退标题
       const raw = (note.plain_text || (note.content || "").replace(/<[^>]+>/g, "") || note.title || "此刻的一点心情").trim().replace(/\s+/g, " ");
-      return { title: `心签 · ${raw.slice(0, 48)}`, path: `pages/note-detail/index?id=${note.id}`, imageUrl: coverRef.current.path || undefined };
+      return {
+        title: `心签 · ${raw.slice(0, 48)}`,
+        path: `pages/note-detail/index?id=${note.id}`,
+        // 签卡封面未就绪时用线上默认签卡，避免微信回落到白屏页面快照
+        imageUrl: coverRef.current.path || "https://www.xinzhan-soulsentry.cn/note-share-default.png"
+      };
     }
   });
   const [note, setNote] = useState(null);

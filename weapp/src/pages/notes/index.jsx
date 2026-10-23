@@ -239,6 +239,8 @@ export default function Notes() {
   const sharePendingRef = useRef(new Set());
   // 心签转发封面（imageUrl）：数据到位后预生成缓存，分享时同步取用
   const noteCoversRef = useRef({});
+  // 兜底封面：签卡 canvas 未就绪时也不回落到白屏页面快照
+  const FALLBACK_COVER = "https://www.xinzhan-soulsentry.cn/note-share-default.png";
 
   useShare({
     title: "心栈心签 · 此刻的一点心情",
@@ -251,8 +253,8 @@ export default function Notes() {
       const raw = note ? shareNoteText(note) : "此刻的一点心情";
       const title = `心签 · ${raw.slice(0, 48)}`;
       const token = shareTokensRef.current[noteId];
-      // 封面优先级：配图 > 品牌签卡封面（正文点名呈现） > 微信回落页面快照
-      const imageUrl = note ? (getNoteImage(note) || noteCoversRef.current[noteId]?.path || undefined) : undefined;
+      // 封面优先级：配图 > 品牌签卡封面（正文点名呈现） > 线上默认签卡（绝不白屏快照）
+      const imageUrl = note ? (getNoteImage(note) || noteCoversRef.current[noteId]?.path || FALLBACK_COVER) : FALLBACK_COVER;
       return { title, path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${noteId}`, imageUrl };
     }
   });

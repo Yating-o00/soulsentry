@@ -108,7 +108,8 @@ function renderCover(payload) {
     const child = execFile(
       "python3",
       [RENDERER],
-      { maxBuffer: 16 * 1024 * 1024, timeout: 15000 },
+      // encoding: "buffer" —— 默认 utf8 字符串会把 PNG 二进制当多字节文本破坏
+      { encoding: "buffer", maxBuffer: 16 * 1024 * 1024, timeout: 15000 },
       (err, stdout, stderr) => {
         if (err) return reject(err);
         if (!stdout || stdout.length < 100) return reject(new Error(`empty render output: ${stderr || ""}`));

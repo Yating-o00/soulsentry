@@ -66,25 +66,29 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
       const isDone = (s) => s.status === "completed" || s.status === "done";
       const doneTodayList = (subtasks || []).filter((s) => isDone(s) && s.completed_at && dayOf(s.completed_at) === today);
 
-      // 极简装帧：米色纸面 + 双线细框 + 宋体大数字 + 朱砂「如约」印
-      const INK = "#2f3a55";
-      const INK_SOFT = "rgba(47,58,85,0.55)";
-      const INK_FAINT = "rgba(47,58,85,0.40)";
-      const TEXT = "#3c465f";
-      const SAGE = "#6f9273";
-      const GOLD = "#b08d57";
-      const SEAL_RED = "#bf4638";
+      // 极简装帧 · 主题品牌蓝主色调：微渐变蓝底 + 暖白文字 + 朱砂印点睛
+      const INK = "#f7f4ee"; // 暖白主文字
+      const INK_SOFT = "rgba(247,244,238,0.72)";
+      const INK_FAINT = "rgba(247,244,238,0.50)";
+      const TEXT = "rgba(247,244,238,0.92)";
+      const SAGE = "#a9d8b2";
+      const GOLD = "#dcbd85";
+      const SEAL_RED = "#d06050";
 
-      ctx.fillStyle = "#f7f5f0";
+      // 主题品牌蓝底（纵向微渐变，克制不花哨）
+      const grd = ctx.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, "#3a4a7a");
+      grd.addColorStop(1, "#2e3a60");
+      ctx.fillStyle = grd;
       ctx.fillRect(0, 0, W, H);
 
       const pad = 48;
 
       // 函套式双线细边框
-      ctx.strokeStyle = "rgba(47,58,85,0.30)";
+      ctx.strokeStyle = "rgba(247,244,238,0.32)";
       ctx.lineWidth = 1;
       ctx.strokeRect(14, 14, W - 28, H - 28);
-      ctx.strokeStyle = "rgba(47,58,85,0.13)";
+      ctx.strokeStyle = "rgba(247,244,238,0.14)";
       ctx.lineWidth = 0.5;
       ctx.strokeRect(22, 22, W - 44, H - 44);
 
@@ -135,7 +139,7 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
 
       // 细分隔线
       const ruleY = titleBottom + 16;
-      ctx.strokeStyle = "rgba(47,58,85,0.20)";
+      ctx.strokeStyle = "rgba(247,244,238,0.20)";
       ctx.lineWidth = 0.75;
       ctx.beginPath();
       ctx.moveTo(pad, ruleY);
@@ -192,7 +196,7 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
           ctx.fillText(text, tx, ly);
           if (line.struck) {
             const w = ctx.measureText(text).width;
-            ctx.strokeStyle = "rgba(60,70,95,0.35)";
+            ctx.strokeStyle = "rgba(247,244,238,0.35)";
             ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(tx, ly + 9);

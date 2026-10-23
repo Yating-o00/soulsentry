@@ -604,7 +604,7 @@ export function extractAdjustmentsFromText(text) {
   const t = String(text || "");
   if (!t) return null;
   const out = [];
-  const dur = /(?:(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|日常|全部|所有)|([一-龥]{2,8}?))[^。！？\n]{0,10}?(加到|增加|加强|加长|延长|调到|减到|缩到|提到|升到|改成)[^。！？\n]{0,6}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
+  const dur = /(?:(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|日常|全部|所有)|([一-龥]{2,8}?))[^。！？\n]{0,10}?(加到|增加|加强|加长|延长|调到|减到|缩到|提到|升到|改成|设为|设置为|到)[^。！？\n]{0,6}?(\d+|一|两|半|一个半)[\s]*(?:个)?(?:半)?(小时|钟头|分钟)/.exec(t);
   if (dur) {
     let target = dur[1] || "";
     if (!target) {
@@ -663,8 +663,7 @@ export function extractAdjustmentsFromText(text) {
   return out.length > 0 ? out : null;
 }
 
-// 多轮调整时模型调整与本地提取的取舍：新增项以本地对原话的解析为准（模型常丢适用日→铺成"每天"出 12 条）；
-// 模型给的新增项若适用日与原话里的星期词对不上，直接丢弃，不静默铺开。
+// 多轮调整时模型调整与本地提取的取舍：新增项以本地对原话的解析为准（模型常丢适用日→铺成"每天"出 12 条）；// 模型给的新增项若适用日与原话里的星期词对不上，直接丢弃，不静默铺开。
 export function resolvePlanAdjustments({ modelAdjustments = null, textAdjustments = null, lastUserText = "" } = {}) {
   const modelList = Array.isArray(modelAdjustments) && modelAdjustments.length ? modelAdjustments : null;
   const textList = Array.isArray(textAdjustments) && textAdjustments.length ? textAdjustments : null;
@@ -695,6 +694,45 @@ export function resolvePlanAdjustments({ modelAdjustments = null, textAdjustment
     }
   }
   return { adjustments, via };
+}
+
+// 从已确认规划的子约定反推日型模板：确认后提案卡清空，多轮调整改以库里的活跃规划为准。
+// 按 组+标题+时刻+时长 聚类，适用日由子约定实际出现的星期反推；时刻/时长优先取 reminderTime/endTime 列。
+export function rebuildPatternsFromChildren(children) {
+  const cn = (d) => new Date(new Date(d).getTime() + 8 * 3600 * 1000).toISOString();
+  const groups = new Map();
+  for (const c of Array.isArray(children) ? children : []) {
+    if (!c?.reminderTime) continue;
+    const date = cn(c.reminderTime).slice(0, 10);
+    const startTime = cn(c.reminderTime).slice(11, 16);
+    if (!TIME_RE.test(startTime)) continue;
+    const meta = c.metadata && typeof c.metadata === "object" ? c.metadata : {};
+    const extra = meta._extraFields && typeof meta._extraFields === "object" ? meta._extraFields : meta;
+    const durRaw = c.endTime
+      ? Math.round((new Date(c.endTime).getTime() - new Date(c.reminderTime).getTime()) / 60000)
+      : Number(extra.duration_minutes);
+    const duration = clampInt(durRaw, 10, 240, 30);
+    const title = String(c.title || "").trim().slice(0, 60) || "每日安排";
+    const planGroup = String(extra.plan_group || "").trim().slice(0, 12) || "每日安排";
+    const kind = extra.plan_kind === "checkin" ? "checkin" : "task";
+    const key = `${planGroup}|${title}|${startTime}|${duration}|${kind}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        plan_group: planGroup, kind, start_time: startTime, duration_minutes: duration,
+        title, description: String(c.description || "").slice(0, 300) || null,
+        note: null, weekly_progression: "", days: new Set()
+      });
+    } else if (!groups.get(key).description && c.description) {
+      groups.get(key).description = String(c.description).slice(0, 300);
+    }
+    const [yy, mm, dd] = date.split("-").map(Number);
+    groups.get(key).days.add(new Date(Date.UTC(yy, mm - 1, dd)).getUTCDay());
+  }
+  const patterns = [...groups.values()]
+    .filter((g) => g.days.size > 0)
+    .map((g) => ({ ...g, applies_to: serializeDaySet(g.days) }));
+  patterns.sort((a, b) => a.start_time.localeCompare(b.start_time));
+  return patterns;
 }
 
 export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], insights = null, now = new Date() } = {}) {

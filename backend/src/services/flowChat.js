@@ -3,7 +3,7 @@ import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
-import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, resolvePlanAdjustments, buildFallbackPlan } from "./planCommitment.js";
+import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, resolvePlanAdjustments, rebuildPatternsFromChildren, buildFallbackPlan } from "./planCommitment.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
@@ -425,8 +425,98 @@ function fallbackReply(userText, extracted, lastExtracted) {
   return "我在听，你继续说～";
 }
 
-// ===== Kimi 对话 =====
+// 已确认规划的延续调整：提案卡确认后 lastExtracted 清空，从库里最近的活跃智能规划（子约定带 plan_group）重建模板
+async function loadActivePlanFromDb({ userId, prisma }) {
+  try {
+    const since = new Date(Date.now() - 60 * 86400000);
+    const parents = await prisma.task.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        parentTaskId: null,
+        createdAt: { gte: since },
+        children: { some: { deletedAt: null, reminderTime: { not: null } } }
+      },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        children: {
+          where: { deletedAt: null, reminderTime: { not: null } },
+          select: { title: true, description: true, reminderTime: true, endTime: true, status: true, metadata: true },
+          take: 80
+        }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 15
+    });
+    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    let best = null;
+    for (const p of parents) {
+      const planKids = p.children.filter((c) => {
+        const meta = c.metadata && typeof c.metadata === "object" ? c.metadata : {};
+        const extra = meta._extraFields && typeof meta._extraFields === "object" ? meta._extraFields : meta;
+        return Boolean(extra.plan_group) || Boolean(extra.plan_kind);
+      });
+      if (planKids.length < 3) continue;
+      const future = planKids.filter((c) =>
+        new Date(new Date(c.reminderTime).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10) >= today
+      ).length;
+      const score = future * 100 + planKids.length;
+      if (!best || score > best.score) best = { parent: p, kids: planKids, score };
+    }
+    if (!best) return null;
+    const patterns = rebuildPatternsFromChildren(best.kids);
+    if (patterns.length === 0) return null;
+    const cnDates = best.kids
+      .map((c) => new Date(new Date(c.reminderTime).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10))
+      .sort();
+    const horizonDays = Math.min(30, Math.max(2, Math.round(
+      (new Date(`${cnDates[cnDates.length - 1]}T00:00:00+08:00`).getTime() - new Date(`${today}T00:00:00+08:00`).getTime()) / 86400000
+    ) + 1));
+    return {
+      goal: String(best.parent.title || "智能规划").replace(/[（(]\d+\s*天[^）)]*[）)]/g, "").trim().slice(0, 60) || "智能规划",
+      horizonDays,
+      dailyMinutes: Math.max(30, requiredBudget(patterns)),
+      patterns
+    };
+  } catch (e) {
+    console.warn("[flowChat] 读取已确认规划失败:", e?.message || e);
+    return null;
+  }
+}
 
+// 语义是调整、但会话里没有待确认规划时：从库里活跃规划重建模板 → 应用调整 → 出新提案
+async function tryDbPlanAdjustment({ userId, prisma, text }) {
+  const t = String(text || "").trim();
+  if (!t || t.length > 40) return null;
+  if (PLAN_INTENT_RE.test(t)) return null; // 新规划请求不接管（如"规划个每天加阅读的计划"）
+  const adj = extractAdjustmentsFromText(t);
+  if (!adj?.length) return null;
+  const active = await loadActivePlanFromDb({ userId, prisma });
+  if (!active) return null;
+  const patched = applyPlanAdjustments(active.patterns, adj);
+  if (patched.applied.length === 0) return null;
+  const budget = Math.max(active.dailyMinutes || 30, requiredBudget(patched.patterns));
+  const re = reexpandPlan(patched.patterns, {
+    goal: active.goal,
+    horizonDays: active.horizonDays,
+    dailyMinutes: budget,
+    preferences: null,
+    baseDailyMinutes: budget
+  });
+  if (!re) return null;
+  return {
+    extracted: {
+      type: "plan",
+      plan_request: { goal: active.goal, horizon_days: active.horizonDays, daily_minutes: active.dailyMinutes, preferences: null },
+      plan: { parent: re.parent, children: re.children, patterns: patched.patterns, source: "ai" }
+    },
+    reply: `好的，已替你更新：${patched.applied.slice(0, 4).join("；")}${patched.missed.length > 0 ? `；没匹配到「${patched.missed.map((m2) => m2.target).join("、")}」` : ""}，看看新安排～`
+  };
+}
+
+// ===== Kimi 对话 =====
 const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
@@ -880,6 +970,14 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           }
         }
       }
+      // 提案卡已确认（lastExtracted 清空）或 goal 被改写失配时：从库里的活跃规划重建模板再应用
+      if (!(out.extracted?.type === "plan" && out.extracted?.plan) && userId && prisma) {
+        const dbAdj = await tryDbPlanAdjustment({ userId, prisma, text: lastText });
+        if (dbAdj) {
+          out.extracted = dbAdj.extracted;
+          out.reply = dbAdj.reply;
+        }
+      }
     }
 
     // AI 调用成功：按真实 token 用量结算（1 点/1000 token，最少 1 点）；余额竞态只记警告不阻断
@@ -1004,6 +1102,14 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         extracted: null,
         source: "fallback"
       };
+    }
+
+    // Kimi 失败但语义是规划调整且规划已确认过：从库里活跃规划重建模板再应用
+    if (userId && prisma) {
+      const dbAdj = await tryDbPlanAdjustment({ userId, prisma, text: lastUser?.content || "" });
+      if (dbAdj) {
+        return { reply: dbAdj.reply, extracted: dbAdj.extracted, source: "fallback" };
+      }
     }
 
     const extracted = raw && raw !== "__reject__" ? sanitizeExtracted(raw) : null;

@@ -708,48 +708,58 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         const prev = lastExtracted && lastExtracted.type === "plan" ? lastExtracted : null;
         const prevReq = prev?.plan_request;
         const prevPatterns = Array.isArray(prev?.plan?.patterns) && prev.plan.patterns.length > 0 ? prev.plan.patterns : null;
-        const sameGoal = prevReq && String(prevReq.goal || "") === String(req.goal || "");
+        // goal 口径放宽：模型常把「两周的健身计划」改写回「健身计划」，严格相等会让定向调整整体失配
+        const normGoal = (s) => String(s || "").replace(/[\s「」"'，。,.！!？?：:；;、]/g, "");
+        const prevGoalN = normGoal(prevReq?.goal);
+        const goalN = normGoal(req.goal);
+        const sameGoal = !!prevReq && !!prevGoalN && !!goalN
+          && (prevGoalN === goalN || ((prevGoalN.includes(goalN) || goalN.includes(prevGoalN)) && Math.min(prevGoalN.length, goalN.length) >= 4));
         const lastUserText = [...safeMessages].reverse().find((m) => m.role === "user")?.content || "";
         const modelAdjustments = Array.isArray(req.adjustments) && req.adjustments.length > 0 ? req.adjustments : null;
         // 文本兜底始终计算：带范围词的调整语句优先按定向修改处理，防止模型误判成整体时长变更
         const textAdjustments = prevPatterns && sameGoal ? extractAdjustmentsFromText(lastUserText) : null;
-        const adjustments = modelAdjustments || textAdjustments;
+        let adjustments = modelAdjustments && modelAdjustments.length ? modelAdjustments
+          : (textAdjustments && textAdjustments.length ? textAdjustments : null);
+        let patched = adjustments && prevPatterns ? applyPlanAdjustments(prevPatterns, adjustments) : null;
+        // 模型抽的调整没落地时，换本地语义兜底再试一次（「周末加强一小时」这类口语模型常漏抽）
+        if ((!patched || patched.applied.length === 0) && textAdjustments && textAdjustments.length && adjustments !== textAdjustments) {
+          const textPatched = applyPlanAdjustments(prevPatterns, textAdjustments);
+          if (textPatched.applied.length > 0) { patched = textPatched; adjustments = textAdjustments; }
+        }
         let planned = null;
         let adjustedPatterns = null;
-        if (!planned && prevPatterns && sameGoal && adjustments?.length) {
-          const patched = applyPlanAdjustments(prevPatterns, adjustments);
-          if (patched.applied.length > 0) {
-            adjustedPatterns = patched.patterns;
-            // 显式调大的时长不能被原每日预算压回：预算抬到模板实际所需
-            const budget = Math.max(
-              req.daily_minutes || prevReq.daily_minutes || 30,
-              requiredBudget(adjustedPatterns)
-            );
-            planned = reexpandPlan(adjustedPatterns, {
-              goal: req.goal,
-              horizonDays: req.horizon_days || prevReq.horizon_days,
-              dailyMinutes: budget,
-              preferences: req.preferences || prevReq.preferences,
-              insights,
-              baseDailyMinutes: budget
-            });
-            if (planned) {
-              out.extracted.plan = {
-                parent: planned.parent,
-                children: planned.children,
-                patterns: adjustedPatterns,
-                source: "ai"
-              };
-              const missedNote = patched.missed.length > 0
-                ? `；没匹配到「${patched.missed.map((m2) => m2.target).join("、")}」对应的安排，可以再说具体点`
-                : "";
-              out.reply = `${out.reply}（已更新：${patched.applied.slice(0, 4).join("；")}${missedNote}）`;
-            }
-          } else {
-            // 没听懂改哪里：不弹空卡，追问清楚
-            out.extracted = null;
-            out.reply = `${out.reply}（没太听懂要改哪一项安排，告诉我是「周末/工作日/每天」还是具体哪组内容？）`;
+        if (!planned && prevPatterns && sameGoal && patched && patched.applied.length > 0) {
+          adjustedPatterns = patched.patterns;
+          // 显式调大的时长不能被原每日预算压回：预算抬到模板实际所需
+          const budget = Math.max(
+            req.daily_minutes || prevReq.daily_minutes || 30,
+            requiredBudget(adjustedPatterns)
+          );
+          planned = reexpandPlan(adjustedPatterns, {
+            goal: req.goal,
+            horizonDays: req.horizon_days || prevReq.horizon_days,
+            dailyMinutes: budget,
+            preferences: req.preferences || prevReq.preferences,
+            insights,
+            baseDailyMinutes: budget
+          });
+          if (planned) {
+            out.extracted.plan = {
+              parent: planned.parent,
+              children: planned.children,
+              patterns: adjustedPatterns,
+              source: "ai"
+            };
+            const missedNote = patched.missed.length > 0
+              ? `；没匹配到「${patched.missed.map((m2) => m2.target).join("、")}」对应的安排，可以再说具体点`
+              : "";
+            out.reply = `${out.reply}（已更新：${patched.applied.slice(0, 4).join("；")}${missedNote}）`;
           }
+        }
+        // 调整语句明确但哪儿都没匹配上：不弹空卡也不装没事，追问清楚
+        if (!planned && prevPatterns && sameGoal && adjustments && (!patched || patched.applied.length === 0)) {
+          out.extracted = null;
+          out.reply = `${out.reply}（没太听懂要改哪一项安排，告诉我是「周末/工作日/每天」还是具体哪组内容？）`;
         }
 
         // —— 快速路径 B：整体参数变化（时段/天数/时长）→ 本地秒级重排 ——
@@ -769,7 +779,14 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
               patterns: adjustedPatterns || prevPatterns,
               source: "ai"
             };
-            out.reply = `${out.reply}（已按你最新的要求重排好啦，看看这次的安排～）`;
+            // 重排结果和上一轮一模一样时不谎称"已重排"，引导用户说具体修改
+            const prevKids = Array.isArray(prev?.plan?.children) ? prev.plan.children : null;
+            const kidSig = (list) => list.map((c) => `${c.date}|${c.start_time}|${c.title}|${c.duration_minutes}`).join(";");
+            const unchanged = !!prevKids && kidSig(planned.children) === kidSig(prevKids);
+            const confirmish = /^(好|好的?|行|可以|确认|就这些|对|嗯|ok|没问题)[～~。!！.\s]*$/i.test(lastUserText.trim());
+            out.reply = unchanged && !confirmish
+              ? `${out.reply}（这轮没看出要改哪里：可以直接说具体修改，比如「周末加到一小时」「周六改到早上9点」「把跑步换成游泳」）`
+              : `${out.reply}（已按你最新的要求重排好啦，看看这次的安排～）`;
           }
         }
 

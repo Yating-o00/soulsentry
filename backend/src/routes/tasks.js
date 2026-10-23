@@ -824,7 +824,8 @@ tasksRouter.patch("/:id", async (req, res) => {
       parentTaskId: payload.data.parent_task_id === undefined ? undefined : (payload.data.parent_task_id || null),
       gcalSyncEnabled: payload.data.gcal_sync_enabled,
       progress: payload.data.progress,
-      completedAt: payload.data.completed_at === undefined ? undefined : (payload.data.completed_at ? new Date(payload.data.completed_at) : null),
+      // 完成时间统一走 nextCompletedAtForUpdate：显式传值、重复约定打卡、普通完成自动打时间戳
+      completedAt: nextCompletedAtForUpdate,
       deletedAt: payload.data.deleted_at === undefined ? undefined : (payload.data.deleted_at ? new Date(payload.data.deleted_at) : null),
       tags: payload.data.tags,
       reminderStrategy: payload.data.reminder_strategy,

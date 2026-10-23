@@ -1,11 +1,12 @@
 // 打卡约定的微信转发封面图（onShareAppMessage 的 imageUrl）：
-// 5:4 品牌蓝渐变底 + 大数字「N 次赴约」+ 约定标题 + 子约定进度/坚持天数
-// + 今日动态（✓ 今日勾掉的子约定划线呈现、＋ 今日新增的子约定）+ 心栈记金句。
+// 5:4 极简装帧——米色纸面 + 双线细框 + 宋体大数字「N 次赴约」+ 朱砂「如约」印
+// + 细分隔线下的进度行与今日动态（✓ 今日勾掉的子约定划线、＋ 今日新增）+ 心栈记金句。
 // onShareAppMessage 必须同步返回，所以封面在卡片数据到位后预生成、缓存 tempFilePath。
 
 const W = 640;
 const H = 512; // 微信分享封面推荐 5:4
 const FONT = '"PingFang SC", "Microsoft YaHei", Arial, sans-serif';
+const SERIF = '"Songti SC", "STSong", "SimSun", serif'; // 书封式宋体，极简高级感
 
 function wrapText(ctx, text, maxWidth, maxLines = 2) {
   const lines = [];
@@ -65,63 +66,83 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
       const isDone = (s) => s.status === "completed" || s.status === "done";
       const doneTodayList = (subtasks || []).filter((s) => isDone(s) && s.completed_at && dayOf(s.completed_at) === today);
 
-      // 品牌蓝渐变底
-      const grd = ctx.createLinearGradient(0, 0, W, H);
-      grd.addColorStop(0, "#2d3a5f");
-      grd.addColorStop(0.55, "#384877");
-      grd.addColorStop(1, "#3b5aa2");
-      ctx.fillStyle = grd;
+      // 极简装帧：米色纸面 + 双线细框 + 宋体大数字 + 朱砂「如约」印
+      const INK = "#2f3a55";
+      const INK_SOFT = "rgba(47,58,85,0.55)";
+      const INK_FAINT = "rgba(47,58,85,0.40)";
+      const TEXT = "#3c465f";
+      const SAGE = "#6f9273";
+      const GOLD = "#b08d57";
+      const SEAL_RED = "#bf4638";
+
+      ctx.fillStyle = "#f7f5f0";
       ctx.fillRect(0, 0, W, H);
 
-      const pad = 40;
+      const pad = 48;
+
+      // 函套式双线细边框
+      ctx.strokeStyle = "rgba(47,58,85,0.30)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(14, 14, W - 28, H - 28);
+      ctx.strokeStyle = "rgba(47,58,85,0.13)";
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(22, 22, W - 44, H - 44);
 
       // 顶部品牌行
-      ctx.textBaseline = "top";
+      ctx.textBaseline = "alphabetic";
       ctx.textAlign = "left";
-      ctx.fillStyle = "rgba(255,255,255,0.72)";
-      ctx.font = `400 18px ${FONT}`;
-      ctx.fillText("心栈 SOULSENTRY", pad, 30);
+      ctx.fillStyle = INK_SOFT;
+      ctx.font = `400 14px ${FONT}`;
+      ctx.fillText("心栈 · SOULSENTRY", pad, 62);
 
-      // 如约印章（右上，斜置双圈）
+      // 朱砂「如约」印章（右上，正置双圈，签名式收束）
       ctx.save();
-      ctx.translate(W - pad - 34, 46);
-      ctx.rotate((-12 * Math.PI) / 180);
-      ctx.strokeStyle = "rgba(255,255,255,0.35)";
-      ctx.lineWidth = 2;
+      ctx.translate(W - pad - 4, 56);
+      ctx.strokeStyle = SEAL_RED;
+      ctx.fillStyle = SEAL_RED;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(0, 0, 30, 0, Math.PI * 2);
+      ctx.arc(0, 0, 22, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.lineWidth = 1;
+      ctx.lineWidth = 0.75;
       ctx.beginPath();
-      ctx.arc(0, 0, 23, 0, Math.PI * 2);
+      ctx.arc(0, 0, 17, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
-      ctx.font = `700 16px ${FONT}`;
+      ctx.font = `600 10px ${SERIF}`;
       ctx.textAlign = "center";
-      ctx.fillText("如", 0, -16);
-      ctx.fillText("约", 0, 1);
+      ctx.fillText("如", 0, -2);
+      ctx.fillText("约", 0, 10);
       ctx.restore();
 
-      // 大数字「N 次赴约」
+      // 大数字「N 次赴约」：宋体大字号，书封式排版
       ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillStyle = "#ffffff";
-      ctx.font = `800 76px ${FONT}`;
+      ctx.fillStyle = INK;
+      ctx.font = `800 84px ${SERIF}`;
       const numText = String(total);
-      ctx.fillText(numText, pad, 158);
+      ctx.fillText(numText, pad, 190);
       const numWidth = ctx.measureText(numText).width;
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.font = `400 22px ${FONT}`;
-      ctx.fillText("次 赴 约", pad + numWidth + 18, 154);
+      ctx.fillStyle = INK_SOFT;
+      ctx.font = `400 17px ${FONT}`;
+      ctx.fillText("次  赴  约", pad + numWidth + 20, 187);
 
-      // 约定标题（最多 2 行）
-      ctx.fillStyle = "#ffffff";
-      ctx.font = `700 28px ${FONT}`;
+      // 约定标题（宋体，最多 2 行）
+      ctx.fillStyle = INK;
+      ctx.font = `600 30px ${SERIF}`;
       ctx.textBaseline = "top";
       const titleLines = wrapText(ctx, String(title || "未命名").trim(), W - pad * 2, 2);
-      titleLines.forEach((line, i) => ctx.fillText(line, pad, 184 + i * 40));
+      titleLines.forEach((line, i) => ctx.fillText(line, pad, 226 + i * 40));
+      const titleBottom = 226 + titleLines.length * 40;
 
-      // 进度行：子约定完成度 / 坚持天数 / 今日已打卡（当日条目在下面逐条列出）
+      // 细分隔线
+      const ruleY = titleBottom + 16;
+      ctx.strokeStyle = "rgba(47,58,85,0.20)";
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(pad, ruleY);
+      ctx.lineTo(W - pad, ruleY);
+      ctx.stroke();
+
+      // 进度行：子约定完成度 / 坚持天数 / 今日已打卡
       const metaParts = [];
       if (Array.isArray(subtasks) && subtasks.length > 0) {
         const doneCount = subtasks.filter(isDone).length;
@@ -134,59 +155,58 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
           metaParts.push(`第 ${dayCount} 天`);
         }
       }
-      if (doneToday) metaParts.unshift("今日已打卡");
-      const metaY = 184 + titleLines.length * 40 + 14;
-      if (metaParts.length > 0) {
-        ctx.fillStyle = "rgba(255,255,255,0.88)";
-        ctx.font = `500 19px ${FONT}`;
-        ctx.fillText(metaParts.join(" · "), pad, metaY);
-      }
+      if (doneToday) metaParts.push("今日已打卡");
+      const metaY = ruleY + 24;
+      ctx.fillStyle = INK_SOFT;
+      ctx.font = `400 15px ${FONT}`;
+      ctx.fillText(metaParts.join("  ·  "), pad, metaY);
 
-      // 今日动态：今日在卡片上做的事点名呈现——勾掉的子约定（✓ 划线）、新增的子约定（＋）
+      // 今日动态：今日在卡片上做的事点名呈现——勾掉的子约定（✓ 细划线）、新增的子约定（＋）
       const doneIds = new Set(doneTodayList.map((s) => s.id));
       const newTodayList = (subtasks || []).filter((s) => s.created_date && dayOf(s.created_date) === today && !doneIds.has(s.id));
-      const MAX_ACTIVITY_LINES = 4;
+      const labelY = metaY + 30;
+      const firstItemY = labelY + 26;
+      const maxLines = Math.max(1, Math.min(4, Math.floor((H - 58 - firstItemY) / 30)));
       const activityLines = [];
       doneTodayList.slice(0, 3).forEach((s) => activityLines.push({ icon: "✓", text: s.title, struck: true }));
       if (doneTodayList.length > 3) activityLines.push({ icon: "✓", text: `等 ${doneTodayList.length} 项完成`, muted: true });
-      const roomForNew = Math.max(0, MAX_ACTIVITY_LINES - activityLines.length);
+      const roomForNew = Math.max(0, maxLines - activityLines.length);
       newTodayList.slice(0, roomForNew).forEach((s) => activityLines.push({ icon: "＋", text: s.title }));
-      if (newTodayList.length > roomForNew && activityLines.length < MAX_ACTIVITY_LINES) {
+      if (newTodayList.length > roomForNew && activityLines.length < maxLines) {
         activityLines.push({ icon: "＋", text: `等 ${newTodayList.length} 项新增`, muted: true });
       }
+      activityLines.length = Math.min(activityLines.length, maxLines);
       if (activityLines.length > 0) {
-        const blockStart = metaY + 32;
-        ctx.textBaseline = "top";
-        ctx.fillStyle = "rgba(255,255,255,0.55)";
-        ctx.font = `600 15px ${FONT}`;
-        ctx.fillText("今日动态", pad, blockStart);
-        let ly = blockStart + 28;
+        ctx.fillStyle = INK_FAINT;
+        ctx.font = `500 13px ${FONT}`;
+        ctx.fillText("— 今日动态", pad, labelY);
+        let ly = firstItemY;
         activityLines.forEach((line) => {
-          ctx.font = `500 20px ${FONT}`;
-          ctx.fillStyle = line.icon === "✓" ? "#8fe3ae" : "#ffd479";
+          ctx.font = `500 18px ${FONT}`;
+          ctx.fillStyle = line.icon === "✓" ? SAGE : GOLD;
           ctx.fillText(line.icon, pad, ly);
           const prefixW = ctx.measureText(line.icon).width;
-          ctx.fillStyle = line.muted ? "rgba(255,255,255,0.62)" : "rgba(255,255,255,0.94)";
+          ctx.fillStyle = line.muted ? INK_SOFT : TEXT;
           const text = truncateToWidth(ctx, line.text, W - pad * 2 - prefixW - 12);
           const tx = pad + prefixW + 12;
           ctx.fillText(text, tx, ly);
           if (line.struck) {
             const w = ctx.measureText(text).width;
-            ctx.strokeStyle = "rgba(255,255,255,0.35)";
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = "rgba(60,70,95,0.35)";
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(tx, ly + 9);
             ctx.lineTo(tx + w, ly + 9);
             ctx.stroke();
           }
-          ly += 28;
+          ly += 30;
         });
       }
 
       // 底部金句（固定底部，今日动态块在其上方自适应）
-      ctx.fillStyle = "rgba(255,255,255,0.62)";
-      ctx.font = `400 16px ${FONT}`;
-      ctx.fillText(`——心栈记 · ${quote}`.slice(0, 34), pad, H - 44);
+      ctx.fillStyle = INK_FAINT;
+      ctx.font = `400 14px ${FONT}`;
+      ctx.fillText(`—— 心栈记 · ${quote}`.slice(0, 36), pad, H - 46);
 
       wx.canvasToTempFilePath({
         canvas,

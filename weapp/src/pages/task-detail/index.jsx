@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Input, Button, ScrollView, Image, Textarea } from "@tarojs/components";
 import { get, post, patch, del, absoluteUrl } from "@/utils/api";
@@ -29,6 +29,8 @@ export default function TaskDetail() {
   const [subtaskText, setSubtaskText] = useState("");
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState(new Set());
+  // 首次加载后默认展开所有带从属子约定的节点：从属子约定直接可见、可勾选，不用先点"+"
+  const autoExpandRef = useRef(false);
   const [changeLogs, setChangeLogs] = useState([]);
   const [membersInfo, setMembersInfo] = useState(null);
   // 打卡约定：累计次数与赴约记录时间线
@@ -71,6 +73,11 @@ export default function TaskDetail() {
 
       const allSubs = await fetchSubtasksRecursive(taskId);
       setSubtasks(allSubs);
+      if (!autoExpandRef.current) {
+        autoExpandRef.current = true;
+        const parentIds = new Set(allSubs.map((s) => s.parent_task_id));
+        setExpandedIds(new Set(allSubs.filter((s) => parentIds.has(s.id)).map((s) => s.id)));
+      }
 
       const cmt = await get("/comments", { task_id: taskId, sort: "-created_date", limit: 100 });
       setComments(Array.isArray(cmt) ? cmt : []);

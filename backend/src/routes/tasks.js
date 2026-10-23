@@ -727,6 +727,17 @@ tasksRouter.patch("/:id", async (req, res) => {
   let nextEndTimeForUpdate = payload.data.end_time === undefined ? undefined : (payload.data.end_time ? new Date(payload.data.end_time) : null);
 
   const recurringRule = ["daily", "weekly", "monthly", "custom"].includes(prevExtra.repeat_rule) ? prevExtra.repeat_rule : null;
+
+  // 状态直接置完成/还原且未显式传 completed_at：自动记录/清除完成时间。
+  // 「今日完成的子约定」分享呈现、完成度统计都依赖该时间戳（重复约定分支在下面另行处理）。
+  if (!recurringRule && payload.data.completed_at === undefined && payload.data.status !== undefined) {
+    const requested = toPrismaTaskStatus(payload.data.status);
+    if (requested === "DONE" && existing.status !== "DONE") {
+      nextCompletedAtForUpdate = new Date();
+    } else if (requested !== "DONE" && existing.status === "DONE") {
+      nextCompletedAtForUpdate = null;
+    }
+  }
   if (recurringRule && payload.data.status !== undefined) {
     const requestedStatus = toPrismaTaskStatus(payload.data.status);
     const recurrenceDoneToday = prevExtra.recurrence_last_done === chinaToday;

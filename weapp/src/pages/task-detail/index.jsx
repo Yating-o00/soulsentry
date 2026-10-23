@@ -601,23 +601,23 @@ export default function TaskDetail() {
                       </Text>
                     </View>
 
-                    <Text
+                    <View
+                      onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
                       style={{
                         width: "40rpx",
                         height: "40rpx",
                         borderRadius: "50%",
                         border: "2rpx solid #384877",
                         background: done ? "#384877" : "#fff",
-                        color: "#fff",
-                        textAlign: "center",
-                        lineHeight: "40rpx",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                         marginRight: "16rpx",
-                        fontSize: "24rpx"
+                        flexShrink: 0
                       }}
-                      onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
                     >
-                      {done ? "✓" : ""}
-                    </Text>
+                      {done ? <Text style={{ color: "#fff", fontSize: "24rpx", lineHeight: "28rpx" }}>✓</Text> : null}
+                    </View>
 
                     <Text
                       style={{

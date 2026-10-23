@@ -34,7 +34,7 @@ function wrapText(ctx, text, maxWidth, maxLines = 2) {
  * @param {string} opts.title 约定标题
  * @param {number} opts.total 累计打卡次数
  * @param {string|null} opts.firstAt 首次打卡时间 ISO
- * @param {Array} opts.subtasks 子约定（含 status）
+ * @param {Array} opts.subtasks 子约定树（含 status/completed_at/created_date），用于呈现当日动态
  * @param {boolean} opts.doneToday 今天是否已打卡
  * @param {string} opts.quote 心栈记金句
  */
@@ -46,6 +46,13 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
       }
       const canvas = wx.createOffscreenCanvas({ type: "2d", width: W, height: H });
       const ctx = canvas.getContext("2d");
+
+      // 当日动态（按北京时间）：今日完成的子约定 / 今日新增的子约定
+      const dayOf = (t) => new Date(new Date(t).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+      const today = dayOf(Date.now());
+      const isDone = (s) => s.status === "completed" || s.status === "done";
+      const doneTodayCount = (subtasks || []).filter((s) => isDone(s) && s.completed_at && dayOf(s.completed_at) === today).length;
+      const newTodayCount = (subtasks || []).filter((s) => s.created_date && dayOf(s.created_date) === today).length;
 
       // 品牌蓝渐变底
       const grd = ctx.createLinearGradient(0, 0, W, H);
@@ -103,12 +110,14 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
       const titleLines = wrapText(ctx, String(title || "未命名").trim(), W - pad * 2, 2);
       titleLines.forEach((line, i) => ctx.fillText(line, pad, 224 + i * 42));
 
-      // 进度行：子约定完成度 / 坚持天数 / 今日已打卡
+      // 进度行：子约定完成度 / 当日动态 / 坚持天数 / 今日已打卡
       const metaParts = [];
       if (Array.isArray(subtasks) && subtasks.length > 0) {
-        const doneCount = subtasks.filter((s) => s.status === "completed" || s.status === "done").length;
+        const doneCount = subtasks.filter(isDone).length;
         metaParts.push(`子约定 ${doneCount}/${subtasks.length}`);
       }
+      if (doneTodayCount > 0) metaParts.push(`今日完成 ${doneTodayCount} 项`);
+      if (newTodayCount > 0) metaParts.push(`今日新增 ${newTodayCount} 项`);
       if (firstAt) {
         const first = new Date(firstAt);
         if (!isNaN(first.getTime())) {

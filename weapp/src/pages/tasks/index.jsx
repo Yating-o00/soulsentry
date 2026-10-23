@@ -153,12 +153,15 @@ export default function Tasks() {
       if (task?.category === "checkin") {
         const total = checkinTotalsRef.current[taskId] ?? 0;
         const t = String(task.title || "打卡约定").trim();
+        const tree = buildSubTree(taskId);
         const subs = subtaskMap[taskId] || [];
         const subDone = subs.filter((s) => s.status === "completed" || s.status === "done").length;
+        const { doneTodayCount } = countTodayActivity(tree);
         const parts = [];
         if (task.done_today) parts.push("今日已打卡");
         parts.push(`累计赴约 ${total} 次`);
         if (subs.length > 0) parts.push(`子约定 ${subDone}/${subs.length}`);
+        if (doneTodayCount > 0) parts.push(`今日完成 ${doneTodayCount} 项`);
         return {
           title: `打卡约定「${t.slice(0, 12)}」：${parts.join(" · ")}`.slice(0, 60),
           path,
@@ -199,15 +202,16 @@ export default function Tasks() {
     Object.entries(checkinMetaMap).forEach(([taskId, meta]) => {
       const task = tasks.find((t) => t.id === taskId);
       if (!task) return;
-      const subs = subtaskMap[taskId] || [];
-      const key = `${meta.total}-${Boolean(task.done_today)}-${subs.length}-${subs.filter((s) => s.status === "completed" || s.status === "done").length}`;
+      const tree = buildSubTree(taskId);
+      const { doneTodayCount, newTodayCount } = countTodayActivity(tree);
+      const key = `${meta.total}-${Boolean(task.done_today)}-${tree.length}-${tree.filter((s) => s.status === "completed" || s.status === "done").length}-${doneTodayCount}-${newTodayCount}`;
       if (shareCoversRef.current[taskId]?.key === key) return;
       shareCoversRef.current[taskId] = { key, path: "" };
       generateCheckinCover({
         title: task.title,
         total: meta.total,
         firstAt: meta.first_at,
-        subtasks: subs,
+        subtasks: tree,
         doneToday: Boolean(task.done_today),
         quote: MILESTONE_QUOTES[meta.total] || "每一次都算数。",
       }).then((path) => {
@@ -441,6 +445,17 @@ export default function Tasks() {
   const buildSubTree = (taskId) => {
     const walk = (pid, depth) => (subtaskMap[pid] || []).flatMap((s) => [{ ...s, depth }, ...walk(s.id, depth + 1)]);
     return walk(taskId, 0);
+  };
+
+  // 当日动态（按北京时间）：今日完成的子约定数 / 今日新增的子约定数
+  const countTodayActivity = (tree) => {
+    const dayOf = (t) => new Date(new Date(t).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const today = dayOf(Date.now());
+    const isDone = (s) => s.status === "completed" || s.status === "done";
+    return {
+      doneTodayCount: tree.filter((s) => isDone(s) && s.completed_at && dayOf(s.completed_at) === today).length,
+      newTodayCount: tree.filter((s) => s.created_date && dayOf(s.created_date) === today).length,
+    };
   };
 
   const handleCheckinDoneToday = (task) => {

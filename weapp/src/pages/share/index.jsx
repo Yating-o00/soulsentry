@@ -313,6 +313,16 @@ export default function Share() {
           const dayCount = firstAt
             ? Math.max(1, Math.floor((Date.now() - new Date(firstAt).getTime()) / 86400000) + 1)
             : 0;
+          // 当日动态（按北京时间）：今日完成的子约定打勾呈现，今日新增的子约定带「新」标出
+          const dayOf = (t) => new Date(new Date(t).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+          const today = dayOf(Date.now());
+          const isSubDone = (s) => s.status === "completed" || s.status === "done";
+          const flatSubs = [];
+          const walkSubs = (nodes) => (nodes || []).forEach((n) => { flatSubs.push(n); walkSubs(n.children); });
+          walkSubs(subtasks);
+          const todayDoneSubs = flatSubs.filter((s) => isSubDone(s) && s.completed_at && dayOf(s.completed_at) === today);
+          const todayDoneIds = new Set(todayDoneSubs.map((s) => s.id));
+          const todayNewSubs = flatSubs.filter((s) => s.created_date && dayOf(s.created_date) === today && !todayDoneIds.has(s.id));
           return (
             <View className="ss-card" style={{ background: "linear-gradient(150deg, #f8faff 0%, #ffffff 55%)", border: "1rpx solid #c9d5ef" }}>
               <View style={{ display: "flex", alignItems: "baseline", gap: "12rpx" }}>
@@ -327,6 +337,37 @@ export default function Share() {
               <Text style={{ display: "block", fontSize: "22rpx", color: "#9ca0a8", marginTop: "6rpx" }}>
                 {firstAt ? `从 ${new Date(firstAt).getFullYear()}年${new Date(firstAt).getMonth() + 1}月${new Date(firstAt).getDate()}日 起 · 第 ${dayCount} 天` : "刚刚开始"}
               </Text>
+
+              {/* 今日动态：今日完成的子约定（打勾）+ 今日新增的子约定（新） */}
+              {(todayDoneSubs.length > 0 || todayNewSubs.length > 0) && (
+                <View style={{ marginTop: "20rpx", background: "#f0f6ff", border: "1rpx solid #dbe3f7", borderRadius: "14rpx", padding: "18rpx 22rpx" }}>
+                  <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "10rpx" }}>
+                    <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: "#3b5aa2" }} />
+                    <Text style={{ fontSize: "24rpx", fontWeight: 600, color: "#384877" }}>今日动态</Text>
+                  </View>
+                  {todayDoneSubs.map((s) => {
+                    const dt = s.completed_at ? new Date(s.completed_at) : null;
+                    const hm = dt && !isNaN(dt.getTime()) ? `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}` : "";
+                    return (
+                      <View key={s.id} style={{ display: "flex", alignItems: "center", gap: "12rpx", padding: "6rpx 0" }}>
+                        <View style={{ width: "30rpx", height: "30rpx", borderRadius: "50%", background: "#1f9d55", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <Text style={{ color: "#fff", fontSize: "18rpx", lineHeight: "22rpx" }}>✓</Text>
+                        </View>
+                        <Text style={{ flex: 1, fontSize: "26rpx", color: "#3a3a3c", textDecoration: "line-through", textDecorationColor: "#c9ced6" }}>{s.title}</Text>
+                        {hm ? <Text style={{ fontSize: "20rpx", color: "#9ca0a8" }}>{hm}</Text> : null}
+                      </View>
+                    );
+                  })}
+                  {todayNewSubs.map((s) => (
+                    <View key={s.id} style={{ display: "flex", alignItems: "center", gap: "12rpx", padding: "6rpx 0" }}>
+                      <View style={{ background: "#EEF2FF", border: "1rpx solid #c9d5ef", padding: "0 8rpx", borderRadius: "6rpx", flexShrink: 0 }}>
+                        <Text style={{ fontSize: "18rpx", color: "#384877" }}>新</Text>
+                      </View>
+                      <Text style={{ flex: 1, fontSize: "26rpx", color: "#3a3a3c" }}>{s.title}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
 
               {items.length > 0 && (
                 <View style={{ marginTop: "20rpx", borderTop: "1rpx dashed #e8ecef", paddingTop: "20rpx" }}>
@@ -397,23 +438,23 @@ export default function Share() {
                 const done = isSubDone(sub);
                 return (
                   <View key={sub.id} style={{ display: "flex", alignItems: "center", padding: "16rpx 0", borderBottom: "1rpx solid #e5e6eb" }}>
-                    <Text
+                    <View
+                      onClick={() => handleToggle(!done, sub.id)}
                       style={{
                         width: "40rpx",
                         height: "40rpx",
                         borderRadius: "50%",
                         border: "2rpx solid #384877",
                         background: done ? "#384877" : "#fff",
-                        color: "#fff",
-                        textAlign: "center",
-                        lineHeight: "40rpx",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                         marginRight: "16rpx",
-                        fontSize: "24rpx"
+                        flexShrink: 0
                       }}
-                      onClick={() => handleToggle(!done, sub.id)}
                     >
-                      {done ? "✓" : ""}
-                    </Text>
+                      {done ? <Text style={{ color: "#fff", fontSize: "24rpx", lineHeight: "28rpx" }}>✓</Text> : null}
+                    </View>
                     <Text style={{ flex: 1, fontSize: "30rpx", color: done ? "#999" : "#333", textDecoration: done ? "line-through" : "none" }}>
                       {sub.title}
                     </Text>

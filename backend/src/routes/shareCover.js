@@ -127,7 +127,7 @@ const CACHE_MAX = 500;
 export const shareCoverRouter = Router();
 
 // GET /api/public/share/cover/note/:id.png —— 微信分享封面图（需签已开启分享）
-shareCoverRouter.get("/note/:id.png", async (req, res) => {
+shareCoverRouter.get("/cover/note/:id.png", async (req, res) => {
   try {
     const note = await prisma.note.findFirst({
       where: { id: String(req.params.id || ""), deletedAt: null, shareEnabled: true }

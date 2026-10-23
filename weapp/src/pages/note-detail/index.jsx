@@ -1,14 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Input, Textarea, Button, ScrollView } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
 import { useShare } from "@/hooks/useShare";
-import { generateNoteCover } from "@/lib/shareCover";
 import RichText from "@/components/RichText";
 
 export default function NoteDetail() {
-  // 心签转发封面：生成品牌签卡作为分享缩略图，正文直接呈现
-  const coverRef = useRef({ key: "", path: "" });
   useShare({
     title: "心栈心签 · 此刻的一点心情",
     path: "pages/notes/index",
@@ -16,11 +13,14 @@ export default function NoteDetail() {
       if (!note) return {};
       // 直接呈现签的内容：优先纯文本、去掉换行；无内容时回退标题
       const raw = (note.plain_text || (note.content || "").replace(/<[^>]+>/g, "") || note.title || "此刻的一点心情").trim().replace(/\s+/g, " ");
+      const condensed = raw.length <= 54 ? raw : `${raw.slice(0, 42)}…${raw.slice(-10)}`;
       return {
-        title: `心签 · ${raw.slice(0, 48)}`,
+        title: `心签 · ${condensed}`,
         path: `pages/note-detail/index?id=${note.id}`,
-        // 签卡封面未就绪时用线上默认签卡，避免微信回落到白屏页面快照
-        imageUrl: coverRef.current.path || "https://www.xinzhan-soulsentry.cn/note-share-default.png"
+        // 封面：签已开启分享时用服务端生成的签卡封面，兜底线上默认签卡
+        imageUrl: note.share_enabled
+          ? `https://www.xinzhan-soulsentry.cn/api/public/share/cover/note/${note.id}.png`
+          : "https://www.xinzhan-soulsentry.cn/note-share-default.png"
       };
     }
   });
@@ -58,25 +58,6 @@ export default function NoteDetail() {
   useEffect(() => {
     fetchAll();
   }, [noteId]);
-
-  // 数据到位后预生成转发封面（与打卡约定封面同一套品牌蓝装帧）
-  useEffect(() => {
-    if (!note) return;
-    const text = (note.plain_text || (note.content || "").replace(/<[^>]+>/g, "")).trim().replace(/\s+/g, " ");
-    if (!text) return;
-    const key = `${note.id}:${note.updated_date || note.created_date || ""}:${text.length}`;
-    if (coverRef.current.key === key) return;
-    coverRef.current = { key, path: coverRef.current.path };
-    generateNoteCover({
-      content: text,
-      typeLabel: "心签",
-      typeColor: "#c97b8a",
-      date: note.created_date,
-      response: note.metadata?.ai_analysis?.emotional_response || ""
-    }).then((p) => {
-      coverRef.current.path = p;
-    });
-  }, [note]);
 
   const startEdit = () => {
     setEditTitle(note?.title || "");

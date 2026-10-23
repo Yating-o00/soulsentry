@@ -1,13 +1,12 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView, Input, Button, Image } from "@tarojs/components";
-import { get, post, patch, del } from "@/utils/api";
+import { get, post, patch, del, absoluteUrl } from "@/utils/api";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
 import ShareButton from "@/components/ShareButton";
 import { useShare } from "@/hooks/useShare";
-import { generateNoteCover } from "@/lib/shareCover";
 import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
 import RichText from "@/components/RichText";
@@ -126,6 +125,13 @@ function shareNoteText(note) {
   return raw.replace(/\s+/g, " ") || "此刻的一点心情";
 }
 
+// 浓缩整个内容成标题：短内容全量；长内容保留头尾、中部省略（起 42 + 尾 10）
+function condenseNoteText(text) {
+  const t = String(text || "").trim();
+  if (t.length <= 54) return t;
+  return `${t.slice(0, 42)}…${t.slice(-10)}`;
+}
+
 // 账本签：收支明细表 + 合计 + AI 吐槽式回应
 function LedgerCard({ ledger }) {
   if (!ledger?.items?.length) return null;
@@ -237,13 +243,10 @@ export default function Notes() {
   // 一键转发：预取心签的公开分享 token（生成接口幂等），转发时朋友无需登录即可查看
   const shareTokensRef = useRef({});
   const sharePendingRef = useRef(new Set());
-  // 心签转发封面（imageUrl）：数据到位后预生成缓存，生成完成触发重渲染写入按钮 data-*
-  const noteCoversRef = useRef({});
-  const [coverTick, setCoverTick] = useState(0);
-  // 点击转发按钮瞬间写入的分享载荷，buildShare 随即读取（不依赖 dataset/查找时序）
-  const pendingShareRef = useRef(null);
-  // 兜底封面：签卡 canvas 未就绪时也不回落到白屏页面快照
+  // 兜底封面：签无分享 token 或服务端封面未就绪时，也不回落到白屏页面快照
   const FALLBACK_COVER = "https://www.xinzhan-soulsentry.cn/note-share-default.png";
+  // 点击转发按钮瞬间写入的分享载荷，buildShare 随即读取（不依赖 dataset 传参与查找时序）
+  const pendingShareRef = useRef(null);
 
   useShare({
     title: "心栈心签 · 此刻的一点心情",
@@ -263,33 +266,10 @@ export default function Notes() {
     }
   });
 
-  // 心签转发封面：内容与回应变化时重新生成，按 noteId+updated 去重
   useEffect(() => {
     if (isGuest) return;
-    filteredNotes.slice(0, 50).forEach((n) => {
-      const text = shareNoteText(n);
-      if (text === "此刻的一点心情") return; // 纯图签不生成，转发直接用配图
-      const meta = TYPE_META[getNoteType(n)] || { label: "心签", color: "#c97b8a" };
-      const key = `${n.id}:${n.updated_date || n.created_date || ""}:${text.length}`;
-      if (noteCoversRef.current[n.id]?.key === key) return;
-      // 重新生成期间保留旧封面：此时点转发仍用上一张图
-      noteCoversRef.current[n.id] = { key, path: noteCoversRef.current[n.id]?.path || "" };
-      generateNoteCover({
-        content: text,
-        typeLabel: `${meta.label}签`,
-        typeColor: meta.color,
-        date: n.created_date,
-        response: getAiResponse(n) || ""
-      }).then((path) => {
-        if (noteCoversRef.current[n.id]) noteCoversRef.current[n.id].path = path;
-        setCoverTick((v) => v + 1); // 封面就绪后重渲染，卡片按钮的 data-share-image-url 随之更新
-      });
-    });
-  }, [filteredNotes, isGuest]);
-
-  useEffect(() => {
-    if (isGuest) return;
-    filteredNotes.slice(0, 30).forEach((n) => {
+    // 分享 token 预取放宽到 60 条：token 就绪后服务端签卡封面才可拉取
+    filteredNotes.slice(0, 60).forEach((n) => {
       if (shareTokensRef.current[n.id] !== undefined || sharePendingRef.current.has(n.id)) return;
       sharePendingRef.current.add(n.id);
       post(`/public/share/generate/note/${n.id}`)
@@ -909,12 +889,13 @@ export default function Notes() {
               e?.stopPropagation?.();
               // 点击瞬间把这条签的完整分享载荷写入注册表，
               // useShare 的 buildShare 随即读取（onClick 先于分享面板回调触发）
+              const token = shareTokensRef.current[note.id];
+              // 封面：配图 > 服务端生成的签卡封面（任何设备都可用） > 线上默认签卡
+              const serverCover = token ? absoluteUrl(`/public/share/cover/note/${note.id}.png`) : "";
               pendingShareRef.current = {
-                title: `心签 · ${shareNoteText(note).slice(0, 48)}`,
-                imageUrl: getNoteImage(note) || noteCoversRef.current[note.id]?.path || FALLBACK_COVER,
-                path: shareTokensRef.current[note.id]
-                  ? `pages/share/index?token=${shareTokensRef.current[note.id]}`
-                  : `pages/note-detail/index?id=${note.id}`
+                title: `心签 · ${condenseNoteText(shareNoteText(note))}`,
+                imageUrl: getNoteImage(note) || serverCover || FALLBACK_COVER,
+                path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${note.id}`
               };
             }}
           />

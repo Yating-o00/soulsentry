@@ -156,12 +156,20 @@ export default function Tasks() {
         const tree = buildSubTree(taskId);
         const subs = subtaskMap[taskId] || [];
         const subDone = subs.filter((s) => s.status === "completed" || s.status === "done").length;
-        const { doneTodayCount } = countTodayActivity(tree);
+        const { doneTodayItems, newTodayItems } = countTodayActivity(tree);
         const parts = [];
         if (task.done_today) parts.push("今日已打卡");
         parts.push(`累计赴约 ${total} 次`);
         if (subs.length > 0) parts.push(`子约定 ${subDone}/${subs.length}`);
-        if (doneTodayCount > 0) parts.push(`今日完成 ${doneTodayCount} 项`);
+        // 当日在约定卡片上做的事直接点名：✓ 今日勾掉的子约定、＋ 今日新增的子约定
+        if (doneTodayItems.length > 0) {
+          const names = doneTodayItems.slice(0, 2).map((s) => s.title).join("、");
+          parts.push(`今日完成 ${names}${doneTodayItems.length > 2 ? ` 等${doneTodayItems.length}项` : ""}`);
+        }
+        if (newTodayItems.length > 0) {
+          const names = newTodayItems.slice(0, 2).map((s) => s.title).join("、");
+          parts.push(`新增 ${names}${newTodayItems.length > 2 ? ` 等${newTodayItems.length}项` : ""}`);
+        }
         return {
           title: `打卡约定「${t.slice(0, 12)}」：${parts.join(" · ")}`.slice(0, 60),
           path,
@@ -206,7 +214,8 @@ export default function Tasks() {
       const { doneTodayCount, newTodayCount } = countTodayActivity(tree);
       const key = `${meta.total}-${Boolean(task.done_today)}-${tree.length}-${tree.filter((s) => s.status === "completed" || s.status === "done").length}-${doneTodayCount}-${newTodayCount}`;
       if (shareCoversRef.current[taskId]?.key === key) return;
-      shareCoversRef.current[taskId] = { key, path: "" };
+      // 重新生成期间保留旧封面：此时点转发仍用上一张图，不至于落到默认截图
+      shareCoversRef.current[taskId] = { key, path: shareCoversRef.current[taskId]?.path || "" };
       generateCheckinCover({
         title: task.title,
         total: meta.total,
@@ -410,13 +419,23 @@ export default function Tasks() {
   };
 
   const handleSubtaskToggle = async (sub) => {
-    const nextStatus = isTaskDone(sub) ? "pending" : "completed";
+    const markingDone = !isTaskDone(sub);
+    const nextStatus = markingDone ? "completed" : "pending";
     try {
       await patch(`/tasks/${sub.id}`, { status: nextStatus });
       setSubtaskMap((prev) => {
         const next = { ...prev };
         const list = next[sub.parent_task_id] || [];
-        next[sub.parent_task_id] = list.map((s) => (s.id === sub.id ? { ...s, status: nextStatus } : s));
+        next[sub.parent_task_id] = list.map((s) => {
+          if (s.id !== sub.id) return s;
+          // 与服务端口径一致：非重复子约定勾选完成时自动记录完成时间（转发卡片"今日完成"据此统计）
+          const recurring = s.repeat_rule && s.repeat_rule !== "none";
+          return {
+            ...s,
+            status: nextStatus,
+            completed_at: recurring ? s.completed_at : (markingDone ? new Date().toISOString() : null),
+          };
+        });
         return next;
       });
     } catch (err) {
@@ -447,15 +466,15 @@ export default function Tasks() {
     return walk(taskId, 0);
   };
 
-  // 当日动态（按北京时间）：今日完成的子约定数 / 今日新增的子约定数
+  // 当日动态（按北京时间）：今日完成的子约定 / 今日新增的子约定（含条目，转发卡片要列出名字）
   const countTodayActivity = (tree) => {
     const dayOf = (t) => new Date(new Date(t).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const today = dayOf(Date.now());
     const isDone = (s) => s.status === "completed" || s.status === "done";
-    return {
-      doneTodayCount: tree.filter((s) => isDone(s) && s.completed_at && dayOf(s.completed_at) === today).length,
-      newTodayCount: tree.filter((s) => s.created_date && dayOf(s.created_date) === today).length,
-    };
+    const doneTodayItems = tree.filter((s) => isDone(s) && s.completed_at && dayOf(s.completed_at) === today);
+    const doneIds = new Set(doneTodayItems.map((s) => s.id));
+    const newTodayItems = tree.filter((s) => s.created_date && dayOf(s.created_date) === today && !doneIds.has(s.id));
+    return { doneTodayCount: doneTodayItems.length, newTodayCount: newTodayItems.length, doneTodayItems, newTodayItems };
   };
 
   const handleCheckinDoneToday = (task) => {

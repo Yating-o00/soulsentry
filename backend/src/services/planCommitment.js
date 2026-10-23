@@ -623,6 +623,14 @@ export function extractAdjustmentsFromText(text) {
       out.push({ target, field: "duration", value: additive ? `+${mins}分钟` : `${mins}分钟` });
     }
   }
+  // 「周末时长一小时」「周六30分钟就好」——无动词的时长声明（时长为/是/就 X），须句尾收尾防误伤"周末一小时瑜伽"
+  if (!dur) {
+    const durBare = /(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|每日|日常|全部|所有)\s*(?:的)?\s*(?:时长|时间|长度)?\s*(?:是|为|就|大概|大约)?\s*(\d+|一|两|半|一个半)\s*(?:个)?(?:半)?(小时|钟头|分钟)(?:就好|就行|就可以了|即可|吧|呢|哦|呀|啊|了|的)*\s*[。！!？?~～]*$/.exec(t.trim());
+    if (durBare) {
+      const mins = parseMinutesText(`${durBare[2]}${durBare[3]}`);
+      if (mins) out.push({ target: durBare[1], field: "duration", value: `${mins}分钟` });
+    }
+  }
   const clock = /(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|日常|全部|所有)?[^。！？\n]{0,10}?(调整到|调整至|改到|调到|放到|挪到)\s*((?:(?:早上|上午|中午|下午|晚上|晚间|睡前)\s*)?[0-9]{1,2}\s*(?:[-—~～到至]\s*[0-9]{1,2}\s*)?(?:[:：点]\s*(?:[0-5]\d|半)|[:：点])?|早上|上午|中午|下午|晚上|晚间|睡前)/.exec(t);
   if (clock) {
     out.push({ target: clock[1] || pinnedTarget || "全部", field: "start_time", value: clock[3] });

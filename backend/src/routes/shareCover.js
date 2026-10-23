@@ -137,9 +137,8 @@ shareCoverRouter.get("/cover/note/:id.png", async (req, res) => {
     const updatedAt = note.updatedAt?.getTime?.() || 0;
     const cached = coverCache.get(note.id);
     if (cached && cached.updatedAt === updatedAt && cached.buffer) {
-      res.set("Content-Type", "image/png");
-      res.set("Cache-Control", "public, max-age=86400");
-      return res.send(cached.buffer);
+      res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" });
+      return res.end(cached.buffer);
     }
 
     const meta = TYPE_META[getNoteType(note)] || { label: "心签", color: "#c97b8a" };
@@ -162,9 +161,8 @@ shareCoverRouter.get("/cover/note/:id.png", async (req, res) => {
     });
     coverCache.set(note.id, { updatedAt, buffer });
     if (coverCache.size > CACHE_MAX) coverCache.delete(coverCache.keys().next().value);
-    res.set("Content-Type", "image/png");
-    res.set("Cache-Control", "public, max-age=86400");
-    return res.send(buffer);
+    res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "public, max-age=86400" });
+    return res.end(buffer);
   } catch (e) {
     console.error("[shareCover] render failed:", e?.message || e);
     return res.status(503).end();

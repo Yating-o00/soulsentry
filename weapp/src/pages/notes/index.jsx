@@ -237,8 +237,9 @@ export default function Notes() {
   // 一键转发：预取心签的公开分享 token（生成接口幂等），转发时朋友无需登录即可查看
   const shareTokensRef = useRef({});
   const sharePendingRef = useRef(new Set());
-  // 心签转发封面（imageUrl）：数据到位后预生成缓存，分享时同步取用
+  // 心签转发封面（imageUrl）：数据到位后预生成缓存，生成完成触发重渲染写入按钮 data-*
   const noteCoversRef = useRef({});
+  const [coverTick, setCoverTick] = useState(0);
   // 兜底封面：签卡 canvas 未就绪时也不回落到白屏页面快照
   const FALLBACK_COVER = "https://www.xinzhan-soulsentry.cn/note-share-default.png";
 
@@ -278,6 +279,7 @@ export default function Notes() {
         response: getAiResponse(n) || ""
       }).then((path) => {
         if (noteCoversRef.current[n.id]) noteCoversRef.current[n.id].path = path;
+        setCoverTick((v) => v + 1); // 封面就绪后重渲染，卡片按钮的 data-share-image-url 随之更新
       });
     });
   }, [filteredNotes, isGuest]);
@@ -898,7 +900,14 @@ export default function Notes() {
           {!converted && <ActionBtn onClick={(e) => convertTask(note, e)} text="转约定" loading={actionLoading[`task-${note.id}`]} />}
           {!inKb && <ActionBtn onClick={(e) => addToKnowledge(note, e)} text="沉淀" loading={actionLoading[`kb-${note.id}`]} />}
           <ActionBtn onClick={(e) => shareNote(note, e)} text="签卡" loading={actionLoading[`share-${note.id}`]} />
-          <ShareButton theme={theme} data-note-id={note.id} />
+          <ShareButton
+            theme={theme}
+            data-note-id={note.id}
+            // 分享载荷直接渲染进按钮 dataset（useShare 优先取 ds），
+            // 封面生成完成后经 coverTick 重渲染自动带上，不依赖点击时刻的 ref 时序
+            data-share-title={`心签 · ${shareNoteText(note).slice(0, 48)}`}
+            data-share-image-url={getNoteImage(note) || noteCoversRef.current[note.id]?.path || FALLBACK_COVER}
+          />
           <ActionBtn onClick={(e) => deleteNote(note, e)} text="删除" danger />
         </View>
       </View>

@@ -262,7 +262,7 @@ export default function Notes() {
   // 心签转发封面：内容与回应变化时重新生成，按 noteId+updated 去重
   useEffect(() => {
     if (isGuest) return;
-    filteredNotes.slice(0, 20).forEach((n) => {
+    filteredNotes.slice(0, 50).forEach((n) => {
       const text = shareNoteText(n);
       if (text === "此刻的一点心情") return; // 纯图签不生成，转发直接用配图
       const meta = TYPE_META[getNoteType(n)] || { label: "心签", color: "#c97b8a" };

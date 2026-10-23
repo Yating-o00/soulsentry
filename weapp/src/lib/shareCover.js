@@ -262,8 +262,8 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
 
 
 /**
- * 生成心签转发封面，返回 Promise<tempFilePath>（失败返回 ""，调用方降级为默认截图）
- * 与打卡约定封面同一套极简装帧语言：主题品牌蓝底 + 双线细框，正文点名呈现签的内容。
+ * 生成心签转发封面，返回 Promise<tempFilePath>（失败返回 ""，调用方降级为线上默认签卡）
+ * 白色底极简装帧：品牌墨蓝文字 + 蓝色双线细框 + 朱砂「心签」印，正文点名呈现签的内容。
  * @param {object} opts
  * @param {string} opts.content 签的正文（纯文本，已去换行）
  * @param {string} opts.typeLabel 类型标签（如 情绪签/灵感签）
@@ -282,24 +282,22 @@ export function generateNoteCover({ content = "", typeLabel = "心签", typeColo
       const canvas = wx.createOffscreenCanvas({ type: "2d", width: W, height: H });
       const ctx = canvas.getContext("2d");
 
-      const INK = "#f7f4ee";
-      const INK_SOFT = "rgba(247,244,238,0.72)";
-      const INK_FAINT = "rgba(247,244,238,0.50)";
-      const SEAL_RED = "#d06050";
+      // 白色底 · 品牌调性（与打卡约定的品牌蓝封面同一版式语言，明暗两套）
+      const INK = "#2f3a55";
+      const INK_SOFT = "rgba(47,58,85,0.66)";
+      const INK_FAINT = "rgba(47,58,85,0.45)";
+      const SEAL_RED = "#c0453a";
 
-      const grd = ctx.createLinearGradient(0, 0, 0, H);
-      grd.addColorStop(0, "#3a4a7a");
-      grd.addColorStop(1, "#2e3a60");
-      ctx.fillStyle = grd;
+      ctx.fillStyle = "#fbfaf7";
       ctx.fillRect(0, 0, W, H);
 
       const pad = 48;
 
-      // 函套式双线细边框
-      ctx.strokeStyle = "rgba(247,244,238,0.32)";
+      // 函套式双线细边框（品牌蓝）
+      ctx.strokeStyle = "rgba(47,58,85,0.28)";
       ctx.lineWidth = 1;
       ctx.strokeRect(14, 14, W - 28, H - 28);
-      ctx.strokeStyle = "rgba(247,244,238,0.14)";
+      ctx.strokeStyle = "rgba(47,58,85,0.12)";
       ctx.lineWidth = 0.5;
       ctx.strokeRect(22, 22, W - 44, H - 44);
 
@@ -355,7 +353,7 @@ export function generateNoteCover({ content = "", typeLabel = "心签", typeColo
       // 心栈回应（AI 共情一句话）
       if (response) {
         const ruleY = y + 8;
-        ctx.strokeStyle = "rgba(247,244,238,0.20)";
+        ctx.strokeStyle = "rgba(47,58,85,0.16)";
         ctx.lineWidth = 0.75;
         ctx.beginPath();
         ctx.moveTo(pad, ruleY);

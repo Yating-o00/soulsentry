@@ -7,6 +7,7 @@ import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
 import ShareButton from "@/components/ShareButton";
 import { useShare } from "@/hooks/useShare";
+import { generateNoteCover } from "@/lib/shareCover";
 import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
 import RichText from "@/components/RichText";
@@ -236,6 +237,8 @@ export default function Notes() {
   // 一键转发：预取心签的公开分享 token（生成接口幂等），转发时朋友无需登录即可查看
   const shareTokensRef = useRef({});
   const sharePendingRef = useRef(new Set());
+  // 心签转发封面（imageUrl）：数据到位后预生成缓存，分享时同步取用
+  const noteCoversRef = useRef({});
 
   useShare({
     title: "心栈心签 · 此刻的一点心情",
@@ -248,11 +251,34 @@ export default function Notes() {
       const raw = note ? shareNoteText(note) : "此刻的一点心情";
       const title = `心签 · ${raw.slice(0, 48)}`;
       const token = shareTokensRef.current[noteId];
-      // 有配图的心签：转发卡片直接展示图片（无图时不传，微信回落页面快照）
-      const imageUrl = note ? getNoteImage(note) || undefined : undefined;
+      // 封面优先级：配图 > 品牌签卡封面（正文点名呈现） > 微信回落页面快照
+      const imageUrl = note ? (getNoteImage(note) || noteCoversRef.current[noteId]?.path || undefined) : undefined;
       return { title, path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${noteId}`, imageUrl };
     }
   });
+
+  // 心签转发封面：内容与回应变化时重新生成，按 noteId+updated 去重
+  useEffect(() => {
+    if (isGuest) return;
+    filteredNotes.slice(0, 20).forEach((n) => {
+      const text = shareNoteText(n);
+      if (text === "此刻的一点心情") return; // 纯图签不生成，转发直接用配图
+      const meta = TYPE_META[getNoteType(n)] || { label: "心签", color: "#c97b8a" };
+      const key = `${n.id}:${n.updated_date || n.created_date || ""}:${text.length}`;
+      if (noteCoversRef.current[n.id]?.key === key) return;
+      // 重新生成期间保留旧封面：此时点转发仍用上一张图
+      noteCoversRef.current[n.id] = { key, path: noteCoversRef.current[n.id]?.path || "" };
+      generateNoteCover({
+        content: text,
+        typeLabel: `${meta.label}签`,
+        typeColor: meta.color,
+        date: n.created_date,
+        response: getAiResponse(n) || ""
+      }).then((path) => {
+        if (noteCoversRef.current[n.id]) noteCoversRef.current[n.id].path = path;
+      });
+    });
+  }, [filteredNotes, isGuest]);
 
   useEffect(() => {
     if (isGuest) return;

@@ -41,6 +41,37 @@ function truncateToWidth(ctx, text, maxWidth) {
   return out + "…";
 }
 
+// 按宽度换行，超出 maxLines 时最后一行末尾补省略号（签文摘要用）
+function wrapTextEllipsis(ctx, text, maxWidth, maxLines) {
+  const chars = Array.from(String(text || "").trim());
+  const lines = [];
+  let line = "";
+  let overflow = false;
+  for (const ch of chars) {
+    if (ctx.measureText(line + ch).width > maxWidth && line) {
+      lines.push(line);
+      line = ch;
+      if (lines.length >= maxLines) {
+        overflow = true;
+        break;
+      }
+    } else {
+      line += ch;
+    }
+  }
+  if (!overflow && line) lines.push(line);
+  if (overflow) {
+    const last = lines[maxLines - 1] || "";
+    let out = "";
+    for (const ch of last) {
+      if (ctx.measureText(out + ch + "…").width > maxWidth) break;
+      out += ch;
+    }
+    lines[maxLines - 1] = out + "…";
+  }
+  return lines;
+}
+
 /**
  * 生成打卡约定转发封面，返回 Promise<tempFilePath>（失败返回 ""，调用方降级为默认截图）
  * @param {object} opts
@@ -211,6 +242,142 @@ export function generateCheckinCover({ title, total = 0, firstAt = null, subtask
       ctx.fillStyle = INK_FAINT;
       ctx.font = `400 14px ${FONT}`;
       ctx.fillText(`—— 心栈记 · ${quote}`.slice(0, 36), pad, H - 46);
+
+      wx.canvasToTempFilePath({
+        canvas,
+        x: 0,
+        y: 0,
+        width: W,
+        height: H,
+        destWidth: W,
+        destHeight: H,
+        success: (res) => resolve(res.tempFilePath || ""),
+        fail: () => resolve("")
+      });
+    } catch (_e) {
+      resolve("");
+    }
+  });
+}
+
+
+/**
+ * 生成心签转发封面，返回 Promise<tempFilePath>（失败返回 ""，调用方降级为默认截图）
+ * 与打卡约定封面同一套极简装帧语言：主题品牌蓝底 + 双线细框，正文点名呈现签的内容。
+ * @param {object} opts
+ * @param {string} opts.content 签的正文（纯文本，已去换行）
+ * @param {string} opts.typeLabel 类型标签（如 情绪签/灵感签）
+ * @param {string} opts.typeColor 类型标签色
+ * @param {string|null} opts.date 签的日期 ISO
+ * @param {string} opts.response 心栈回应（AI 共情一句话，可空）
+ */
+export function generateNoteCover({ content = "", typeLabel = "心签", typeColor = "#c97b8a", date = null, response = "" }) {
+  return new Promise((resolve) => {
+    try {
+      if (process.env.TARO_ENV !== "weapp" || typeof wx === "undefined" || !wx.createOffscreenCanvas) {
+        return resolve("");
+      }
+      const text = String(content || "").trim();
+      if (!text) return resolve(""); // 纯图签不生成，转发用配图
+      const canvas = wx.createOffscreenCanvas({ type: "2d", width: W, height: H });
+      const ctx = canvas.getContext("2d");
+
+      const INK = "#f7f4ee";
+      const INK_SOFT = "rgba(247,244,238,0.72)";
+      const INK_FAINT = "rgba(247,244,238,0.50)";
+      const SEAL_RED = "#d06050";
+
+      const grd = ctx.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, "#3a4a7a");
+      grd.addColorStop(1, "#2e3a60");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, W, H);
+
+      const pad = 48;
+
+      // 函套式双线细边框
+      ctx.strokeStyle = "rgba(247,244,238,0.32)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(14, 14, W - 28, H - 28);
+      ctx.strokeStyle = "rgba(247,244,238,0.14)";
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(22, 22, W - 44, H - 44);
+
+      // 顶部品牌行
+      ctx.textBaseline = "alphabetic";
+      ctx.textAlign = "left";
+      ctx.fillStyle = INK_SOFT;
+      ctx.font = `400 14px ${FONT}`;
+      ctx.fillText("心栈 · SOULSENTRY", pad, 62);
+
+      // 朱砂「心签」印章（右上）
+      ctx.save();
+      ctx.translate(W - pad - 4, 56);
+      ctx.strokeStyle = SEAL_RED;
+      ctx.fillStyle = SEAL_RED;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 0.75;
+      ctx.beginPath();
+      ctx.arc(0, 0, 17, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = `600 10px ${SERIF}`;
+      ctx.textAlign = "center";
+      ctx.fillText("心", 0, -2);
+      ctx.fillText("签", 0, 10);
+      ctx.restore();
+
+      // 类型标签 + 日期
+      const d = date ? new Date(date) : new Date();
+      const dateStr = isNaN(d.getTime()) ? "" : `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+      ctx.textBaseline = "top";
+      ctx.textAlign = "left";
+      ctx.font = `500 14px ${FONT}`;
+      ctx.fillStyle = typeColor;
+      const typeWidth = ctx.measureText(typeLabel).width;
+      ctx.fillText(typeLabel, pad, 118);
+      ctx.fillStyle = INK_FAINT;
+      ctx.fillText(dateStr ? ` · ${dateStr}` : "", pad + typeWidth, 118);
+
+      // 签的正文（主角）：有回应时限 4 行，无回应可到 6 行
+      const maxLines = response ? 4 : 6;
+      ctx.font = `500 22px ${FONT}`;
+      ctx.fillStyle = INK;
+      const contentLines = wrapTextEllipsis(ctx, text, W - pad * 2, maxLines);
+      let y = 162;
+      contentLines.forEach((line) => {
+        ctx.fillText(line, pad, y);
+        y += 36;
+      });
+
+      // 心栈回应（AI 共情一句话）
+      if (response) {
+        const ruleY = y + 8;
+        ctx.strokeStyle = "rgba(247,244,238,0.20)";
+        ctx.lineWidth = 0.75;
+        ctx.beginPath();
+        ctx.moveTo(pad, ruleY);
+        ctx.lineTo(W - pad, ruleY);
+        ctx.stroke();
+        ctx.fillStyle = INK_FAINT;
+        ctx.font = `500 12px ${FONT}`;
+        ctx.fillText("—— 心栈回应", pad, ruleY + 18);
+        ctx.fillStyle = INK_SOFT;
+        ctx.font = `400 17px ${FONT}`;
+        const respLines = wrapTextEllipsis(ctx, response, W - pad * 2, 2);
+        let ry = ruleY + 44;
+        respLines.forEach((line) => {
+          ctx.fillText(line, pad, ry);
+          ry += 28;
+        });
+      }
+
+      // 底部品牌语
+      ctx.fillStyle = INK_FAINT;
+      ctx.font = `400 14px ${FONT}`;
+      ctx.fillText("—— 心栈 · 从容地记住每一声心动", pad, H - 46);
 
       wx.canvasToTempFilePath({
         canvas,

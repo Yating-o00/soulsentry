@@ -20,6 +20,8 @@ export default function Share() {
   const [commentText, setCommentText] = useState("");
   const [autoImport, setAutoImport] = useState(false);
   const [joinState, setJoinState] = useState("idle"); // idle | loading | joined
+  // 子约定较多时折叠已完成，待办一眼可见
+  const [hideDoneSubs, setHideDoneSubs] = useState(false);
 
   const nameRef = useRef("");
   const tokenRef = useRef("");
@@ -333,11 +335,21 @@ export default function Share() {
                     const timeStr = isNaN(d.getTime())
                       ? ""
                       : `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                    const isToday = !isNaN(d.getTime())
+                      && new Date(d.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10)
+                        === new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
                     return (
                       <View key={c.id} style={{ display: "flex", gap: "18rpx", padding: "14rpx 0", borderBottom: "1rpx solid #eef0f3" }}>
-                        <View style={{ width: "14rpx", height: "14rpx", borderRadius: "50%", background: "#3b5aa2", marginTop: "12rpx", flexShrink: 0 }} />
+                        <View style={{ width: "14rpx", height: "14rpx", borderRadius: "50%", background: isToday ? "#1f9d55" : "#3b5aa2", marginTop: "12rpx", flexShrink: 0 }} />
                         <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text style={{ fontSize: "22rpx", color: "#9ca0a8" }}>{timeStr}</Text>
+                          <View style={{ display: "flex", alignItems: "center", gap: "10rpx" }}>
+                            <Text style={{ fontSize: "22rpx", color: "#9ca0a8" }}>{timeStr}</Text>
+                            {isToday && (
+                              <View style={{ background: "#e8f7ee", border: "1rpx solid #b7e4c7", padding: "0 8rpx", borderRadius: "6rpx" }}>
+                                <Text style={{ fontSize: "18rpx", color: "#1f9d55" }}>今日</Text>
+                              </View>
+                            )}
+                          </View>
                           {c.note ? (
                             <View style={{ marginTop: "8rpx", background: "#ffffff", border: "1rpx solid #e8ecef", borderRadius: "12rpx", padding: "14rpx 18rpx" }}>
                               <Text style={{ fontSize: "27rpx", color: "#3a3a3c", lineHeight: "40rpx" }}>{c.note}</Text>
@@ -364,38 +376,56 @@ export default function Share() {
           );
         })()}
 
-        {isTask && subtasks.length > 0 && (
-          <View className="ss-card">
-            <View className="ss-section-title">子约定</View>
-            {subtasks.map((sub) => {
-              const done = sub.status === "completed" || sub.status === "done";
-              return (
-                <View key={sub.id} style={{ display: "flex", alignItems: "center", padding: "16rpx 0", borderBottom: "1rpx solid #e5e6eb" }}>
+        {isTask && subtasks.length > 0 && (() => {
+          const isSubDone = (s) => s.status === "completed" || s.status === "done";
+          const doneCount = subtasks.filter(isSubDone).length;
+          const visibleSubs = hideDoneSubs ? subtasks.filter((s) => !isSubDone(s)) : subtasks;
+          return (
+            <View className="ss-card">
+              <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <View className="ss-section-title" style={{ marginBottom: 0 }}>子约定</View>
+                {doneCount > 0 && (
                   <Text
-                    style={{
-                      width: "40rpx",
-                      height: "40rpx",
-                      borderRadius: "50%",
-                      border: "2rpx solid #384877",
-                      background: done ? "#384877" : "#fff",
-                      color: "#fff",
-                      textAlign: "center",
-                      lineHeight: "40rpx",
-                      marginRight: "16rpx",
-                      fontSize: "24rpx"
-                    }}
-                    onClick={() => handleToggle(!done, sub.id)}
+                    onClick={() => setHideDoneSubs((v) => !v)}
+                    style={{ fontSize: "24rpx", color: "#5b82a0", padding: "4rpx 12rpx" }}
                   >
-                    {done ? "✓" : ""}
+                    {hideDoneSubs ? `展开已完成 ${doneCount} 条` : "折叠已完成"}
                   </Text>
-                  <Text style={{ flex: 1, fontSize: "30rpx", color: done ? "#999" : "#333", textDecoration: done ? "line-through" : "none" }}>
-                    {sub.title}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
+                )}
+              </View>
+              {visibleSubs.map((sub) => {
+                const done = isSubDone(sub);
+                return (
+                  <View key={sub.id} style={{ display: "flex", alignItems: "center", padding: "16rpx 0", borderBottom: "1rpx solid #e5e6eb" }}>
+                    <Text
+                      style={{
+                        width: "40rpx",
+                        height: "40rpx",
+                        borderRadius: "50%",
+                        border: "2rpx solid #384877",
+                        background: done ? "#384877" : "#fff",
+                        color: "#fff",
+                        textAlign: "center",
+                        lineHeight: "40rpx",
+                        marginRight: "16rpx",
+                        fontSize: "24rpx"
+                      }}
+                      onClick={() => handleToggle(!done, sub.id)}
+                    >
+                      {done ? "✓" : ""}
+                    </Text>
+                    <Text style={{ flex: 1, fontSize: "30rpx", color: done ? "#999" : "#333", textDecoration: done ? "line-through" : "none" }}>
+                      {sub.title}
+                    </Text>
+                  </View>
+                );
+              })}
+              {visibleSubs.length === 0 && (
+                <View className="ss-empty" style={{ padding: "20rpx 0" }}>{subtasks.length} 条子约定已全部完成</View>
+              )}
+            </View>
+          );
+        })()}
 
         <View className="ss-card">
           <View className="ss-section-title">参与操作</View>

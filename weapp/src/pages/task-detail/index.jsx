@@ -34,6 +34,8 @@ export default function TaskDetail() {
   // 打卡约定：累计次数与赴约记录时间线
   const [checkinData, setCheckinData] = useState(null);
   const [checkinBusy, setCheckinBusy] = useState(false);
+  // 子约定折叠已完成（打卡/重复约定子项多的时候，待办一眼可见）
+  const [hideDoneSubs, setHideDoneSubs] = useState(false);
 
   const taskId = Taro.getCurrentInstance().router.params.id;
 
@@ -314,6 +316,12 @@ export default function TaskDetail() {
     return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
   };
 
+  // 按北京时间（UTC+8）判断两个时间点是否同一天
+  const isSameChinaDay = (isoA, tsB) => {
+    const dayOf = (t) => new Date(new Date(t).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    return dayOf(isoA) === dayOf(tsB);
+  };
+
   if (loading && !task) {
     return (
       <View className="ss-page">
@@ -373,6 +381,9 @@ export default function TaskDetail() {
           const dayCount = firstAt
             ? Math.max(1, Math.floor((Date.now() - new Date(firstAt).getTime()) / 86400000) + 1)
             : 0;
+          // 当日已完成的打卡单独列出（按北京时间），其余进历史时间线
+          const todayItems = items.filter((c) => isSameChinaDay(c.created_at, Date.now()));
+          const historyItems = todayItems.length > 0 ? items.filter((c) => !isSameChinaDay(c.created_at, Date.now())) : items;
           return (
             <View className="ss-card" style={{ background: "linear-gradient(150deg, #f8faff 0%, #ffffff 55%)", border: "1rpx solid #c9d5ef" }}>
               <View style={{ display: "flex", alignItems: "center", gap: "24rpx" }}>
@@ -419,13 +430,46 @@ export default function TaskDetail() {
                 </View>
               </View>
 
-              {/* 打卡情况：赴约记录时间线 */}
-              <View style={{ marginTop: "28rpx", borderTop: "1rpx dashed #e8ecef", paddingTop: "24rpx" }}>
-                <View className="ss-section-title" style={{ marginBottom: "8rpx" }}>赴约记录</View>
-                {items.length === 0 ? (
-                  <View className="ss-empty" style={{ padding: "20rpx 0" }}>还没有记录，点上方小脚印开始第一次打卡</View>
+              {/* 今日已完成：当日打卡内容单独列出，一眼可见 */}
+              {todayItems.length > 0 && (
+                <View style={{ marginTop: "24rpx", background: "#f0f6ff", border: "1rpx solid #dbe3f7", borderRadius: "14rpx", padding: "20rpx 22rpx" }}>
+                  <View style={{ display: "flex", alignItems: "center", gap: "10rpx", marginBottom: "12rpx" }}>
+                    <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: "#1f9d55" }} />
+                    <Text style={{ fontSize: "24rpx", fontWeight: 600, color: "#384877" }}>今日已完成 · {todayItems.length} 次</Text>
+                  </View>
+                  {todayItems.map((c) => (
+                    <View key={c.id} style={{ display: "flex", alignItems: "flex-start", gap: "14rpx", padding: "8rpx 0" }}>
+                      <Text style={{ fontSize: "22rpx", color: "#9ca0a8", flexShrink: 0, marginTop: "2rpx" }}>{fmtCheckinTime(c.created_at)}</Text>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        {c.note ? (
+                          <Text style={{ fontSize: "26rpx", color: "#3a3a3c", lineHeight: "38rpx" }}>{c.note}</Text>
+                        ) : (
+                          <Text style={{ fontSize: "24rpx", color: "#9ca0a8" }}>完成一次赴约</Text>
+                        )}
+                        {c.photo_url ? (
+                          <Image
+                            src={absoluteUrl(c.photo_url)}
+                            mode="aspectFill"
+                            style={{ marginTop: "8rpx", width: "220rpx", height: "170rpx", borderRadius: "10rpx", background: "#f2f3f5" }}
+                          />
+                        ) : null}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* 打卡情况：历史赴约时间线（当日的已在上方专区） */}
+              <View style={{ marginTop: "28rpx", borderTop: `1rpx dashed ${todayItems.length > 0 ? "#dbe3f7" : "#e8ecef"}`, paddingTop: "24rpx" }}>
+                <View className="ss-section-title" style={{ marginBottom: "8rpx" }}>
+                  {todayItems.length > 0 ? "过往赴约记录" : "赴约记录"}
+                </View>
+                {historyItems.length === 0 ? (
+                  <View className="ss-empty" style={{ padding: "20rpx 0" }}>
+                    {todayItems.length > 0 ? "之前的记录会出现在这里" : "还没有记录，点上方小脚印开始第一次打卡"}
+                  </View>
                 ) : (
-                  items.map((c) => (
+                  historyItems.map((c) => (
                     <View key={c.id} style={{ display: "flex", gap: "18rpx", padding: "16rpx 0", borderBottom: "1rpx solid #eef0f3" }}>
                       <View style={{ width: "16rpx", display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, paddingTop: "10rpx" }}>
                         <View style={{ width: "14rpx", height: "14rpx", borderRadius: "50%", background: "#3b5aa2" }} />
@@ -454,11 +498,30 @@ export default function TaskDetail() {
         })()}
 
         <View className="ss-card">
-          <View className="ss-section-title">子约定</View>
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <View className="ss-section-title" style={{ marginBottom: 0 }}>子约定</View>
+            {(() => {
+              const doneAny = subtasks.some((s) => s.status === "completed" || s.status === "done");
+              if (!doneAny) return null;
+              return (
+                <Text
+                  onClick={() => setHideDoneSubs((v) => !v)}
+                  style={{ fontSize: "24rpx", color: "#5b82a0", padding: "4rpx 12rpx" }}
+                >
+                  {hideDoneSubs ? "展开已完成" : "折叠已完成"}
+                </Text>
+              );
+            })()}
+          </View>
 
           {(() => {
+            const isSubDone = (s) => s.status === "completed" || s.status === "done";
             const tops = subtasks.filter((s) => s.parent_task_id === taskId);
-            const childrenOf = (id) => subtasks.filter((s) => s.parent_task_id === id);
+            const visibleTops = hideDoneSubs ? tops.filter((s) => !isSubDone(s)) : tops;
+            const childrenOf = (id) => {
+              const kids = subtasks.filter((s) => s.parent_task_id === id);
+              return hideDoneSubs ? kids.filter((s) => !isSubDone(s)) : kids;
+            };
 
             const renderSub = (sub, depth = 0) => {
               const done = sub.status === "completed" || sub.status === "done";
@@ -569,8 +632,11 @@ export default function TaskDetail() {
             if (tops.length === 0) {
               return <View className="ss-empty" style={{ padding: "24rpx 0" }}>暂无子约定</View>;
             }
+            if (visibleTops.length === 0) {
+              return <View className="ss-empty" style={{ padding: "24rpx 0" }}>{tops.length} 条子约定已全部完成</View>;
+            }
 
-            return <View>{tops.map((sub) => renderSub(sub, 0))}</View>;
+            return <View>{visibleTops.map((sub) => renderSub(sub, 0))}</View>;
           })()}
 
           <View style={{ marginTop: "24rpx", display: "flex", alignItems: "center" }}>

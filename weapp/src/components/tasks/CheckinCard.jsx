@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Taro from "@tarojs/taro";
 import { View, Text } from "@tarojs/components";
 import ShareButton from "@/components/ShareButton";
@@ -79,6 +80,8 @@ export default function CheckinCard({
   onSnooze,
   onSubtaskToggle,
 }) {
+  // 子约定较多时默认折叠已完成，露出待办的；可手动展开
+  const [hideDoneSubs, setHideDoneSubs] = useState(null);
   const doneToday = Boolean(task.done_today);
   const total = checkinMeta?.total ?? 0;
   const recurringText = task.repeat_rule && task.repeat_rule !== "none" ? recurringBadgeText(task) : null;
@@ -251,10 +254,13 @@ export default function CheckinCard({
             {checkinEncourage(total)}
           </Text>
 
-          {/* sub promises */}
+          {/* sub promises：超过 4 条时默认折叠已完成，待办一眼可见 */}
           {subtasks && subtasks.length > 0 && (() => {
-            const subDoneCount = subtasks.filter((s) => s.status === "completed" || s.status === "done").length;
+            const isDone = (s) => s.status === "completed" || s.status === "done";
+            const subDoneCount = subtasks.filter(isDone).length;
             const progress = Math.round((subDoneCount / subtasks.length) * 100);
+            const hideDone = hideDoneSubs === null ? subtasks.length > 4 : hideDoneSubs;
+            const visibleSubs = hideDone ? subtasks.filter((s) => !isDone(s)) : subtasks;
             return (
               <View
                 style={{
@@ -273,8 +279,8 @@ export default function CheckinCard({
                   </View>
                   <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>{progress}%</Text>
                 </View>
-                {subtasks.map((s) => {
-                  const subDone = s.status === "completed" || s.status === "done";
+                {visibleSubs.map((s) => {
+                  const subDone = isDone(s);
                   return (
                     <View
                       key={s.id}
@@ -308,6 +314,25 @@ export default function CheckinCard({
                     </View>
                   );
                 })}
+                {visibleSubs.length === 0 && (
+                  <Text style={{ fontSize: "24rpx", color: theme.inkQuaternary, marginBottom: "12rpx" }}>
+                    {subtasks.length} 条子约定已全部完成
+                  </Text>
+                )}
+                {subDoneCount > 0 && (
+                  <View
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setHideDoneSubs(!hideDone);
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "6rpx", padding: "6rpx 0" }}
+                  >
+                    <Text style={{ fontSize: "22rpx", color: theme.water, letterSpacing: "1rpx" }}>
+                      {hideDone ? `展开已完成 ${subDoneCount} 条` : "折叠已完成"}
+                    </Text>
+                    <Text style={{ fontSize: "20rpx", color: theme.water }}>{hideDone ? "▾" : "▴"}</Text>
+                  </View>
+                )}
               </View>
             );
           })()}

@@ -25,7 +25,9 @@ export function useShare({ title = APP_SHARE_TITLE, path = "pages/index/index", 
     const ds = options.from === "button" ? options.target?.dataset || {} : {};
     return {
       title: String(ds.shareTitle || custom.title || title).slice(0, 60),
-      path: normalizePath(ds.sharePath || custom.path || path)
+      path: normalizePath(ds.sharePath || custom.path || path),
+      // 自定义转发封面（如打卡约定的品牌蓝分享图），未生成时走默认截图
+      imageUrl: ds.shareImageUrl || custom.imageUrl
     };
   });
 

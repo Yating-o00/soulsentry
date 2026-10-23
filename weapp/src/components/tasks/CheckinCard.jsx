@@ -76,7 +76,6 @@ export default function CheckinCard({
   checkinMeta,
   onCheckin,
   onCheckinDoneToday,
-  onShare,
   onSnooze,
   onSubtaskToggle,
 }) {
@@ -101,11 +100,6 @@ export default function CheckinCard({
       return;
     }
     if (onCheckin) onCheckin(task);
-  };
-
-  const handleShare = (e) => {
-    e.stopPropagation();
-    onShare(task);
   };
 
   const handleSnooze = (e) => {
@@ -393,14 +387,9 @@ export default function CheckinCard({
       >
         <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>约定 · 打卡</Text>
         <View style={{ display: "flex", alignItems: "center", gap: "28rpx" }}>
-          <Text
-            onClick={handleShare}
-            style={{ fontSize: "24rpx", color: theme.inkTertiary }}
-          >
-            分享
-          </Text>
           <ShareButton
             theme={theme}
+            text="转发"
             data-task-id={task.id}
             style={{ padding: "4rpx 14rpx", fontSize: "20rpx" }}
           />

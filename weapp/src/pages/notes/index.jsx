@@ -119,6 +119,12 @@ function getTitle(note) {
   return note.title || null;
 }
 
+// 转发卡片直接呈现签的内容：优先纯文本、去掉换行；无内容时回退标题
+function shareNoteText(note) {
+  const raw = (note.plain_text || (note.content || "").replace(/<[^>]+>/g, "") || note.title || "").trim();
+  return raw.replace(/\s+/g, " ") || "此刻的一点心情";
+}
+
 // 账本签：收支明细表 + 合计 + AI 吐槽式回应
 function LedgerCard({ ledger }) {
   if (!ledger?.items?.length) return null;
@@ -239,8 +245,8 @@ export default function Notes() {
       const noteId = options.target?.dataset?.noteId;
       if (!noteId) return {};
       const note = notes.find((n) => n.id === noteId);
-      const raw = note ? (getTitle(note) || note.plain_text || note.content || "此刻的一点心情") : "此刻的一点心情";
-      const title = `心签 · ${String(raw).trim().slice(0, 18)}`;
+      const raw = note ? shareNoteText(note) : "此刻的一点心情";
+      const title = `心签 · ${raw.slice(0, 48)}`;
       const token = shareTokensRef.current[noteId];
       // 有配图的心签：转发卡片直接展示图片（无图时不传，微信回落页面快照）
       const imageUrl = note ? getNoteImage(note) || undefined : undefined;

@@ -11,8 +11,9 @@ export default function NoteDetail() {
     path: "pages/notes/index",
     buildShare: () => {
       if (!note) return {};
-      const raw = note.title || note.plain_text || note.content || "此刻的一点心情";
-      return { title: `心签 · ${String(raw).trim().slice(0, 18)}`, path: `pages/note-detail/index?id=${note.id}` };
+      // 直接呈现签的内容：优先纯文本、去掉换行；无内容时回退标题
+      const raw = (note.plain_text || (note.content || "").replace(/<[^>]+>/g, "") || note.title || "此刻的一点心情").trim().replace(/\s+/g, " ");
+      return { title: `心签 · ${raw.slice(0, 48)}`, path: `pages/note-detail/index?id=${note.id}` };
     }
   });
   const [note, setNote] = useState(null);

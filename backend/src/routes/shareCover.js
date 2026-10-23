@@ -13,7 +13,7 @@ const INK = "#2f3a55";
 const INK_SOFT = "rgba(47,58,85,0.66)";
 const INK_FAINT = "rgba(47,58,85,0.45)";
 const SEAL_RED = "#c0453a";
-const RENDERER = fileURLToPath(new URL("../scripts/noteCover.py", import.meta.url));
+const RENDERER = fileURLToPath(new URL("../../scripts/noteCover.py", import.meta.url));
 
 const TYPE_META = {
   emotion: { label: "情绪", color: "#c97b8a" },
@@ -164,7 +164,8 @@ shareCoverRouter.get("/cover/note/:id.png", async (req, res) => {
     res.set("Content-Type", "image/png");
     res.set("Cache-Control", "public, max-age=86400");
     return res.send(buffer);
-  } catch (_e) {
+  } catch (e) {
+    console.error("[shareCover] render failed:", e?.message || e);
     return res.status(503).end();
   }
 });

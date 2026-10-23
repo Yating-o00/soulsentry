@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
-import { View, Text, Input, Button, ScrollView, Image } from "@tarojs/components";
+import { View, Text, Input, Button, ScrollView, Image, Textarea } from "@tarojs/components";
 import { get, post, patch, del, absoluteUrl } from "@/utils/api";
 import { useShare } from "@/hooks/useShare";
 import { CHECKIN_MILESTONES, checkinEncourage, milestoneQuote } from "@/components/tasks/checkinMeta";
@@ -34,6 +34,9 @@ export default function TaskDetail() {
   // 打卡约定：累计次数与赴约记录时间线
   const [checkinData, setCheckinData] = useState(null);
   const [checkinBusy, setCheckinBusy] = useState(false);
+  // 单次打卡附言：打卡后补记 / 事后编辑（代表这一次赴约做到的事）
+  const [noteSheet, setNoteSheet] = useState(null); // { checkinId, note, total }
+  const [noteBusy, setNoteBusy] = useState(false);
   // 子约定折叠已完成（打卡/重复约定子项多的时候，待办一眼可见）
   const [hideDoneSubs, setHideDoneSubs] = useState(false);
 
@@ -115,7 +118,7 @@ export default function TaskDetail() {
     }
   };
 
-  // 打卡：点 👣 = 一次赴约；服务端记录并把开放式打卡约定的排期滚到下一期
+  // 打卡：点 👣 = 一次赴约；成功后弹出附言输入（这次做到了什么，代表单次约定所做的事）
   const doCheckin = async () => {
     if (!taskId || checkinBusy) return;
     if (task?.done_today) {
@@ -138,13 +141,40 @@ export default function TaskDetail() {
         icon: "none",
         duration: 2600,
       });
-      // 打卡后刷新记录时间线与约定状态
-      fetchAll();
+      // 弹出附言输入：可写一句话代表这次做到的事，也可以什么都不留
+      setNoteSheet({ checkinId: res?.id, note: "", total });
     } catch (err) {
       // handled globally
     } finally {
       setCheckinBusy(false);
     }
+  };
+
+  // 保存附言：PATCH 到当次打卡记录，随后刷新列表呈现最新内容
+  const saveCheckinNote = async () => {
+    if (!noteSheet?.checkinId || noteBusy) return;
+    const note = (noteSheet.note || "").trim();
+    if (!note) {
+      setNoteSheet(null);
+      fetchAll();
+      return;
+    }
+    setNoteBusy(true);
+    try {
+      await patch(`/tasks/${taskId}/checkins/${noteSheet.checkinId}`, { note });
+      setNoteSheet(null);
+      fetchAll();
+    } catch (err) {
+      // handled globally
+    } finally {
+      setNoteBusy(false);
+    }
+  };
+
+  // 关闭附言弹层（不留内容也算一次有效打卡）
+  const closeNoteSheet = () => {
+    setNoteSheet(null);
+    fetchAll();
   };
 
   // 约定允许不执行：内容沉淀进知识库（服务端留存含子约定树的完整快照），约定标记为完成
@@ -441,11 +471,18 @@ export default function TaskDetail() {
                     <View key={c.id} style={{ display: "flex", alignItems: "flex-start", gap: "14rpx", padding: "8rpx 0" }}>
                       <Text style={{ fontSize: "22rpx", color: "#9ca0a8", flexShrink: 0, marginTop: "2rpx" }}>{fmtCheckinTime(c.created_at)}</Text>
                       <View style={{ flex: 1, minWidth: 0 }}>
+                        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12rpx" }}>
+                          {c.note ? null : <Text style={{ fontSize: "24rpx", color: "#9ca0a8" }}>完成一次赴约</Text>}
+                          <Text
+                            onClick={() => setNoteSheet({ checkinId: c.id, note: c.note || "", total: null })}
+                            style={{ fontSize: "22rpx", color: "#5b82a0", marginLeft: "auto", padding: "2rpx 8rpx" }}
+                          >
+                            {c.note ? "编辑" : "记一句"}
+                          </Text>
+                        </View>
                         {c.note ? (
-                          <Text style={{ fontSize: "26rpx", color: "#3a3a3c", lineHeight: "38rpx" }}>{c.note}</Text>
-                        ) : (
-                          <Text style={{ fontSize: "24rpx", color: "#9ca0a8" }}>完成一次赴约</Text>
-                        )}
+                          <Text style={{ fontSize: "26rpx", color: "#3a3a3c", lineHeight: "38rpx", marginTop: "4rpx" }}>{c.note}</Text>
+                        ) : null}
                         {c.photo_url ? (
                           <Image
                             src={absoluteUrl(c.photo_url)}
@@ -475,7 +512,15 @@ export default function TaskDetail() {
                         <View style={{ width: "14rpx", height: "14rpx", borderRadius: "50%", background: "#3b5aa2" }} />
                       </View>
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={{ fontSize: "22rpx", color: "#9ca0a8" }}>{fmtCheckinTime(c.created_at)}</Text>
+                        <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12rpx" }}>
+                          <Text style={{ fontSize: "22rpx", color: "#9ca0a8" }}>{fmtCheckinTime(c.created_at)}</Text>
+                          <Text
+                            onClick={() => setNoteSheet({ checkinId: c.id, note: c.note || "", total: null })}
+                            style={{ fontSize: "22rpx", color: "#5b82a0", padding: "2rpx 8rpx" }}
+                          >
+                            {c.note ? "编辑" : "记一句"}
+                          </Text>
+                        </View>
                         {c.note ? (
                           <View style={{ marginTop: "8rpx", background: "#ffffff", border: "1rpx solid #e8ecef", borderRadius: "12rpx", padding: "16rpx 20rpx" }}>
                             <Text style={{ fontSize: "27rpx", color: "#3a3a3c", lineHeight: "40rpx" }}>{c.note}</Text>
@@ -737,6 +782,75 @@ export default function TaskDetail() {
 
         <View style={{ height: "40rpx" }} />
       </ScrollView>
+
+      {/* 单次打卡附言：打卡后补记 / 事后编辑——代表这一次赴约做到的事 */}
+      {noteSheet && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "48rpx"
+          }}
+          onClick={closeNoteSheet}
+        >
+          <View
+            style={{ width: "100%", background: "#ffffff", borderRadius: "20rpx", padding: "32rpx" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {noteSheet.total ? (
+              <View>
+                <Text style={{ fontSize: "30rpx", fontWeight: 600, color: "#1c1c1e" }}>
+                  这是第 <Text style={{ color: "#384877" }}>{noteSheet.total}</Text> 次赴约
+                </Text>
+                <Text style={{ display: "block", fontSize: "24rpx", color: "#9ca0a8", marginTop: "8rpx" }}>
+                  这次做到了什么？留一句话代表这次赴约（也可以什么都不留）。
+                </Text>
+              </View>
+            ) : (
+              <Text style={{ fontSize: "30rpx", fontWeight: 600, color: "#1c1c1e" }}>编辑这次记录</Text>
+            )}
+            <Textarea
+              value={noteSheet.note}
+              onInput={(e) => setNoteSheet((prev) => ({ ...prev, note: e.detail.value }))}
+              placeholder={"一句话就好，比如：跑了 3 公里，配速 6 分半"}
+              maxlength={500}
+              style={{
+                width: "100%",
+                minHeight: "160rpx",
+                marginTop: "24rpx",
+                background: "#f8f9fd",
+                border: "1rpx solid #e8ecef",
+                borderRadius: "14rpx",
+                padding: "20rpx 24rpx",
+                fontSize: "28rpx",
+                color: "#3a3a3c",
+                boxSizing: "border-box"
+              }}
+            />
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "28rpx" }}>
+              <Text onClick={closeNoteSheet} style={{ fontSize: "26rpx", color: "#9ca0a8", padding: "12rpx 16rpx" }}>
+                就这样吧 →
+              </Text>
+              <Button
+                className="ss-btn"
+                style={{ margin: 0, padding: "0 40rpx" }}
+                loading={noteBusy}
+                onClick={saveCheckinNote}
+              >
+                {noteSheet.note?.trim() ? "收下这句话" : "保存"}
+              </Button>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }

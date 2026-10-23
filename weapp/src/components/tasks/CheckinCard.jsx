@@ -74,6 +74,7 @@ export default function CheckinCard({
   task,
   analysis,
   subtasks,
+  subtaskTree = [],
   checkinMeta,
   onCheckin,
   onCheckinDoneToday,
@@ -82,6 +83,8 @@ export default function CheckinCard({
 }) {
   // 子约定较多时默认折叠已完成，露出待办的；可手动展开
   const [hideDoneSubs, setHideDoneSubs] = useState(null);
+  // 从属子约定逐级展开成带缩进的树（与 Web 端 subtaskTree 口径一致）
+  const tree = subtaskTree.length > 0 ? subtaskTree : subtasks.map((s) => ({ ...s, depth: 0 }));
   const doneToday = Boolean(task.done_today);
   const total = checkinMeta?.total ?? 0;
   const recurringText = task.repeat_rule && task.repeat_rule !== "none" ? recurringBadgeText(task) : null;
@@ -254,13 +257,13 @@ export default function CheckinCard({
             {checkinEncourage(total)}
           </Text>
 
-          {/* sub promises：超过 4 条时默认折叠已完成，待办一眼可见 */}
-          {subtasks && subtasks.length > 0 && (() => {
+          {/* sub promises（含从属子约定，逐级缩进可勾选）：超过 4 条时默认折叠已完成 */}
+          {tree.length > 0 && (() => {
             const isDone = (s) => s.status === "completed" || s.status === "done";
-            const subDoneCount = subtasks.filter(isDone).length;
-            const progress = Math.round((subDoneCount / subtasks.length) * 100);
-            const hideDone = hideDoneSubs === null ? subtasks.length > 4 : hideDoneSubs;
-            const visibleSubs = hideDone ? subtasks.filter((s) => !isDone(s)) : subtasks;
+            const subDoneCount = tree.filter(isDone).length;
+            const progress = Math.round((subDoneCount / tree.length) * 100);
+            const hideDone = hideDoneSubs === null ? tree.length > 4 : hideDoneSubs;
+            const visibleSubs = hideDone ? tree.filter((s) => !isDone(s)) : tree;
             return (
               <View
                 style={{
@@ -272,7 +275,7 @@ export default function CheckinCard({
                 <View style={{ display: "flex", alignItems: "center", gap: "16rpx", marginBottom: "16rpx" }}>
                   <IconChevronRight size={18} color={theme.primary} />
                   <Text style={{ fontSize: "24rpx", color: theme.inkSecondary, fontWeight: 500 }}>
-                    子约定 {subDoneCount}/{subtasks.length}
+                    子约定 {subDoneCount}/{tree.length}
                   </Text>
                   <View style={{ flex: 1, height: "8rpx", borderRadius: "4rpx", background: "rgba(91,130,160,0.15)", overflow: "hidden" }}>
                     <View style={{ width: `${progress}%`, height: "100%", borderRadius: "4rpx", background: theme.primary }} />
@@ -290,6 +293,7 @@ export default function CheckinCard({
                         alignItems: "center",
                         gap: "16rpx",
                         marginBottom: "12rpx",
+                        paddingLeft: `${(s.depth || 0) * 36}rpx`,
                       }}
                     >
                       <View
@@ -316,7 +320,7 @@ export default function CheckinCard({
                 })}
                 {visibleSubs.length === 0 && (
                   <Text style={{ fontSize: "24rpx", color: theme.inkQuaternary, marginBottom: "12rpx" }}>
-                    {subtasks.length} 条子约定已全部完成
+                    {tree.length} 条子约定已全部完成
                   </Text>
                 )}
                 {subDoneCount > 0 && (

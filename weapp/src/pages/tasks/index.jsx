@@ -437,6 +437,12 @@ export default function Tasks() {
     }
   };
 
+  // 从属子约定树：逐级展开成带 depth 的扁平列表（打卡卡片按层级缩进渲染、每级都可勾选）
+  const buildSubTree = (taskId) => {
+    const walk = (pid, depth) => (subtaskMap[pid] || []).flatMap((s) => [{ ...s, depth }, ...walk(s.id, depth + 1)]);
+    return walk(taskId, 0);
+  };
+
   const handleCheckinDoneToday = (task) => {
     showToast("今日已赴约 · 点卡片可查看打卡记录");
     Taro.navigateTo({ url: `/pages/task-detail/index?id=${task.id}` });
@@ -689,6 +695,7 @@ export default function Tasks() {
                           task={task}
                           analysis={mergeAnalysis(task, analysisMap[task.id])}
                           subtasks={subtaskMap[task.id] || []}
+                          subtaskTree={buildSubTree(task.id)}
                           checkinMeta={checkinMetaMap[task.id]}
                           onCheckin={handleCheckin}
                           onCheckinDoneToday={handleCheckinDoneToday}

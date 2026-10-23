@@ -100,8 +100,8 @@ function appliesToMatcher(appliesTo, { defaultDaily = true } = {}) {
   };
 }
 
-// 适用日 → 具体星期集合（无"缺省按每天"兜底，供调整时的子集判定用）
-function explicitDaySet(appliesTo) {
+// 目标日严格子集时的序列化 + 新增项适用日判定都依赖这个集合，导出让 flowChat 也能用
+export function explicitDaySet(appliesTo) {
   const text = String(appliesTo || "").toLowerCase();
   const tokens = text.split(/[,，、\s/|]+/).filter(Boolean);
   const days = new Set();
@@ -629,8 +629,9 @@ export function extractAdjustmentsFromText(text) {
   if (swap && !/(\d+|一|两|半)[\s]*(?:个)?(?:半)?(?:小时|钟头|分钟)/.test(swap[2])) {
     out.push({ target: swap[1].trim(), field: "content", value: swap[2].trim() });
   }
-  // 「周六下午3点加半小时瑜伽」「每天睡前加15分钟冥想」→ 在规划里新增一项（已有提取都没命中时才尝试，防误伤）
-  if (out.length === 0) {
+  // 「周六下午3点加半小时瑜伽」「每天睡前加15分钟冥想」→ 在规划里新增一项。
+  // 只在时长/时刻提取都没命中时尝试（防"周末加到一小时"被误判）；内容替换与新增可同句并存
+  if (!dur && !clock) {
     const add = /(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|每日|日常|全部|所有)?\s*(?:的)?\s*((?:(?:早上|早晨|上午|中午|午间|下午|午后|晚上|晚间|夜里|睡前|凌晨)\s*)?(?:[0-9]{1,2}\s*(?:[:：]\s*[0-5]\d|[:：点]\s*(?:[0-5]\d|半)|点|[:：]))?)?\s*(?:加上?|再加|增加|来)\s*(?:(\d+|一|两|半|一个半)\s*(?:个)?(?:半)?(小时|钟头|分钟))?\s*([一-龥a-zA-Z][一-龥a-zA-Z0-9·]{1,11})$/.exec(t.trim());
     if (add) {
       const target = add[1] || "每天";
@@ -660,6 +661,40 @@ export function extractAdjustmentsFromText(text) {
     }
   }
   return out.length > 0 ? out : null;
+}
+
+// 多轮调整时模型调整与本地提取的取舍：新增项以本地对原话的解析为准（模型常丢适用日→铺成"每天"出 12 条）；
+// 模型给的新增项若适用日与原话里的星期词对不上，直接丢弃，不静默铺开。
+export function resolvePlanAdjustments({ modelAdjustments = null, textAdjustments = null, lastUserText = "" } = {}) {
+  const modelList = Array.isArray(modelAdjustments) && modelAdjustments.length ? modelAdjustments : null;
+  const textList = Array.isArray(textAdjustments) && textAdjustments.length ? textAdjustments : null;
+  const textAdd = textList && textList.some((a) => a && a.field === "add");
+  let adjustments = textAdd ? textList : (modelList || textList);
+  let via = textAdd ? "text" : (modelList ? "model" : (textList ? "text" : null));
+  if (adjustments && !textAdd) {
+    // 原话里出现的所有星期词（用于校验模型新增项的适用日）
+    const utterDays = new Set();
+    const dayTokens = String(lastUserText || "").match(/周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|每日|天天|日常/g) || [];
+    for (const tok of dayTokens) {
+      for (const d of explicitDaySet(tok)) utterDays.add(d);
+    }
+    const filtered = adjustments.filter((a) => {
+      if (!a || a.field !== "add") return true;
+      const tDays = explicitDaySet(a.target);
+      if (tDays.size === 0) return false; // 适用日完全缺失 → 不猜，交回追问
+      if (utterDays.size === 0) return tDays.size < 7; // 原话没有星期词：只接受具体日（每天=模型脑补）
+      // 原话有星期词：模型适用日必须与原话吻合——收窄可以，变宽不行（周六→每天/周末会静默铺开）
+      if (tDays.size < utterDays.size) return true;
+      if ([...utterDays].some((d) => !tDays.has(d))) return false;
+      if (utterDays.size < 7 && tDays.size > utterDays.size) return false;
+      return true;
+    });
+    if (filtered.length !== adjustments.length) {
+      adjustments = filtered.length ? filtered : null;
+      if (!adjustments) via = null;
+    }
+  }
+  return { adjustments, via };
 }
 
 export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], insights = null, now = new Date() } = {}) {

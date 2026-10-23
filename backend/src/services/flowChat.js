@@ -3,7 +3,7 @@ import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
-import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, buildFallbackPlan } from "./planCommitment.js";
+import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, resolvePlanAdjustments, buildFallbackPlan } from "./planCommitment.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
@@ -711,7 +711,11 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         const prevReq = prev?.plan_request;
         const prevPatterns = Array.isArray(prev?.plan?.patterns) && prev.plan.patterns.length > 0 ? prev.plan.patterns : null;
         // goal 口径放宽：模型常把「两周的健身计划」改写回「健身计划」，严格相等会让定向调整整体失配
-        const normGoal = (s) => String(s || "").replace(/[\s「」"'，。,.！!？?：:；;、]/g, "");
+        const normGoal = (s) => String(s || "")
+          .replace(/[（(][^）)]*[）)]/g, "") // 括号里的补充说明（如"含游泳"）不算主题变化
+          .replace(/[\s「」"'，。,.！!？?：:；;、·]/g, "")
+          .replace(/[的把了地呢吧哦啊呀]/g, "")
+          .replace(/^(帮我|我要|我想|我想想|想要|麻烦|请)/, "");
         const prevGoalN = normGoal(prevReq?.goal);
         const goalN = normGoal(req.goal);
         const sameGoal = !!prevReq && !!prevGoalN && !!goalN
@@ -720,14 +724,16 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         const modelAdjustments = Array.isArray(req.adjustments) && req.adjustments.length > 0 ? req.adjustments : null;
         // 文本兜底始终计算：带范围词的调整语句优先按定向修改处理，防止模型误判成整体时长变更
         const textAdjustments = prevPatterns && sameGoal ? extractAdjustmentsFromText(lastUserText) : null;
-        let adjustments = modelAdjustments && modelAdjustments.length ? modelAdjustments
-          : (textAdjustments && textAdjustments.length ? textAdjustments : null);
+        // 新增项优先用本地对原话的精确解析；模型给的新增项适用日与原话不吻合时直接丢弃
+        const resolved = resolvePlanAdjustments({ modelAdjustments, textAdjustments, lastUserText });
+        let adjustments = resolved.adjustments;
         let patched = adjustments && prevPatterns ? applyPlanAdjustments(prevPatterns, adjustments) : null;
         // 模型抽的调整没落地时，换本地语义兜底再试一次（「周末加强一小时」这类口语模型常漏抽）
         if ((!patched || patched.applied.length === 0) && textAdjustments && textAdjustments.length && adjustments !== textAdjustments) {
           const textPatched = applyPlanAdjustments(prevPatterns, textAdjustments);
           if (textPatched.applied.length > 0) { patched = textPatched; adjustments = textAdjustments; }
         }
+        console.log(`[flowChat] 规划调整: sameGoal=${!!sameGoal} via=${resolved.via} applied=${patched ? patched.applied.length : 0} goal=${String(req.goal || "").slice(0, 20)}`);
         let planned = null;
         let adjustedPatterns = null;
         if (!planned && prevPatterns && sameGoal && patched && patched.applied.length > 0) {

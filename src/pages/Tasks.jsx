@@ -17,6 +17,7 @@ import NotificationManager from "../components/notifications/NotificationManager
 import MilestoneCard from "../components/tasks/MilestoneCard";
 import LifeTaskCard from "../components/tasks/LifeTaskCard";
 import { flattenSubtasks } from "@/components/checkins/subtaskTree";
+import { composeShanghaiISO } from "@/lib/timeCore";
 import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
@@ -1047,9 +1048,63 @@ export default function Tasks() {
         <DialogContent className="max-w-3xl p-0 max-h-[90vh] overflow-y-auto bg-transparent border-0 shadow-none scrollbar-hide">
           {editingTask && (
             <TaskCreationPanel 
-              initialData={editingTask}
+              initialData={{
+                ...editingTask,
+                // 编辑时把既有子约定带进面板：行内可改可删，保存时与库里的 diff 同步
+                subtasks: getSubtasks(editingTask.id).map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  time: s.reminder_time
+                    ? new Date(new Date(s.reminder_time).getTime() + 8 * 3600 * 1000).toISOString().slice(11, 16)
+                    : "",
+                  priority: s.priority,
+                  category: s.category
+                }))
+              }}
               onAddTask={async (data) => {
-                await updateTaskAsync({ id: editingTask.id, data });
+                // 父约定字段走更新接口；子约定单独 diff：无 id 的新行创建、有 id 的改字段同步、被删的行软删除
+                const { subtasks = [], ...parentData } = data;
+                await updateTaskAsync({ id: editingTask.id, data: parentData });
+                const existing = getSubtasks(editingTask.id);
+                const existingById = new Map(existing.map((s) => [s.id, s]));
+                const keptIds = new Set();
+                for (const st of subtasks) {
+                  const title = String(st.title || "").trim();
+                  if (!title) continue;
+                  if (st.id && existingById.has(st.id)) {
+                    keptIds.add(st.id);
+                    const old = existingById.get(st.id);
+                    const patch = {};
+                    if (title !== old.title) patch.title = title;
+                    const oldTime = old.reminder_time
+                      ? new Date(new Date(old.reminder_time).getTime() + 8 * 3600 * 1000).toISOString().slice(11, 16)
+                      : "";
+                    if (st.time && st.time !== oldTime) {
+                      patch.reminder_time = composeShanghaiISO(old.reminder_time || editingTask.reminder_time, st.time);
+                    }
+                    if (st.priority && st.priority !== old.priority) patch.priority = st.priority;
+                    if (st.category && st.category !== old.category) patch.category = st.category;
+                    if (Object.keys(patch).length > 0) {
+                      await updateTaskAsync({ id: st.id, data: patch });
+                    }
+                  } else {
+                    await base44.entities.Task.create({
+                      title,
+                      parent_task_id: editingTask.id,
+                      status: "pending",
+                      priority: st.priority || editingTask.priority,
+                      category: st.category || editingTask.category,
+                      reminder_time: st.time ? composeShanghaiISO(editingTask.reminder_time, st.time) : editingTask.reminder_time
+                    });
+                  }
+                }
+                for (const old of existing) {
+                  if (!keptIds.has(old.id)) {
+                    await base44.entities.Task.update(old.id, { deleted_at: new Date().toISOString() });
+                  }
+                }
+                queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                queryClient.invalidateQueries({ queryKey: ["subtasks"] });
                 setEditingTask(null);
               }}
               onCancel={() => setEditingTask(null)}

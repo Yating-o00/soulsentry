@@ -41,6 +41,8 @@ export default function TaskDetail() {
   const [noteBusy, setNoteBusy] = useState(false);
   // 子约定折叠已完成（打卡/重复约定子项多的时候，待办一眼可见）
   const [hideDoneSubs, setHideDoneSubs] = useState(false);
+  // 打卡赴约记录折叠：默认只露最近 3 条，长的历史收起来
+  const [expandHistory, setExpandHistory] = useState(false);
 
   const taskId = Taro.getCurrentInstance().router.params.id;
 
@@ -421,6 +423,8 @@ export default function TaskDetail() {
           // 当日已完成的打卡单独列出（按北京时间），其余进历史时间线
           const todayItems = items.filter((c) => isSameChinaDay(c.created_at, Date.now()));
           const historyItems = todayItems.length > 0 ? items.filter((c) => !isSameChinaDay(c.created_at, Date.now())) : items;
+          // 历史默认只露最近 3 条，长的折叠起来，点「展开全部」再看
+          const visibleHistory = expandHistory ? historyItems : historyItems.slice(0, 3);
           return (
             <View className="ss-card" style={{ background: "linear-gradient(150deg, #f8faff 0%, #ffffff 55%)", border: "1rpx solid #c9d5ef" }}>
               <View style={{ display: "flex", alignItems: "center", gap: "24rpx" }}>
@@ -513,7 +517,8 @@ export default function TaskDetail() {
                     {todayItems.length > 0 ? "之前的记录会出现在这里" : "还没有记录，点上方小脚印开始第一次打卡"}
                   </View>
                 ) : (
-                  historyItems.map((c) => (
+                  <View>
+                  {visibleHistory.map((c) => (
                     <View key={c.id} style={{ display: "flex", gap: "18rpx", padding: "16rpx 0", borderBottom: "1rpx solid #eef0f3" }}>
                       <View style={{ width: "16rpx", display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, paddingTop: "10rpx" }}>
                         <View style={{ width: "14rpx", height: "14rpx", borderRadius: "50%", background: "#3b5aa2" }} />
@@ -542,7 +547,18 @@ export default function TaskDetail() {
                         ) : null}
                       </View>
                     </View>
-                  ))
+                  ))}
+                  {historyItems.length > 3 && (
+                    <View
+                      onClick={() => setExpandHistory((v) => !v)}
+                      style={{ textAlign: "center", padding: "20rpx 0 6rpx" }}
+                    >
+                      <Text style={{ fontSize: "24rpx", color: "#5b82a0" }}>
+                        {expandHistory ? "收起 ▴" : `展开全部 ${historyItems.length} 条 ▾`}
+                      </Text>
+                    </View>
+                  )}
+                  </View>
                 )}
               </View>
             </View>
@@ -583,17 +599,19 @@ export default function TaskDetail() {
 
               return (
                 <View key={sub.id}>
+                  {/* 整行点击 = 勾选/取消（与约定卡片上的口径一致），圈只做视觉指示 */}
                   <View
+                    onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
                     style={{
                       display: "flex",
                       alignItems: "center",
-                      padding: "16rpx 0",
+                      padding: "18rpx 0",
                       paddingLeft: `${depth * 40}rpx`,
                       borderBottom: "1rpx solid #e5e6eb"
                     }}
                   >
                     <View
-                      onClick={() => toggleExpand(sub.id)}
+                      onClick={(e) => { e.stopPropagation(); toggleExpand(sub.id); }}
                       style={{
                         width: "44rpx",
                         height: "44rpx",
@@ -609,7 +627,6 @@ export default function TaskDetail() {
                     </View>
 
                     <View
-                      onClick={() => toggleTaskStatus(sub.id, done ? "pending" : "completed")}
                       style={{
                         width: "40rpx",
                         height: "40rpx",
@@ -633,13 +650,12 @@ export default function TaskDetail() {
                         color: done ? "#999" : "#333",
                         textDecoration: done ? "line-through" : "none"
                       }}
-                      onClick={() => toggleExpand(sub.id)}
                     >
                       {sub.title}
                     </Text>
 
                     <View
-                      onClick={() => deleteSubtask(sub.id)}
+                      onClick={(e) => { e.stopPropagation(); deleteSubtask(sub.id); }}
                       style={{
                         width: "48rpx",
                         height: "48rpx",

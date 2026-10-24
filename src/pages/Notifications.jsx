@@ -22,7 +22,7 @@ import { toast } from "sonner";
 export default function NotificationsPage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [activeTab, setActiveTab] = useState("executions");
+  const [activeTab, setActiveTab] = useState(new URLSearchParams(window.location.search).get("tab") || "executions");
   const [feedMode, setFeedMode] = useState("execution"); // 'execution' = 执行链路, 'timeline' = 统一活动流
   const [advisorExecution, setAdvisorExecution] = useState(null);
   const [statusFilter, setStatusFilter] = useState(null);

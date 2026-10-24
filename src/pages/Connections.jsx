@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import AppConnectionsGrid from "@/components/connections/AppConnectionsGrid";
 import MailboxPanel from "@/components/connections/MailboxPanel";
+import ActionPanel from "@/components/connections/ActionPanel";
+import { PANELS } from "@/components/connections/connectionPanels";
 import RecommendedHardware from "@/components/connections/RecommendedHardware";
 import ConnectedDevicesPanel from "@/components/devices/ConnectedDevicesPanel";
 
@@ -19,7 +21,14 @@ export default function Connections() {
         <h2 className="font-semibold text-slate-800">应用连接</h2>
         <AppConnectionsGrid mailConnected={mailConnected} active={active} onSelect={setActive} />
         <div className="rounded-[24px] border border-slate-200 bg-slate-50/50 p-4 md:p-6">
-          <MailboxPanel onStatus={setMailConnected} />
+          <div className={active === "mail" ? "" : "hidden"}><MailboxPanel onStatus={setMailConnected} /></div>
+          {active !== "mail" && (PANELS[active].soon ? (
+            <div>
+              <h3 className="font-semibold text-slate-800">{PANELS[active].title}</h3>
+              <p className="text-sm text-slate-500 mt-1">{PANELS[active].desc}</p>
+              <p className="text-xs text-slate-400 mt-3">即将开放，敬请期待。</p>
+            </div>
+          ) : <ActionPanel key={active} {...PANELS[active]} />)}
         </div>
       </section>
 

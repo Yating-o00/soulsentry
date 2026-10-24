@@ -20,7 +20,7 @@ export default function NoteDetail() {
         path: `pages/note-detail/index?id=${note.id}`,
         // 封面：签已开启分享时用服务端生成的签卡封面，兜底线上默认签卡（?v=2 排微信缓存）
         imageUrl: note.share_enabled
-          ? `https://www.xinzhan-soulsentry.cn/api/public/share/cover/note/${note.id}.png?v=2`
+          ? `https://www.xinzhan-soulsentry.cn/api/public/share/cover/note/${note.id}.png?v=3`
           : "https://www.xinzhan-soulsentry.cn/note-share-default.png"
       };
     }

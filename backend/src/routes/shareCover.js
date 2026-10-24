@@ -79,12 +79,12 @@ function noteCoverElements({ typeLabel, typeColor, dateStr, content, response })
     { t: "text", x: pad + dispWidth(typeLabel) * 28 + 12, y: 224, size: 28, fill: INK_FAINT, text: dateStr ? ` · ${dateStr}` : "" }
   ];
 
-  // 签的正文（主角）：大字报式，缩略图尺度可辨；有回应时 3 行，无回应 4 行
-  const lines = wrapText(content, 64, W - pad * 2, response ? 3 : 4);
-  let y = 316;
+  // 签的正文（主角）：大字但克制，缩略图尺度可辨；有回应时 3 行，无回应 4 行
+  const lines = wrapText(content, 56, W - pad * 2, response ? 3 : 4);
+  let y = 340;
   lines.forEach((line) => {
-    els.push({ t: "text", x: pad, y, size: 64, fill: INK, text: line, stroke: 1 });
-    y += 100;
+    els.push({ t: "text", x: pad, y, size: 56, fill: INK, text: line, stroke: 1 });
+    y += 90;
   });
 
   // 回应区贴底排版（与底部品牌语保持一个呼吸间距）

@@ -125,11 +125,12 @@ function shareNoteText(note) {
   return raw.replace(/\s+/g, " ") || "此刻的一点心情";
 }
 
-// 浓缩整个内容成标题：短内容全量；长内容保留头尾、中部省略（起 42 + 尾 10）
-function condenseNoteText(text) {
-  const t = String(text || "").trim();
-  if (t.length <= 54) return t;
-  return `${t.slice(0, 42)}…${t.slice(-10)}`;
+// 转发标题用「摘要」：优先 AI 生成的签标题，否则短内容全量、长内容截断加省略
+function shareTitleText(note) {
+  const ai = (note.title || "").trim();
+  if (ai) return ai.length > 30 ? `${ai.slice(0, 28)}…` : ai;
+  const t = shareNoteText(note);
+  return t.length <= 26 ? t : `${t.slice(0, 24)}…`;
 }
 
 // 账本签：收支明细表 + 合计 + AI 吐槽式回应
@@ -565,7 +566,7 @@ export default function Notes() {
         <View>
           <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "3rpx" }}>{dateLine()}</Text>
           {/* 版本标记：用于确认手机端运行的是最新体验版，确认后可移除 */}
-          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "6rpx" }}>v2.1.8</Text>
+          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "6rpx" }}>v2.1.9</Text>
         </View>
         <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
           <View
@@ -893,7 +894,7 @@ export default function Notes() {
               // useShare 的 buildShare 随即读取（onClick 先于分享面板回调触发）
               const token = shareTokensRef.current[note.id];
               // 封面：配图 > 服务端签卡封面（share_enabled 是签数据自带字段，不依赖 token 预取时序）> 默认签卡
-              const serverCover = note.share_enabled ? absoluteUrl(`/api/public/share/cover/note/${note.id}.png`) : "";
+              const serverCover = note.share_enabled ? absoluteUrl(`/api/public/share/cover/note/${note.id}.png?v=2`) : "";
               // 从未分享过的签：顺手幂等生成 token，下一次转发即有签卡封面
               if (!note.share_enabled && !sharePendingRef.current.has(note.id)) {
                 sharePendingRef.current.add(note.id);
@@ -903,7 +904,7 @@ export default function Notes() {
                   .finally(() => sharePendingRef.current.delete(note.id));
               }
               pendingShareRef.current = {
-                title: `心签 · ${condenseNoteText(shareNoteText(note))}`,
+                title: `心签 · ${shareTitleText(note)}`,
                 imageUrl: getNoteImage(note) || serverCover || FALLBACK_COVER,
                 path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${note.id}`
               };

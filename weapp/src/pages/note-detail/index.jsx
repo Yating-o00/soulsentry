@@ -11,15 +11,16 @@ export default function NoteDetail() {
     path: "pages/notes/index",
     buildShare: () => {
       if (!note) return {};
-      // 直接呈现签的内容：优先纯文本、去掉换行；无内容时回退标题
-      const raw = (note.plain_text || (note.content || "").replace(/<[^>]+>/g, "") || note.title || "此刻的一点心情").trim().replace(/\s+/g, " ");
-      const condensed = raw.length <= 54 ? raw : `${raw.slice(0, 42)}…${raw.slice(-10)}`;
+      // 标题用「摘要」：优先 AI 生成的签标题，否则短内容全量、长内容截断加省略
+      const ai = (note.title || "").trim();
+      const raw = (note.plain_text || (note.content || "").replace(/<[^>]+>/g, "") || "此刻的一点心情").trim().replace(/\s+/g, " ");
+      const summary = ai ? (ai.length > 30 ? `${ai.slice(0, 28)}…` : ai) : (raw.length <= 26 ? raw : `${raw.slice(0, 24)}…`);
       return {
-        title: `心签 · ${condensed}`,
+        title: `心签 · ${summary}`,
         path: `pages/note-detail/index?id=${note.id}`,
-        // 封面：签已开启分享时用服务端生成的签卡封面，兜底线上默认签卡
+        // 封面：签已开启分享时用服务端生成的签卡封面，兜底线上默认签卡（?v=2 排微信缓存）
         imageUrl: note.share_enabled
-          ? `https://www.xinzhan-soulsentry.cn/api/public/share/cover/note/${note.id}.png`
+          ? `https://www.xinzhan-soulsentry.cn/api/public/share/cover/note/${note.id}.png?v=2`
           : "https://www.xinzhan-soulsentry.cn/note-share-default.png"
       };
     }

@@ -79,27 +79,29 @@ function noteCoverElements({ typeLabel, typeColor, dateStr, content, response })
     { t: "text", x: pad + dispWidth(typeLabel) * 28 + 12, y: 224, size: 28, fill: INK_FAINT, text: dateStr ? ` · ${dateStr}` : "" }
   ];
 
-  // 签的正文（主角）：大字报式，缩略图尺度可辨；有回应时限 2 行，无回应 3 行
-  const lines = wrapText(content, 64, W - pad * 2, response ? 2 : 3);
+  // 签的正文（主角）：大字报式，缩略图尺度可辨；有回应时 3 行，无回应 4 行
+  const lines = wrapText(content, 64, W - pad * 2, response ? 3 : 4);
   let y = 316;
   lines.forEach((line) => {
     els.push({ t: "text", x: pad, y, size: 64, fill: INK, text: line, stroke: 1 });
     y += 100;
   });
 
+  // 回应区贴底排版（与底部品牌语保持一个呼吸间距）
   if (response) {
-    const ruleY = y + 8;
+    const ruleY = 672;
     els.push({ t: "line", x1: pad, y1: ruleY, x2: W - pad, y2: ruleY, fill: "rgba(47,58,85,0.16)", width: 1 });
-    els.push({ t: "text", x: pad, y: ruleY + 42, size: 24, fill: INK_FAINT, text: "—— 心栈回应" });
+    els.push({ t: "text", x: pad, y: ruleY + 38, size: 24, fill: INK_FAINT, text: "—— 心栈回应" });
     const respLines = wrapText(response, 34, W - pad * 2, 2);
-    let ry = ruleY + 92;
+    let ry = ruleY + 86;
     respLines.forEach((line) => {
       els.push({ t: "text", x: pad, y: ry, size: 34, fill: INK_SOFT, text: line });
-      ry += 56;
+      ry += 52;
     });
   }
 
-  els.push({ t: "text", x: pad, y: 932, size: 28, fill: INK_FAINT, text: "—— 心栈 · 从容地记住每一声心动" });
+  // 品牌语：右对齐、收在内框范围内（内框右边 1192、底边 936）
+  els.push({ t: "text", x: W - pad, y: 880, size: 28, fill: INK_FAINT, text: "心签，从容记录每一声心动", anchor: "ra" });
   return els;
 }
 

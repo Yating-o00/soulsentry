@@ -105,6 +105,15 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
 
       {!agentCmd && !phase && !text && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {[
+            { icon: "🗓", text: "帮我制定半个月的健身计划，每天晚上练" },
+            { icon: "✍️", text: "周五下午3点和产品团队开评审会，提前准备好原型" },
+          ].map((ex) => (
+            <button key={ex.text} onClick={() => { setText(ex.text); inputRef.current?.focus(); }}
+              className="no-min-size px-2.5 py-1 rounded-lg text-[11px] bg-[#384877]/5 border border-[#384877]/15 text-[#384877] hover:bg-[#384877]/10 transition-colors">
+              {ex.icon} {ex.text}
+            </button>
+          ))}
           {AGENT_EXAMPLES.map((ex) => (
             <button key={ex} onClick={() => setAgentCmd(ex)}
               className="no-min-size px-2.5 py-1 rounded-lg text-[11px] bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition-colors">

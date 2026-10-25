@@ -1,6 +1,8 @@
 import { base44 } from "@/api/base44Client";
 
 // 智能约定规划：把「一类要做的事」规划成主约定 + 带具体执行/提醒时刻的子约定
+const FITNESS_RE = /(健身|运动|跑步|训练|减肥|减脂|增肌|瑜伽|游泳|骑行|锻炼)/;
+
 export async function planAgreement(input) {
   const now = new Date();
   const horizon = new Date(now.getTime() + 31 * 86400000);
@@ -12,6 +14,18 @@ export async function planAgreement(input) {
     ),
     base44.entities.UserPreference.filter({}, { limit: 1, fields: ["daily_routine", "quiet_hours_start", "quiet_hours_end"] }),
   ]);
+  // 运动类规划：读取近 30 天运动/健康数据，按用户现有水平制定方案
+  const isFitness = FITNESS_RE.test(input);
+  let fitnessCtx = "";
+  if (isFitness) {
+    const agg = await base44.entities.HealthLog.aggregate({
+      query: { date: { $gte: new Date(now.getTime() - 30 * 86400000).toISOString() } },
+      groupBy: "type", avg: ["value"], max: ["value"],
+    });
+    const rows = (agg.rows || []).map((r) => `${r.type}: 平均 ${Math.round(r.avg_value * 10) / 10}，最高 ${r.max_value}（${r.count} 条记录）`).join("；");
+    fitnessCtx = `\n用户近 30 天运动/健康数据：${rows || "暂无记录（按零基础/入门水平安排）"}
+运动规划要求：参照常规运动方案（热身-主训练-拉伸），有氧与力量交替、相邻高强度日之间安排恢复，强度按用户数据循序渐进；detail 写明动作、组数×次数或时长、目标心率/强度；同一天不安排两次训练。`;
+  }
   const busy = (busyPage.items || []).map((t) => `${t.reminder_time}${t.end_time ? " ~ " + t.end_time : ""} ${t.title}`).join("\n") || "无";
   const pref = prefPage.items?.[0] || {};
 
@@ -20,6 +34,7 @@ export async function planAgreement(input) {
 
 当前时间：${now.toISOString()}（用户时区 Asia/Shanghai，输出时间请带 +08:00 偏移）
 用户作息：${JSON.stringify(pref.daily_routine || {})}；免打扰：${pref.quiet_hours_start || "22:00"}-${pref.quiet_hours_end || "08:00"}
+${fitnessCtx}
 已有安排（请避开冲突）：
 ${busy}
 
@@ -58,12 +73,14 @@ ${busy}
   if (!steps.length) throw new Error("没能生成可执行的规划，请描述得更具体一些");
   steps.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
   const iso = (v) => new Date(v).toISOString();
-  const category = plan.category || "personal";
+  const category = isFitness ? "health" : plan.category || "personal";
+  const tags = isFitness ? ["运动"] : [];
 
   const parent = await base44.entities.Task.create({
     title: plan.title,
     description: plan.overview || input,
     category,
+    tags,
     reminder_time: iso(steps[0].start_time),
     end_time: iso(steps[steps.length - 1].end_time || steps[steps.length - 1].start_time),
   });
@@ -81,6 +98,7 @@ ${busy}
       advance_alert_sent: false,
       category,
       parent_task_id: parent.id,
+      tags,
       reminder_time: iso(s.start_time),
       end_time: isNaN(new Date(s.end_time)) ? undefined : iso(s.end_time),
       advance_reminders: [10],

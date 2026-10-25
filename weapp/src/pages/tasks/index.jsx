@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, ScrollView } from "@tarojs/components";
 import { get, post, patch } from "@/utils/api";
+import { isEffectivelyDone } from "@/utils/recurrence";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
@@ -68,6 +69,8 @@ const dateLabel = new Date().toLocaleDateString("zh-CN", {
 });
 
 function isTaskDone(task) {
+  // 打卡不杀系列：重复约定永不归档，完成只看当天（done_today），系列保持活跃
+  if (task.repeat_rule && task.repeat_rule !== "none") return false;
   return task.status === "completed" || task.status === "done" || task.status === "archived";
 }
 
@@ -436,7 +439,7 @@ export default function Tasks() {
   };
 
   const handleSubtaskToggle = async (sub) => {
-    const markingDone = !isTaskDone(sub);
+    const markingDone = !isEffectivelyDone(sub);
     const nextStatus = markingDone ? "completed" : "pending";
     try {
       await patch(`/tasks/${sub.id}`, { status: nextStatus });
@@ -445,12 +448,15 @@ export default function Tasks() {
         const list = next[sub.parent_task_id] || [];
         next[sub.parent_task_id] = list.map((s) => {
           if (s.id !== sub.id) return s;
-          // 与服务端口径一致：非重复子约定勾选完成时自动记录完成时间（转发卡片"今日完成"据此统计）
-          const recurring = s.repeat_rule && s.repeat_rule !== "none";
+          // 打卡不杀系列：重复子约定完成只看今天（done_today），status 保持活跃；
+          // 非重复子约定勾选完成时自动记录完成时间（转发卡片"今日完成"据此统计）
+          if (s.repeat_rule && s.repeat_rule !== "none") {
+            return { ...s, done_today: markingDone, completed_at: markingDone ? new Date().toISOString() : null };
+          }
           return {
             ...s,
             status: nextStatus,
-            completed_at: recurring ? s.completed_at : (markingDone ? new Date().toISOString() : null),
+            completed_at: markingDone ? new Date().toISOString() : null,
           };
         });
         return next;
@@ -487,7 +493,7 @@ export default function Tasks() {
   const countTodayActivity = (tree) => {
     const dayOf = (t) => new Date(new Date(t).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     const today = dayOf(Date.now());
-    const isDone = (s) => s.status === "completed" || s.status === "done";
+    const isDone = (s) => isEffectivelyDone(s);
     const doneTodayItems = tree.filter((s) => isDone(s) && s.completed_at && dayOf(s.completed_at) === today);
     const doneIds = new Set(doneTodayItems.map((s) => s.id));
     const newTodayItems = tree.filter((s) => s.created_date && dayOf(s.created_date) === today && !doneIds.has(s.id));

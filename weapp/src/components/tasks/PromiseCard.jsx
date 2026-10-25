@@ -10,7 +10,7 @@ import {
   IconChevronRight,
 } from "./icons";
 import theme from "./theme";
-import { isRecurring, recurringBadgeText, nextOccurrenceOf } from "@/utils/recurrence";
+import { isRecurring, recurringBadgeText, nextOccurrenceOf, isEffectivelyDone } from "@/utils/recurrence";
 
 const categoryMap = {
   work: "工作",
@@ -320,7 +320,7 @@ export default function PromiseCard({
 
           {/* sub promises */}
           {subtasks && subtasks.length > 0 && (() => {
-            const subDoneCount = subtasks.filter((s) => s.status === "completed" || s.status === "done").length;
+            const subDoneCount = subtasks.filter((s) => isEffectivelyDone(s)).length;
             const progress = Math.round((subDoneCount / subtasks.length) * 100);
             return (
             <View
@@ -342,7 +342,7 @@ export default function PromiseCard({
                 <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>{progress}%</Text>
               </View>
               {subtasks.map((s) => {
-                const subDone = s.status === "completed" || s.status === "done";
+                const subDone = isEffectivelyDone(s);
                 return (
                   <View
                     key={s.id}

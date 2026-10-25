@@ -4,6 +4,7 @@ import { View, Text, Input, Button, ScrollView, Image, Textarea } from "@tarojs/
 import { get, post, patch, del, absoluteUrl } from "@/utils/api";
 import { useShare } from "@/hooks/useShare";
 import { CHECKIN_MILESTONES, checkinEncourage, milestoneQuote } from "@/components/tasks/checkinMeta";
+import { isEffectivelyDone } from "@/utils/recurrence";
 
 const statusLabel = {
   pending: "待办",
@@ -377,7 +378,7 @@ export default function TaskDetail() {
     );
   }
 
-  const isCompleted = task.status === "completed" || task.status === "done";
+  const isCompleted = isEffectivelyDone(task);
 
   return (
     <View className="ss-page">
@@ -583,7 +584,7 @@ export default function TaskDetail() {
           </View>
 
           {(() => {
-            const isSubDone = (s) => s.status === "completed" || s.status === "done";
+            const isSubDone = (s) => isEffectivelyDone(s);
             const tops = subtasks.filter((s) => s.parent_task_id === taskId);
             const visibleTops = hideDoneSubs ? tops.filter((s) => !isSubDone(s)) : tops;
             const childrenOf = (id) => {
@@ -592,7 +593,7 @@ export default function TaskDetail() {
             };
 
             const renderSub = (sub, depth = 0) => {
-              const done = sub.status === "completed" || sub.status === "done";
+              const done = isEffectivelyDone(sub);
               const kids = childrenOf(sub.id);
               const hasKids = kids.length > 0;
               const expanded = expandedIds.has(sub.id);

@@ -9,7 +9,7 @@ import {
   IconChevronRight,
 } from "./icons";
 import theme from "./theme";
-import { recurringBadgeText, nextOccurrenceOf } from "@/utils/recurrence";
+import { recurringBadgeText, nextOccurrenceOf, isEffectivelyDone } from "@/utils/recurrence";
 import { checkinEncourage } from "./checkinMeta";
 
 // 品牌蓝（与 Web 打卡卡一致的视觉口径）
@@ -260,7 +260,7 @@ export default function CheckinCard({
 
           {/* sub promises（含从属子约定，逐级缩进可勾选）：超过 4 条时默认折叠已完成 */}
           {tree.length > 0 && (() => {
-            const isDone = (s) => s.status === "completed" || s.status === "done";
+            const isDone = (s) => isEffectivelyDone(s);
             const subDoneCount = tree.filter(isDone).length;
             const progress = Math.round((subDoneCount / tree.length) * 100);
             const hideDone = hideDoneSubs === null ? tree.length > 4 : hideDoneSubs;

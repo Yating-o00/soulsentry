@@ -130,3 +130,10 @@ export function recurringBadgeText(t, from = new Date()) {
   const next = nextOccurrenceOf(t, from);
   return next ? `${label} · ${countdownText(next, from)}` : label;
 }
+
+// 重复约定的完成口径（打卡不杀系列）：服务端只记 recurrence_last_done、status 保持活跃，
+// 完成状态按 done_today（北京日期）判断；非重复约定看 status。
+// 与 Web 端 src/lib/taskStatus.js 的 isTaskEffectivelyCompleted 一致。
+export function isEffectivelyDone(t) {
+  return isRecurring(t) ? Boolean(t?.done_today) : t?.status === "completed" || t?.status === "done";
+}

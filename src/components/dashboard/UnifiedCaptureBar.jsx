@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { routeCaptureIntent, CAPTURE_KINDS, isAgreementPlan } from "@/lib/captureRouter";
 import { isAgentCommand, AGENT_EXAMPLES } from "@/lib/agentRunner";
 import AgentRunPanel from "@/components/agent/AgentRunPanel";
-import { planAgreement } from "@/lib/agreementPlanner";
+import { draftAgreementPlan } from "@/lib/agreementPlanner";
+import PlanPreviewPanel from "@/components/dashboard/PlanPreviewPanel";
 
 export const CAPTURE_EVENT = "unified-capture";
 export const CAPTURE_FOCUS_EVENT = "unified-capture-focus";
@@ -19,6 +20,7 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
   const [routedTo, setRoutedTo] = useState(null);
   const [lastInput, setLastInput] = useState("");
   const [agentCmd, setAgentCmd] = useState(null);
+  const [planDraft, setPlanDraft] = useState(null);
   const queryClient = useQueryClient();
   const inputRef = React.useRef(null);
 
@@ -47,9 +49,8 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
       if (kind === "weave") {
         await runWeave(input);
       } else if (kind === "agreement_plan") {
-        toast.info("正在整体规划，可能需要几十秒…");
-        setWeaveResult(await planAgreement(input));
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        toast.info("正在生成规划预览，可能需要几十秒…");
+        setPlanDraft(await draftAgreementPlan(input));
       } else {
         window.dispatchEvent(new CustomEvent(CAPTURE_EVENT, { detail: { kind, text: input } }));
         toast.success(CAPTURE_KINDS[kind].hint, { icon: "✨" });
@@ -122,6 +123,20 @@ export default function UnifiedCaptureBar({ onTaskClick }) {
             {phase === "routing" ? "识别中…" : `分发中 · ${CAPTURE_KINDS[routedTo]?.label || ""}`}
           </span>
         </div>
+      )}
+
+      {!phase && planDraft && (
+        <PlanPreviewPanel
+          key={planDraft.input}
+          draft={planDraft}
+          onCancel={() => setPlanDraft(null)}
+          onDone={(res) => {
+            setPlanDraft(null);
+            setWeaveResult(res);
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            toast.success(res.message);
+          }}
+        />
       )}
 
       {!phase && weaveResult && (

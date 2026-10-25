@@ -464,7 +464,8 @@ export default function Share() {
 
   const isTask = data?.type === "task";
   const item = data?.item;
-  // 打卡类约定：扫码进入的访客点击"为 TA 打卡"= 打卡累计 +1，附言同步访客称呼
+  // 打卡类约定：访客点"为 TA 打卡"= 留下打卡记录（附言同步访客称呼）但不计入累计；
+  // 拥有者/共有成员本人扫码打卡才计入（后端按登录态区分，见 checkinStats）
   const isCheckinTask = isTask && item?.category === "checkin";
   const checkinTotal = data?.checkin_total ?? 0;
   // 心签配图：分享落地页随签文一并展示

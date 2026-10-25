@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { computeNextReminderTime } from "../lib/recurrence.js";
+import { countedCheckinsWhere } from "../lib/checkinStats.js";
 import { syncParentProgress } from "./tasks.js";
 
 /**
@@ -110,7 +111,7 @@ checkinsRouter.post("/:id/checkins", async (req, res) => {
     },
   });
 
-  const total = await prisma.checkin.count({ where: { taskId: task.id } });
+  const total = await prisma.checkin.count({ where: countedCheckinsWhere(task.id) });
   const first = await prisma.checkin.findFirst({
     where: { taskId: task.id },
     orderBy: { createdAt: "asc" },
@@ -177,7 +178,7 @@ checkinsRouter.get("/:id/checkins", async (req, res) => {
       orderBy: { createdAt: "desc" },
       take: limit,
     }),
-    prisma.checkin.count({ where: { taskId: task.id } }),
+    prisma.checkin.count({ where: countedCheckinsWhere(task.id) }),
     prisma.checkin.findFirst({
       where: { taskId: task.id },
       orderBy: { createdAt: "asc" },

@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
+import { countedCheckinsWhere, VISITOR_CHECKIN_SOURCE } from "../lib/checkinStats.js";
 
 export const publicShareRouter = Router();
 
@@ -321,9 +322,9 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         orderBy: { createdAt: "desc" },
         include: { user: true }
       });
-      // 打卡类约定：分享落地页需要展示累计打卡次数
+      // 打卡类约定：分享落地页需要展示累计打卡次数（访客代打卡不计入，见 checkinStats）
       const checkinTotal = item.category === "checkin"
-        ? await prisma.checkin.count({ where: { taskId: item.id } })
+        ? await prisma.checkin.count({ where: countedCheckinsWhere(item.id) })
         : null;
 
       // 打卡类约定：分享落地页需要展示累计打卡次数与最近赴约内容（附言/照片）
@@ -582,7 +583,8 @@ publicShareRouter.delete("/comments/:commentId", requireAuth, async (req, res) =
 });
 
 // POST /api/public/share/:token/toggle - 匿名勾选/取消勾选（仅 task，支持子约定）
-publicShareRouter.post("/:token/toggle", async (req, res) => {
+// optionalAuth：登录用户若为拥有者/共有成员，打卡计入累计；否则按访客记录（不计数）
+publicShareRouter.post("/:token/toggle", optionalAuth, async (req, res) => {
   const schema = z.object({
     checked: z.boolean(),
     subtask_id: z.string().optional().nullable(),
@@ -613,21 +615,26 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
     let targetTitle = item.title;
     let payload = { checked, status: nextStatus };
 
-    // 打卡类约定：扫码点"打卡" = 新增一次打卡记录（累计 +1），不完成约定。
-    // 访客填写的称呼同步进打卡附言，拥有者在赴约记录里能看到是谁帮 TA 打卡。
+    // 打卡类约定：扫码点"打卡" = 新增一次打卡记录，不完成约定。
+    // 拥有者/共有成员（登录态）的打卡计入累计；访客（匿名或未加入共有的登录用户）打卡
+    // 保留记录（附言/动态可见）但 source 标记为访客，不计入约定卡片的打卡计数。
     if (!subtaskId && item.category === "checkin") {
-      const total = await prisma.checkin.count({ where: { taskId: item.id } });
+      const total = await prisma.checkin.count({ where: countedCheckinsWhere(item.id) });
       if (checked) {
         const providedName = (parsed.data.visitor_name || "").trim();
+        const membership = req.user
+          ? await prisma.taskMember.findFirst({ where: { taskId: item.id, userId: req.user.id } })
+          : null;
+        const isVisitor = !(req.user && (req.user.id === item.userId || membership));
         const checkin = await prisma.checkin.create({
           data: {
-            userId: item.userId,
+            userId: isVisitor ? (req.user?.id || item.userId) : req.user.id,
             taskId: item.id,
             note: providedName ? `${providedName} 扫码打卡` : null,
-            source: "public_share"
+            source: isVisitor ? VISITOR_CHECKIN_SOURCE : "public_share"
           }
         });
-        const nextTotal = total + 1;
+        const nextTotal = isVisitor ? total : total + 1;
 
         await prisma.sharedActionLog.create({
           data: {
@@ -637,14 +644,16 @@ publicShareRouter.post("/:token/toggle", async (req, res) => {
             visitorToken,
             visitorName,
             actionType: "checkin",
-            payload: { checkinId: checkin.id, total: nextTotal }
+            payload: { checkinId: checkin.id, total: nextTotal, visitor: isVisitor }
           }
         });
 
         await notifyOwner(item.userId, {
           type: "public_share_checkin",
           title: "有人为你的约定打卡",
-          body: `${visitorName} 扫码为「${item.title}」打卡一次，已累计 ${nextTotal} 次`,
+          body: isVisitor
+            ? `${visitorName} 扫码为「${item.title}」打卡一次（访客记录，不计入累计 ${nextTotal} 次）`
+            : `${visitorName} 扫码为「${item.title}」打卡一次，已累计 ${nextTotal} 次`,
           shareToken: req.params.token,
           targetType: "task",
           targetId: item.id,

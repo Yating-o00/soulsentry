@@ -299,9 +299,16 @@ export default function Share() {
               onClick={() => handleToggle(!isCompleted)}
             >
               {isCheckinTask
-                ? (item.done_today ? "今日已打卡 · 再记一次" : "打卡")
+                ? (share.is_owner
+                    ? (item.done_today ? "今日已打卡 · 再记一次" : "打卡")
+                    : "帮 TA 打卡")
                 : (isCompleted ? "标记为未完成" : "标记为已完成")}
             </Button>
+          )}
+          {isCheckinTask && !share.is_owner && (
+            <Text className="ss-muted" style={{ display: "block", marginTop: "12rpx", fontSize: "24rpx" }}>
+              你不是约定的拥有者，这次打卡会留下记录给 TA，但不计入累计次数
+            </Text>
           )}
         </View>
 

@@ -166,6 +166,19 @@ export default function Share() {
     }
   };
 
+  const handleCheer = async () => {
+    if (!ensureVisitorName(() => handleCheer())) return;
+
+    try {
+      const data = await post(`/public/share/${token}/cheer`, buildVisitorPayload());
+      updateVisitorToken(data.visitor_token);
+      Taro.showToast({ title: `已加油 · 累计 ${data.cheer_total} 次`, icon: "none" });
+      loadShare(token, currentVisitorToken());
+    } catch (err) {
+      // handled globally
+    }
+  };
+
   const submitComment = async () => {
     if (!commentText.trim()) {
       Taro.showToast({ title: "请输入评论", icon: "none" });
@@ -296,18 +309,18 @@ export default function Share() {
           {isTask && (
             <Button
               className={`ss-btn ${isCheckinTask ? "" : (isCompleted ? "ss-btn-plain" : "")}`}
-              onClick={() => handleToggle(!isCompleted)}
+              onClick={() => (isCheckinTask && !share.is_owner ? handleCheer() : handleToggle(!isCompleted))}
             >
               {isCheckinTask
                 ? (share.is_owner
                     ? (item.done_today ? "今日已打卡 · 再记一次" : "打卡")
-                    : "帮 TA 打卡")
+                    : "为 TA 加油 👏")
                 : (isCompleted ? "标记为未完成" : "标记为已完成")}
             </Button>
           )}
           {isCheckinTask && !share.is_owner && (
             <Text className="ss-muted" style={{ display: "block", marginTop: "12rpx", fontSize: "24rpx" }}>
-              你不是约定的拥有者，这次打卡会留下记录给 TA，但不计入累计次数
+              点一次就是一声加油，会计入 TA 约定卡片的鼓励数据
             </Text>
           )}
         </View>
@@ -344,6 +357,23 @@ export default function Share() {
               <Text style={{ display: "block", fontSize: "22rpx", color: "#9ca0a8", marginTop: "6rpx" }}>
                 {firstAt ? `从 ${new Date(firstAt).getFullYear()}年${new Date(firstAt).getMonth() + 1}月${new Date(firstAt).getDate()}日 起 · 第 ${dayCount} 天` : "刚刚开始"}
               </Text>
+
+              {/* 鼓励数据：访客"为 TA 加油"的累计与最近加油的人 */}
+              {share.cheers && (share.cheers.total ?? 0) > 0 && (() => {
+                const names = (share.cheers.items || []).map((c) => c.name).slice(0, 5);
+                return (
+                  <View style={{ marginTop: "16rpx", background: "#fff8ee", border: "1rpx solid #f0dfc2", borderRadius: "14rpx", padding: "16rpx 22rpx" }}>
+                    <Text style={{ fontSize: "24rpx", color: "#b0722d", fontWeight: 600 }}>
+                      👏 已被加油 {share.cheers.total} 次
+                    </Text>
+                    {names.length > 0 && (
+                      <Text style={{ display: "block", fontSize: "22rpx", color: "#9ca0a8", marginTop: "6rpx" }}>
+                        {names.join("、")} 为 TA 加油
+                      </Text>
+                    )}
+                  </View>
+                );
+              })()}
 
               {/* 今日动态：今日完成的子约定（打勾）+ 今日新增的子约定（新） */}
               {(todayDoneSubs.length > 0 || todayNewSubs.length > 0) && (

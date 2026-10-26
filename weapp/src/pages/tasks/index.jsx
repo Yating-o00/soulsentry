@@ -216,7 +216,7 @@ export default function Tasks() {
       checkinFetchedRef.current.add(t.id);
       get(`/tasks/${t.id}/checkins`, { limit: 1 })
         .then((d) => {
-          const meta = { total: d?.total ?? 0, first_at: d?.first_at || null };
+          const meta = { total: d?.total ?? 0, first_at: d?.first_at || null, cheer_total: d?.cheer_total ?? 0 };
           checkinTotalsRef.current[t.id] = meta.total;
           setCheckinMetaMap((prev) => ({ ...prev, [t.id]: meta }));
         })

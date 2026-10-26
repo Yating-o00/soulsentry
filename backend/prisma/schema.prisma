@@ -45,6 +45,7 @@ model User {
   taskTemplates     TaskTemplate[]
   behaviors         UserBehavior[]
   checkins          Checkin[]
+  cheers            Cheer[]
   userDataPoints    UserDataPoint[]
   preferences       UserPreference?
   wechatOrders      WechatOrder[]
@@ -119,6 +120,7 @@ model Task {
   shareExpiresAt   DateTime?
   members          TaskMember[]
   checkins         Checkin[]
+  cheers           Cheer[]
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
   user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -141,6 +143,22 @@ model Checkin {
   updatedAt DateTime @updatedAt
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+  @@index([userId, createdAt])
+}
+
+// 分享落地页的"为 TA 加油"：访客每点一次 = 一条鼓励记录，计入约定卡片的鼓励数据。
+// 匿名访客以 visitorToken 标识，登录用户（含拥有者本人）记录 userId。
+model Cheer {
+  id           String   @id @default(cuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitorToken String?
+  visitorName  String?
+  createdAt    DateTime @default(now())
 
   @@index([taskId, createdAt])
   @@index([userId, createdAt])

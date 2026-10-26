@@ -88,6 +88,7 @@ export default function CheckinCard({
   const tree = subtaskTree.length > 0 ? subtaskTree : subtasks.map((s) => ({ ...s, depth: 0 }));
   const doneToday = Boolean(task.done_today);
   const total = checkinMeta?.total ?? 0;
+  const cheerTotal = checkinMeta?.cheer_total ?? 0;
   const recurringText = task.repeat_rule && task.repeat_rule !== "none" ? recurringBadgeText(task) : null;
   const aiNote = analysis?.aiNote || "";
   const nextHm = (() => {
@@ -387,6 +388,18 @@ export default function CheckinCard({
               }}
             >
               已打卡 {total} 次
+            </Text>
+          )}
+          {cheerTotal > 0 && (
+            <Text
+              style={{
+                marginTop: "6rpx",
+                fontSize: "20rpx",
+                color: "#b0722d",
+                textAlign: "center",
+              }}
+            >
+              👏 加油 {cheerTotal}
             </Text>
           )}
           <Text

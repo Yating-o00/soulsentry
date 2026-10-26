@@ -172,7 +172,7 @@ checkinsRouter.get("/:id/checkins", async (req, res) => {
   if (!task) return res.status(404).json({ error: "NOT_FOUND", message: "约定不存在或无权限" });
 
   const limit = Math.min(Number(req.query.limit) || 100, 200);
-  const [items, total, first] = await Promise.all([
+  const [items, total, first, cheerTotal] = await Promise.all([
     prisma.checkin.findMany({
       where: { taskId: task.id },
       orderBy: { createdAt: "desc" },
@@ -184,11 +184,14 @@ checkinsRouter.get("/:id/checkins", async (req, res) => {
       orderBy: { createdAt: "asc" },
       select: { createdAt: true },
     }),
+    // 鼓励数据：分享落地页访客"为 TA 加油"的累计（打卡卡片展示）
+    prisma.cheer.count({ where: { taskId: task.id } }),
   ]);
 
   return res.json({
     total,
     first_at: first?.createdAt?.toISOString?.() || null,
+    cheer_total: cheerTotal,
     items: items.map(serializeCheckin),
   });
 });

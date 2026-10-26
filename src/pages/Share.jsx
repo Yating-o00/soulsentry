@@ -284,10 +284,31 @@ export default function Share() {
         }));
       }
       if (data?.item?.category === "checkin" && !subtaskId) {
-        toast.success(`已为 TA 打卡，累计 ${result.checkin_total} 次`);
+        toast.success(isOwnerView ? `已打卡，累计 ${result.checkin_total} 次` : `已为 TA 打卡，累计 ${result.checkin_total} 次`);
       } else {
         toast.success(checked ? "已勾选" : "已取消勾选");
       }
+    } catch (err) {
+      toast.error(err?.message || "操作失败");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleCheer = async () => {
+    if (data?.type !== "task") return;
+    setSubmitting(true);
+    try {
+      const result = await api(`/api/public/share/${token}/cheer`, {
+        method: "POST",
+        body: {
+          visitor_token: visitorToken,
+          visitor_name: visitorName || undefined
+        }
+      });
+      if (result.visitor_token) setVisitorToken(result.visitor_token);
+      setData((prev) => ({ ...prev, cheer_total: result.cheer_total }));
+      toast.success(`已为 TA 加油 · 累计 ${result.cheer_total} 次`);
     } catch (err) {
       toast.error(err?.message || "操作失败");
     } finally {
@@ -659,20 +680,35 @@ export default function Share() {
                 <div className="flex items-center justify-between">
                   {isCheckinTask ? (
                     <div className="flex flex-wrap items-center gap-3">
-                      <Button
-                        type="button"
-                        onClick={() => ensureNameThen(() => handleToggleTask(true))}
-                        disabled={submitting}
-                        className="rounded-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-5 hover:opacity-95"
-                      >
-                        {submitting ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-4 h-4 mr-1.5" />
-                        )}
-                        为 TA 打卡
-                      </Button>
+                      {isOwnerView ? (
+                        <Button
+                          type="button"
+                          onClick={() => ensureNameThen(() => handleToggleTask(true))}
+                          disabled={submitting}
+                          className="rounded-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-5 hover:opacity-95"
+                        >
+                          {submitting ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                          )}
+                          打卡
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          onClick={() => ensureNameThen(() => handleCheer())}
+                          disabled={submitting}
+                          className="rounded-full bg-gradient-to-r from-[#b0722d] to-[#d99a4e] px-5 hover:opacity-95"
+                        >
+                          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="mr-1.5">👏</span>}
+                          为 TA 加油
+                        </Button>
+                      )}
                       <span className="text-sm text-slate-500">已打卡 {checkinTotal} 次</span>
+                      {(data?.cheer_total ?? 0) > 0 && (
+                        <span className="text-sm text-[#b0722d]">被加油 {data.cheer_total} 次</span>
+                      )}
                     </div>
                   ) : (
                     <div className="flex items-center gap-3">

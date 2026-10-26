@@ -323,8 +323,23 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         include: { user: true }
       });
       // 打卡类约定：分享落地页需要展示累计打卡次数（访客代打卡不计入，见 checkinStats）
+      // 与"为 TA 加油"鼓励数据（访客每次点击一条，全部计入）
       const checkinTotal = item.category === "checkin"
         ? await prisma.checkin.count({ where: countedCheckinsWhere(item.id) })
+        : null;
+      const cheerPayload = item.category === "checkin"
+        ? {
+            total: await prisma.cheer.count({ where: { taskId: item.id } }),
+            items: (await prisma.cheer.findMany({
+              where: { taskId: item.id },
+              orderBy: { createdAt: "desc" },
+              take: 8,
+            })).map((c) => ({
+              id: c.id,
+              name: c.visitorName || "访客",
+              created_at: c.createdAt?.toISOString?.() || null,
+            })),
+          }
         : null;
 
       // 打卡类约定：分享落地页需要展示累计打卡次数与最近赴约内容（附言/照片）
@@ -357,6 +372,8 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         subtasks,
         checkin_total: checkinTotal,
         checkins: checkinPayload,
+        cheer_total: cheerPayload?.total ?? null,
+        cheers: cheerPayload,
         comments: comments.map(serializeComment)
       });
     }
@@ -739,6 +756,76 @@ publicShareRouter.post("/:token/toggle", optionalAuth, async (req, res) => {
     });
   } catch (error) {
     console.error("[publicShare] toggle failed:", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});
+
+// POST /api/public/share/:token/cheer - 访客"为 TA 加油"：每点一次 = 一条鼓励记录，计入约定卡片的鼓励数据
+publicShareRouter.post("/:token/cheer", optionalAuth, async (req, res) => {
+  const schema = z.object({
+    visitor_token: z.string().min(8).optional(),
+    visitor_name: z.string().max(50).optional().nullable()
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
+  }
+
+  const result = await findSharedItem(req.params.token);
+  if (!result) return res.status(404).json({ error: "NOT_FOUND" });
+  if (result.type !== "task" || result.item.category !== "checkin") {
+    return res.status(400).json({ error: "INVALID_TYPE", message: "仅支持打卡类约定" });
+  }
+
+  const { item } = result;
+  if (isShareExpired(item)) return res.status(410).json({ error: "SHARE_EXPIRED" });
+
+  const visitorToken = ensureVisitorToken(req);
+  const providedName = (parsed.data.visitor_name || "").trim();
+  const visitorName = (providedName || req.user?.displayName || req.user?.email || "访客").slice(0, 50);
+
+  try {
+    const cheer = await prisma.cheer.create({
+      data: {
+        taskId: item.id,
+        userId: req.user?.id || null,
+        visitorToken,
+        visitorName,
+      }
+    });
+    const cheerTotal = await prisma.cheer.count({ where: { taskId: item.id } });
+
+    await prisma.sharedActionLog.create({
+      data: {
+        shareToken: req.params.token,
+        targetType: "task",
+        targetId: item.id,
+        visitorToken,
+        visitorName,
+        actionType: "cheer",
+        payload: { cheerId: cheer.id, total: cheerTotal }
+      }
+    });
+
+    // 拥有者本人自己加油不通知自己（与评论链路口径一致）
+    if (req.user?.id !== item.userId) {
+      await notifyOwner(item.userId, {
+        type: "public_share_cheer",
+        title: "有人为你的约定加油",
+        body: `${visitorName} 为「${item.title}」加油，累计被加油 ${cheerTotal} 次`,
+        shareToken: req.params.token,
+        targetType: "task",
+        targetId: item.id,
+        visitorToken,
+        visitorName,
+        link: `/tasks?taskId=${item.id}`
+      });
+    }
+
+    return res.json({ cheer_total: cheerTotal, visitor_token: visitorToken });
+  } catch (error) {
+    console.error("[publicShare] cheer failed:", error);
     return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
   }
 });

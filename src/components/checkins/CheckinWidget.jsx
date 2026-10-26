@@ -61,6 +61,7 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
 
   const total = data?.total ?? 0;
   const firstAt = data?.first_at;
+  const cheerTotal = data?.cheer_total ?? 0;
   const items = useMemo(() => data?.items || [], [data]);
   const subDone = subtaskTree.filter(isTaskEffectivelyCompleted).length;
 
@@ -168,6 +169,11 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
           >
             {metaText}
           </button>
+        )}
+        {cheerTotal > 0 && (
+          <span className="text-[10px] whitespace-nowrap text-center text-[#b0722d]" title="访客在分享页为 TA 加油的累计">
+            👏 加油 {cheerTotal}
+          </span>
         )}
         {subtaskTree.length > 0 && (
           <Popover open={detailOpen} onOpenChange={setDetailOpen}>

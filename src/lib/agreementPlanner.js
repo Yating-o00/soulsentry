@@ -3,6 +3,8 @@ import { base44 } from "@/api/base44Client";
 // 智能约定规划：先生成预览草案 → 用户多轮对话修改 → 确认后写入主约定 + 带提醒时刻的子约定
 const FITNESS_RE = /(健身|运动|跑步|训练|减肥|减脂|增肌|瑜伽|游泳|骑行|锻炼)/;
 
+const STUDY_RE = /(学习|英语|单词|背词|考试|四级|六级|雅思|托福|考研|复习|阅读|听力|口语|课程)/;
+
 const PLAN_SCHEMA = {
   type: "object",
   properties: {
@@ -26,7 +28,9 @@ async function buildContext(input) {
   const now = new Date();
   const horizon = new Date(now.getTime() + 31 * 86400000);
   const isFitness = FITNESS_RE.test(input);
-  const [busyPage, prefPage, agg] = await Promise.all([
+  const isStudy = !isFitness && STUDY_RE.test(input);
+  const since = new Date(now.getTime() - 30 * 86400000).toISOString();
+  const [busyPage, prefPage, agg, studyAgg, hourAgg] = await Promise.all([
     base44.entities.Task.filter(
       { reminder_time: { $gte: now.toISOString(), $lte: horizon.toISOString() }, status: { $in: ["pending", "in_progress"] }, deleted_at: { $exists: false } },
       { sort: "reminder_time", limit: 100, fields: ["title", "reminder_time", "end_time"] }
@@ -35,7 +39,16 @@ async function buildContext(input) {
     isFitness
       ? base44.entities.HealthLog.aggregate({ query: { date: { $gte: new Date(now.getTime() - 30 * 86400000).toISOString() } }, groupBy: "type", avg: ["value"], max: ["value"] })
       : null,
+    isStudy ? base44.entities.Task.aggregate({ query: { category: "study", created_date: { $gte: since } }, groupBy: "status" }) : null,
+    base44.entities.UserBehavior.aggregate({ query: { event_type: "task_completed", created_date: { $gte: since } }, groupBy: "hour_of_day" }),
   ]);
+  const topHours = (hourAgg.rows || []).sort((a, b) => b.count - a.count).slice(0, 3).map((r) => `${r.hour_of_day}点`).join("、");
+  let studyCtx = "";
+  if (isStudy) {
+    const st = (studyAgg.rows || []).map((r) => `${r.status} ${r.count} 条`).join("，");
+    studyCtx = `用户近 30 天学习类约定：${st || "暂无记录"}（完成率低则单次时长更短、总量更保守）
+学习规划要求：先根据用户自述基础判断水平（如四级以上≈词汇 4500+，目标向六级/实用进阶），按「输入（听读）-输出（说写）-词汇语法-复习」科学配比，运用间隔重复（第1/2/4/7/15天复习）与每周一次小测；每日任务具体到材料类型、数量与产出（如"精听 VOA 1 篇×3 遍并跟读""背新词 40 + 复习前日词"），每天只排 1 个 30-60 分钟主时段。`;
+  }
   let fitnessCtx = "";
   if (isFitness) {
     const rows = (agg.rows || []).map((r) => `${r.type}: 平均 ${Math.round(r.avg_value * 10) / 10}，最高 ${r.max_value}（${r.count} 条记录）`).join("；");
@@ -44,9 +57,10 @@ async function buildContext(input) {
   }
   const busy = (busyPage.items || []).map((t) => `${t.reminder_time}${t.end_time ? " ~ " + t.end_time : ""} ${t.title}`).join("\n") || "无";
   const pref = prefPage.items?.[0] || {};
-  return { isFitness, text: `当前时间：${now.toISOString()}（用户时区 Asia/Shanghai，输出时间请带 +08:00 偏移）
+  return { isFitness, isStudy, text: `当前时间：${now.toISOString()}（用户时区 Asia/Shanghai，输出时间请带 +08:00 偏移）
 用户作息：${JSON.stringify(pref.daily_routine || {})}；免打扰：${pref.quiet_hours_start || "22:00"}-${pref.quiet_hours_end || "08:00"}
-${fitnessCtx}
+${fitnessCtx}${studyCtx}
+用户最常完成约定的时段：${topHours || "暂无数据"}（优先安排在这些时段附近）
 已有安排（请避开冲突）：
 ${busy}` };
 }
@@ -55,7 +69,8 @@ const RULES = `要求：
 1. 先整体考虑周期、总量、节奏（循序渐进、留出休息与复盘），再落到每一天的具体时刻。
 2. 每个子约定必须有 start_time 与 end_time（ISO），单次时长合理（通常 20-90 分钟），不落在免打扰与已有安排时段。
 3. detail 写清这一步具体做什么、做到什么程度。
-4. 子约定数量与周期匹配，最后安排一次复盘。`;
+4. 子约定数量与周期匹配，最后安排一次复盘。
+5. 所有时间必须晚于当前时间至少 1 小时；今天剩余时间不足时从明天开始。`;
 
 function normalize(plan, isFitness) {
   const steps = (plan.steps || []).filter((s) => !isNaN(new Date(s.start_time)));
@@ -71,7 +86,7 @@ export async function draftAgreementPlan(input) {
     prompt: `你是心栈的智能约定规划师。用户提出了一件需要持续推进的事，请做一份合理、可执行的整体规划草案。\n\n${ctx.text}\n\n用户需求：""" ${input} """\n\n${RULES}`,
     response_json_schema: PLAN_SCHEMA,
   });
-  return { ...normalize(plan, ctx.isFitness), ctxText: ctx.text, input };
+  return { ...normalize(plan, ctx.isFitness), ...(ctx.isStudy && { category: "study", isStudy: true }), ctxText: ctx.text, input };
 }
 
 // 根据用户反馈修改预览（不写入）
@@ -81,14 +96,14 @@ export async function reviseAgreementPlan(draft, history) {
     prompt: `你是心栈的智能约定规划师，正在和用户一起打磨规划草案。\n\n${draft.ctxText}\n\n用户最初需求：""" ${draft.input} """\n当前草案：${JSON.stringify({ title, overview, steps })}\n\n对话记录：\n${history.map((m) => `${m.role === "user" ? "用户" : "心栈"}：${m.text}`).join("\n")}\n\n请理解用户最新的意见，输出修改后的完整草案（未被提及的部分保持不变），并在 reply 中简短说明改了什么。\n\n${RULES}`,
     response_json_schema: PLAN_SCHEMA,
   });
-  return { ...normalize(plan, draft.isFitness), ctxText: draft.ctxText, input: draft.input };
+  return { ...normalize(plan, draft.isFitness), ...(draft.isStudy && { category: "study", isStudy: true }), ctxText: draft.ctxText, input: draft.input };
 }
 
 // 用户确认后正式写入约定
 export async function commitAgreementPlan(plan) {
   const { steps, category } = plan;
   const iso = (v) => new Date(v).toISOString();
-  const tags = plan.isFitness ? ["运动"] : [];
+  const tags = plan.isFitness ? ["运动"] : plan.isStudy ? ["学习"] : [];
   const parent = await base44.entities.Task.create({
     title: plan.title,
     description: plan.overview || plan.input,

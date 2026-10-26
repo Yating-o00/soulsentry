@@ -89,9 +89,21 @@ export default function NotificationManager() {
     try { return await fn(); } catch (e) { console.warn('[NotificationManager] query failed:', e?.message); return []; }
   };
   const { data: tasks = [] } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: swallow(() => base44.entities.Task.list()),
-    staleTime: 5 * 60 * 1000,
+    // 只拉取提醒窗口内（近 31 天 ~ 未来 2 天）的未完成约定，含规划生成的子约定；每分钟刷新，确保到点准时提醒
+    queryKey: ['reminderTasks'],
+    queryFn: swallow(async () => {
+      const now = Date.now();
+      const page = await base44.entities.Task.filter(
+        {
+          status: { $in: ['pending', 'in_progress', 'snoozed'] },
+          deleted_at: { $exists: false },
+          reminder_time: { $gte: new Date(now - 31 * 86400000).toISOString(), $lte: new Date(now + 2 * 86400000).toISOString() },
+        },
+        { sort: 'reminder_time', limit: 500 }
+      );
+      return page.items || [];
+    }),
+    refetchInterval: 60 * 1000,
     retry: 1,
   });
 
@@ -128,6 +140,7 @@ export default function NotificationManager() {
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['reminderTasks'] });
     },
   });
 
@@ -187,7 +200,8 @@ export default function NotificationManager() {
 
   var sendNotification = async function(task, isAdvanceReminder) {
     if (typeof isAdvanceReminder === 'undefined') isAdvanceReminder = false;
-    if (!notificationSupported || permission !== "granted") return;
+    // 浏览器通知未授权时仍弹应用内提醒，仅跳过系统通知
+    const canSystemNotify = notificationSupported && permission === "granted";
 
     // Check DND
     if (currentUser?.dnd_settings?.enabled) {
@@ -273,7 +287,7 @@ export default function NotificationManager() {
     if (geoLine) body = body ? `${body}\n${geoLine}` : geoLine;
 
     var notification;
-    try {
+    if (canSystemNotify) try {
       notification = new Notification(title, {
         body: body,
         icon: "/favicon.ico",

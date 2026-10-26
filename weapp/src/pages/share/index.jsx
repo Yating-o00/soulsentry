@@ -314,7 +314,7 @@ export default function Share() {
               {isCheckinTask
                 ? (share.is_owner
                     ? (item.done_today ? "今日已打卡 · 再记一次" : "打卡")
-                    : "为 TA 加油 👏")
+                    : "为 TA 加油 ♥")
                 : (isCompleted ? "标记为未完成" : "标记为已完成")}
             </Button>
           )}
@@ -362,9 +362,9 @@ export default function Share() {
               {share.cheers && (share.cheers.total ?? 0) > 0 && (() => {
                 const names = (share.cheers.items || []).map((c) => c.name).slice(0, 5);
                 return (
-                  <View style={{ marginTop: "16rpx", background: "#fff8ee", border: "1rpx solid #f0dfc2", borderRadius: "14rpx", padding: "16rpx 22rpx" }}>
-                    <Text style={{ fontSize: "24rpx", color: "#b0722d", fontWeight: 600 }}>
-                      👏 已被加油 {share.cheers.total} 次
+                  <View style={{ marginTop: "16rpx", background: "#EEF2FF", border: "1rpx solid #dbe3f7", borderRadius: "14rpx", padding: "16rpx 22rpx" }}>
+                    <Text style={{ fontSize: "24rpx", color: "#384877", fontWeight: 600 }}>
+                      ♥ 已被加油 {share.cheers.total} 次
                     </Text>
                     {names.length > 0 && (
                       <Text style={{ display: "block", fontSize: "22rpx", color: "#9ca0a8", marginTop: "6rpx" }}>

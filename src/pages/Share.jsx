@@ -23,7 +23,8 @@ import {
   Loader2,
   ChevronLeft,
   ExternalLink,
-  Copy
+  Copy,
+  Heart
 } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
@@ -699,15 +700,15 @@ export default function Share() {
                           type="button"
                           onClick={() => ensureNameThen(() => handleCheer())}
                           disabled={submitting}
-                          className="rounded-full bg-gradient-to-r from-[#b0722d] to-[#d99a4e] px-5 hover:opacity-95"
+                          className="rounded-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-5 hover:opacity-95"
                         >
-                          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="mr-1.5">👏</span>}
+                          {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Heart className="w-4 h-4 mr-1.5" />}
                           为 TA 加油
                         </Button>
                       )}
                       <span className="text-sm text-slate-500">已打卡 {checkinTotal} 次</span>
                       {(data?.cheer_total ?? 0) > 0 && (
-                        <span className="text-sm text-[#b0722d]">被加油 {data.cheer_total} 次</span>
+                        <span className="text-sm text-[#384877]">被加油 {data.cheer_total} 次</span>
                       )}
                     </div>
                   ) : (

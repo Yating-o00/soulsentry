@@ -395,11 +395,11 @@ export default function CheckinCard({
               style={{
                 marginTop: "6rpx",
                 fontSize: "20rpx",
-                color: "#b0722d",
+                color: BRAND,
                 textAlign: "center",
               }}
             >
-              👏 加油 {cheerTotal}
+              ♥ 加油 {cheerTotal}
             </Text>
           )}
           <Text

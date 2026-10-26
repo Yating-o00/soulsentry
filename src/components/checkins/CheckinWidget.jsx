@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { formatShanghai } from "@/lib/timeCore";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
-import { X, Footprints, Camera, ListChecks, ChevronDown, ChevronUp, Check } from "lucide-react";
+import { X, Footprints, Camera, ListChecks, ChevronDown, ChevronUp, Check, Heart } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildApiUrl } from "@/api/httpClient";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -171,8 +171,9 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
           </button>
         )}
         {cheerTotal > 0 && (
-          <span className="text-[10px] whitespace-nowrap text-center text-[#b0722d]" title="访客在分享页为 TA 加油的累计">
-            👏 加油 {cheerTotal}
+          <span className="inline-flex items-center gap-0.5 text-[10px] whitespace-nowrap text-center text-[#384877]" title="访客在分享页为 TA 加油的累计">
+            <Heart className="w-3 h-3" />
+            加油 {cheerTotal}
           </span>
         )}
         {subtaskTree.length > 0 && (

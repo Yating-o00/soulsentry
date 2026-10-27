@@ -2,7 +2,7 @@
 // 信任边界：只用当前空间数据（子约定树/讨论/节点/文档），不读成员私人记录、其他约定、心签；
 // 中性呈现观点、不评判对错、不替人承诺；输出草案必须人工确认后才生效。
 import { prisma } from "../lib/prisma.js";
-import { callKimiChat, parseModelJson } from "../lib/kimi.js";
+import { callKimiChat, invokeKimiWebSearch, parseModelJson } from "../lib/kimi.js";
 import { assertAICredits, chargeAICredits } from "./aiCredits.js";
 import { AI_CALL_COSTS } from "../routes/functions.js";
 import { collectSubtasks, logCollabChange } from "./collabSpace.js";
@@ -86,11 +86,11 @@ const SCENARIO_TAILS = {
   custom: "当前是自定义约定空间：语气中性平和、清晰高效。"
 };
 
-function buildSystem(scenario) {
+export function buildSystem(scenario) {
   return `${TRUST_RULES}\n\n${SCENARIO_TAILS[scenario] || SCENARIO_TAILS.custom}`;
 }
 
-function formatSpaceData(task, snapshot) {
+export function formatSpaceData(task, snapshot) {
   const collab = task.metadata?.collab || {};
   const memberNames = [task.user, ...task.members.map((m) => m.user)]
     .filter(Boolean)
@@ -135,7 +135,7 @@ function formatSpaceData(task, snapshot) {
 }
 
 // ── 空间数据快照 ──
-async function loadSpaceSnapshot(task) {
+export async function loadSpaceSnapshot(task) {
   const [subtasks, comments, nodes, docs] = await Promise.all([
     collectSubtasks(task.id),
     prisma.comment.findMany({
@@ -155,7 +155,7 @@ async function loadSpaceSnapshot(task) {
   return { subtasks, comments, nodes, docs };
 }
 
-async function postAgentMessage(taskId, { content, parentId = null, topic = null }) {
+export async function postAgentMessage(taskId, { content, parentId = null, topic = null }) {
   return prisma.comment.create({
     data: {
       taskId,
@@ -247,7 +247,7 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
   }
 
   if (action === "disputes") {
-    const prompt = `${spaceText}\n\n请找出标记为分歧（dispute）或尚未形成共识的讨论：\n1. 中性汇总各方观点（300 字以内），将作为 Agent 消息发到讨论；\n2. 为相关成员各提出一个帮助澄清立场的补充问题。\n\n只输出 JSON：{"analysis": "...", "questions": [{"userId": "成员ID或空字符串", "question": "..."}]}`;
+    const prompt = `${spaceText}\n\n请找出标记为分歧（dispute）或尚未形成共识的讨论：\n1. 中性汇总各方观点（300 字以内），将作为 Agent 消息发到讨论；\n2. 给出 2-3 个具体可执行的折中方案，帮助各方向一致靠拢（方案要落到本约定的时间/预算/人员约束上）；\n3. 为相关成员各提出一个帮助澄清立场的补充问题。\n\n只输出 JSON：{"analysis": "...", "options": ["折中方案1", "折中方案2"], "questions": [{"userId": "成员ID或空字符串", "question": "..."}]}`;
     const data = await invokeLLM({ system, prompt, json: true, kind: action });
     if (!data || !isNonEmptyString(data.analysis)) {
       return degradeWithMessage(task.id, "分歧协调没有形成有效分析");
@@ -261,22 +261,27 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
     );
     const allParties = [...new Set([task.userId, ...task.members.map((m) => m.userId)])];
     const targets = disputedIds.size > 0 ? [...disputedIds] : allParties;
+    const optionLines = (Array.isArray(data.options) ? data.options : [])
+      .filter(isNonEmptyString)
+      .map((o, i) => `${i + 1}. ${String(o).slice(0, 120)}`).join("\n");
     const questionLines = questions.map((q) => `· ${String(q.question || "").slice(0, 100)}`).join("\n");
     for (const userId of targets) {
       await prisma.notification.create({
         data: {
           userId,
           title: "协同约定：分歧协调",
-          body: `Agent 对「${task.title}」做了分歧汇总，并提出了补充问题，请到讨论中查看。`,
+          body: `Agent 对「${task.title}」做了分歧汇总与折中建议，请到讨论中查看并确认。`,
           channel: "in_app",
           status: "SENT",
           payload: { type: "collab_agent_disputes", taskId: task.id, link: `/collabspace?taskId=${task.id}` }
         }
       });
     }
-    const content = questionLines
-      ? `${data.analysis}\n\n补充问题：\n${questionLines}`
-      : data.analysis;
+    const content = [
+      data.analysis,
+      optionLines ? `折中方案：\n${optionLines}` : "",
+      questionLines ? `补充问题：\n${questionLines}` : ""
+    ].filter(Boolean).join("\n\n");
     const message = await postAgentMessage(task.id, { content });
     return { message_comment_id: message.id, notified: targets, questions_count: questions.length };
   }
@@ -342,7 +347,35 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
       const who = c.agent ? "Agent" : (c.user?.displayName || c.user?.email || c.user?.phone || "成员");
       return `- ${who}：${String(c.content).slice(0, 300)}`;
     }).join("\n");
-    const prompt = `约定主题：${task.title}；共同目标：${task.metadata?.collab?.goal || "（未填写）"}\n\n成员在讨论中 @你：\n${threadText}\n\n请直接回复这位成员：可以回答疑问、汇总观点或比较方案。要求：中性、不评判、不替人承诺、不用空间外信息；150 字以内；不要用“Agent：”开头。`;
+
+    // 联网补充判断：旅行攻略/价格/路线/推荐等时效性、经验性请求先检索外部信息
+    let searchBlock = "";
+    let searched = false;
+    try {
+      const classify = await invokeLLM({
+        system,
+        prompt: `${spaceText}\n\n成员 @Agent 的请求（所在线程）：\n${threadText}\n\n判断：要高质量回应这个请求，是否需要联网检索外部信息（如旅行攻略、景点、交通路线、价格、餐厅/酒店推荐等时效性或经验性内容）？只输出 JSON：{"needsSearch": true/false, "searchQuery": "检索关键词，20字以内"}`,
+        json: true,
+        kind: "coordinate_classify"
+      });
+      if (classify?.needsSearch && isNonEmptyString(classify.searchQuery)) {
+        const search = await invokeKimiWebSearch({
+          query: `${classify.searchQuery.trim().slice(0, 80)}（背景：${task.title}；${task.metadata?.collab?.goal || ""}；成员偏好见讨论记录）`
+        });
+        if (search?.content) {
+          searched = true;
+          const refs = Array.isArray(search.references) && search.references.length
+            ? "\n参考来源：" + search.references.slice(0, 5).map((r) => r.url).join("、")
+            : "";
+          searchBlock = `\n\n联网检索到的外部信息（用于充实回答，结合成员讨论中的偏好取舍，不要照搬）：\n${String(search.content).slice(0, 2500)}${refs}`;
+        }
+      }
+    } catch (error) {
+      console.warn("[collabAgent] 联网检索失败，退回纯空间上下文:", error?.message || error);
+    }
+
+    // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请直接回复这位成员：回答疑问、汇总观点、比较方案，或${searched ? "结合联网信息" : "结合完整讨论"}给出有指导意义的建议。要求：\n1. 全程记住并使用完整讨论里的信息——成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；\n2. 建议要落到本约定的具体情境（成员、时间窗、预算约束），不要泛泛而谈；\n3. 中性、不评判、不替人承诺；\n4. 200-400 字，分段清晰；不要用"Agent："开头。`;
     const text = await invokeLLM({ system, prompt, json: false, kind: action });
     if (!isNonEmptyString(text)) throw errorWith(502, "AGENT_EMPTY", "Agent 没有生成有效回复");
     // 保持一层回复：目标是根则挂其下，目标是回复则挂在同根线程下
@@ -351,7 +384,7 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
       parentId: target.parentId || target.id,
       topic: target.topic
     });
-    return { reply_comment_id: reply.id };
+    return { reply_comment_id: reply.id, searched };
   }
 
   throw errorWith(400, "INVALID_ACTION", `未知 Agent 动作：${action}`);

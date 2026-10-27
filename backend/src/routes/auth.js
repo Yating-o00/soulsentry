@@ -21,6 +21,8 @@ const phoneLoginSchema = z.object({
   code: z.string().regex(/^\d{6}$/, "验证码应为6位数字")
 });
 
+import { logBehavior } from "../lib/behavior.js";
+
 const loginSchema = z.discriminatedUnion("type", [
   emailLoginSchema,
   phoneLoginSchema
@@ -184,6 +186,7 @@ authRouter.post("/login", async (req, res) => {
     }
 
     const token = signAccessToken(user);
+    logBehavior(user.id, "user_login", { metadata: { via: "email" } });
     return res.json({ token, user: serializeUser(user) });
   }
 
@@ -202,6 +205,7 @@ authRouter.post("/login", async (req, res) => {
       where: { phone }
     });
 
+    const isNewUser = !user;
     if (!user) {
       user = await prisma.user.create({
         data: {
@@ -225,6 +229,8 @@ authRouter.post("/login", async (req, res) => {
       });
     }
 
+    if (isNewUser) logBehavior(user.id, "user_registered", { metadata: { via: "phone_login" } });
+    logBehavior(user.id, "user_login", { metadata: { via: "phone" } });
     const token = signAccessToken(user);
     return res.json({ token, user: serializeUser(user) });
   }
@@ -277,6 +283,7 @@ authRouter.post("/register", async (req, res) => {
     });
 
     const token = signAccessToken(user);
+    logBehavior(user.id, "user_registered", { metadata: { via: "email" } });
     return res.status(201).json({ token, user: serializeUser(user) });
   }
 
@@ -322,6 +329,7 @@ authRouter.post("/register", async (req, res) => {
     });
 
     const token = signAccessToken(user);
+    logBehavior(user.id, "user_registered", { metadata: { via: "phone" } });
     return res.status(201).json({ token, user: serializeUser(user) });
   }
 });

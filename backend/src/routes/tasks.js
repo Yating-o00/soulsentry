@@ -15,6 +15,7 @@ import {
   withSharedInfo
 } from "../services/taskSharing.js";
 import { computeNextReminderTime, parseRecurrenceFromText } from "../lib/recurrence.js";
+import { logBehavior } from "../lib/behavior.js";
 
 export const tasksRouter = Router();
 
@@ -450,6 +451,8 @@ tasksRouter.post("/", async (req, res) => {
   // 主动检测可自动执行的部分，异步执行后待用户验收（不阻塞创建）
   void maybeAutoExecute(task, req.user.id, prisma);
 
+  logBehavior(req.user.id, "task_created", { taskId: task.id, category: task.category, metadata: { via: task.parentTaskId ? "subtask" : "top" } });
+
   return res.status(201).json(serializeTask(task));
 });
 
@@ -502,6 +505,8 @@ tasksRouter.post("/batch", async (req, res) => {
       }
     );
   });
+
+  logBehavior(req.user.id, "task_created", { metadata: { via: "batch", count: tasks.length } });
 
   return res.status(201).json(tasks.map(serializeTask));
 });
@@ -903,6 +908,14 @@ tasksRouter.patch("/:id", async (req, res) => {
     }
   }
 
+  // 行为埋点：完成/删除 transitions（重复打卡约定的每日勾选由 checkin_created 口径承担，这里只记非打卡约定的完成）
+  if (task.status === "DONE" && existing.status !== "DONE" && task.category !== "checkin") {
+    logBehavior(req.user.id, "task_completed", { taskId: task.id, category: task.category, metadata: { top: !task.parentTaskId } });
+  }
+  if (payload.data.deleted_at) {
+    logBehavior(req.user.id, "task_deleted", { taskId: task.id, category: task.category });
+  }
+
   return res.json(serializeTask(task));
 });
 
@@ -921,6 +934,7 @@ tasksRouter.delete("/:id", async (req, res) => {
   });
 
   await prisma.task.delete({ where: { id: existing.id } });
+  logBehavior(req.user.id, "task_deleted", { taskId: existing.id, category: existing.category, metadata: { hard: true } });
   await syncParentProgress(existing.parentTaskId);
   await createTaskChangeLog(
     req.user.id,

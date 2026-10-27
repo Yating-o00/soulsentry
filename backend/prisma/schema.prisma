@@ -167,6 +167,26 @@ model Cheer {
   @@index([userId, createdAt])
 }
 
+// 每日汇总表：admin 数据看板的历史数据来源（当天数据实时直查，昨天及更早由 rollup 写入）
+model StatsDaily {
+  id             String   @id @default(cuid())
+  date           String   @unique // 北京日期 YYYY-MM-DD
+  newUsers       Int      @default(0)
+  totalUsers     Int      @default(0)
+  activeUsers    Int      @default(0)
+  checkins       Int      @default(0)
+  cheers         Int      @default(0)
+  comments       Int      @default(0)
+  tasksCreated   Int      @default(0) // 顶层约定新建数
+  tasksCompleted Int      @default(0) // 顶层约定完成数
+  shareVisitors  Int      @default(0) // 分享落地页互动访客数（按访客 token 去重）
+  joins          Int      @default(0) // 加入共有约定数
+  planChildren   Int      @default(0) // 智能规划生成的子约定数
+  events         Json?    // UserBehavior 事件计数 {eventType: n}
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
 model TaskMember {
   id        String   @id @default(cuid())
   taskId    String

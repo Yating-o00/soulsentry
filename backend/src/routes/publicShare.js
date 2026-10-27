@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
 import { countedCheckinsWhere, VISITOR_CHECKIN_SOURCE } from "../lib/checkinStats.js";
+import { logBehavior } from "../lib/behavior.js";
 
 export const publicShareRouter = Router();
 
@@ -524,6 +525,9 @@ publicShareRouter.post("/:token/comments", optionalAuth, async (req, res) => {
         payload: { commentId: comment.id, parentId, preview: content.slice(0, 100) }
       }
     });
+    if (loggedInUser) {
+      logBehavior(loggedInUser.id, "comment_created", { taskId: type === "task" ? item.id : null, metadata: { via: "public_share", reply: !!parentId } });
+    }
 
     // 拥有者本人评论/回复时不通知自己；其余情况通知拥有者
     if (!isOwner) {
@@ -816,6 +820,9 @@ publicShareRouter.post("/:token/cheer", optionalAuth, async (req, res) => {
         visitorName,
       }
     });
+    if (req.user) {
+      logBehavior(req.user.id, "cheer_created", { taskId: item.id, metadata: { visitor: req.user.id !== item.userId } });
+    }
     const cheerTotal = await prisma.cheer.count({ where: { taskId: item.id } });
 
     await prisma.sharedActionLog.create({
@@ -1015,6 +1022,7 @@ publicShareRouter.post("/:token/join", requireAuth, async (req, res) => {
     await prisma.taskMember.create({
       data: { taskId: item.id, userId: req.user.id, invitedBy: req.user.id }
     });
+    logBehavior(req.user.id, "join_created", { taskId: item.id, metadata: { via: "public_share" } });
 
     await notifyOwner(item.userId, {
       type: "shared_task_joined",

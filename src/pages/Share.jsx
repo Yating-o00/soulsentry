@@ -189,6 +189,8 @@ export default function Share() {
   const [importing, setImporting] = useState(false);
   const [importConfirmOpen, setImportConfirmOpen] = useState(false);
   const [namePromptOpen, setNamePromptOpen] = useState(false);
+  // 加油记录默认折叠：点开看谁在什么时间为 TA 加油
+  const [cheerListOpen, setCheerListOpen] = useState(false);
   const pendingActionRef = useRef(null);
 
   const visitorToken = useMemo(() => getVisitorToken(token), [token]);
@@ -708,7 +710,13 @@ export default function Share() {
                       )}
                       <span className="text-sm text-slate-500">已打卡 {checkinTotal} 次</span>
                       {(data?.cheer_total ?? 0) > 0 && (
-                        <span className="text-sm text-[#384877]">被加油 {data.cheer_total} 次</span>
+                        <button
+                          type="button"
+                          onClick={() => setCheerListOpen((v) => !v)}
+                          className="text-sm text-[#384877] underline-offset-2 hover:underline"
+                        >
+                          被加油 {data.cheer_total} 次{cheerListOpen ? " ▴" : " ▸"}
+                        </button>
                       )}
                     </div>
                   ) : (
@@ -726,6 +734,20 @@ export default function Share() {
                   )}
                   {isTaskEffectivelyCompleted(item) && <CheckCircle2 className="w-5 h-5 text-emerald-500" />}
                 </div>
+
+                {/* 加油记录：默认折叠，点开看"谁在什么时间"为 TA 加油 */}
+                {isCheckinTask && cheerListOpen && (data?.cheers?.items?.length > 0) && (
+                  <div className="mt-2 rounded-xl border border-[#dbe3f7] bg-[#EEF2FF] px-3 py-2">
+                    {data.cheers.items.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between py-1">
+                        <span className="text-sm text-slate-700">{c.name}</span>
+                        <span className="text-xs text-slate-400">
+                          {c.created_at ? format(new Date(c.created_at), "M月d日 HH:mm", { locale: zhCN }) : ""}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {subtasks.length > 0 && (
                   <div className="bg-slate-50 rounded-xl p-4 space-y-3">

@@ -22,6 +22,8 @@ export default function Share() {
   const [joinState, setJoinState] = useState("idle"); // idle | loading | joined
   // 子约定较多时折叠已完成，待办一眼可见
   const [hideDoneSubs, setHideDoneSubs] = useState(false);
+  // 加油记录默认折叠：谁、什么时间，点开才展开
+  const [cheerListOpen, setCheerListOpen] = useState(false);
 
   const nameRef = useRef("");
   const tokenRef = useRef("");
@@ -358,18 +360,37 @@ export default function Share() {
                 {firstAt ? `从 ${new Date(firstAt).getFullYear()}年${new Date(firstAt).getMonth() + 1}月${new Date(firstAt).getDate()}日 起 · 第 ${dayCount} 天` : "刚刚开始"}
               </Text>
 
-              {/* 鼓励数据：访客"为 TA 加油"的累计与最近加油的人 */}
+              {/* 鼓励数据：默认只露出累计次数，点开折叠看"谁在什么时间"为 TA 加油 */}
               {share.cheers && (share.cheers.total ?? 0) > 0 && (() => {
-                const names = (share.cheers.items || []).map((c) => c.name).slice(0, 5);
+                const items = share.cheers.items || [];
+                const fmtTime = (iso) => {
+                  const d = new Date(iso);
+                  return isNaN(d.getTime())
+                    ? ""
+                    : `${d.getMonth() + 1}月${d.getDate()}日 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+                };
                 return (
                   <View style={{ marginTop: "16rpx", background: "#EEF2FF", border: "1rpx solid #dbe3f7", borderRadius: "14rpx", padding: "16rpx 22rpx" }}>
-                    <Text style={{ fontSize: "24rpx", color: "#384877", fontWeight: 600 }}>
-                      ♥ 已被加油 {share.cheers.total} 次
-                    </Text>
-                    {names.length > 0 && (
-                      <Text style={{ display: "block", fontSize: "22rpx", color: "#9ca0a8", marginTop: "6rpx" }}>
-                        {names.join("、")} 为 TA 加油
+                    <View
+                      onClick={() => setCheerListOpen((v) => !v)}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+                    >
+                      <Text style={{ fontSize: "24rpx", color: "#384877", fontWeight: 600 }}>
+                        ♥ 已被加油 {share.cheers.total} 次
                       </Text>
+                      <Text style={{ fontSize: "22rpx", color: "#7d8cb3" }}>
+                        {cheerListOpen ? "收起 ▴" : "谁在加油 ▸"}
+                      </Text>
+                    </View>
+                    {cheerListOpen && items.length > 0 && (
+                      <View style={{ marginTop: "10rpx", borderTop: "1rpx dashed #dbe3f7", paddingTop: "10rpx" }}>
+                        {items.map((c) => (
+                          <View key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6rpx 0" }}>
+                            <Text style={{ fontSize: "24rpx", color: "#3a3a3c" }}>{c.name}</Text>
+                            <Text style={{ fontSize: "22rpx", color: "#9ca0a8" }}>{fmtTime(c.created_at)}</Text>
+                          </View>
+                        ))}
+                      </View>
                     )}
                   </View>
                 );

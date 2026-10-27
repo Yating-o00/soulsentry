@@ -75,7 +75,7 @@ import SubtaskChildren from "@/components/tasks/SubtaskChildren";
 import InlineEditableText from "@/components/tasks/InlineEditableText";
 import TaskMetaChips from "@/components/tasks/TaskMetaChips";
 
-const TAB_CLS = "flex-shrink-0 px-3.5 py-1.5 text-xs md:text-sm font-medium text-stone-500 rounded-full data-[state=active]:bg-white data-[state=active]:text-[#4F6B1A] data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all flex items-center gap-1";
+const TAB_CLS = "relative flex-shrink-0 px-1 pb-3 pt-1 mr-5 text-sm font-medium text-slate-400 bg-transparent rounded-none border-b-2 border-transparent data-[state=active]:bg-transparent data-[state=active]:text-[#384877] data-[state=active]:border-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold hover:text-slate-600 transition-all flex items-center gap-1";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
@@ -599,8 +599,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) onClose();
     }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-[32px] bg-[#F7F4EF] border-[#EAE5DD]">
-        <DialogHeader className="flex flex-col space-y-3 px-5 md:px-7 pt-6 pb-4 shrink-0 bg-[#F7F4EF] z-10 border-b border-[#EAE5DD]">
+      <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-[28px] bg-white border-slate-100 shadow-2xl">
+        <DialogHeader className="flex flex-col space-y-4 px-6 md:px-10 pt-8 pb-6 shrink-0 bg-gradient-to-b from-[#f4f6fb] to-white z-10">
           <div className="flex items-start gap-3 flex-1 pr-8">
             <button
               type="button"
@@ -620,13 +620,13 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               className={`mt-1 flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
                 task.status === 'completed'
                   ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200 hover:bg-green-600'
-                  : 'bg-white border-stone-300 hover:border-[#6B8E23] hover:bg-[#6B8E23]/10'
+                  : 'bg-white border-slate-300 hover:border-[#384877] hover:bg-[#384877]/5'
               }`}
             >
               {task.status === 'completed' && <CheckCircle2 className="w-5 h-5" strokeWidth={2.5} />}
             </button>
-            <DialogTitle className={`text-lg md:text-[22px] font-bold tracking-tight leading-snug flex-1 transition-colors ${
-              task.status === 'completed' ? 'text-stone-400 line-through decoration-stone-300' : 'text-stone-800'
+            <DialogTitle className={`text-xl md:text-[26px] font-bold tracking-tight leading-snug flex-1 transition-colors ${
+              task.status === 'completed' ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'
             }`}>
               <InlineEditableText
                 value={task.title}
@@ -640,12 +640,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               <TaskMetaChips task={task} />
             </DialogTitle>
           </div>
-          <div className="flex items-center gap-1 self-start md:self-end p-1 rounded-full bg-white border border-[#EAE5DD] shadow-sm [&_button]:rounded-full">
+          <div className="flex items-center gap-1 self-start pl-10 [&_button]:rounded-full">
              <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowReviseDialog(true)}
-                className="h-9 px-3 rounded-full bg-[#6B8E23]/10 hover:bg-[#6B8E23]/20 text-[#4F6B1A] gap-1.5"
+                className="h-9 px-4 rounded-full bg-[#384877] hover:bg-[#2d3a62] text-white gap-1.5 mr-1"
                 title="新一轮更新"
              >
                 <GitBranch className="w-4 h-4" />
@@ -658,7 +658,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 size="sm" 
                 onClick={handleTranslate}
                 disabled={isTranslating}
-                className="h-9 w-9 p-0 bg-transparent hover:bg-stone-100 text-stone-500"
+                className="h-9 w-9 p-0 bg-transparent hover:bg-slate-100 text-slate-500"
                 title={targetLangLabel}
              >
                 {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
@@ -668,7 +668,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 size="sm" 
                 onClick={handleAIAnalysis}
                 disabled={isAnalyzing}
-                className="h-9 w-9 p-0 bg-transparent hover:bg-[#6B8E23]/10 text-[#6B8E23]"
+                className="h-9 w-9 p-0 bg-transparent hover:bg-[#384877]/10 text-[#384877]"
                 title="AI 分析"
              >
                 {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -676,7 +676,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 md:px-7 pt-5 pb-7 space-y-5 bg-[#F7F4EF]">
+        <div className="flex-1 overflow-y-auto px-6 md:px-10 pt-2 pb-10 space-y-8 bg-white">
           <AITaskEnhancer 
             taskTitle={task.title} 
             currentDescription={task.description} 
@@ -703,15 +703,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </div>
               <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-[#6B8E23] rounded-full transition-all duration-500"
+                  className="h-full bg-[#384877] rounded-full transition-all duration-500"
                   style={{ width: `${task.progress || 0}%` }}
                 />
               </div>
             </div>
           )}
 
-          <div className="bg-white rounded-[24px] p-5 md:p-6 border border-[#EAE5DD]">
-            <p className="text-[11px] font-semibold tracking-wider text-stone-400 mb-2">说明</p>
+          <div className="border-l-2 border-[#384877]/20 pl-5">
+            <p className="text-[11px] font-semibold tracking-[0.2em] text-slate-400 mb-2">说明</p>
             <InlineEditableText
               value={task.description}
               multiline
@@ -743,7 +743,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           <RelatedKnowledgePanel task={task} />
 
           <Tabs defaultValue={initialTab || "subtasks"} key={initialTab || "subtasks"} className="w-full">
-            <TabsList className="flex w-full overflow-x-auto justify-start gap-1 p-1 bg-[#EAE5DD]/70 h-auto scrollbar-hide rounded-full">
+            <TabsList className="flex w-full overflow-x-auto justify-start gap-0 p-0 bg-transparent h-auto scrollbar-hide rounded-none border-b border-slate-100">
               <TabsTrigger value="subtasks" className={TAB_CLS}>
                 子约定 ({totalSubtasks})
               </TabsTrigger>
@@ -935,7 +935,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </TabsContent>
 
               {/* Subtasks Tab */}
-            <TabsContent value="subtasks" className="space-y-4 bg-white rounded-[24px] p-5 md:p-6 border border-[#EAE5DD]">
+            <TabsContent value="subtasks" className="space-y-4">
               <AnimatePresence>
                 {showRegeneratePrompt && (
                   <motion.div
@@ -976,14 +976,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </AnimatePresence>
 
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-stone-800">子约定</h3>
+                <h3 className="text-base font-semibold text-slate-900">子约定</h3>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={handleAutoGenerateSubtasks}
                   disabled={isGeneratingSubtasks}
-                  className="border-[#6B8E23]/30 bg-[#6B8E23]/10 hover:bg-[#6B8E23]/20 text-[#4F6B1A] h-9 rounded-full font-medium"
+                  className="border-slate-200 bg-white hover:bg-[#384877]/5 text-[#384877] h-9 rounded-full font-medium"
                 >
                   {isGeneratingSubtasks ? (
                     <>
@@ -1005,12 +1005,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                   value={newSubtask}
                   onChange={(e) => setNewSubtask(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddSubtask()}
-                  className="flex-1 h-11 rounded-full px-4 border-[#EAE5DD] bg-[#F7F4EF] focus-visible:bg-white focus-visible:ring-[#6B8E23]/30"
+                  className="flex-1 h-12 rounded-2xl px-5 border-slate-200 bg-slate-50 focus-visible:bg-white focus-visible:ring-[#384877]/20"
                 />
                 <Button
                   onClick={handleAddSubtask}
                   disabled={!newSubtask.trim() || isAddingSubtask}
-                  className="bg-[#6B8E23] hover:bg-[#5A7A1C] text-white rounded-full h-11 px-6 font-medium"
+                  className="bg-[#384877] hover:bg-[#2d3a62] text-white rounded-2xl h-12 px-6 font-medium"
                 >
                   {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : "添加"}
                 </Button>
@@ -1026,8 +1026,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       exit={{ opacity: 0, x: -100 }}
                       className={`p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                         subtask.status === "completed"
-                          ? "bg-[#F7F4EF] border-[#EAE5DD]"
-                          : "bg-white border-[#EAE5DD] hover:border-[#6B8E23]/40"
+                          ? "bg-slate-50 border-slate-100"
+                          : "bg-white border-slate-100 hover:border-[#384877]/30"
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -1082,7 +1082,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 </AnimatePresence>
 
                 {subtasks.length === 0 && (
-                  <div className="text-center py-8 text-stone-400 rounded-[20px] border border-dashed border-[#EAE5DD]">
+                  <div className="text-center py-10 text-slate-400 rounded-2xl border border-dashed border-slate-200">
                     <Circle className="w-10 h-10 mx-auto mb-2 opacity-40" />
                     <p className="text-sm">还没有子约定，试试「AI 生成子约定」</p>
                   </div>

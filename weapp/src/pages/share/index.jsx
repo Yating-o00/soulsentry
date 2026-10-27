@@ -586,9 +586,9 @@ export default function Share() {
         </View>
 
         <View style={{ height: "40rpx" }} />
-        {/* 构建标记：确认线上/体验版跑的是不是新包（v20261027-2 = 加油+折叠明细+fallback修复） */}
+        {/* 构建标记：确认线上/体验版跑的是不是新包（v20261027-3 = 加油+折叠明细+fallback修复+已完成折叠区） */}
         <Text style={{ display: "block", textAlign: "center", fontSize: "20rpx", color: "#c0c4cc", marginBottom: "16rpx" }}>
-          v20261027-2
+          v20261027-3
         </Text>
       </ScrollView>
 

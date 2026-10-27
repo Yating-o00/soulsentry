@@ -93,8 +93,10 @@ export default function Tasks() {
   const [toast, setToast] = useState(null);
   const [isGuest, setIsGuest] = useState(false);
   const [showDailyReview, setShowDailyReview] = useState(false);
+  // 已完成约定折叠区（列表最底部）：默认收起
+  const [doneOpen, setDoneOpen] = useState(false);
   // 本会话内刚盖章完成的约定 id：卡片先暂留列表显示「已盖章」样式（不移除节点，滚动位置不跳回页眉），
-  // 短暂延迟后收起并归档出列表
+  // 短暂延迟后收起，归入底部「已完成」折叠区
   const [sessionDoneIds, setSessionDoneIds] = useState(() => new Set());
   const [collapsingIds, setCollapsingIds] = useState(() => new Set()); // 正在收起动画的盖章卡片
   const collapseTimersRef = useRef({}); // task.id -> [timeout...]，取消完成时撤销收起计划
@@ -349,7 +351,10 @@ export default function Tasks() {
     }));
   }, [tasks, analysisMap, sessionDoneIds]);
 
-  const doneItems = useMemo(() => tasks.filter((t) => isTaskDone(t)), [tasks]);
+  // 已完成：盖印后折叠到列表底部的「已完成」区（本会话刚盖章的暂留原位展示盖章样式，收起动画后再归入折叠区）
+  const doneItems = useMemo(() => tasks
+    .filter((t) => isTaskDone(t) && !sessionDoneIds.has(t.id))
+    .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime()), [tasks, sessionDoneIds]);
   const pendingItems = useMemo(() => tasks.filter((t) => !isTaskDone(t)), [tasks]);
 
   const evo = useMemo(() => computeEvolution(tasks, executions), [tasks, executions]);
@@ -382,8 +387,8 @@ export default function Tasks() {
       else next.delete(task.id);
       return next;
     });
-    // 盖章后延迟收起并归档出列表：先展示约 1s 盖章样式，再收起（节点占位归 0），最后移除。
-    // 移除时列表高度已不变，滚动位置不会跳回页眉；取消完成可撤销收起计划
+    // 盖章后延迟收起：先展示约 1s 盖章样式，再收起（节点占位归 0），随后归入底部「已完成」折叠区。
+    // 列表高度不变、滚动位置不跳回页眉；取消完成可撤销收起计划
     const timers = collapseTimersRef.current[task.id] || [];
     timers.forEach(clearTimeout);
     if (markingDone) {
@@ -398,18 +403,13 @@ export default function Tasks() {
             next.delete(task.id);
             return next;
           });
+          // 不移除约定：从"原位暂留"转入底部「已完成」折叠区（status 已是 completed，doneItems 会接管）
           setSessionDoneIds((prev) => {
             const next = new Set(prev);
             next.delete(task.id);
             return next;
           });
-          setTasks((prev) => {
-            const target = prev.find((t) => t.id === task.id);
-            // 期间被取消了完成或已不存在，则不移除
-            if (!target || !isTaskDone(target)) return prev;
-            return prev.filter((t) => t.id !== task.id);
-          });
-          // 归档移除（及随后的重渲染）可能触发微信 ScrollView 重置滚动位置，分次恢复兜底
+          // 收起动画后的重渲染可能触发微信 ScrollView 重置滚动位置，分次恢复兜底
           [80, 400, 900].forEach((delay) => {
             setTimeout(() => restoreSvScroll(svTopRef.current), delay);
           });
@@ -783,19 +783,72 @@ export default function Tasks() {
             </View>
           ))}
 
-          {/* archive line */}
+          {/* 已完成折叠区：盖印归档到列表最底部，默认收起不影响主列表 */}
           {doneItems.length > 0 && (
             <View style={{ marginBottom: "40rpx" }}>
-              <Text
-                style={{
-                  textAlign: "center",
-                  fontSize: "20rpx",
-                  color: theme.inkQuaternary,
-                  letterSpacing: "4rpx",
-                }}
+              <View
+                onClick={() => setDoneOpen((v) => !v)}
+                style={{ display: "flex", alignItems: "center", gap: "16rpx", marginBottom: doneOpen ? "20rpx" : 0 }}
               >
-                —— 已完成的约定会盖印归档，成为你的兑现记录 ——
-              </Text>
+                <Text style={{ fontSize: "30rpx", fontWeight: 700, color: theme.inkTertiary }}>已完成</Text>
+                <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary }}>{doneItems.length}</Text>
+                <View style={{ flex: 1, height: "1rpx", background: theme.border }} />
+                <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary }}>
+                  {doneOpen ? "收起 ▴" : "展开 ▾"}
+                </Text>
+              </View>
+              {doneOpen && (
+                <View style={{ paddingLeft: "20rpx" }}>
+                  {doneItems.map((task) => {
+                    const doneAt = task.completed_at ? new Date(task.completed_at) : null;
+                    const doneText = doneAt && !isNaN(doneAt.getTime())
+                      ? `${doneAt.getMonth() + 1}月${doneAt.getDate()}日 完成`
+                      : "";
+                    return (
+                      <View
+                        key={task.id}
+                        onClick={() => Taro.navigateTo({ url: `/pages/task-detail/index?id=${task.id}` })}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "16rpx",
+                          padding: "16rpx 4rpx",
+                          borderBottom: `1rpx solid ${theme.border}`,
+                        }}
+                      >
+                        <View
+                          style={{
+                            width: "32rpx",
+                            height: "32rpx",
+                            borderRadius: "50%",
+                            border: `2rpx solid ${theme.inkQuaternary}`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <Text style={{ fontSize: "18rpx", color: theme.inkQuaternary, lineHeight: "22rpx" }}>✓</Text>
+                        </View>
+                        <Text
+                          style={{
+                            flex: 1,
+                            fontSize: "26rpx",
+                            color: theme.inkTertiary,
+                            textDecoration: "line-through",
+                            textDecorationColor: "rgba(0,0,0,0.25)",
+                          }}
+                        >
+                          {task.title}
+                        </Text>
+                        {doneText ? (
+                          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary }}>{doneText}</Text>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           )}
         </View>

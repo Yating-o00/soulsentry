@@ -1,10 +1,12 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import LifeTaskCard from "./LifeTaskCard";
+import CollabTaskCard from "./CollabTaskCard";
 import { flattenSubtasks } from "@/components/checkins/subtaskTree";
 
 /**
  * 智能分组容器 - 显示一组通过AI规则归类的约定
+ * 协同约定（metadata.collab）整卡替换为 CollabTaskCard，点击进共创空间
  */
 export default function SmartGroupSection({
   title,
@@ -26,6 +28,7 @@ export default function SmartGroupSection({
   onViewTab,
   onUpdateTask,
   onSettleKnowledge,
+  onEnableCollab,
   getAutoExec,
 }) {
   if (!tasks || tasks.length === 0) {
@@ -64,7 +67,9 @@ export default function SmartGroupSection({
       </div>
 
       <div className="flex flex-col gap-4">
-        {tasks.map((task) => (
+        {tasks.map((task) => task.metadata?.collab ? (
+          <CollabTaskCard key={task.id} task={task} />
+        ) : (
           <LifeTaskCard
             key={task.id}
             task={task}
@@ -82,6 +87,7 @@ export default function SmartGroupSection({
             onViewTab={(tab) => onViewTab(task, tab)}
             onUpdateTask={onUpdateTask}
             onSettleKnowledge={onSettleKnowledge}
+            onEnableCollab={onEnableCollab ? () => onEnableCollab(task) : undefined}
             autoExec={getAutoExec ? getAutoExec(task) : undefined}
           />
         ))}

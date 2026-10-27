@@ -11,7 +11,8 @@ import {
   Car, Store, Home, AlertCircle, Timer,
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
-  Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen
+  Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen,
+  Users2
 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -134,6 +135,7 @@ export default function LifeTaskCard({
   onViewTab,
   onReparent,
   onSettleKnowledge,
+  onEnableCollab,
   autoExec
 }) {
   const isRecurringTask = task.repeat_rule && task.repeat_rule !== 'none';
@@ -677,6 +679,9 @@ export default function LifeTaskCard({
                     <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare && onShare(); }}>
                             <Share2 className="w-4 h-4 mr-2" /> 分享
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEnableCollab && onEnableCollab(task); }}>
+                            <Users2 className="w-4 h-4 mr-2" /> 开启协同
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>
                             <Edit className="w-4 h-4 mr-2" /> 编辑

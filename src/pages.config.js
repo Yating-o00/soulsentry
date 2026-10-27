@@ -49,6 +49,7 @@
  */
 import Account from './pages/Account';
 import Archive from './pages/Archive.jsx';
+import CollabSpace from './pages/CollabSpace.jsx';
 import Dashboard from './pages/Dashboard';
 import GeminiTest from './pages/GeminiTest';
 import HeartSign from './pages/HeartSign.jsx';
@@ -72,6 +73,7 @@ import __Layout from './Layout.jsx';
 export const PAGES = {
     "Account": Account,
     "Archive": Archive,
+    "CollabSpace": CollabSpace,
     "Dashboard": Dashboard,
     "GeminiTest": GeminiTest,
     "HeartSign": HeartSign,

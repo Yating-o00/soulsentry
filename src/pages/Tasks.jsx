@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2 } from "lucide-react";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -26,6 +26,8 @@ import CheckinShareCard from "../components/checkins/CheckinShareCard";
 import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
 import CombineParentDialog from "../components/tasks/CombineParentDialog";
+import CollabTaskCard from "../components/tasks/CollabTaskCard";
+import CollabCreateDialog from "../components/tasks/CollabCreateDialog";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
@@ -35,6 +37,7 @@ let lastAnalyzeAt = 0;
 
 export default function Tasks() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState("overview"); // 'overview', 'milestone', 'life'
   const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
@@ -45,6 +48,8 @@ export default function Tasks() {
   const [editingTask, setEditingTask] = useState(null);
   const [sharingTask, setSharingTask] = useState(null);
   const [user, setUser] = useState(null);
+  // 协同约定：null=关闭；{open:true, target:null}=新建；{open:true, target:task}=为已有约定开启协同
+  const [collabDialog, setCollabDialog] = useState({ open: false, target: null });
   
   // Search & Selection State
   const [searchQuery, setSearchQuery] = useState("");
@@ -81,6 +86,13 @@ export default function Tasks() {
       toast.error("沉淀失败：" + (e?.message || "请稍后再试"));
     }
   };
+
+  // 协同约定：新建 / 开启协同 Dialog 完成后的跳转与刷新
+  const handleCollabCreated = (taskId) => {
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    if (taskId) navigate(`/collabspace?taskId=${taskId}`);
+  };
+  const openEnableCollab = (task) => setCollabDialog({ open: true, target: task });
 
   React.useEffect(() => {
     base44.auth.me().then(setUser).catch(() => {});
@@ -543,6 +555,15 @@ export default function Tasks() {
             </p>
           </div>
 
+          <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setCollabDialog({ open: true, target: null })}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium bg-white border border-[#c7d2fe] text-[#384877] hover:bg-[#eef2ff] transition-all shadow-sm"
+          >
+            <Users2 className="w-4 h-4" />
+            <span>协同约定</span>
+          </button>
+
           <div className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex">
             <button
               onClick={() => setViewMode('overview')}
@@ -578,6 +599,7 @@ export default function Tasks() {
 
               <span>生活</span>
             </button>
+          </div>
           </div>
         </div>
 
@@ -714,6 +736,7 @@ export default function Tasks() {
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
+                onEnableCollab={openEnableCollab}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -737,6 +760,7 @@ export default function Tasks() {
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
+                onEnableCollab={openEnableCollab}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -760,6 +784,7 @@ export default function Tasks() {
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
+                onEnableCollab={openEnableCollab}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -783,6 +808,7 @@ export default function Tasks() {
                 onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
+                onEnableCollab={openEnableCollab}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
             </div>
@@ -835,7 +861,9 @@ export default function Tasks() {
               </div>
 
               <div className="flex flex-col gap-4">
-                {lifeTasks.map((task) =>
+                {lifeTasks.map((task) => task.metadata?.collab ? (
+                  <CollabTaskCard key={task.id} task={task} />
+                ) : (
                   <LifeTaskCard
                     key={task.id}
                     task={task}
@@ -853,10 +881,11 @@ export default function Tasks() {
                     onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
                     onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                     onSettleKnowledge={handleSettleKnowledge}
+                    onEnableCollab={() => openEnableCollab(task)}
                     onReparent={handleReparent}
                     autoExec={autoExecMap[task.id]?.autoExec}
                   />
-                )}
+                ))}
               </div>
             </div>
           }
@@ -1139,6 +1168,14 @@ export default function Tasks() {
         createTaskAsync={createTaskAsync}
         updateTaskAsync={updateTaskAsync}
         onCombined={() => { setSelectedTaskIds([]); setIsSelectionMode(false); }}
+      />
+
+      {/* 协同约定：新建 / 为已有约定开启协同 */}
+      <CollabCreateDialog
+        open={collabDialog.open}
+        existingTask={collabDialog.target}
+        onClose={() => setCollabDialog({ open: false, target: null })}
+        onCreated={handleCollabCreated}
       />
 
       {/* Bulk Selection Action Bar */}

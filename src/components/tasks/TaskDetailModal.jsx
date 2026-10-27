@@ -73,6 +73,9 @@ import { invokeAI } from "@/components/utils/aiHelper";
 import TaskLocationBinder from "@/components/tasks/TaskLocationBinder";
 import SubtaskChildren from "@/components/tasks/SubtaskChildren";
 import InlineEditableText from "@/components/tasks/InlineEditableText";
+import TaskMetaChips from "@/components/tasks/TaskMetaChips";
+
+const TAB_CLS = "flex-shrink-0 px-3.5 py-1.5 text-xs md:text-sm font-medium text-stone-500 rounded-full data-[state=active]:bg-white data-[state=active]:text-[#4F6B1A] data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all flex items-center gap-1";
 
 export default function TaskDetailModal({ task: initialTaskData, open, onClose, initialTab }) {
   const [uploading, setUploading] = useState(false);
@@ -596,8 +599,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     <Dialog open={open} onOpenChange={(isOpen) => {
       if (!isOpen) onClose();
     }}>
-      <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-2xl bg-white">
-        <DialogHeader className="flex flex-col md:flex-row md:items-start md:justify-between space-y-3 md:space-y-0 px-5 md:px-6 pt-5 pb-4 shrink-0 bg-white z-10">
+      <DialogContent className="max-w-3xl max-h-[90vh] md:max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden w-[calc(100%-16px)] md:w-full rounded-[32px] bg-[#F7F4EF] border-[#EAE5DD]">
+        <DialogHeader className="flex flex-col space-y-3 px-5 md:px-7 pt-6 pb-4 shrink-0 bg-[#F7F4EF] z-10 border-b border-[#EAE5DD]">
           <div className="flex items-start gap-3 flex-1 pr-8">
             <button
               type="button"
@@ -617,13 +620,13 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               className={`mt-1 flex-shrink-0 w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
                 task.status === 'completed'
                   ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200 hover:bg-green-600'
-                  : 'bg-white border-slate-300 hover:border-[#384877] hover:bg-[#eef0fa]'
+                  : 'bg-white border-stone-300 hover:border-[#6B8E23] hover:bg-[#6B8E23]/10'
               }`}
             >
               {task.status === 'completed' && <CheckCircle2 className="w-5 h-5" strokeWidth={2.5} />}
             </button>
             <DialogTitle className={`text-lg md:text-[22px] font-bold tracking-tight leading-snug flex-1 transition-colors ${
-              task.status === 'completed' ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'
+              task.status === 'completed' ? 'text-stone-400 line-through decoration-stone-300' : 'text-stone-800'
             }`}>
               <InlineEditableText
                 value={task.title}
@@ -634,14 +637,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               >
                 {task.title}
               </InlineEditableText>
+              <TaskMetaChips task={task} />
             </DialogTitle>
           </div>
-          <div className="flex items-center gap-2 md:absolute md:right-12 md:top-5">
+          <div className="flex items-center gap-1 self-start md:self-end p-1 rounded-full bg-white border border-[#EAE5DD] shadow-sm [&_button]:rounded-full">
              <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowReviseDialog(true)}
-                className="h-9 px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 gap-1.5"
+                className="h-9 px-3 rounded-full bg-[#6B8E23]/10 hover:bg-[#6B8E23]/20 text-[#4F6B1A] gap-1.5"
                 title="新一轮更新"
              >
                 <GitBranch className="w-4 h-4" />
@@ -654,7 +658,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 size="sm" 
                 onClick={handleTranslate}
                 disabled={isTranslating}
-                className="h-9 w-9 p-0 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500"
+                className="h-9 w-9 p-0 bg-transparent hover:bg-stone-100 text-stone-500"
                 title={targetLangLabel}
              >
                 {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
@@ -664,7 +668,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 size="sm" 
                 onClick={handleAIAnalysis}
                 disabled={isAnalyzing}
-                className="h-9 w-9 p-0 rounded-lg bg-[#eef0fa] hover:bg-[#e0e4f3] text-[#384877]"
+                className="h-9 w-9 p-0 bg-transparent hover:bg-[#6B8E23]/10 text-[#6B8E23]"
                 title="AI 分析"
              >
                 {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
@@ -672,7 +676,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-5 md:px-6 pb-6 space-y-5 bg-white">
+        <div className="flex-1 overflow-y-auto px-5 md:px-7 pt-5 pb-7 space-y-5 bg-[#F7F4EF]">
           <AITaskEnhancer 
             taskTitle={task.title} 
             currentDescription={task.description} 
@@ -699,14 +703,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </div>
               <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-[#384877] to-[#6366f1] rounded-full transition-all duration-500"
+                  className="h-full bg-[#6B8E23] rounded-full transition-all duration-500"
                   style={{ width: `${task.progress || 0}%` }}
                 />
               </div>
             </div>
           )}
 
-          <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-slate-100">
+          <div className="bg-white rounded-[24px] p-5 md:p-6 border border-[#EAE5DD]">
+            <p className="text-[11px] font-semibold tracking-wider text-stone-400 mb-2">说明</p>
             <InlineEditableText
               value={task.description}
               multiline
@@ -738,31 +743,31 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           <RelatedKnowledgePanel task={task} />
 
           <Tabs defaultValue={initialTab || "subtasks"} key={initialTab || "subtasks"} className="w-full">
-            <TabsList className="flex w-full overflow-x-auto justify-start gap-1 p-0 bg-transparent h-auto scrollbar-hide border-b border-slate-100 rounded-none">
-              <TabsTrigger value="subtasks" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+            <TabsList className="flex w-full overflow-x-auto justify-start gap-1 p-1 bg-[#EAE5DD]/70 h-auto scrollbar-hide rounded-full">
+              <TabsTrigger value="subtasks" className={TAB_CLS}>
                 子约定 ({totalSubtasks})
               </TabsTrigger>
-              <TabsTrigger value="dependencies" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+              <TabsTrigger value="dependencies" className={TAB_CLS}>
                 依赖 ({task.dependencies?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="attachments" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+              <TabsTrigger value="attachments" className={TAB_CLS}>
                 附件 ({task.attachments?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="notes" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+              <TabsTrigger value="notes" className={TAB_CLS}>
                 笔记 ({task.notes?.length || 0})
               </TabsTrigger>
-              <TabsTrigger value="revisions" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+              <TabsTrigger value="revisions" className={TAB_CLS}>
                 <GitBranch className="w-3.5 h-3.5" />
                 版本 ({(task.revisions?.length || 0) + 1})
               </TabsTrigger>
-              <TabsTrigger value="comments" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all">
+              <TabsTrigger value="comments" className={TAB_CLS}>
                 评论 <CommentCount taskId={task.id} />
               </TabsTrigger>
-              <TabsTrigger value="reminders" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+              <TabsTrigger value="reminders" className={TAB_CLS}>
                 <Clock className="w-3.5 h-3.5" />
                 提醒
               </TabsTrigger>
-              <TabsTrigger value="history" className="flex-shrink-0 px-3 py-2 text-xs md:text-sm font-medium text-slate-500 data-[state=active]:bg-[#eef0fa] data-[state=active]:text-[#384877] data-[state=active]:shadow-none data-[state=active]:font-semibold rounded-lg transition-all flex items-center gap-1">
+              <TabsTrigger value="history" className={TAB_CLS}>
                 <History className="w-3.5 h-3.5" />
                 历史
               </TabsTrigger>
@@ -930,7 +935,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </TabsContent>
 
               {/* Subtasks Tab */}
-            <TabsContent value="subtasks" className="space-y-4">
+            <TabsContent value="subtasks" className="space-y-4 bg-white rounded-[24px] p-5 md:p-6 border border-[#EAE5DD]">
               <AnimatePresence>
                 {showRegeneratePrompt && (
                   <motion.div
@@ -971,14 +976,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </AnimatePresence>
 
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-slate-900">子约定管理</h3>
+                <h3 className="text-base font-semibold text-stone-800">子约定</h3>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={handleAutoGenerateSubtasks}
                   disabled={isGeneratingSubtasks}
-                  className="border-[#d6dcf0] bg-[#f0f3fb] hover:bg-[#e4e9f7] text-[#384877] h-9 rounded-xl font-medium"
+                  className="border-[#6B8E23]/30 bg-[#6B8E23]/10 hover:bg-[#6B8E23]/20 text-[#4F6B1A] h-9 rounded-full font-medium"
                 >
                   {isGeneratingSubtasks ? (
                     <>
@@ -1000,12 +1005,12 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                   value={newSubtask}
                   onChange={(e) => setNewSubtask(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAddSubtask()}
-                  className="flex-1 h-11 rounded-xl border-slate-200 bg-slate-50/50 focus-visible:bg-white"
+                  className="flex-1 h-11 rounded-full px-4 border-[#EAE5DD] bg-[#F7F4EF] focus-visible:bg-white focus-visible:ring-[#6B8E23]/30"
                 />
                 <Button
                   onClick={handleAddSubtask}
                   disabled={!newSubtask.trim() || isAddingSubtask}
-                  className="bg-slate-200 hover:bg-slate-300 text-slate-600 hover:text-slate-700 rounded-xl h-11 px-5 font-medium"
+                  className="bg-[#6B8E23] hover:bg-[#5A7A1C] text-white rounded-full h-11 px-6 font-medium"
                 >
                   {isAddingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : "添加"}
                 </Button>
@@ -1021,8 +1026,8 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                       exit={{ opacity: 0, x: -100 }}
                       className={`p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                         subtask.status === "completed"
-                          ? "bg-slate-50 border-slate-200"
-                          : "bg-white border-[#d6dcf0] hover:border-[#384877]/40"
+                          ? "bg-[#F7F4EF] border-[#EAE5DD]"
+                          : "bg-white border-[#EAE5DD] hover:border-[#6B8E23]/40"
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -1077,9 +1082,9 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 </AnimatePresence>
 
                 {subtasks.length === 0 && (
-                  <div className="text-center py-8 text-slate-400">
-                    <Circle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>暂无子约定</p>
+                  <div className="text-center py-8 text-stone-400 rounded-[20px] border border-dashed border-[#EAE5DD]">
+                    <Circle className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">还没有子约定，试试「AI 生成子约定」</p>
                   </div>
                 )}
               </div>

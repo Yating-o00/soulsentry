@@ -22,7 +22,8 @@ import { chargeAICredits, assertAICredits, usageCost } from "../services/aiCredi
 import QRCode from "qrcode";
 
 // 各 AI 功能的固定扣费点数（与前端 creditConfig 的参考表一致；对话/通用调用按 token 用量动态结算）
-const AI_CALL_COSTS = {
+// collab_agent 供协同约定 Agent（services/collabAgent.js）引用，保持同一扣费口径
+export const AI_CALL_COSTS = {
   kimi_web_browse: 2,
   analyze_intent: 1,
   analyze_image: 3,
@@ -33,7 +34,8 @@ const AI_CALL_COSTS = {
   mood_river: 1,
   week_plan: 3,
   month_plan: 4,
-  analyze_task: 1
+  analyze_task: 1,
+  collab_agent: 2
 };
 
 // 预检点数：不足时直接回 402 并返回 false（调用方中断 AI 调用）

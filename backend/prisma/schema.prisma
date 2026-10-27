@@ -52,6 +52,7 @@ model User {
   weeklyPlans       WeeklyPlan[]
   memoryRecords     MemoryRecord[]
   vaultItems        VaultItem[]
+  collabDocs        CollabDoc[]
 }
 
 model UserPreference {
@@ -119,6 +120,8 @@ model Task {
   shareEnabled     Boolean    @default(false)
   shareExpiresAt   DateTime?
   members          TaskMember[]
+  collabNodes      CollabNode[]
+  collabDocs       CollabDoc[]
   checkins         Checkin[]
   cheers           Cheer[]
   createdAt        DateTime   @default(now())
@@ -565,6 +568,11 @@ model Comment {
   content      String
   mentions     Json?
   parentId     String?
+  // 协同约定讨论：主题 / 共识·分歧·待确认标记 / Agent 发言标识 / 附件列表
+  topic        String?
+  mark         String?
+  agent        Boolean   @default(false)
+  attachments  Json?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   user         User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -731,6 +739,42 @@ model SmsVerification {
   createdAt  DateTime  @default(now())
 
   @@index([phone, purpose, createdAt])
+}
+
+// 协同约定：执行节点（时间节点/阶段/决策/回顾）
+model CollabNode {
+  id        String    @id @default(cuid())
+  taskId    String
+  title     String
+  nodeType  String    @default("stage")
+  dueAt     DateTime?
+  doneAt    DateTime?
+  sortOrder Int       @default(0)
+  createdBy String?
+  createdAt DateTime  @default(now())
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, sortOrder])
+}
+
+// 协同约定：沉淀文档（共识纪要/分歧清单/文件/决策/纪要/复盘），带版本历史与确认状态
+model CollabDoc {
+  id              String   @id @default(cuid())
+  taskId          String
+  userId          String?
+  title           String
+  docType         String   @default("file")
+  content         String
+  version         Int      @default(1)
+  history         Json?
+  status          String   @default("draft")
+  sourceCommentId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  task            Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user            User?    @relation(fields: [userId], references: [id])
+
+  @@index([taskId, updatedAt])
 }
 
 enum UserRole {

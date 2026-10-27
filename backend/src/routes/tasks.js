@@ -129,7 +129,7 @@ function getSerializedTaskExtraFields(task) {
   );
 }
 
-function serializeTask(task) {
+export function serializeTask(task) {
   const extraFields = getSerializedTaskExtraFields(task);
 
   return {

@@ -10,7 +10,17 @@ export const commentsRouter = Router();
 const commentSchema = z.object({
   task_id: z.string().min(1),
   content: z.string().min(1).max(5000),
-  mentions: z.array(z.string()).optional()
+  mentions: z.array(z.string()).optional(),
+  // 协同约定讨论：线程回复 / 主题 / 共识·分歧·待确认标记 / 附件
+  parent_id: z.string().optional().nullable(),
+  topic: z.string().max(50).optional().nullable(),
+  mark: z.enum(["consensus", "dispute", "pending"]).optional().nullable(),
+  attachments: z.array(z.object({
+    url: z.string().max(500),
+    name: z.string().max(200).optional().nullable(),
+    type: z.string().max(100).optional().nullable(),
+    size: z.number().optional().nullable()
+  })).max(10).optional().nullable()
 });
 
 commentsRouter.use(requireAuth);
@@ -26,14 +36,20 @@ function parseSort(sort = "-created_date") {
   return { [mapping[key] || "createdAt"]: order };
 }
 
-function serializeComment(comment) {
+export function serializeComment(comment) {
   const visitorLabel = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
   return {
     id: comment.id,
     task_id: comment.taskId,
     content: comment.content,
     mentions: comment.mentions || [],
+    parent_id: comment.parentId,
+    topic: comment.topic,
+    mark: comment.mark,
+    agent: comment.agent,
+    attachments: comment.attachments || [],
     created_by: comment.user?.email || "",
+    created_by_name: comment.user?.displayName || comment.user?.email || comment.visitorName || (comment.agent ? "心栈 Agent" : ""),
     created_by_id: comment.userId,
     visitor_token: comment.visitorToken,
     visitor_name: comment.visitorName,
@@ -43,9 +59,28 @@ function serializeComment(comment) {
   };
 }
 
+// 约定讨论：根消息按序挂载 replies（只支持一层回复，与 publicShare 校验一致）
+export function buildCommentTree(comments) {
+  const nodes = new Map();
+  for (const comment of comments) nodes.set(comment.id, { ...serializeComment(comment), replies: [] });
+  const roots = [];
+  for (const node of nodes.values()) {
+    if (node.parent_id && nodes.has(node.parent_id)) {
+      nodes.get(node.parent_id).replies.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  const byCreated = (a, b) => new Date(a.created_date).getTime() - new Date(b.created_date).getTime();
+  roots.sort(byCreated);
+  for (const node of nodes.values()) node.replies.sort(byCreated);
+  return roots;
+}
+
 commentsRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || 100), 300);
   const where = {};
+  const isTaskThread = Boolean(req.query.task_id);
   if (req.query.task_id) {
     // 共有约定：创建者/成员可读，无权限按不存在处理
     const result = await assertTaskAccess(req, res, String(req.query.task_id));
@@ -58,6 +93,8 @@ commentsRouter.get("/", async (req, res) => {
     take: Number.isFinite(limit) ? limit : 100,
     include: { user: true }
   });
+  // 约定讨论返回线程树（replies 嵌套）；笔记等场景保持扁平列表
+  if (isTaskThread) return res.json(buildCommentTree(comments));
   return res.json(comments.map(serializeComment));
 });
 
@@ -74,12 +111,28 @@ commentsRouter.post("/", async (req, res) => {
   const result = await assertTaskAccess(req, res, payload.data.task_id);
   if (!result) return;
 
+  // 回复校验：父评论必须属于同一约定，且只支持一层回复
+  const parentId = payload.data.parent_id || null;
+  if (parentId) {
+    const parent = await prisma.comment.findFirst({ where: { id: parentId, taskId: payload.data.task_id } });
+    if (!parent) {
+      return res.status(400).json({ error: "INVALID_PARENT", message: "要回复的评论不存在" });
+    }
+    if (parent.parentId) {
+      return res.status(400).json({ error: "INVALID_PARENT", message: "不支持回复的回复" });
+    }
+  }
+
   const comment = await prisma.comment.create({
     data: {
       userId: req.user.id,
       taskId: payload.data.task_id,
       content: payload.data.content,
-      mentions: payload.data.mentions || []
+      mentions: payload.data.mentions || [],
+      parentId,
+      topic: payload.data.topic || null,
+      mark: payload.data.mark || null,
+      attachments: payload.data.attachments || []
     },
     include: { user: true }
   });

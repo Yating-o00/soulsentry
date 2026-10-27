@@ -38,6 +38,7 @@ import { voiceRouter } from "./routes/voice.js";
 import { functionsRouter } from "./routes/functions.js";
 import { weatherRouter } from "./routes/weather.js";
 import { chatRouter } from "./routes/chat.js";
+import { collabRouter } from "./routes/collab.js";
 import { handleWechatNotify } from "./routes/wechatNotify.js";
 
 export const app = express();
@@ -101,6 +102,7 @@ app.use("/api/voice", voiceRouter);
 app.use("/api/functions", functionsRouter);
 app.use("/api/weather", weatherRouter);
 app.use("/api/chat", chatRouter);
+app.use("/api/collab", collabRouter);
 
 // 上传的图片会被小程序/网页跨域嵌入展示：helmet 默认 CORP same-origin 会挡住 <Image> 加载，
 // 对 /uploads 静态资源显式放宽为 cross-origin

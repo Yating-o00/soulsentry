@@ -148,7 +148,7 @@ export default function Tasks() {
   const prepareTaskShare = (task) => {
     if (!task) return;
     const token = shareTokensRef.current[task.id];
-    const path = token ? `pages/share/index?token=${token}` : `pages/task-detail/index?id=${task.id}`;
+    const path = token ? `pages/share/index?token=${token}` : `pages/share/index?taskId=${task.id}`;
     // 打卡约定：转发卡片标题 + 品牌蓝封面图直接呈现打卡情况
     if (task.category === "checkin") {
       const total = checkinTotalsRef.current[task.id] ?? 0;

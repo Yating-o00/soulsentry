@@ -223,6 +223,28 @@ async function notifyOwner(ownerId, payload) {
   }
 }
 
+// GET /api/public/share/resolve/:type/:id - 解析已分享内容的 token（公开、只读）
+// 仅供分享落地页使用：仅当内容已被拥有者开启分享时返回既有 token，不新建、不修改任何状态。
+publicShareRouter.get("/resolve/:type/:id", async (req, res) => {
+  const { type, id } = req.params;
+  if (!["task", "note"].includes(type)) {
+    return res.status(400).json({ error: "INVALID_TYPE", message: "类型必须是 task 或 note" });
+  }
+
+  try {
+    const item = type === "task"
+      ? await prisma.task.findFirst({ where: { id, deletedAt: null } })
+      : await prisma.note.findFirst({ where: { id, deletedAt: null } });
+    if (!item || !item.shareEnabled || !item.shareToken || isShareExpired(item)) {
+      return res.status(404).json({ error: "NOT_FOUND" });
+    }
+    return res.json({ type, id, token: item.shareToken });
+  } catch (error) {
+    console.error("[publicShare] resolve share failed:", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});
+
 // POST /api/public/share/generate/:type/:id - 生成/刷新分享 token（需登录）
 // 使用 /generate 前缀避免与 /:token/comments 等匿名路由冲突
 publicShareRouter.post("/generate/:type/:id", requireAuth, async (req, res) => {

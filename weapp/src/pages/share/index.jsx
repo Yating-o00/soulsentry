@@ -62,8 +62,19 @@ export default function Share() {
   const generateShareFromTask = async (taskId, vToken) => {
     setLoading(true);
     try {
-      const shareData = await post(`/public/share/generate/task/${taskId}`);
-      if (shareData.token) {
+      // 拥有者本人：直接生成/刷新 token；非拥有者或生成失败：回落到公开解析（仅当已开启分享）
+      let shareData = null;
+      if (isLoggedIn()) {
+        try {
+          shareData = await post(`/public/share/generate/task/${taskId}`);
+        } catch (_e) {
+          shareData = null;
+        }
+      }
+      if (!shareData?.token) {
+        shareData = await get(`/public/share/resolve/task/${taskId}`);
+      }
+      if (shareData?.token) {
         setToken(shareData.token);
         loadShare(shareData.token, vToken);
       } else {

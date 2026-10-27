@@ -307,7 +307,7 @@ export default function Share() {
           visitor_name: visitorName || undefined
         }
       });
-      if (result.visitor_token) setVisitorToken(result.visitor_token);
+      // Web 端 visitorToken 由 getVisitorToken 在本地生成并持久化，无需回写服务端返回值
       setData((prev) => ({ ...prev, cheer_total: result.cheer_total }));
       toast.success(`已为 TA 加油 · 累计 ${result.cheer_total} 次`);
     } catch (err) {

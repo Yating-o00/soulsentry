@@ -1,4 +1,6 @@
 import Login from "./pages/Login";
+import { useEffect } from "react";
+import { httpRequest } from "@/api/httpClient";
 import './App.css'
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "sonner"
@@ -29,6 +31,14 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+
+  // 行为埋点：每个浏览器会话上报一次应用打开（驱动 admin 看板的活跃口径）
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (sessionStorage.getItem("ss_app_open_sent")) return;
+    sessionStorage.setItem("ss_app_open_sent", "1");
+    httpRequest("/api/user-behaviors", { method: "POST", body: { event_type: "app_open" } }).catch(() => {});
+  }, [isAuthenticated]);
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {

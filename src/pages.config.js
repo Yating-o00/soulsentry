@@ -48,6 +48,7 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Account from './pages/Account';
+import AdminStats from './pages/AdminStats.jsx';
 import Archive from './pages/Archive.jsx';
 import CollabSpace from './pages/CollabSpace.jsx';
 import Dashboard from './pages/Dashboard';
@@ -72,6 +73,7 @@ import __Layout from './Layout.jsx';
 
 export const PAGES = {
     "Account": Account,
+    "AdminStats": AdminStats,
     "Archive": Archive,
     "CollabSpace": CollabSpace,
     "Dashboard": Dashboard,

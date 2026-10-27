@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft, BarChart3 } from "lucide-react";
 import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -69,6 +69,11 @@ const getNavigationItems = (t) => [
     title: t('notifications'),
     url: createPageUrl("Notifications"),
     icon: Bell,
+  },
+  {
+    title: "数据看板",
+    url: createPageUrl("AdminStats"),
+    icon: BarChart3,
   },
 ];
 

@@ -157,14 +157,14 @@ commentsRouter.patch("/:id", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
   const existing = await prisma.comment.findFirst({
-    where: { id: req.params.id },
-    include: { task: true }
+    where: { id: req.params.id }
   });
   if (!existing || existing.taskId == null) {
     return res.status(404).json({ error: "NOT_FOUND", message: "评论不存在" });
   }
+  const task = await prisma.task.findFirst({ where: { id: existing.taskId } });
   const isAuthor = existing.userId === req.user.id;
-  const isOwner = existing.task && existing.task.userId === req.user.id;
+  const isOwner = task && task.userId === req.user.id;
   if (!isAuthor && !isOwner) {
     return res.status(403).json({ error: "FORBIDDEN", message: "只有评论作者或约定创建者可以标记" });
   }

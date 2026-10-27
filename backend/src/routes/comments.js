@@ -146,6 +146,36 @@ commentsRouter.post("/", async (req, res) => {
   return res.status(201).json(serializeComment(comment));
 });
 
+// 协同讨论：更新消息的共识/分歧/待确认标记（评论作者或约定 owner）
+const commentPatchSchema = z.object({
+  mark: z.enum(["consensus", "dispute", "pending"]).nullable()
+});
+
+commentsRouter.patch("/:id", async (req, res) => {
+  const payload = commentPatchSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+  const existing = await prisma.comment.findFirst({
+    where: { id: req.params.id },
+    include: { task: true }
+  });
+  if (!existing || existing.taskId == null) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "评论不存在" });
+  }
+  const isAuthor = existing.userId === req.user.id;
+  const isOwner = existing.task && existing.task.userId === req.user.id;
+  if (!isAuthor && !isOwner) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "只有评论作者或约定创建者可以标记" });
+  }
+  const comment = await prisma.comment.update({
+    where: { id: existing.id },
+    data: { mark: payload.data.mark },
+    include: { user: true }
+  });
+  return res.json(serializeComment(comment));
+});
+
 commentsRouter.delete("/:id", async (req, res) => {
   const existing = await prisma.comment.findFirst({
     where: {

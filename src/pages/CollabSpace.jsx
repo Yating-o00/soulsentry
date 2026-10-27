@@ -16,6 +16,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   ArrowLeft, Bot, Check, Circle, CircleCheck, Clock, FileText,
   Flag, Handshake, Link2, ListChecks, Loader2, MapPin, Milestone, Plus,
   Scale, Send, Sparkles, AlertCircle, Target, RefreshCw,
@@ -186,6 +189,15 @@ function DiscussionTab({ taskId, highlightId, onClearHighlight }) {
     }
   };
 
+  const handleMark = async (message, mark) => {
+    try {
+      await httpRequest(`/api/comments/${message.id}`, { method: "PATCH", body: { mark } } );
+      invalidateAll();
+    } catch (error) {
+      toast.error(error?.message || "标记失败");
+    }
+  };
+
   const handleSend = async () => {
     const text = content.trim();
     if (!text) return;
@@ -286,6 +298,36 @@ function DiscussionTab({ taskId, highlightId, onClearHighlight }) {
                 >
                   {isSelected ? "已选为提取源" : "选为提取源"}
                 </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className={cn(
+                        "text-[11px] px-2 py-1 rounded-md transition-colors flex items-center gap-0.5",
+                        message.mark ? MARK_STYLES[message.mark] : "bg-slate-100 hover:bg-[#eef2ff] text-slate-600 hover:text-[#384877]"
+                      )}
+                    >
+                      {message.mark ? MARK_LABELS[message.mark] : "标记"}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="text-xs">
+                    {Object.entries(MARK_LABELS).map(([value, label]) => (
+                      <DropdownMenuItem key={value} onClick={() => handleMark(message, value)} className="gap-1.5">
+                        <span className={cn("inline-block w-2 h-2 rounded-full", {
+                          "bg-emerald-500": value === "consensus",
+                          "bg-rose-500": value === "dispute",
+                          "bg-amber-500": value === "pending",
+                        })} />
+                        {label}
+                        {message.mark === value && <Check className="w-3 h-3 ml-auto" />}
+                      </DropdownMenuItem>
+                    ))}
+                    {message.mark && (
+                      <DropdownMenuItem onClick={() => handleMark(message, null)} className="text-slate-400">
+                        清除标记
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
             {!isAgent && !isReply && (
@@ -299,6 +341,26 @@ function DiscussionTab({ taskId, highlightId, onClearHighlight }) {
                 >
                   回复
                 </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="text-[11px] text-slate-400">
+                      {message.mark ? MARK_LABELS[message.mark] : "标记"}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="text-xs">
+                    {Object.entries(MARK_LABELS).map(([value, label]) => (
+                      <DropdownMenuItem key={value} onClick={() => handleMark(message, value)}>
+                        {label}
+                        {message.mark === value && <Check className="w-3 h-3 ml-auto" />}
+                      </DropdownMenuItem>
+                    ))}
+                    {message.mark && (
+                      <DropdownMenuItem onClick={() => handleMark(message, null)} className="text-slate-400">
+                        清除标记
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )}
             {!isAgent && !isReply && hasReplies === false && (

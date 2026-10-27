@@ -625,14 +625,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
             >
               {task.status === 'completed' && <CheckCircle2 className="w-5 h-5" strokeWidth={2.5} />}
             </button>
-            <DialogTitle className={`text-xl md:text-[26px] font-bold tracking-tight leading-snug flex-1 transition-colors ${
+            <DialogTitle className={`text-xl md:text-[26px] font-bold tracking-tight leading-[1.35] flex-1 min-w-0 transition-colors ${
               task.status === 'completed' ? 'text-slate-400 line-through decoration-slate-300' : 'text-slate-900'
             }`}>
               <InlineEditableText
                 value={task.title}
                 required
                 placeholder="约定标题"
-                inputClassName="text-lg md:text-[22px] font-bold"
+                inputClassName="text-xl md:text-[26px] font-bold"
                 onSave={(v) => updateTaskMutation.mutateAsync({ id: task.id, data: { title: v } })}
               >
                 {task.title}
@@ -640,7 +640,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               <TaskMetaChips task={task} />
             </DialogTitle>
           </div>
-          <div className="flex items-center gap-1 self-start pl-10 [&_button]:rounded-full">
+          <div className="flex items-center gap-1.5 self-start ml-10 p-1 rounded-full bg-white/80 border border-slate-100 shadow-sm [&_button]:rounded-full">
              <Button
                 variant="ghost"
                 size="sm"
@@ -711,7 +711,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
           )}
 
           <div className="border-l-2 border-[#384877]/20 pl-5">
-            <p className="text-[11px] font-semibold tracking-[0.2em] text-slate-400 mb-2">说明</p>
+            <p className="text-xs font-semibold tracking-[0.2em] text-[#384877]/60 mb-2.5">说明</p>
             <InlineEditableText
               value={task.description}
               multiline

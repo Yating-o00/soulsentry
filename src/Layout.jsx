@@ -19,6 +19,7 @@ import OverdueFeedbackHost from "./components/feedback/OverdueFeedbackHost";
 import DeviceHeartbeat from "./components/devices/DeviceHeartbeat";
 import { base44 } from "@/api/base44Client";
 import { getCachedUser } from "@/lib/userCache";
+import { useAuth } from "@/lib/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -81,7 +82,10 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   const location = useLocation();
   const { setOpenMobile } = useSidebar();
   const { t, language, toggleLanguage, isAIMode, toggleAIMode } = useTranslation();
-  const navigationItems = getNavigationItems(t);
+  const { user } = useAuth();
+  const navigationItems = getNavigationItems(t).filter(
+    (item) => item.title !== "数据看板" || user?.role === "admin"
+  );
 
   const handleMobileClick = () => {
     setOpenMobile(false);

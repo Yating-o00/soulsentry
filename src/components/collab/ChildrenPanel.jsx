@@ -1,7 +1,7 @@
 // 子约定面板：全部/待处理/已完成胶囊过滤（>4 折叠）+ 草案确认
 import React, { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Circle, Clock3, Plus, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Circle, Clock3, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { httpRequest } from "@/api/httpClient";
@@ -17,7 +17,7 @@ const subStatusMeta = (sub, done) => {
   return { label: "进行中", className: "bg-[#e4e6f8] text-[#2a2861]" };
 };
 
-function ChildRow({ sub, members, currentUserId, confirmingId, onConfirm, onJumpToDiscussion }) {
+function ChildRow({ sub, members, currentUserId, confirmingId, togglingId, onConfirm, onToggleDone, onJumpToDiscussion }) {
   const done = isTaskEffectivelyCompleted(sub);
   const subCollab = sub.metadata?.collab;
   const isDraft = subCollab?.state === "draft";
@@ -27,15 +27,24 @@ function ChildRow({ sub, members, currentUserId, confirmingId, onConfirm, onJump
   const assignee = assigneeId ? members.find((m) => m.user_id === assigneeId || m.id === assigneeId) : null;
   const isAgentDraft = !!subCollab?.sourceCommentId;
   const meta = subStatusMeta(sub, done);
+  const busy = confirmingId === sub.id || togglingId === sub.id;
 
   return (
     <article className="border-b py-4 last:border-b-0" style={{ borderColor: "#dfddd6" }} aria-label={`子约定 ${sub.title}`}>
       <div className="flex items-start gap-3">
-        <span className="mt-0.5 shrink-0" aria-label={done ? "已完成" : "未完成"}>
+        {/* 勾选：草案=确认；进行中=标记完成/重新打开 */}
+        <button
+          type="button"
+          onClick={() => (isDraft ? onConfirm(sub) : onToggleDone(sub))}
+          disabled={busy}
+          className="mt-0.5 shrink-0 rounded-full transition-opacity disabled:opacity-50 min-h-7 min-w-7 focus-visible:outline-none"
+          aria-label={isDraft ? "确认子约定" : done ? "标记为未完成" : "标记完成"}
+          title={isDraft ? "确认子约定" : done ? "重新打开" : "标记完成"}
+        >
           {done
             ? <CheckCircle2 className="h-[18px] w-[18px]" style={{ color: C.green }} />
-            : <Circle className="h-[18px] w-[18px] text-[#aaa69e]" strokeWidth={1.5} />}
-        </span>
+            : <Circle className="h-[18px] w-[18px]" strokeWidth={1.5} style={{ color: isDraft ? C.amberInk : "#aaa69e" }} />}
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium leading-none", meta.className)}>
@@ -74,23 +83,12 @@ function ChildRow({ sub, members, currentUserId, confirmingId, onConfirm, onJump
               {sub.reminder_time && (
                 <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{formatTime(sub.reminder_time)}</span>
               )}
-              {isDraft && <span style={{ color: C.amberInk }}>确认 {confirmedCount}/{members.length || 1}</span>}
+              {isDraft && (
+                <span style={{ color: C.amberInk }}>
+                  {alreadyConfirmed ? "已确认" : "待确认"} · {confirmedCount}/{members.length || 1}
+                </span>
+              )}
             </div>
-            {isDraft && !alreadyConfirmed && (
-              <button
-                type="button"
-                onClick={() => onConfirm(sub)}
-                disabled={confirmingId === sub.id}
-                className="inline-flex shrink-0 items-center justify-center gap-1 self-start rounded-full px-3.5 text-xs font-medium transition-colors disabled:opacity-50 sm:self-auto min-h-9"
-                style={{ backgroundColor: C.ink, color: "#faf9f5" }}
-              >
-                {confirmingId === sub.id ? "确认中…" : "确认"}
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {isDraft && alreadyConfirmed && (
-              <span className="shrink-0 self-start text-[11px] sm:self-auto" style={{ color: C.amberInk }}>已确认，待他人</span>
-            )}
           </div>
         </div>
       </div>
@@ -105,6 +103,7 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
   const [newSubTitle, setNewSubTitle] = useState("");
   const [addingSub, setAddingSub] = useState(false);
   const [confirmingId, setConfirmingId] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
 
   const task = summary?.task;
   const members = summary?.members || [];
@@ -178,6 +177,27 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
     }
   };
 
+  // 勾选完成/重新打开：与全站任务卡片同一口径（PATCH status + completed_at）
+  const handleToggleDone = async (subtask) => {
+    const done = isTaskEffectivelyCompleted(subtask);
+    setTogglingId(subtask.id);
+    try {
+      await httpRequest(`/api/tasks/${subtask.id}`, {
+        method: "PATCH",
+        body: {
+          status: done ? "pending" : "completed",
+          completed_at: done ? null : new Date().toISOString(),
+        },
+      });
+      invalidateAll();
+      toast.success(done ? "已重新打开" : "已完成该子约定");
+    } catch (error) {
+      toast.error(error?.message || "操作失败");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   return (
     <section id="content-children" className="border-b px-4 py-5 sm:px-6" style={{ borderColor: C.line }}>
       <PanelHeader
@@ -215,7 +235,9 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
             members={members}
             currentUserId={currentUserId}
             confirmingId={confirmingId}
+            togglingId={togglingId}
             onConfirm={handleConfirm}
+            onToggleDone={handleToggleDone}
             onJumpToDiscussion={onJumpToDiscussion}
           />
         ))}

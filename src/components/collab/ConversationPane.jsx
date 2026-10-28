@@ -411,8 +411,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
         </div>
       )}
 
-      {/* 消息流 */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2 sm:px-6" style={{ minHeight: 200 }}>
+      {/* 消息流：可被输入区挤压（多行输入/附件时），保证输入框始终在视口内 */}
+      <div className="min-h-20 flex-1 overflow-y-auto px-4 py-2 sm:px-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-10 text-sm" style={{ color: "#99958d" }}>
             <Loader2 className="w-4 h-4 animate-spin mr-2" /> 加载讨论…

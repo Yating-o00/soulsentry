@@ -12,7 +12,7 @@ import {
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
   Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen,
-  Users2
+  Users2, ListTree
 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -1223,9 +1223,6 @@ export default function LifeTaskCard({
                           </div>
                         );
                       })}
-                      <div className="text-xs text-stone-400 px-2 py-1">
-                        子约定 {subtasks.filter(isTaskEffectivelyCompleted).length}/{subtasks.length}
-                      </div>
                     </>
                   ) : (
                     <>
@@ -1290,11 +1287,6 @@ export default function LifeTaskCard({
                           <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
                         </button>
                       )}
-                      {subtasks.length <= 3 && (
-                        <div className="text-xs text-stone-400 px-2 py-1">
-                          子约定 {subtasks.filter(isTaskEffectivelyCompleted).length}/{subtasks.length}
-                        </div>
-                      )}
                     </>
                   )}
                   <button
@@ -1303,9 +1295,14 @@ export default function LifeTaskCard({
                       // 打开约定详情（子约定 tab）：子约定可勾选/编辑，评论、版本、历史等在并列 tab
                       onViewTab && onViewTab("subtasks");
                     }}
-                    className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-stone-50 border border-stone-100 hover:border-stone-300 hover:bg-stone-100/60 transition-colors group"
                   >
-                    查看详情
+                    <ListTree className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" />
+                    <span className="text-xs font-medium text-stone-500 group-hover:text-stone-700">查看全部子约定与详情</span>
+                    <span className="ml-auto text-[11px] text-stone-400 tabular-nums flex-shrink-0">
+                      子约定 {subtasks.filter(isTaskEffectivelyCompleted).length}/{subtasks.length}
+                    </span>
+                    <ChevronRight className="w-3.5 h-3.5 text-stone-300 group-hover:text-stone-400 flex-shrink-0" />
                   </button>
                 </div>
               </div>

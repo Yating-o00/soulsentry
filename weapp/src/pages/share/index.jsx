@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Taro, { useShareAppMessage } from "@tarojs/taro";
 import { View, Text, Input, Button, ScrollView, Image } from "@tarojs/components";
 import { get, post, absoluteUrl } from "@/utils/api";
-import { isLoggedIn } from "@/utils/auth";
+import { isLoggedIn, isDemoMode } from "@/utils/auth";
 import { milestoneQuote } from "@/components/tasks/checkinMeta";
 
 const BASE_API = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
@@ -262,7 +262,8 @@ export default function Share() {
 
   // 加入共有约定：双方实时共享同一条约定（区别于导入副本）
   const handleJoin = async () => {
-    if (!isLoggedIn()) {
+    if (!isLoggedIn() || isDemoMode()) {
+      // 体验账号是所有人共用的占位会话，不能用来加入共有约定
       const redirect = encodeURIComponent(`/pages/share/index?token=${token}`);
       Taro.navigateTo({ url: `/pages/login/index?redirect=${redirect}` });
       return;
@@ -539,15 +540,15 @@ export default function Share() {
 
         <View className="ss-card">
           <View className="ss-section-title">参与操作</View>
-          {isTask && isLoggedIn() && joinState !== "joined" && (
+          {isTask && isLoggedIn() && !isDemoMode() && joinState !== "joined" && (
             <Button className="ss-btn" onClick={handleJoin} loading={joinState === "loading"}>
               加入共有约定
             </Button>
           )}
-          {isTask && isLoggedIn() && joinState === "joined" && (
+          {isTask && isLoggedIn() && !isDemoMode() && joinState === "joined" && (
             <Button className="ss-btn" onClick={gotoTasks}>已加入 · 前往约定列表</Button>
           )}
-          {isTask && isLoggedIn() && (
+          {isTask && isLoggedIn() && !isDemoMode() && (
             <Text className="ss-muted" style={{ display: "block", margin: "12rpx 0 20rpx" }}>
               加入后，双方将实时共享这条约定的内容、提醒、子约定、评论与变化记录
             </Text>
@@ -586,9 +587,9 @@ export default function Share() {
         </View>
 
         <View style={{ height: "40rpx" }} />
-        {/* 构建标记：确认线上/体验版跑的是不是新包（v20261027-3 = 加油+折叠明细+fallback修复+已完成折叠区） */}
+        {/* 构建标记：确认线上/体验版跑的是不是新包（v20261028-1 = Demo 账号禁止加入共有约定） */}
         <Text style={{ display: "block", textAlign: "center", fontSize: "20rpx", color: "#c0c4cc", marginBottom: "16rpx" }}>
-          v20261027-3
+          v20261028-1
         </Text>
       </ScrollView>
 

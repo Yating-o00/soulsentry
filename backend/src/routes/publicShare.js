@@ -6,6 +6,7 @@ import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
 import { countedCheckinsWhere, VISITOR_CHECKIN_SOURCE } from "../lib/checkinStats.js";
 import { logBehavior } from "../lib/behavior.js";
+import { isDemoUser } from "../lib/ensureDemoUser.js";
 
 export const publicShareRouter = Router();
 
@@ -665,10 +666,12 @@ publicShareRouter.post("/:token/toggle", optionalAuth, async (req, res) => {
       const total = await prisma.checkin.count({ where: countedCheckinsWhere(item.id) });
       if (checked) {
         const providedName = (parsed.data.visitor_name || "").trim();
-        const membership = req.user
+        // 体验账号是所有人共用的静默会话：即使库里残留着它的成员关系，也一律按访客处理，不计入累计
+        const demoUser = isDemoUser(req.user);
+        const membership = req.user && !demoUser
           ? await prisma.taskMember.findFirst({ where: { taskId: item.id, userId: req.user.id } })
           : null;
-        const isVisitor = !(req.user && (req.user.id === item.userId || membership));
+        const isVisitor = demoUser || !(req.user && (req.user.id === item.userId || membership));
         const checkin = await prisma.checkin.create({
           data: {
             userId: isVisitor ? (req.user?.id || item.userId) : req.user.id,
@@ -1009,6 +1012,9 @@ publicShareRouter.post("/:token/join", requireAuth, async (req, res) => {
   if (isShareExpired(item)) return res.status(410).json({ error: "SHARE_EXPIRED" });
   if (item.userId === req.user.id) {
     return res.status(400).json({ error: "ALREADY_OWNER", message: "这是你自己的约定" });
+  }
+  if (isDemoUser(req.user)) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "体验账号不能加入共有约定，请先注册登录" });
   }
 
   const existing = await prisma.taskMember.findUnique({

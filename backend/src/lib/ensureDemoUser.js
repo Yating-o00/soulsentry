@@ -7,6 +7,13 @@ const TEST_PASSWORD = "demo123456";
 const LEGACY_DEMO_EMAIL = "demo@gmail.com";
 const TEST_CREDITS = 10000;
 
+// 体验账号是所有人共用的静默会话，绝不能让它的行为计入/关联到真实用户的约定
+export function isDemoUser(user) {
+  if (!user) return false;
+  const email = String(user.email || "").toLowerCase();
+  return email === TEST_EMAIL || email === LEGACY_DEMO_EMAIL;
+}
+
 export async function ensureDemoUser() {
   try {
     const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);

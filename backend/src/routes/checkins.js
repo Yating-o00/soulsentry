@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { computeNextReminderTime } from "../lib/recurrence.js";
 import { countedCheckinsWhere } from "../lib/checkinStats.js";
 import { syncParentProgress } from "./tasks.js";
+import { isDemoUser } from "../lib/ensureDemoUser.js";
 
 /**
  * 约定打卡（Checkin）：同一个约定可多次打卡，每次可附带一句话或照片。
@@ -100,6 +101,10 @@ checkinsRouter.post("/:id/checkins", async (req, res) => {
   }
   const task = await assertCheckinAccess(req.user.id, req.params.id);
   if (!task) return res.status(404).json({ error: "NOT_FOUND", message: "约定不存在或无权限" });
+  // 体验账号是所有人共用的静默会话，不能为别人的约定打卡（避免污染真实用户的累计数据）
+  if (task.userId !== req.user.id && isDemoUser(req.user)) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "体验账号不能为别人的约定打卡，请先注册登录" });
+  }
 
   const checkin = await prisma.checkin.create({
     data: {

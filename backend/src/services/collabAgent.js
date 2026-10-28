@@ -28,8 +28,8 @@ function mockLLM({ json, kind }) {
   if (kind === "extract_subtasks") {
     return {
       items: [
-        { title: "确认时间地点", standard: "所有成员给出可行时间并达成一致", assigneeHint: "" },
-        { title: "分工准备物料", standard: "物料清单确定且每人认领至少一项", assigneeHint: "" }
+        { title: "确认时间地点", standard: "所有成员给出可行时间并达成一致", assigneeHint: "", parentHint: "" },
+        { title: "分工准备物料", standard: "物料清单确定且每人认领至少一项", assigneeHint: "", parentHint: "" }
       ]
     };
   }
@@ -37,7 +37,7 @@ function mockLLM({ json, kind }) {
     return {
       reply: "（本地调试回复）收到！我先梳理一下目前的讨论要点：各方的想法都已经摆在桌面上了。建议下一步先确认大家最在意的 1-2 个分歧点，需要我整理共识或提取子约定的话，随时 @我。",
       subtasks: [
-        { title: "（mock）确认时间地点", standard: "所有成员给出可行时间", assigneeHint: "" }
+        { title: "（mock）确认时间地点", standard: "所有成员给出可行时间", assigneeHint: "", parentHint: "" }
       ],
       nodes: [{ title: "（mock）出发前确认清单", node_type: "review" }],
       doc: null
@@ -223,14 +223,14 @@ const isNonEmptyString = (value) => typeof value === "string" && value.trim().le
 // ── 动作实现：每个返回 { ...结果 }；抛错表示动作失败（此时未扣点）──
 
 // 子约定草案统一创建入口（extract_subtasks 与 coordinate 共用）
-async function createDraftSubtask(task, user, { title, standard = "", assigneeHint = "", sourceCommentId = null }) {
+async function createDraftSubtask(task, user, { title, standard = "", assigneeHint = "", sourceCommentId = null, parentId = null }) {
   const subtask = await prisma.task.create({
     data: {
       userId: user.id,
       title: String(title).trim().slice(0, 120),
       status: "TODO",
       priority: "medium",
-      parentTaskId: task.id,
+      parentTaskId: parentId || task.id,
       metadata: {
         collab: {
           state: "draft",
@@ -245,11 +245,24 @@ async function createDraftSubtask(task, user, { title, standard = "", assigneeHi
   });
   await logCollabChange(user.id, task, "collab_subtask_draft", [
     { field: "subtask", field_label: "子约定", new_value: subtask.title },
+    ...(parentId
+      ? [{ field: "parent", field_label: "从属于", new_value: parentId }]
+      : []),
     ...(sourceCommentId
       ? [{ field: "agent", field_label: "来源", new_value: "Agent 提取" }]
       : [{ field: "agent", field_label: "来源", new_value: "Agent 沉淀" }])
   ]);
   return subtask;
+}
+
+// 从属归属解析：Agent 给出已有子约定的标题/ID 提示，匹配到已有子约定（含本次刚创建的）
+function resolveParentSubtask(pool, hint) {
+  if (!isNonEmptyString(hint)) return null;
+  const h = hint.trim();
+  return pool.find((s) => s.id === h)
+    || pool.find((s) => s.title === h)
+    || pool.find((s) => s.title.includes(h) || h.includes(s.title))
+    || null;
 }
 
 async function runAction({ action, task, snapshot, system, user, commentId }) {
@@ -341,21 +354,26 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
       const who = c.agent ? "Agent" : (c.user?.displayName || c.user?.email || c.user?.phone || "成员");
       return `- ${who}：${String(c.content).slice(0, 300)}`;
     }).join("\n");
-    const prompt = `约定主题：${task.title}\n\n以下是一条讨论线程：\n${threadText}\n\n请从线程中提取可执行的行动项，每项给出：标题 title（30 字以内）、完成标准 standard（怎样算完成）、负责人建议 assigneeHint（成员姓名，不确定就空字符串）。\n\n只输出 JSON：{"items": [{"title": "...", "standard": "...", "assigneeHint": "..."}]}`;
+    const prompt = `约定主题：${task.title}\n\n已有的子约定清单：\n${snapshot.subtasks.length ? snapshot.subtasks.map((s) => `- ${s.title}`).join("\n") : "（暂无）"}\n\n以下是一条讨论线程：\n${threadText}\n\n请从线程中提取可执行的行动项，每项给出：标题 title（30 字以内）、完成标准 standard（怎样算完成）、负责人建议 assigneeHint（成员姓名，不确定就空字符串）、parentHint（若该行动项明显从属于上面某个已有子约定，填那个子约定的标题；是独立事项则空字符串）。\n\n只输出 JSON：{"items": [{"title": "...", "standard": "...", "assigneeHint": "...", "parentHint": ""}]}`;
     const data = await invokeLLM({ system, prompt, json: true, kind: action });
     const items = Array.isArray(data?.items) ? data.items.slice(0, MAX_SUBTASKS_PER_RUN) : [];
     if (items.length === 0 || items.every((item) => !isNonEmptyString(item?.title))) {
       return degradeWithMessage(task.id, "没有从讨论中提取到有效行动项");
     }
     const created = [];
+    const pool = [...snapshot.subtasks];
     for (const item of items) {
       if (!isNonEmptyString(item.title)) continue;
-      created.push(await createDraftSubtask(task, user, {
+      const parent = resolveParentSubtask(pool, item.parentHint);
+      const subtask = await createDraftSubtask(task, user, {
         title: item.title,
         standard: item.standard,
         assigneeHint: item.assigneeHint,
-        sourceCommentId: commentId
-      }));
+        sourceCommentId: commentId,
+        parentId: parent?.id || null
+      });
+      created.push(subtask);
+      pool.push(subtask); // 允许本次提取的项之间形成从属
     }
     await syncParentProgress(task.id);
     const message = await postAgentMessage(task.id, {
@@ -403,7 +421,7 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
 
     // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息。
     // 结构化输出：除回复外，按讨论内容把可执行项落成子约定草案、执行节点、沉淀文件（均为草案，待人确认）。
-    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：若讨论中出现了可执行的行动项（成员要做的事），提取为子约定草案，每项含 title（30 字以内）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null。\n\n所有对象都是草案，需成员确认后才生效；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"..."}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null}`;
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：若讨论中出现了可执行的行动项（成员要做的事），提取为子约定草案，每项含 title（30 字以内）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（若明显从属于某个已有子约定——清单见上方空间数据——填那个子约定的标题；独立事项留空）；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null。\n\n所有对象都是草案，需成员确认后才生效；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action });
@@ -419,14 +437,19 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
 
     if (data && typeof data === "object") {
       const items = Array.isArray(data.subtasks) ? data.subtasks : [];
+      const pool = [...snapshot.subtasks];
       for (const item of items.slice(0, MAX_SUBTASKS_PER_RUN)) {
         if (!isNonEmptyString(item?.title)) continue;
-        created.push(await createDraftSubtask(task, user, {
+        const parent = resolveParentSubtask(pool, item.parentHint);
+        const subtask = await createDraftSubtask(task, user, {
           title: item.title,
           standard: item.standard,
           assigneeHint: item.assigneeHint,
-          sourceCommentId: target.id
-        }));
+          sourceCommentId: target.id,
+          parentId: parent?.id || null
+        });
+        created.push(subtask);
+        pool.push(subtask);
       }
       if (created.length > 0) {
         await syncParentProgress(task.id);

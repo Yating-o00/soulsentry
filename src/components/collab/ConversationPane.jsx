@@ -147,9 +147,15 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
   const [mentionOpen, setMentionOpen] = useState(false); // @Agent 自动弹出
   const [agentPendingSince, setAgentPendingSince] = useState(null); // @Agent 打字指示器
   const [flashingId, setFlashingId] = useState(null);
-  const bottomRef = useRef(null);
+  const streamRef = useRef(null);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
+
+  // 只滚动消息流内部，避免 scrollIntoView 连带滚动页面祖先（手机端会导致整个版面上移）
+  const scrollStreamToBottom = (behavior = "smooth") => {
+    const el = streamRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+  };
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['collab', taskId, 'messages'],
@@ -195,12 +201,10 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
     if (latestAgent) {
       setAgentPendingSince(null);
       setFlashingId(latestAgent.id);
-      setTimeout(() => {
-        const el = document.getElementById(`collab-msg-${latestAgent.id}`);
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "end" });
-      }, 100);
+      setTimeout(() => scrollStreamToBottom(), 100);
       setTimeout(() => setFlashingId(null), 2200);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, agentPendingSince]);
 
   // 光标前出现 @xx 时自动弹出 Agent 选项
@@ -307,7 +311,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
         toast.info("Agent 正在结合全部讨论与联网信息整理，可能需要 30-90 秒", { duration: 5000 });
         setAgentPendingSince(Date.now());
       }
-      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 150);
+      setTimeout(() => scrollStreamToBottom(), 150);
     } catch (error) {
       toast.error(error?.message || "发送失败");
     }
@@ -411,8 +415,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
         </div>
       )}
 
-      {/* 消息流：可被输入区挤压（多行输入/附件时），保证输入框始终在视口内 */}
-      <div className="min-h-20 flex-1 overflow-y-auto px-4 py-2 sm:px-6">
+      {/* 消息流：可被输入区挤压（多行输入/附件时），保证输入框始终在视口内；滚动仅限流内部 */}
+      <div ref={streamRef} className="min-h-20 flex-1 overflow-y-auto px-4 py-2 sm:px-6">
         {isLoading ? (
           <div className="flex items-center justify-center py-10 text-sm" style={{ color: "#99958d" }}>
             <Loader2 className="w-4 h-4 animate-spin mr-2" /> 加载讨论…
@@ -438,7 +442,6 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
             </span>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* 输入区 */}

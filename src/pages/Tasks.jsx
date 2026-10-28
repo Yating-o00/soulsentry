@@ -266,6 +266,10 @@ export default function Tasks() {
     const PRI_WEIGHT = { urgent: 1000, high: 100, medium: 10, low: 1 };
     const RISK_WEIGHT = { critical: 30, high: 20, medium: 8, low: 2 };
     const sortByPriorityTimeImportance = (a, b) => {
+      // 0) 手动置顶：pinned_at 非空的最前（后置顶的排更前）
+      const pinA = a.pinned_at ? new Date(a.pinned_at).getTime() : 0;
+      const pinB = b.pinned_at ? new Date(b.pinned_at).getTime() : 0;
+      if (pinA !== pinB) return pinB - pinA;
       // 1) 优先级（urgent=置顶 远超 其它级别）
       const pa = PRI_WEIGHT[a.priority] ?? PRI_WEIGHT.medium;
       const pb = PRI_WEIGHT[b.priority] ?? PRI_WEIGHT.medium;

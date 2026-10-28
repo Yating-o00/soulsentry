@@ -119,6 +119,7 @@ model Task {
   shareToken       String?    @unique
   shareEnabled     Boolean    @default(false)
   shareExpiresAt   DateTime?
+  pinnedAt         DateTime?
   members          TaskMember[]
   collabNodes      CollabNode[]
   collabDocs       CollabDoc[]

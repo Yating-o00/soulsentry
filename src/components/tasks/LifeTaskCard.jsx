@@ -12,7 +12,7 @@ import {
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
   Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen,
-  Users2
+  Users2, Pin
 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -202,6 +202,24 @@ export default function LifeTaskCard({
   const [showExecDetail, setShowExecDetail] = useState(false);
   const queryClient = useQueryClient();
   const execState = execStateOverride || autoExec?.state;
+
+  // 置顶/取消置顶：置顶约定在列表最前（列表排序第 0 键）
+  const [isPinning, setIsPinning] = useState(false);
+  const handleTogglePin = async (e) => {
+    e?.stopPropagation();
+    if (isPinning) return;
+    setIsPinning(true);
+    try {
+      const pinned = Boolean(task.pinned_at);
+      await base44.entities.Task.update(task.id, { pinned_at: pinned ? null : new Date().toISOString() });
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success(pinned ? "已取消置顶" : "已置顶，会排在列表最前");
+    } catch (_err) {
+      toast.error("操作没成功，再试一次");
+    } finally {
+      setIsPinning(false);
+    }
+  };
 
   // 验收：确认产物，服务端会同步把关联约定标为完成
   const handleExecAccept = async (e) => {
@@ -553,6 +571,7 @@ export default function LifeTaskCard({
         completed && "opacity-60",
         isCheckinTask && "border-[#c9d5ef]/80 bg-gradient-to-br from-[#f8faff] via-white to-white",
         isSelected && "ring-2 ring-blue-500 bg-blue-50/10",
+        task.pinned_at && "border-[#c9d5ef] shadow-md",
         isDragOver && "ring-2 ring-[#384877] ring-offset-2 bg-[#eef2ff]/50 scale-[1.01]"
       )}
     >
@@ -665,6 +684,11 @@ export default function LifeTaskCard({
                 </div>
 
                 {/* Dropdown Menu */}
+                {task.pinned_at && (
+                    <span title="已置顶" className="p-1.5 text-[#384877]">
+                        <Pin className="w-4 h-4" fill="currentColor" />
+                    </span>
+                )}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button 
@@ -680,6 +704,9 @@ export default function LifeTaskCard({
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEnableCollab && onEnableCollab(task); }}>
                             <Users2 className="w-4 h-4 mr-2" /> 开启协同
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleTogglePin(e); }}>
+                            <Pin className="w-4 h-4 mr-2" /> {task.pinned_at ? "取消置顶" : "置顶"}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit && onEdit(); }}>
                             <Edit className="w-4 h-4 mr-2" /> 编辑

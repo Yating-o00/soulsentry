@@ -42,6 +42,7 @@ const taskInputSchema = z.object({
   progress: z.number().int().min(0).max(100).optional(),
   completed_at: isoDateTime.optional().nullable(),
   deleted_at: isoDateTime.optional().nullable(),
+  pinned_at: isoDateTime.optional().nullable(),
   tags: z.any().optional(),
   reminder_strategy: z.any().optional(),
   metadata: z.any().optional()
@@ -67,7 +68,8 @@ const KNOWN_TASK_FIELDS = new Set([
   "tags",
   "reminder_strategy",
   "metadata",
-  "done_today"
+  "done_today",
+  "pinned_at"
 ]);
 
 tasksRouter.use(requireAuth);
@@ -153,6 +155,7 @@ export function serializeTask(task) {
     progress: task.progress,
     completed_at: task.completedAt,
     deleted_at: task.deletedAt,
+    pinned_at: task.pinnedAt,
     tags: task.tags,
     reminder_strategy: task.reminderStrategy,
     share_token: task.shareToken,
@@ -320,7 +323,7 @@ async function createTaskChangeLog(userId, task, changeType, payload = {}, previ
 
 tasksRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
-  const orderBy = parseSort(req.query.sort || req.query.orderBy);
+  const orderBy = [{ pinnedAt: "desc" }, parseSort(req.query.sort || req.query.orderBy)]; // 置顶优先（SQLite 中 DESC 的 NULL 沉底）
   // 共有约定：本人所有 + 作为成员参与的约定（含其子约定）
   const sharedIds = await getSharedTaskIds(req.user.id);
   const where = sharedIds.length
@@ -832,6 +835,7 @@ tasksRouter.patch("/:id", async (req, res) => {
       // 完成时间统一走 nextCompletedAtForUpdate：显式传值、重复约定打卡、普通完成自动打时间戳
       completedAt: nextCompletedAtForUpdate,
       deletedAt: payload.data.deleted_at === undefined ? undefined : (payload.data.deleted_at ? new Date(payload.data.deleted_at) : null),
+      pinnedAt: payload.data.pinned_at === undefined ? undefined : (payload.data.pinned_at ? new Date(payload.data.pinned_at) : null),
       tags: payload.data.tags,
       reminderStrategy: payload.data.reminder_strategy,
       metadata: nextMetadata

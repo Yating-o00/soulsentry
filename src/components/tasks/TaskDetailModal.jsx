@@ -34,7 +34,8 @@ import {
   Languages,
   MapPin,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Footprints
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -72,7 +73,7 @@ import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { isRecurringTask, isTaskEffectivelyCompleted } from "@/lib/taskStatus";
-import { isSameShanghaiDay } from "@/lib/timeCore";
+import { isSameShanghaiDay, formatShanghai } from "@/lib/timeCore";
 
 // 子约定只继承「未来的」时间安排：父约定时间已过时不带过来，
 // 否则新建子约定会立刻触发到点提醒 / 截止跟进 / 逾期衰减三连提醒
@@ -1196,6 +1197,28 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                           }`}
                         >
                           {subtask.title}
+                          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            {(subtask.plan_kind === "checkin" || subtask.category === "checkin") && (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                                <Footprints className="w-3 h-3" /> 打卡
+                              </span>
+                            )}
+                            {subtask.reminder_time && (() => {
+                              const sameDay = isSameShanghaiDay(subtask.reminder_time, nowIso);
+                              const startText = sameDay
+                                ? formatShanghai(subtask.reminder_time, "HH:mm")
+                                : formatShanghai(subtask.reminder_time, "M/d HH:mm");
+                              const timeText = subtask.end_time
+                                ? `${startText}–${formatShanghai(subtask.end_time, "HH:mm")}`
+                                : startText;
+                              return (
+                                <span className="inline-flex items-center gap-0.5 text-[11px] tabular-nums text-slate-400">
+                                  <Clock className="w-3 h-3" />
+                                  {timeText}
+                                </span>
+                              );
+                            })()}
+                          </span>
                         </span>
                         {subtask.revisions?.length > 0 && (
                           <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-md font-medium flex items-center gap-0.5">

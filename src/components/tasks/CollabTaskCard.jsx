@@ -1,12 +1,13 @@
 // 协同约定卡片：概览/生活视图中的多人+Agent 约定卡片（点击进入共创空间，只读摘要，编辑一律进空间）
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Check, ChevronRight, MessageSquare, Bot, Sparkles, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { httpRequest } from "@/api/httpClient";
+import { toast } from "sonner";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import CollabInviteDialog from "./CollabInviteDialog";
 
@@ -78,6 +79,35 @@ export default function CollabTaskCard({ task }) {
   const agentActive = collab?.agent?.enabled && !collab?.agent?.paused;
 
   const openSpace = () => navigate(`/collabspace?taskId=${task.id}`);
+
+  // 卡片上直接勾选/确认子约定（阻止冒泡到卡片跳转）
+  const [togglingId, setTogglingId] = useState(null);
+  const queryClient = useQueryClient();
+  const handleToggleSub = async (e, sub) => {
+    e.stopPropagation();
+    if (togglingId === sub.id) return;
+    const isDraft = sub.metadata?.collab?.state === "draft";
+    const done = isTaskEffectivelyCompleted(sub);
+    setTogglingId(sub.id);
+    try {
+      if (isDraft) {
+        const res = await httpRequest(`/api/collab/${task.id}/subtasks/${sub.id}/confirm`, { method: "POST" });
+        if (res?.state === "active") toast.success(`子约定「${sub.title}」已确认生效`);
+        else toast.info(`已确认，还差 ${res?.pending_confirm_users?.length ?? 0} 位成员确认`);
+      } else {
+        await httpRequest(`/api/tasks/${sub.id}`, {
+          method: "PATCH",
+          body: { status: done ? "pending" : "completed", completed_at: done ? null : new Date().toISOString() },
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['collab-card', task.id] });
+      queryClient.invalidateQueries({ queryKey: ['collab', task.id] });
+    } catch (error) {
+      toast.error(error?.message || "操作失败");
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   if (!collab) return null;
 
@@ -195,14 +225,17 @@ export default function CollabTaskCard({ task }) {
               const confirmedCount = Array.isArray(subCollab?.confirmedBy) ? subCollab.confirmedBy.length : 0;
               return (
                 <div key={sub.id} className="flex items-center gap-3 py-1.5">
-                  <span
-                    className={cn(
-                      "w-[18px] h-[18px] rounded-full border flex items-center justify-center flex-shrink-0",
-                      done ? "bg-[#384877] border-[#384877] text-white" : "border-slate-300"
-                    )}
+                  <button
+                    type="button"
+                    onClick={(e) => handleToggleSub(e, sub)}
+                    disabled={togglingId === sub.id}
+                    className="w-[18px] h-[18px] rounded-full border flex items-center justify-center flex-shrink-0 transition-opacity disabled:opacity-50 focus-visible:outline-none"
+                    style={done ? { backgroundColor: "#384877", borderColor: "#384877", color: "#fff" } : { borderColor: "#cbd5e1" }}
+                    aria-label={isDraft ? "确认子约定" : done ? "标记为未完成" : "标记完成"}
+                    title={isDraft ? "确认子约定" : done ? "重新打开" : "标记完成"}
                   >
                     {done && <Check className="w-3 h-3" />}
-                  </span>
+                  </button>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={cn("text-sm truncate", done ? "text-slate-400 line-through" : "text-slate-700")}>

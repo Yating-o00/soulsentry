@@ -45,8 +45,12 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
         if (result?.url) {
           setInviteUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
         }
-      } catch {
-        // 链接生成失败：留空，仅展示直接添加表单
+      } catch (error) {
+        // 透出真实原因（如无权限），不再静默失败
+        if (!cancelled) {
+          console.error("[collab] 邀请链接生成失败:", error?.message || error);
+          toast.error(error?.data?.message || error?.message || "邀请链接生成失败，请稍后再试");
+        }
       } finally {
         if (!cancelled) setLinkLoading(false);
       }
@@ -144,7 +148,7 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
                 </div>
               </>
             ) : (
-              <p className="text-xs text-slate-400">链接生成失败，请稍后再试</p>
+              <p className="text-xs text-slate-400">未能生成邀请链接：需要是该约定的发起人或成员</p>
             )}
           </div>
 

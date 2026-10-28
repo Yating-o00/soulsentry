@@ -271,8 +271,16 @@ publicShareRouter.post("/generate/:type/:id", requireAuth, async (req, res) => {
 
   try {
     if (type === "task") {
-      const task = await prisma.task.findFirst({ where: { id, userId: req.user.id } });
-      if (!task) return res.status(404).json({ error: "NOT_FOUND" });
+      // 协同约定：发起人与成员都可生成/刷新邀请链接（邀请是协同的基础动作）；
+      // 非协同任务仍仅发起人可生成
+      const task = await prisma.task.findFirst({
+        where: { id, OR: [{ userId: req.user.id }, { members: { some: { userId: req.user.id } } }] }
+      });
+      if (!task) return res.status(404).json({ error: "NOT_FOUND", message: "约定不存在或无权限生成邀请链接" });
+      const isCollab = !!(task.metadata && typeof task.metadata === "object" && task.metadata.collab);
+      if (task.userId !== req.user.id && !isCollab) {
+        return res.status(403).json({ error: "FORBIDDEN", message: "只有发起人可以为该约定生成邀请链接" });
+      }
 
       const token = task.shareToken || generateToken();
       const updated = await prisma.task.update({

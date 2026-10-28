@@ -32,7 +32,9 @@ import {
   Sparkles,
   Loader2,
   Languages,
-  MapPin
+  MapPin,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -70,6 +72,7 @@ import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
 import { isRecurringTask, isTaskEffectivelyCompleted } from "@/lib/taskStatus";
+import { isSameShanghaiDay } from "@/lib/timeCore";
 
 // 子约定只继承「未来的」时间安排：父约定时间已过时不带过来，
 // 否则新建子约定会立刻触发到点提醒 / 截止跟进 / 逾期衰减三连提醒
@@ -96,6 +99,10 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
   const [isTranslating, setIsTranslating] = useState(false);
   const [showReviseDialog, setShowReviseDialog] = useState(false);
   const [revisingSubtask, setRevisingSubtask] = useState(null);
+  // 智能规划分组折叠（子约定带 plan_group 时）：null = 自动，只展开含今天的组
+  const [collapsedGroups, setCollapsedGroups] = useState(null);
+  // 非规划约定：已完成子约定折叠区（默认收起）
+  const [doneOpen, setDoneOpen] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch latest task data to ensure UI updates (e.g. after AI analysis)
@@ -141,6 +148,37 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
     });
     return map;
   }, [subtasks, childQueries]);
+
+  // —— 智能规划分组：与约定卡片同一套折叠语义（默认只展开含今天的组） ——
+  const nowIso = new Date().toISOString();
+  const planMode = subtasks.some((s) => s.plan_kind || s.plan_group);
+  const planGroups = React.useMemo(() => {
+    if (!planMode) return [];
+    return Object.values(
+      subtasks.reduce((acc, s) => {
+        const g = String(s.plan_group || "每日安排");
+        (acc[g] = acc[g] || { name: g, items: [] }).items.push(s);
+        return acc;
+      }, {})
+    )
+      .map((g) => ({
+        ...g,
+        items: g.items.slice().sort((a, b) => String(a.reminder_time || "").localeCompare(String(b.reminder_time || ""))),
+      }))
+      .sort((a, b) => String(a.items[0]?.reminder_time || "").localeCompare(String(b.items[0]?.reminder_time || "")));
+  }, [subtasks, planMode]);
+  const todayGroupName = planGroups.find((g) => g.items.some((s) => s.reminder_time && isSameShanghaiDay(s.reminder_time, nowIso)))?.name || null;
+  const isPlanGroupCollapsed = (name) =>
+    collapsedGroups ? collapsedGroups.has(name) : name !== todayGroupName;
+  const togglePlanGroup = (name) => {
+    setCollapsedGroups((prev) => {
+      const base = prev || new Set(planGroups.filter((g) => g.name !== todayGroupName).map((g) => g.name));
+      const next = new Set(base);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
 
   // Calculate target language for button label
   const targetLangLabel = React.useMemo(() => {
@@ -1065,15 +1103,26 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 )}
               </AnimatePresence>
 
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold text-slate-900">子约定管理</h3>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <h3 className="text-base font-bold text-slate-900">子约定</h3>
+                  {subtasks.length > 0 && (() => {
+                    const doneCount = subtasks.filter(isEffectivelyCompleted).length;
+                    const pct = Math.round((doneCount / subtasks.length) * 100);
+                    return (
+                      <span className="text-xs text-slate-400 tabular-nums flex-shrink-0">
+                        已完成 {doneCount}/{subtasks.length} · {pct}%
+                      </span>
+                    );
+                  })()}
+                </div>
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   onClick={handleAutoGenerateSubtasks}
                   disabled={isGeneratingSubtasks}
-                  className="border-[#d6dcf0] bg-[#f0f3fb] hover:bg-[#e4e9f7] text-[#384877] h-9 rounded-xl font-medium"
+                  className="border-[#d6dcf0] bg-[#f0f3fb] hover:bg-[#e4e9f7] text-[#384877] h-8 rounded-lg font-medium text-xs flex-shrink-0"
                 >
                   {isGeneratingSubtasks ? (
                     <>
@@ -1088,6 +1137,15 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                   )}
                 </Button>
               </div>
+              {subtasks.length > 0 && (() => {
+                const doneCount = subtasks.filter(isEffectivelyCompleted).length;
+                return (
+                  <Progress
+                    value={Math.round((doneCount / subtasks.length) * 100)}
+                    className="h-1.5 mb-4 bg-slate-100 [&>div]:bg-[#384877]"
+                  />
+                );
+              })()}
 
               <div className="flex gap-2 mb-4">
                 <Input
@@ -1106,15 +1164,16 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                 </Button>
               </div>
 
-              <div className="space-y-2.5">
-                <AnimatePresence mode="popLayout">
-                  {subtasks.map((subtask) => (
-                    <motion.div
+              {(() => {
+                const pendingItems = subtasks.filter((s) => !isEffectivelyCompleted(s));
+                const doneItems = subtasks.filter((s) => isEffectivelyCompleted(s));
+                const renderSubtaskRow = (subtask) => (
+                  <motion.div
                       key={subtask.id}
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, x: -100 }}
-                      className={`flex flex-col p-3.5 rounded-xl border transition-all hover:shadow-sm ${
+                      className={`group flex flex-col p-3.5 rounded-xl border transition-all hover:shadow-sm ${
                         isEffectivelyCompleted(subtask)
                           ? "bg-slate-50 border-slate-200"
                           : "bg-white border-[#d6dcf0] hover:border-[#384877]/40"
@@ -1144,6 +1203,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                             v{subtask.revisions.length + 1}
                           </span>
                         )}
+                        <div className="flex items-center gap-0.5 flex-shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <Button
                           size="icon"
                           variant="ghost"
@@ -1170,6 +1230,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
+                        </div>
                       </div>
                       {insertParentId === subtask.id && (
                         <div className="flex items-center gap-2 mt-2.5 pl-8">
@@ -1251,16 +1312,74 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                         </div>
                       )}
                     </motion.div>
-                  ))}
-                </AnimatePresence>
+                );
 
-                {subtasks.length === 0 && (
-                  <div className="text-center py-8 text-slate-400">
-                    <Circle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p>暂无子约定</p>
+                if (subtasks.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-slate-400">
+                      <Circle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>暂无子约定</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2.5">
+                    {planMode ? (
+                      planGroups.map((g) => {
+                        const collapsed = isPlanGroupCollapsed(g.name);
+                        const gDone = g.items.filter(isEffectivelyCompleted).length;
+                        const hasToday = g.items.some((s) => s.reminder_time && isSameShanghaiDay(s.reminder_time, nowIso));
+                        return (
+                          <div key={g.name} className="rounded-xl border border-slate-200 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => togglePlanGroup(g.name)}
+                              className="w-full flex items-center gap-1.5 px-3 py-2 text-left bg-slate-50/70 hover:bg-slate-100/70 transition-colors"
+                            >
+                              {collapsed
+                                ? <ChevronRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                : <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
+                              <span className="text-[13px] font-medium text-slate-700">{g.name}</span>
+                              {hasToday && (
+                                <span className="rounded-full px-1.5 py-0.5 text-[10px] bg-[#eef0fa] text-[#384877]">今日</span>
+                              )}
+                              <span className="ml-auto text-[11px] text-slate-400 tabular-nums flex-shrink-0">{gDone}/{g.items.length}</span>
+                            </button>
+                            {!collapsed && (
+                              <div className="p-2 space-y-2">
+                                <AnimatePresence mode="popLayout">
+                                  {g.items.map(renderSubtaskRow)}
+                                </AnimatePresence>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <AnimatePresence mode="popLayout">
+                          {pendingItems.map(renderSubtaskRow)}
+                        </AnimatePresence>
+                        {doneItems.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setDoneOpen(!doneOpen)}
+                            className="w-full flex items-center justify-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5 rounded-lg hover:bg-slate-50 transition-colors"
+                          >
+                            {doneOpen ? "收起已完成 ▴" : `已完成 ${doneItems.length} 条 ▾`}
+                          </button>
+                        )}
+                        {doneOpen && (
+                          <AnimatePresence mode="popLayout">
+                            {doneItems.map(renderSubtaskRow)}
+                          </AnimatePresence>
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
             </TabsContent>
 
             {/* Attachments Tab */}

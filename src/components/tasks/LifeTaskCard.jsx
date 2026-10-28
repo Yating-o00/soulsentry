@@ -12,7 +12,7 @@ import {
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
   Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen,
-  Users2, ListTree
+  Users2
 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -1297,7 +1297,9 @@ export default function LifeTaskCard({
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-stone-50 border border-stone-100 hover:border-stone-300 hover:bg-stone-100/60 transition-colors group"
                   >
-                    <ListTree className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" />
+                    <span className="flex-shrink-0 rounded-full bg-[#384877]/10 text-[#384877] text-[10px] font-semibold min-w-[20px] h-5 px-1 flex items-center justify-center tabular-nums">
+                      {subtasks.length}
+                    </span>
                     <span className="text-xs font-medium text-stone-500 group-hover:text-stone-700">查看全部子约定与详情</span>
                     <span className="ml-auto text-[11px] text-stone-400 tabular-nums flex-shrink-0">
                       子约定 {subtasks.filter(isTaskEffectivelyCompleted).length}/{subtasks.length}

@@ -1,4 +1,5 @@
 import Taro from "@tarojs/taro";
+import { useState } from "react";
 import { View, Text } from "@tarojs/components";
 import ShareButton from "@/components/ShareButton";
 import {
@@ -114,6 +115,8 @@ export default function PromiseCard({
   const p = priorityMark[task.priority] || priorityMark.medium;
   const categoryLabel = categoryMap[task.category] || task.category || "其他";
   const aiNote = makeAiNote(task, analysis);
+  // 子约定默认折叠：长规划（如每日规划）只预览前 3 条，点按展开全部
+  const [subExpanded, setSubExpanded] = useState(false);
 
   const goDetail = () => {
     Taro.navigateTo({ url: `/pages/task-detail/index?id=${task.id}` });
@@ -341,7 +344,7 @@ export default function PromiseCard({
                 </View>
                 <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>{progress}%</Text>
               </View>
-              {subtasks.map((s) => {
+              {(subExpanded ? subtasks : subtasks.slice(0, 3)).map((s) => {
                 const subDone = isEffectivelyDone(s);
                 return (
                   <View
@@ -376,6 +379,16 @@ export default function PromiseCard({
                   </View>
                 );
               })}
+              {subtasks.length > 3 && (
+                <View
+                  onClick={(e) => { e.stopPropagation(); setSubExpanded(!subExpanded); }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "12rpx 0 4rpx" }}
+                >
+                  <Text style={{ fontSize: "24rpx", color: theme.primary }}>
+                    {subExpanded ? "收起子约定 ▴" : `展开全部 ${subtasks.length} 条子约定 ▾`}
+                  </Text>
+                </View>
+              )}
             </View>
             );
           })()}

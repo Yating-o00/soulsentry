@@ -148,7 +148,7 @@ export default function LifeTaskCard({
     setCompleted(isRecurringTask ? !!task.done_today : task.status === 'completed');
   }, [task.done_today, task.status, isRecurringTask]);
   const [expanded, setExpanded] = useState(false);
-  // 智能规划母卡：子约定按 plan_group 分组折叠。null = 自动（含今天的组、以及首个有待办项的组展开）
+  // 智能规划母卡：子约定按 plan_group 分组折叠。null = 自动（只展开含今天的组，其余全部收起，避免长规划占满卡片）
   const [collapsedGroups, setCollapsedGroups] = useState(null);
   // —— 智能规划分组渲染：子约定带 plan_kind/plan_group 时，母卡按组动态展示（时刻/打卡项/组进度） ——
   const planMode = !isSelectionMode && subtasks.some((s) => s.plan_kind || s.plan_group);
@@ -168,18 +168,16 @@ export default function LifeTaskCard({
         }))
         .sort((a, b) => String(a.items[0]?.reminder_time || "").localeCompare(String(b.items[0]?.reminder_time || "")))
     : [];
-  const defaultOpenGroup = (() => {
+  // 默认只展开「含今天」的组；规划期不含今天时全部组收起（具体规划事项折叠，组头看进度即可）
+  const todayGroupName = (() => {
     if (planGroups.length === 0) return null;
-    const todayGroup = planGroups.find((g) => g.items.some((s) => s.reminder_time && isSameShanghaiDay(s.reminder_time, nowIso)));
-    if (todayGroup) return todayGroup.name;
-    const pendingGroup = planGroups.find((g) => g.items.some((s) => s.status !== "completed"));
-    return (pendingGroup || planGroups[0]).name;
+    return planGroups.find((g) => g.items.some((s) => s.reminder_time && isSameShanghaiDay(s.reminder_time, nowIso)))?.name || null;
   })();
   const isPlanGroupCollapsed = (name) =>
-    collapsedGroups ? collapsedGroups.has(name) : name !== defaultOpenGroup && planGroups.length > 1;
+    collapsedGroups ? collapsedGroups.has(name) : name !== todayGroupName;
   const togglePlanGroup = (name) => {
     setCollapsedGroups((prev) => {
-      const base = prev || new Set(planGroups.filter((g) => planGroups.length > 1 && g.name !== defaultOpenGroup).map((g) => g.name));
+      const base = prev || new Set(planGroups.filter((g) => g.name !== todayGroupName).map((g) => g.name));
       const next = new Set(base);
       if (next.has(name)) next.delete(name);
       else next.add(name);

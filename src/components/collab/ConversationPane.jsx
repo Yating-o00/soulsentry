@@ -667,7 +667,7 @@ export default function ConversationPane({
   return (
     <section
       id="conversation-pane"
-      className="flex min-h-[75dvh] flex-col min-[900px]:h-full min-[900px]:min-h-0"
+      className="flex min-h-[75vh] flex-col min-[900px]:h-full min-[900px]:min-h-0"
       style={{ backgroundColor: C.pane }}
     >
       <div className="shrink-0 border-b px-4 pt-4 sm:px-6" style={{ borderColor: C.line }}>

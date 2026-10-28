@@ -75,8 +75,27 @@ function AttachmentView({ attachments }) {
   );
 }
 
-// 消息操作（桌面 hover 显示，移动端常驻）：转为子约定 / 标记节点 / 存为文件 / 标记 / 回复
-function MessageActions({ message, onConvert, onMark, onReply }) {
+// 删除消息（自己的内容）：第一次点击变为确认，3 秒后自动复位
+function DeleteMessageButton({ onDelete }) {
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = setTimeout(() => setConfirming(false), 3000);
+    return () => clearTimeout(timer);
+  }, [confirming]);
+  return (
+    <button
+      type="button"
+      onClick={() => (confirming ? onDelete() : setConfirming(true))}
+      className={cn(msgActionCls, confirming && "text-rose-600 hover:text-rose-600")}
+    >
+      {confirming ? "确认删除？" : "删除"}
+    </button>
+  );
+}
+
+// 消息操作（桌面 hover 显示，移动端常驻）：转为子约定 / 标记节点 / 存为文件 / 标记 / 回复 / 删除
+function MessageActions({ message, canDelete, onConvert, onMark, onReply, onDelete }) {
   return (
     <div className="mt-1 flex flex-wrap gap-x-1 min-[900px]:opacity-0 min-[900px]:transition-opacity min-[900px]:group-hover:opacity-100">
       <button type="button" onClick={() => onConvert(message, "subtask")} className={msgActionCls}>转为子约定</button>
@@ -109,13 +128,14 @@ function MessageActions({ message, onConvert, onMark, onReply }) {
         </DropdownMenuContent>
       </DropdownMenu>
       <button type="button" onClick={() => onReply(message)} className={msgActionCls}>回复</button>
+      {canDelete && <DeleteMessageButton onDelete={() => onDelete(message)} />}
     </div>
   );
 }
 
 // ──────────────────────────── 讨论视图 ────────────────────────────
 
-function DiscussionView({ taskId, highlightId, onClearHighlight }) {
+function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }) {
   const queryClient = useQueryClient();
   const [topicFilter, setTopicFilter] = useState("all");
   const [replyTo, setReplyTo] = useState(null);
@@ -227,6 +247,17 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
     }
   };
 
+  // 删除自己发的消息（回复也可删）
+  const handleDelete = async (message) => {
+    try {
+      await httpRequest(`/api/comments/${message.id}`, { method: "DELETE" });
+      invalidateAll();
+      toast.success("已删除");
+    } catch (error) {
+      toast.error(error?.message || "删除失败");
+    }
+  };
+
   // 插入附件：上传后挂到待发列表
   const handlePickFiles = async (fileList) => {
     const list = Array.from(fileList || []).slice(0, Math.max(0, 10 - attachments.length));
@@ -329,10 +360,17 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
             {!isAgent && !isReply && (
               <MessageActions
                 message={message}
+                canDelete={message.created_by_id === currentUserId}
                 onConvert={handleConvert}
                 onMark={handleMark}
                 onReply={(m) => setReplyTo({ id: m.id, name: m.created_by_name })}
+                onDelete={handleDelete}
               />
+            )}
+            {!isAgent && isReply && message.created_by_id === currentUserId && (
+              <div className="min-[900px]:opacity-0 min-[900px]:transition-opacity min-[900px]:group-hover:opacity-100">
+                <DeleteMessageButton onDelete={() => handleDelete(message)} />
+              </div>
             )}
           </div>
         </div>
@@ -621,7 +659,7 @@ function ActivityView({ taskId }) {
 // ──────────────────────────── 会话窗（右栏） ────────────────────────────
 
 export default function ConversationPane({
-  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount,
+  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId,
 }) {
   return (
     <section
@@ -683,7 +721,7 @@ export default function ConversationPane({
         </div>
       </div>
       {view === "discussion"
-        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} />
+        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} />
         : <ActivityView taskId={taskId} />}
     </section>
   );

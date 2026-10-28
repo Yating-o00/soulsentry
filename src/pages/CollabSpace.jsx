@@ -133,7 +133,7 @@ export default function CollabSpace() {
 
   return (
     <div
-      className="min-h-dvh pb-[64px] min-[900px]:grid min-[900px]:h-dvh min-[900px]:grid-cols-2 min-[900px]:overflow-hidden min-[900px]:pb-0"
+      className="min-h-dvh pb-[64px] min-[900px]:grid min-[900px]:h-dvh min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden min-[900px]:pb-0"
       style={{ backgroundColor: "#f1f0ec", color: "#231f20" }}
     >
       <style>{`
@@ -198,7 +198,7 @@ export default function CollabSpace() {
       </main>
 
       {/* 右栏：会话窗 */}
-      <aside className="min-w-0 border-t min-[900px]:h-full min-[900px]:border-l min-[900px]:border-t-0" style={{ borderColor: "#d5d3cc" }}>
+      <aside className="min-w-0 border-t min-[900px]:h-full min-[900px]:min-h-0 min-[900px]:border-l min-[900px]:border-t-0" style={{ borderColor: "#d5d3cc" }}>
         <ConversationPane
           taskId={taskId}
           view={conversationView}
@@ -207,6 +207,7 @@ export default function CollabSpace() {
           onClearHighlight={() => setHighlightCommentId(null)}
           onOpenAgent={openAgent}
           messageCount={messageCount}
+          currentUserId={currentUser?.id}
         />
       </aside>
 

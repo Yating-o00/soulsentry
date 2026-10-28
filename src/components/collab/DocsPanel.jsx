@@ -10,6 +10,30 @@ import { cn } from "@/lib/utils";
 import { C, DOC_TYPE_LABELS, formatTime } from "./constants";
 import { EmptyState, PanelHeader } from "./Common";
 
+// 共同文件正文渲染：markdown 链接与裸 URL 转为可点击链接（附件沉淀后可下载）
+function renderLinkedContent(content) {
+  const text = String(content || "");
+  const re = /\[([^\]]+)\]\(((?:https?:\/\/|\/)[^)\s]+)\)|((?:https?:\/\/|\/uploads\/)\S+)/g;
+  const parts = [];
+  let last = 0;
+  let match;
+  let key = 0;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    const label = match[1] || match[3];
+    const url = match[2] || match[3];
+    parts.push(
+      <a key={key} href={url} target="_blank" rel="noreferrer" className="text-[#384877] underline underline-offset-2 break-all hover:opacity-80">
+        {label}
+      </a>
+    );
+    key += 1;
+    last = re.lastIndex;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
 export default function DocsPanel({ docs, taskId, onJumpToSource }) {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState(docs[0]?.id ?? "");
@@ -140,7 +164,7 @@ export default function DocsPanel({ docs, taskId, onJumpToSource }) {
                 className={cn("text-[13px] leading-6 whitespace-pre-wrap break-words", !expanded && "line-clamp-[12]")}
                 style={{ color: "#57534d" }}
               >
-                {selected.content || "（空文档）"}
+                {selected.content ? renderLinkedContent(selected.content) : "（空文档）"}
               </div>
             )}
           </div>

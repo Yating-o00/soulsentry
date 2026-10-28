@@ -54,24 +54,6 @@ export const ACTIVITY_LABELS = {
   collab_doc_confirmed: "确认沉淀文档",
 };
 
-export const AGENT_ACTION_TEXT = {
-  tidy: "心栈 Agent 正在整理讨论（约 30 秒）…",
-  minutes: "心栈 Agent 正在生成纪要（约 30 秒）…",
-  disputes: "心栈 Agent 正在协调分歧（约 30 秒）…",
-  extract_subtasks: "心栈 Agent 正在提取子约定（约 30 秒）…",
-};
-
-export const agentSuccessText = (action, res) => {
-  const r = res?.result || {};
-  switch (action) {
-    case "tidy": return r.summary || "整理完成：共识纪要与分歧清单已更新";
-    case "minutes": return r.doc ? `纪要「${r.doc.title}」已生成` : "纪要已生成";
-    case "disputes": return `已向相关成员发出 ${r.questions_count ?? 0} 个补充问题`;
-    case "extract_subtasks": return `已生成 ${r.created?.length ?? 0} 条子约定草案，待确认后生效`;
-    default: return "Agent 执行完成";
-  }
-};
-
 // @Agent 意图识别：发送内容按意图给展示层提示（实际触发由后端完成）
 export const agentIntentFor = (text) => {
   if (/分歧|协调|意见分歧/.test(text)) return { key: "disputes", toast: "Agent 将协调分歧" };

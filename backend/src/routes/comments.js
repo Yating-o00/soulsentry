@@ -173,6 +173,18 @@ commentsRouter.patch("/:id", async (req, res) => {
     data: { mark: payload.data.mark },
     include: { user: true }
   });
+
+  // 标记「分歧」时，Agent 作为聊天协调员自动出面：汇总观点 + 折中方案 + 通知相关成员
+  if (payload.data.mark === "dispute" && task?.metadata?.collab) {
+    setImmediate(() => {
+      import("../services/collabAgent.js")
+        .then(({ runCollabAgent }) =>
+          runCollabAgent({ taskId: task.id, action: "disputes", user: req.user })
+        )
+        .catch((error) => console.error("[collab] 分歧协调触发失败:", error?.message || error));
+    });
+  }
+
   return res.json(serializeComment(comment));
 });
 

@@ -625,13 +625,15 @@ collabRouter.post("/:taskId/convert", async (req, res) => {
     return res.status(201).json({ target, comment_id: comment.id, node: serializeNode(node) });
   }
 
+  const attachmentLines = (Array.isArray(comment.attachments) ? comment.attachments : [])
+    .map((a) => `- [${a?.name || "附件"}](${a?.url})`).join("\n");
   const doc = await prisma.collabDoc.create({
     data: {
       taskId: task.id,
       userId: req.user.id,
       title: comment.content.trim().slice(0, 50),
       docType: "file",
-      content: comment.content,
+      content: comment.content + (attachmentLines ? `\n\n附件：\n${attachmentLines}` : ""),
       version: 1,
       history: [],
       status: "draft",
@@ -695,6 +697,7 @@ collabRouter.post("/:taskId/agent", async (req, res) => {
         ...(r.message_comment_id ? { message_comment_id: r.message_comment_id } : {}),
         ...(r.reply_comment_id ? { reply_comment_id: r.reply_comment_id } : {}),
         ...(r.created ? { created: r.created.map(serializeTask) } : {}),
+        ...(r.nodes ? { nodes: r.nodes.map(serializeNode) } : {}),
         ...(r.notified ? { notified: r.notified } : {}),
         ...(r.questions_count !== undefined ? { questions_count: r.questions_count } : {})
       }

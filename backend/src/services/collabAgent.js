@@ -33,6 +33,16 @@ function mockLLM({ json, kind }) {
       ]
     };
   }
+  if (kind === "coordinate") {
+    return {
+      reply: "（本地调试回复）收到！我先梳理一下目前的讨论要点：各方的想法都已经摆在桌面上了。建议下一步先确认大家最在意的 1-2 个分歧点，需要我整理共识或提取子约定的话，随时 @我。",
+      subtasks: [
+        { title: "（mock）确认时间地点", standard: "所有成员给出可行时间", assigneeHint: "" }
+      ],
+      nodes: [{ title: "（mock）出发前确认清单", node_type: "review" }],
+      doc: null
+    };
+  }
   if (kind === "disputes") {
     return {
       analysis: "（本地 mock）当前分歧主要集中在时间安排与分工两点，各方偏好尚未完全对齐，需要进一步澄清。",
@@ -128,7 +138,10 @@ export function formatSpaceData(task, snapshot) {
     for (const comment of snapshot.comments.slice(-60)) {
       const who = comment.agent ? "Agent" : (comment.user?.displayName || comment.user?.email || comment.user?.phone || "成员");
       const mark = comment.mark ? ` [标记:${comment.mark}]` : "";
-      lines.push(`- ${who}：${String(comment.content).slice(0, 200)}${mark}`);
+      const atts = Array.isArray(comment.attachments) && comment.attachments.length
+        ? ` [附件:${comment.attachments.map((a) => a?.name || a?.type || "文件").join("、")}]`
+        : "";
+      lines.push(`- ${who}：${String(comment.content).slice(0, 200)}${mark}${atts}`);
     }
   }
   return lines.join("\n");
@@ -207,7 +220,38 @@ function errorWith(status, code, message) {
 
 const isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
 
-// 动作实现：每个返回 { ...结果 }；抛错表示动作失败（此时未扣点）
+// ── 动作实现：每个返回 { ...结果 }；抛错表示动作失败（此时未扣点）──
+
+// 子约定草案统一创建入口（extract_subtasks 与 coordinate 共用）
+async function createDraftSubtask(task, user, { title, standard = "", assigneeHint = "", sourceCommentId = null }) {
+  const subtask = await prisma.task.create({
+    data: {
+      userId: user.id,
+      title: String(title).trim().slice(0, 120),
+      status: "TODO",
+      priority: "medium",
+      parentTaskId: task.id,
+      metadata: {
+        collab: {
+          state: "draft",
+          standard: String(standard || "").slice(0, 500),
+          assignee: null,
+          confirmedBy: [],
+          assigneeHint: String(assigneeHint || "").slice(0, 60),
+          sourceCommentId
+        }
+      }
+    }
+  });
+  await logCollabChange(user.id, task, "collab_subtask_draft", [
+    { field: "subtask", field_label: "子约定", new_value: subtask.title },
+    ...(sourceCommentId
+      ? [{ field: "agent", field_label: "来源", new_value: "Agent 提取" }]
+      : [{ field: "agent", field_label: "来源", new_value: "Agent 沉淀" }])
+  ]);
+  return subtask;
+}
+
 async function runAction({ action, task, snapshot, system, user, commentId }) {
   const spaceText = formatSpaceData(task, snapshot);
 
@@ -306,29 +350,12 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
     const created = [];
     for (const item of items) {
       if (!isNonEmptyString(item.title)) continue;
-      const subtask = await prisma.task.create({
-        data: {
-          userId: user.id,
-          title: String(item.title).trim().slice(0, 120),
-          status: "TODO",
-          priority: "medium",
-          parentTaskId: task.id,
-          metadata: {
-            collab: {
-              state: "draft",
-              standard: String(item.standard || "").slice(0, 500),
-              assignee: null,
-              confirmedBy: [],
-              sourceCommentId: commentId
-            }
-          }
-        }
-      });
-      created.push(subtask);
-      await logCollabChange(user.id, task, "collab_subtask_draft", [
-        { field: "subtask", field_label: "子约定", new_value: subtask.title },
-        { field: "agent", field_label: "来源", new_value: "Agent 提取" }
-      ]);
+      created.push(await createDraftSubtask(task, user, {
+        title: item.title,
+        standard: item.standard,
+        assigneeHint: item.assigneeHint,
+        sourceCommentId: commentId
+      }));
     }
     await syncParentProgress(task.id);
     const message = await postAgentMessage(task.id, {
@@ -374,17 +401,105 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
       console.warn("[collabAgent] 联网检索失败，退回纯空间上下文:", error?.message || error);
     }
 
-    // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息
-    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请直接回复这位成员：回答疑问、汇总观点、比较方案，或${searched ? "结合联网信息" : "结合完整讨论"}给出有指导意义的建议。要求：\n1. 全程记住并使用完整讨论里的信息——成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；\n2. 建议要落到本约定的具体情境（成员、时间窗、预算约束），不要泛泛而谈；\n3. 中性、不评判、不替人承诺；\n4. 200-400 字，分段清晰；不要用"Agent："开头。`;
-    const text = await invokeLLM({ system, prompt, json: false, kind: action });
-    if (!isNonEmptyString(text)) throw errorWith(502, "AGENT_EMPTY", "Agent 没有生成有效回复");
+    // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息。
+    // 结构化输出：除回复外，按讨论内容把可执行项落成子约定草案、执行节点、沉淀文件（均为草案，待人确认）。
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：若讨论中出现了可执行的行动项（成员要做的事），提取为子约定草案，每项含 title（30 字以内）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null。\n\n所有对象都是草案，需成员确认后才生效；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"..."}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null}`;
+    let data;
+    try {
+      data = await invokeLLM({ system, prompt, json: true, kind: action });
+    } catch (error) {
+      console.warn("[collabAgent] coordinate 结构化输出解析失败，降级为纯文本回复:", error?.message || error);
+      data = null;
+    }
+
+    const createdNotes = [];
+    let created = [];
+    let createdNodes = [];
+    let doc = null;
+
+    if (data && typeof data === "object") {
+      const items = Array.isArray(data.subtasks) ? data.subtasks : [];
+      for (const item of items.slice(0, MAX_SUBTASKS_PER_RUN)) {
+        if (!isNonEmptyString(item?.title)) continue;
+        created.push(await createDraftSubtask(task, user, {
+          title: item.title,
+          standard: item.standard,
+          assigneeHint: item.assigneeHint,
+          sourceCommentId: target.id
+        }));
+      }
+      if (created.length > 0) {
+        await syncParentProgress(task.id);
+        createdNotes.push(`${created.length} 条子约定草案`);
+      }
+
+      const NODE_TYPES = new Set(["time", "stage", "decision", "review"]);
+      const nodeItems = Array.isArray(data.nodes) ? data.nodes : [];
+      for (const item of nodeItems.slice(0, 10)) {
+        if (!isNonEmptyString(item?.title)) continue;
+        const sortOrder = await prisma.collabNode.count({ where: { taskId: task.id } });
+        const node = await prisma.collabNode.create({
+          data: {
+            taskId: task.id,
+            title: String(item.title).trim().slice(0, 120),
+            nodeType: NODE_TYPES.has(item.node_type) ? item.node_type : "stage",
+            sortOrder,
+            createdBy: user.id
+          }
+        });
+        createdNodes.push(node);
+        await logCollabChange(user.id, task, "collab_node_created", [
+          { field: "node", field_label: "执行节点", new_value: node.title },
+          { field: "agent", field_label: "来源", new_value: "Agent 沉淀" }
+        ]);
+      }
+      if (createdNodes.length > 0) createdNotes.push(`${createdNodes.length} 个执行节点`);
+
+      if (data.doc && isNonEmptyString(data.doc.title)) {
+        doc = await prisma.collabDoc.create({
+          data: {
+            taskId: task.id,
+            userId: user.id,
+            title: String(data.doc.title).trim().slice(0, 120),
+            docType: "file",
+            content: String(data.doc.content || "").slice(0, 50000),
+            version: 1,
+            history: [],
+            status: "draft",
+            sourceCommentId: target.id
+          }
+        });
+        await logCollabChange(user.id, task, "collab_doc_created", [
+          { field: "doc", field_label: "沉淀文档", new_value: doc.title },
+          { field: "agent", field_label: "来源", new_value: "Agent 沉淀" }
+        ]);
+        createdNotes.push(`沉淀文件「${doc.title}」`);
+      }
+    }
+
+    let replyText = isNonEmptyString(data?.reply)
+      ? String(data.reply).trim().slice(0, 3000)
+      : "";
+    if (!replyText) {
+      return degradeWithMessage(task.id, "Agent 没能整理出有效回复");
+    }
+    if (createdNotes.length > 0) {
+      replyText += `\n\n—— 已落成草案：${createdNotes.join("、")}，待成员确认。`;
+    }
+
     // 保持一层回复：目标是根则挂其下，目标是回复则挂在同根线程下
     const reply = await postAgentMessage(task.id, {
-      content: String(text).trim().slice(0, 3000),
+      content: replyText,
       parentId: target.parentId || target.id,
       topic: target.topic
     });
-    return { reply_comment_id: reply.id, searched };
+    return {
+      reply_comment_id: reply.id,
+      searched,
+      ...(created.length > 0 ? { created } : {}),
+      ...(createdNodes.length > 0 ? { nodes: createdNodes } : {}),
+      ...(doc ? { doc } : {})
+    };
   }
 
   throw errorWith(400, "INVALID_ACTION", `未知 Agent 动作：${action}`);

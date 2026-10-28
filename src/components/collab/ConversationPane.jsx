@@ -1,11 +1,11 @@
-// 会话窗（右栏全高）：成员讨论 / 共同动态双 tab + Agent 快捷 chips + 输入框（召唤 Agent）
-// @Agent 增强：发送含 @ 内容后立即显示「心栈 Agent 思考中…」打字指示器，
+// 会话窗（右栏全高）：成员讨论 / 共同动态双 tab + 输入框
+// 讨论 = 各方 + Agent 的自由聊天：输入 @ 自动弹出 Agent（总结 / 查外部信息 / 转子约定·节点·沉淀），
+// 支持插入图片与文档附件（可随消息沉淀为文件）；发送含 @ 的内容后显示打字指示器，
 // 轮询发现更新的 agent 消息后撤下指示器、滚动到底部并高亮该消息 2 秒
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowUp, Bot, Check, ChevronDown, FileText, Handshake,
-  ListChecks, Loader2, MapPin, Sparkles,
+  ArrowUp, Bot, Check, ChevronDown, FileText, Loader2, MapPin, Paperclip, Sparkles, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,28 +18,118 @@ import { httpRequest } from "@/api/httpClient";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ACTIVITY_LABELS, AGENT_ACTION_TEXT, MARK_LABELS, MARK_STYLES,
-  agentIntentFor, agentSuccessText, C, formatTime,
+  ACTIVITY_LABELS, MARK_LABELS, MARK_STYLES, agentIntentFor, C, formatTime,
 } from "./constants";
 import { AgentAvatar, EmptyState, MemberAvatar } from "./Common";
 
 const msgActionCls = "inline-flex items-center rounded px-1.5 text-[10px] font-medium text-[#77736c] transition-colors hover:bg-[#efefe9] hover:text-[#384877] min-h-7 focus-visible:outline-none";
+
+const formatSize = (bytes) => {
+  if (bytes == null || Number.isNaN(bytes)) return "";
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+};
+
+// 消息附件：图片内联预览，其他文件卡片下载
+function AttachmentView({ attachments }) {
+  if (!attachments || attachments.length === 0) return null;
+  const images = attachments.filter((a) => (a?.type || "").startsWith("image/"));
+  const files = attachments.filter((a) => !(a?.type || "").startsWith("image/"));
+  return (
+    <div className="mt-2 space-y-2">
+      {images.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {images.map((a, i) => (
+            <a key={i} href={a.url} target="_blank" rel="noreferrer" className="block">
+              <img
+                src={a.url}
+                alt={a.name || "图片附件"}
+                className="max-h-44 rounded-lg border object-cover"
+                style={{ borderColor: C.lineSoft }}
+                loading="lazy"
+              />
+            </a>
+          ))}
+        </div>
+      )}
+      {files.map((a, i) => (
+        <a
+          key={i}
+          href={a.url}
+          target="_blank"
+          rel="noreferrer"
+          className="flex max-w-sm items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-colors hover:border-[#384877]"
+          style={{ borderColor: C.lineSoft, color: "#45413d" }}
+        >
+          <FileText className="h-3.5 w-3.5 shrink-0" style={{ color: "#77736c" }} />
+          <span className="truncate">{a.name || "文件"}</span>
+          {a.size != null && (
+            <span className="shrink-0 font-mono text-[10px]" style={{ color: "#8a867e" }}>
+              {formatSize(a.size)}
+            </span>
+          )}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+// 消息操作（桌面 hover 显示，移动端常驻）：转为子约定 / 标记节点 / 存为文件 / 标记 / 回复
+function MessageActions({ message, onConvert, onMark, onReply }) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-1 min-[900px]:opacity-0 min-[900px]:transition-opacity min-[900px]:group-hover:opacity-100">
+      <button type="button" onClick={() => onConvert(message, "subtask")} className={msgActionCls}>转为子约定</button>
+      <button type="button" onClick={() => onConvert(message, "node")} className={msgActionCls}>标记节点</button>
+      <button type="button" onClick={() => onConvert(message, "doc")} className={msgActionCls}>存为文件</button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button type="button" className={cn(msgActionCls, message.mark && MARK_STYLES[message.mark])}>
+            {message.mark ? MARK_LABELS[message.mark] : "标记"}
+            <ChevronDown className="h-3 w-3 ml-0.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="text-xs">
+          {Object.entries(MARK_LABELS).map(([value, label]) => (
+            <DropdownMenuItem key={value} onClick={() => onMark(message, value)} className="gap-1.5">
+              <span className={cn("inline-block w-2 h-2 rounded-full", {
+                "bg-emerald-500": value === "consensus",
+                "bg-rose-500": value === "dispute",
+                "bg-amber-500": value === "pending",
+              })} />
+              {label}
+              {message.mark === value && <Check className="w-3 h-3 ml-auto" />}
+            </DropdownMenuItem>
+          ))}
+          {message.mark && (
+            <DropdownMenuItem onClick={() => onMark(message, null)} className="text-slate-400">
+              清除标记
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <button type="button" onClick={() => onReply(message)} className={msgActionCls}>回复</button>
+    </div>
+  );
+}
 
 // ──────────────────────────── 讨论视图 ────────────────────────────
 
 function DiscussionView({ taskId, highlightId, onClearHighlight }) {
   const queryClient = useQueryClient();
   const [topicFilter, setTopicFilter] = useState("all");
-  const [selectedId, setSelectedId] = useState(null); // 提取子约定前先选一条消息
   const [replyTo, setReplyTo] = useState(null);
   const [content, setContent] = useState("");
   const [topic, setTopic] = useState("");
   const [showTopicInput, setShowTopicInput] = useState(false);
-  const [agentRunning, setAgentRunning] = useState(false);
+  const [attachments, setAttachments] = useState([]); // {url,name,type,size}
+  const [uploading, setUploading] = useState(false);
+  const [mentionOpen, setMentionOpen] = useState(false); // @Agent 自动弹出
   const [agentPendingSince, setAgentPendingSince] = useState(null); // @Agent 打字指示器
   const [flashingId, setFlashingId] = useState(null);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
+  const fileRef = useRef(null);
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['collab', taskId, 'messages'],
@@ -93,30 +183,24 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
     }
   }, [messages, agentPendingSince]);
 
-  const runAgent = async (action) => {
-    if (agentRunning) return;
-    if (action === "extract_subtasks" && !selectedId) {
-      toast.info("先点选一条消息，再让 Agent 从中提取子约定");
-      return;
-    }
-    setAgentRunning(true);
-    const toastId = toast.loading(AGENT_ACTION_TEXT[action] || "心栈 Agent 正在执行（约 30 秒）…");
-    try {
-      const res = await httpRequest(`/api/collab/${taskId}/agent`, {
-        method: "POST",
-        body: { action, comment_id: action === "extract_subtasks" ? selectedId : undefined },
-      });
-      toast.success(agentSuccessText(action, res), { id: toastId });
-      setSelectedId(null);
-      invalidateAll();
-    } catch (error) {
-      const msg = error?.status === 402
-        ? `积分不足：${error?.data?.message || "请先充值"}`
-        : error?.data?.message || error?.message || "Agent 执行失败，请稍后重试";
-      toast.error(msg, { id: toastId });
-    } finally {
-      setAgentRunning(false);
-    }
+  // 光标前出现 @xx 时自动弹出 Agent 选项
+  const detectMention = (value, cursorPos) => {
+    const before = value.slice(0, cursorPos ?? value.length);
+    setMentionOpen(/@[^\s@]{0,20}$/.test(before));
+  };
+
+  const insertMention = () => {
+    const el = inputRef.current;
+    const pos = el?.selectionStart ?? content.length;
+    const before = content.slice(0, pos);
+    const after = content.slice(pos);
+    const replaced = before.replace(/@[^\s@]{0,20}$/, "@心栈 Agent ");
+    setContent(replaced + after);
+    setMentionOpen(false);
+    window.requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(replaced.length, replaced.length);
+    });
   };
 
   const handleConvert = async (message, target) => {
@@ -143,23 +227,47 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
     }
   };
 
+  // 插入附件：上传后挂到待发列表
+  const handlePickFiles = async (fileList) => {
+    const list = Array.from(fileList || []).slice(0, Math.max(0, 10 - attachments.length));
+    if (!list.length) return;
+    setUploading(true);
+    for (const file of list) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await httpRequest("/api/uploads", { method: "POST", body: formData });
+        setAttachments((cur) => [...cur, {
+          url: res.file_url, name: res.file_name, type: res.file_type, size: res.file_size,
+        }]);
+      } catch (error) {
+        toast.error(error?.message || `「${file.name}」上传失败`);
+      }
+    }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const handleSend = async () => {
     const text = content.trim();
-    if (!text) return;
+    if ((!text && attachments.length === 0) || uploading) return;
     const mentionAgent = /@\s*(agent|心栈)/i.test(text);
     try {
       await httpRequest(`/api/collab/${taskId}/messages`, {
         method: "POST",
         body: {
-          content: text,
+          content: text || "（分享附件）",
           parent_id: replyTo?.id || undefined,
           topic: topic.trim() || undefined,
+          attachments: attachments.length > 0 ? attachments : undefined,
         },
       });
       setContent("");
       setTopic("");
       setShowTopicInput(false);
       setReplyTo(null);
+      setAttachments([]);
+      setMentionOpen(false);
       invalidateAll();
       if (mentionAgent) {
         // 展示层意图提示（实际触发由后端完成）+ 打字指示器兜底
@@ -176,8 +284,6 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
 
   const renderMessage = (message, isReply = false) => {
     const isAgent = !!message.agent;
-    const isSelected = selectedId === message.id;
-    const hasReplies = !isReply && (message.replies?.length || 0) > 0;
     return (
       <div
         key={message.id}
@@ -218,91 +324,15 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
             <p className="mt-1.5 text-[13px] leading-6 whitespace-pre-wrap break-words" style={{ color: isAgent ? "#49465b" : "#57534d" }}>
               {message.content}
             </p>
+            <AttachmentView attachments={message.attachments} />
 
-            {/* hover 操作（Agent 消息与回复不提供转换）；移动端常驻 */}
             {!isAgent && !isReply && (
-              <div className="hidden min-[900px]:flex flex-wrap gap-x-1 mt-1 opacity-0 transition-opacity group-hover:opacity-100">
-                <button type="button" onClick={() => handleConvert(message, "subtask")} className={msgActionCls}><ListChecks className="h-3 w-3 mr-0.5" />转为子约定</button>
-                <button type="button" onClick={() => handleConvert(message, "node")} className={msgActionCls}>标记节点</button>
-                <button type="button" onClick={() => handleConvert(message, "doc")} className={msgActionCls}>存为文件</button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(isSelected ? null : message.id)}
-                  className={cn(msgActionCls, isSelected && "text-[#384877]")}
-                >
-                  {isSelected ? "✓ 已选为提取源" : "选为提取源"}
-                </button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button type="button" className={cn(msgActionCls, message.mark && MARK_STYLES[message.mark])}>
-                      {message.mark ? MARK_LABELS[message.mark] : "标记"}
-                      <ChevronDown className="h-3 w-3 ml-0.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="text-xs">
-                    {Object.entries(MARK_LABELS).map(([value, label]) => (
-                      <DropdownMenuItem key={value} onClick={() => handleMark(message, value)} className="gap-1.5">
-                        <span className={cn("inline-block w-2 h-2 rounded-full", {
-                          "bg-emerald-500": value === "consensus",
-                          "bg-rose-500": value === "dispute",
-                          "bg-amber-500": value === "pending",
-                        })} />
-                        {label}
-                        {message.mark === value && <Check className="w-3 h-3 ml-auto" />}
-                      </DropdownMenuItem>
-                    ))}
-                    {message.mark && (
-                      <DropdownMenuItem onClick={() => handleMark(message, null)} className="text-slate-400">
-                        清除标记
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <button type="button" onClick={() => setReplyTo({ id: message.id, name: message.created_by_name })} className="collab-msg-action">回复</button>
-              </div>
-            )}
-            {!isAgent && !isReply && (
-              <div className="flex min-[900px]:hidden flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[11px]">
-                <button type="button" onClick={() => handleConvert(message, "subtask")} className="text-[#384877]">转为子约定</button>
-                <button type="button" onClick={() => handleConvert(message, "node")} className="text-[#384877]">标记节点</button>
-                <button type="button" onClick={() => handleConvert(message, "doc")} className="text-[#384877]">存为文件</button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedId(isSelected ? null : message.id)}
-                  className={isSelected ? "text-[#384877] font-medium" : "text-[#77736c]"}
-                >
-                  {isSelected ? "已选为提取源" : "选为提取源"}
-                </button>
-                <button type="button" onClick={() => setReplyTo({ id: message.id, name: message.created_by_name })} className="text-[#77736c]">回复</button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button className="text-[#77736c]">{message.mark ? MARK_LABELS[message.mark] : "标记"}</button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="text-xs">
-                    {Object.entries(MARK_LABELS).map(([value, label]) => (
-                      <DropdownMenuItem key={value} onClick={() => handleMark(message, value)}>
-                        {label}
-                        {message.mark === value && <Check className="w-3 h-3 ml-auto" />}
-                      </DropdownMenuItem>
-                    ))}
-                    {message.mark && (
-                      <DropdownMenuItem onClick={() => handleMark(message, null)} className="text-slate-400">
-                        清除标记
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            )}
-            {!isAgent && !isReply && hasReplies === false && (
-              <button
-                type="button"
-                onClick={() => setReplyTo({ id: message.id, name: message.created_by_name })}
-                className="hidden min-[900px]:inline-block mt-1 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
-                style={{ color: "#8a867e" }}
-              >
-                回复
-              </button>
+              <MessageActions
+                message={message}
+                onConvert={handleConvert}
+                onMark={handleMark}
+                onReply={(m) => setReplyTo({ id: m.id, name: m.created_by_name })}
+              />
             )}
           </div>
         </div>
@@ -313,50 +343,9 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
 
   return (
     <div id="section-discussion" role="tabpanel" aria-labelledby="discussion-tab" className="flex min-h-0 flex-1 flex-col">
-      {/* Agent 快捷 chips */}
-      <div className="flex shrink-0 gap-2 overflow-x-auto border-b px-4 py-3 sm:px-6" style={{ borderColor: C.lineSoft }}>
-        <button
-          type="button"
-          onClick={() => runAgent("tidy")}
-          disabled={agentRunning}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-colors disabled:opacity-50 min-h-8"
-          style={{ backgroundColor: C.ink, color: "#faf9f5" }}
-        >
-          {agentRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-          整理
-        </button>
-        {[
-          { action: "extract_subtasks", label: "提取子约定", icon: ListChecks },
-          { action: "disputes", label: "协调分歧", icon: Handshake },
-          { action: "minutes", label: "生成纪要", icon: FileText },
-        ].map(({ action, label, icon: Icon }) => (
-          <button
-            key={action}
-            type="button"
-            onClick={() => runAgent(action)}
-            disabled={agentRunning}
-            className={cn(
-              "inline-flex shrink-0 items-center gap-1 rounded-full px-3 text-[11px] font-medium transition-colors disabled:opacity-50 min-h-8",
-              action === "extract_subtasks" && selectedId ? "text-[#384877]" : ""
-            )}
-            style={action === "extract_subtasks" && selectedId
-              ? { backgroundColor: C.brandTint, border: "1px solid #c7d2fe" }
-              : { backgroundColor: "#efefe9", color: "#625e58" }}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {label}
-          </button>
-        ))}
-        {selectedId && (
-          <button type="button" onClick={() => setSelectedId(null)} className="shrink-0 px-1 text-[11px] text-[#384877] hover:underline">
-            取消选中的提取源
-          </button>
-        )}
-      </div>
-
       {/* 主题过滤 */}
       {topics.length > 0 && (
-        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto px-4 py-2.5 sm:px-6">
+        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b px-4 py-2.5 sm:px-6" style={{ borderColor: C.lineSoft }}>
           <button
             type="button"
             onClick={() => setTopicFilter("all")}
@@ -393,7 +382,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
         ) : filteredMessages.length === 0 ? (
           <EmptyState
             title={topicFilter === "all" ? "还没有讨论" : "该主题下暂无讨论"}
-            description="写下第一条想法，共同约定会从这里开始。也可以 @心栈 Agent 让它整理。"
+            description="写下第一条想法，共同约定会从这里开始。输入 @ 可以召唤心栈 Agent 总结、查资料或转化内容。"
           />
         ) : (
           filteredMessages.map((m) => renderMessage(m))
@@ -415,35 +404,125 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
       </div>
 
       {/* 输入区 */}
-      <div className="shrink-0 border-t p-4 sm:px-6" style={{ borderColor: C.line, backgroundColor: C.card }}>
+      <div className="relative shrink-0 border-t p-4 sm:px-6" style={{ borderColor: C.line, backgroundColor: C.card }}>
+        {/* @ 自动弹出：选择心栈 Agent */}
+        {mentionOpen && (
+          <div
+            className="absolute bottom-full left-4 right-4 mb-2 overflow-hidden rounded-xl border shadow-lg sm:left-6 sm:right-6"
+            style={{ borderColor: C.line, backgroundColor: "#fdfcf9" }}
+            role="listbox"
+            aria-label="召唤 Agent"
+          >
+            <button
+              type="button"
+              role="option"
+              aria-selected="true"
+              onClick={insertMention}
+              className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-[#eef2ff]"
+            >
+              <AgentAvatar size="sm" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#302c2a" }}>
+                  心栈 Agent
+                  <Sparkles className="h-3 w-3" style={{ color: "#384877" }} />
+                </span>
+                <span className="mt-0.5 block text-[11px] leading-4" style={{ color: "#77736c" }}>
+                  总结讨论 · 查外部攻略 · 转成子约定 / 节点 / 沉淀
+                </span>
+              </span>
+              <span className="shrink-0 font-mono text-[9px]" style={{ color: "#b8b4ab" }}>Enter</span>
+            </button>
+          </div>
+        )}
+
         {replyTo && (
           <div className="mb-2 flex items-center gap-2 text-[11px]" style={{ color: "#77736c" }}>
             回复 <span className="font-medium" style={{ color: "#45413d" }}>{replyTo.name || "成员"}</span>
             <button type="button" onClick={() => setReplyTo(null)} className="hover:text-[#231f20]">取消</button>
           </div>
         )}
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {attachments.map((a, i) => (
+              <span
+                key={`${a.url}-${i}`}
+                className="inline-flex max-w-48 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
+                style={{ borderColor: C.lineSoft, color: "#57534d" }}
+              >
+                <FileText className="h-3 w-3 shrink-0" style={{ color: "#77736c" }} />
+                <span className="truncate">{a.name || "附件"}</span>
+                <button
+                  type="button"
+                  aria-label="移除附件"
+                  onClick={() => setAttachments((cur) => cur.filter((_, idx) => idx !== i))}
+                  className="shrink-0 rounded-full p-0.5 hover:bg-[#efefe9]"
+                >
+                  <X className="h-3 w-3" style={{ color: "#8a867e" }} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="rounded-md border bg-[#fdfcf9] p-2.5 focus-within:border-[#384877]" style={{ borderColor: "#d4d2cb" }}>
           <div className="flex items-start gap-2">
-            <button
-              type="button"
-              onClick={() => setShowTopicInput((v) => !v)}
-              className={cn(
-                "mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md border transition-colors",
-                showTopicInput || topic ? "border-[#c7d2fe] text-[#384877]" : "text-[#99958d] hover:text-[#57534d]"
-              )}
-              style={showTopicInput || topic ? { backgroundColor: C.brandTint } : { borderColor: "#d8d6cf" }}
-              title="给这条讨论加个主题"
-            >
-              <MapPin className="w-3.5 h-3.5" />
-            </button>
+            <div className="mt-0.5 flex flex-shrink-0 flex-col gap-1.5">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading || attachments.length >= 10}
+                className="flex h-7 w-7 items-center justify-center rounded-md border text-[#99958d] transition-colors hover:text-[#57534d] disabled:opacity-50 min-h-7"
+                style={{ borderColor: "#d8d6cf" }}
+                title="插入图片或文档"
+                aria-label="插入图片或文档"
+              >
+                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowTopicInput((v) => !v)}
+                className={cn(
+                  "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
+                  showTopicInput || topic ? "border-[#c7d2fe] text-[#384877]" : "text-[#99958d] hover:text-[#57534d]"
+                )}
+                style={showTopicInput || topic ? { backgroundColor: C.brandTint } : { borderColor: "#d8d6cf" }}
+                title="给这条讨论加个主题"
+                aria-label="给这条讨论加个主题"
+              >
+                <MapPin className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              className="hidden"
+              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md"
+              onChange={(e) => handlePickFiles(e.target.files)}
+            />
             <Textarea
               ref={inputRef}
               value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="写下想法，或 @心栈 Agent…"
-              className="min-h-[38px] max-h-28 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
-              rows={1}
+              onChange={(e) => {
+                setContent(e.target.value);
+                detectMention(e.target.value, e.target.selectionStart);
+              }}
+              onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
+              placeholder="写下想法，输入 @ 召唤心栈 Agent…"
+              className="min-h-[60px] max-h-28 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
+              rows={2}
               onKeyDown={(e) => {
+                if (mentionOpen) {
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    insertMention();
+                    return;
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setMentionOpen(false);
+                    return;
+                  }
+                }
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   handleSend();
@@ -453,7 +532,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
             <Button
               size="sm"
               onClick={handleSend}
-              disabled={!content.trim()}
+              disabled={(!content.trim() && attachments.length === 0) || uploading}
               className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
               style={{ backgroundColor: C.ink }}
               aria-label="发送讨论"
@@ -462,18 +541,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight }) {
             </Button>
           </div>
           <div className="mt-2 flex items-center justify-between border-t pt-2" style={{ borderColor: C.lineSoft }}>
-            <button
-              type="button"
-              onClick={() => {
-                setContent((cur) => `${cur}${cur.endsWith(" ") || !cur ? "" : " "}@心栈 Agent `);
-                inputRef.current?.focus();
-              }}
-              className="inline-flex items-center gap-1 px-1.5 text-[11px] font-medium text-[#384877] min-h-7 focus-visible:outline-none"
-            >
-              <Bot className="h-3.5 w-3.5" />召唤 Agent
-            </button>
+            <span className="px-1.5 text-[11px]" style={{ color: "#8a867e" }}>
+              <span className="font-medium" style={{ color: "#384877" }}>@</span> 召唤 Agent 总结 · 查攻略 · 转化
+            </span>
             <span className="font-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: "#b8b4ab" }}>
-              {content.trim() ? "Enter 发送 · Shift+Enter 换行" : "成员与 Agent 的共同讨论"}
+              {content.trim() || attachments.length > 0 ? "Enter 发送 · Shift+Enter 换行" : "成员与 Agent 的共同讨论"}
             </span>
           </div>
         </div>
@@ -568,7 +640,7 @@ export default function ConversationPane({
               </span>
             </h2>
             <p className="mt-1 text-xs leading-5" style={{ color: C.sub }}>
-              {view === "discussion" ? "成员的讨论与 Agent 整理，都可以回到约定内容。" : "查看成员操作、确认进度与 Agent 沉淀记录。"}
+              {view === "discussion" ? "各方与 Agent 的自由聊天：@ 它总结、查资料，或把内容转成子约定、节点、沉淀。" : "查看成员操作、确认进度与 Agent 沉淀记录。"}
             </p>
           </div>
           <button

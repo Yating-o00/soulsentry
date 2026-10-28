@@ -99,7 +99,7 @@ export default function AgentDrawer({ open, onOpenChange, agentEnabled, agentPau
           <div className="mt-6 border-t pt-5" style={{ borderColor: "#deddd7" }}>
             <div className="font-mono text-[10px] uppercase tracking-[0.16em]" style={{ color: C.sub }}>如何召唤</div>
             <p className="mt-2 text-xs leading-5" style={{ color: "#77736c" }}>
-              在讨论输入框里 <span className="font-medium" style={{ color: "#45413d" }}>@心栈 Agent</span> 加上你的诉求，它会结合全部讨论与联网信息回复；也可以点讨论区的快捷按钮直接整理、提取子约定、协调分歧或生成纪要。
+              在讨论输入框输入 <span className="font-medium" style={{ color: "#45413d" }}>@</span> 会自动弹出心栈 Agent：直接说要总结讨论、查外部攻略，或把内容转成子约定、节点、沉淀，它会结合全部讨论上下文回应；消息上也可以插入图片与文档附件一起沉淀。
             </p>
             <button
               type="button"

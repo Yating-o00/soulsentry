@@ -792,6 +792,17 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 30000))
     ]);
 
+    // 协同约定强意图优先：「建立/创建…协同约定」明确要的是多人共创卡片，
+    // 模型若误读成智能规划（plan）或普通约定，一律按协同提案覆盖，话术同步换掉
+    {
+      const lastUserTextEarly = [...safeMessages].reverse().find((m) => m.role === "user")?.content || "";
+      const collabIntent = tryCollabExtract(lastUserTextEarly);
+      if (collabIntent && out.extracted?.type !== "collab") {
+        out.extracted = collabIntent;
+        out.reply = fallbackReply(lastUserTextEarly, collabIntent, lastExtracted) || out.reply;
+      }
+    }
+
     // —— 智能约定规划：调规划器（注入已有安排避障），把逐日执行计划填进提案 ——
     // plan 字段由服务端生成，不落模型之手；每次带最新 plan_request 重排，确认/改期都走这里
     if (out.extracted?.type === "plan" && out.extracted.plan_request && userId && prisma) {

@@ -120,6 +120,31 @@ function detectHeartSubSwitch(text) {
 
 // 显式「立约定」指令：设为约定 / 立个约定 / 转成约定 等
 const TASK_DIRECTIVE_RE = /(?:设为|立个?|定为|记为|存为|保存为|转成|变成)\s*约定/;
+// 协同约定：「建立一个以XX为主题的协同约定」。模式明确，Kimi 没出提案时本地兜底直出
+const COLLAB_RE = /(?:建立|创建|建|发起|新开?|开一个?)(?:一?个)?(?:以([^，。,.！!？?~～]{1,40}?)(?:为|作)?主题)?的?\s*(?:协同|共创)约定/;
+function tryCollabExtract(t) {
+  const m = String(t || "").trim().match(COLLAB_RE)
+    || (/(?:建立|创建|建|发起)/.test(t) && /(?:协同|共创)(?:约定|空间)/.test(t) ? [t, ""] : null);
+  if (!m) return null;
+  let theme = (m[1] || "").trim();
+  if (!theme) {
+    theme = String(t || "")
+      .replace(COLLAB_RE, "")
+      .replace(/^(一个|个|的)/, "")
+      .replace(/[，。,.；;！!？?\s]+$/g, "")
+      .trim()
+      .slice(0, 60);
+  }
+  if (!theme) theme = String(t || "").replace(/[。！!？?\s]+$/g, "").slice(0, 60);
+  const scenario = /情侣|夫妻|恋人|男朋友|女朋友|老公|老婆|对象|我们俩/.test(t)
+    ? "couple"
+    : /同事|工作|团队|项目|客户|办公/.test(t)
+      ? "colleagues"
+      : /朋友|闺蜜|兄弟|室友|同学|家人|姐妹|一起/.test(t)
+        ? "friends"
+        : "custom";
+  return { type: "collab", title: theme, scenario, goal: null };
+}
 // 周期性提醒时刻：每天下午3点 / 每晚11点半 / 每天8:30
 const DAILY_TIME_RE = /(?:每天|每日|每晚|每夜|天天)\s*(?:(上午|中午|下午|晚上|早上|清晨|凌晨)\s*)?(\d{1,2})(?:\s*[点:：]\s*(\d{1,2})?|\s*半)?/;
 // 每周X（可选时刻，未给时刻时按惯例取 9:00）
@@ -207,29 +232,8 @@ function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
 
   // —— 协同约定：「建立一个以XX为主题的协同约定」——
   // 优先于普通约定识别：多人共创场景，确认后生成协同卡片
-  const COLLAB_RE = /(?:建立|创建|建|发起|新开?|开一个?)(?:一?个)?(?:以([^，。,.！!？?~～]{1,40}?)(?:为|作)?主题)?的?\s*(?:协同|共创)约定/;
-  const collabMatch = t.match(COLLAB_RE) || (/(?:建立|创建|建|发起)/.test(t) && /(?:协同|共创)(?:约定|空间)/.test(t) ? [t, ""] : null);
-  if (collabMatch) {
-    let theme = (collabMatch[1] || "").trim();
-    if (!theme) {
-      // 没带「以X为主题」：剥掉指令词后剩余内容作主题；剥光则回退整句截断
-      theme = t
-        .replace(COLLAB_RE, "")
-        .replace(/^(一个|个|的)/, "")
-        .replace(/[，。,.；;！!？?\s]+$/g, "")
-        .trim()
-        .slice(0, 60);
-    }
-    if (!theme) theme = t.replace(/[。！!？?\s]+$/g, "").slice(0, 60);
-    const scenario = /情侣|夫妻|恋人|男朋友|女朋友|老公|老婆|对象|我们俩/.test(t)
-      ? "couple"
-      : /同事|工作|团队|项目|客户|办公/.test(t)
-        ? "colleagues"
-        : /朋友|闺蜜|兄弟|室友|同学|家人|姐妹|一起/.test(t)
-          ? "friends"
-          : "custom";
-    return { type: "collab", title: theme, scenario, goal: null };
-  }
+  const collab = tryCollabExtract(t);
+  if (collab) return collab;
 
   const urlMatch = t.match(URL_RE);
   const notLater = !LATER_REMIND_RE.test(t);
@@ -566,7 +570,7 @@ const RESPONSE_SCHEMA = {
       type: ["object", "null"],
       description: "从对话中提取的待确认内容；信息不足或纯聊天时为 null",
       properties: {
-        type: { type: "string", enum: ["task", "heart", "link", "plan", "collab"] },
+        type: { type: "string", enum: ["task", "heart", "link", "plan", "collab"], description: "collab=协同/共创约定：用户说「帮我建立一个以X为主题的协同约定」「创建和同事/朋友/伴侣一起的协同约定」时用它，title=主题；主题明确即可出提案，不要追问" },
         title: { type: "string" },
         description: { type: "string" },
         content: { type: "string" },
@@ -668,9 +672,15 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   }
   const agentGoal = trim(result.agent_goal, 200) || null;
   // 同一件事不要重复：agent_goal 已覆盖的请求，不再出同名约定提案
-  const extracted = agentGoal && result.extracted?.type === "task"
+  let extracted = agentGoal && result.extracted?.type === "task"
     ? null
     : sanitizeExtracted(result.extracted);
+  // 协同约定强兜底：「建立/创建…协同约定」模式明确，Kimi 未出提案（去追问）时用本地识别补上
+  if (!extracted) {
+    const lastUserMsg = [...messages].reverse().find((m) => m && m.role === "user" && typeof m.content === "string");
+    const localCollab = tryCollabExtract(lastUserMsg?.content || "");
+    if (localCollab) extracted = localCollab;
+  }
   return {
     reply: trim(result.reply, 120),
     agentGoal,

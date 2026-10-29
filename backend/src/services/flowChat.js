@@ -79,6 +79,13 @@ function sanitizeExtracted(raw) {
       }
     };
   }
+  if (type === "collab") {
+    // 协同约定：theme 必填；场景推断不出时 custom
+    const title = trim(raw.title, 60);
+    if (!title) return null;
+    const scenario = ["couple", "friends", "colleagues", "custom"].includes(raw.scenario) ? raw.scenario : "custom";
+    return { type: "collab", title, scenario, goal: trim(raw.goal, 120) || null };
+  }
   return null;
 }
 
@@ -197,6 +204,32 @@ function fallbackExtract(lastUserText, lastExtracted, recentUserTexts = []) {
 
   // 否定提案：返回 null 收起卡片，由 fallbackReply 引导用户说清要改什么
   if (REJECT_RE.test(t) && lastExtracted) return "__reject__";
+
+  // —— 协同约定：「建立一个以XX为主题的协同约定」——
+  // 优先于普通约定识别：多人共创场景，确认后生成协同卡片
+  const COLLAB_RE = /(?:建立|创建|建|发起|新开?|开一个?)(?:一?个)?(?:以([^，。,.！!？?~～]{1,40}?)(?:为|作)?主题)?的?\s*(?:协同|共创)约定/;
+  const collabMatch = t.match(COLLAB_RE) || (/(?:建立|创建|建|发起)/.test(t) && /(?:协同|共创)(?:约定|空间)/.test(t) ? [t, ""] : null);
+  if (collabMatch) {
+    let theme = (collabMatch[1] || "").trim();
+    if (!theme) {
+      // 没带「以X为主题」：剥掉指令词后剩余内容作主题；剥光则回退整句截断
+      theme = t
+        .replace(COLLAB_RE, "")
+        .replace(/^(一个|个|的)/, "")
+        .replace(/[，。,.；;！!？?\s]+$/g, "")
+        .trim()
+        .slice(0, 60);
+    }
+    if (!theme) theme = t.replace(/[。！!？?\s]+$/g, "").slice(0, 60);
+    const scenario = /情侣|夫妻|恋人|男朋友|女朋友|老公|老婆|对象|我们俩/.test(t)
+      ? "couple"
+      : /同事|工作|团队|项目|客户|办公/.test(t)
+        ? "colleagues"
+        : /朋友|闺蜜|兄弟|室友|同学|家人|姐妹|一起/.test(t)
+          ? "friends"
+          : "custom";
+    return { type: "collab", title: theme, scenario, goal: null };
+  }
 
   const urlMatch = t.match(URL_RE);
   const notLater = !LATER_REMIND_RE.test(t);
@@ -422,6 +455,10 @@ function fallbackReply(userText, extracted, lastExtracted) {
   if (extracted.type === "link") {
     return "这个链接我帮你存进记录。点下面的确认就存好～";
   }
+  if (extracted.type === "collab") {
+    const SCENARIO_ZH = { couple: "情侣", friends: "朋友", colleagues: "同事", custom: "自定义" };
+    return `好，我搭了一个「${extracted.title}」的协同约定骨架（${SCENARIO_ZH[extracted.scenario] || "自定义"}场景）。点下面的确认，我就把它生成卡片，之后可以点卡片进共创空间一起完善～`;
+  }
   return "我在听，你继续说～";
 }
 
@@ -529,7 +566,7 @@ const RESPONSE_SCHEMA = {
       type: ["object", "null"],
       description: "从对话中提取的待确认内容；信息不足或纯聊天时为 null",
       properties: {
-        type: { type: "string", enum: ["task", "heart", "link", "plan"] },
+        type: { type: "string", enum: ["task", "heart", "link", "plan", "collab"] },
         title: { type: "string" },
         description: { type: "string" },
         content: { type: "string" },
@@ -538,6 +575,8 @@ const RESPONSE_SCHEMA = {
         heart_category: { type: "string", enum: ["emotion", "inspiration", "material", "memo", "share", "ledger"], description: "心签子类型（情绪/灵感/资料/备忘/分享/账本）；用户纠正心签分类时更新为目标类型，平时可省略" },
         priority: { type: "string", enum: PRIORITIES },
         due_at: { type: "string", description: "ISO8601 带 +08:00 时区，如 2026-09-24T15:00:00+08:00" },
+        scenario: { type: "string", enum: ["couple", "friends", "colleagues", "custom"], description: "type=collab 时的场景：情侣/朋友/同事；推断不出为 custom" },
+        goal: { type: "string", description: "type=collab 时的共同目标（一句话，可省略）" },
         plan_request: {
           type: ["object", "null"],
           description: "type=plan 时的规划请求：用户提出一类需要多天持续做的事，由系统排期后生成提案；不需要时为 null",

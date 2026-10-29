@@ -21,9 +21,16 @@ const C = {
   recordingBorder: "#e8a5a5",
 };
 
-const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划" };
-const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️" };
+const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划", collab: "协同约定" };
+const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️", collab: "👥" };
 const HEART_TYPE_LABEL = { emotion: "情绪签", inspiration: "灵感签", material: "资料签", memo: "备忘录", share: "分享签", ledger: "账本签" };
+// 协同约定场景（与 CollabCreateDialog 同一套 confirmRule 口径）
+const COLLAB_SCENARIO_LIST = [
+  { key: "couple", label: "情侣", confirmRule: "all" },
+  { key: "friends", label: "朋友", confirmRule: "owner" },
+  { key: "colleagues", label: "同事", confirmRule: "owner" },
+  { key: "custom", label: "自定义", confirmRule: "owner" },
+];
 const CATEGORY_LABEL = {
   work: "工作", personal: "个人", health: "健康", study: "学习",
   family: "家庭", shopping: "购物", finance: "财务", checkin: "打卡", other: "其他"
@@ -90,6 +97,15 @@ export default function SmartInputBar() {
   const [messages, setMessages] = useState([]);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(null);
+  // 协同约定提案卡：场景（AI 推断后用户可改）与共同目标
+  const [collabScenario, setCollabScenario] = useState("custom");
+  const [collabGoal, setCollabGoal] = useState("");
+  useEffect(() => {
+    if (pending?.type === "collab") {
+      setCollabScenario(pending.scenario || "custom");
+      setCollabGoal("");
+    }
+  }, [pending]);
   const [creating, setCreating] = useState(false);
   const [recording, setRecording] = useState(false);
   // —— 浏览器小助手（对话内嵌 Agent）：agentExecId 非空时轮询执行状态 ——
@@ -344,6 +360,19 @@ export default function SmartInputBar() {
           reminder_time: pending.due_at || null,
         });
         doneLabel = pending.title;
+      } else if (pending.type === "collab") {
+        // 协同约定：与 CollabCreateDialog 同一套 metadata.collab 结构，生成后约定页出现协同卡片
+        const scenarioMeta = COLLAB_SCENARIO_LIST.find((s) => s.key === collabScenario) || COLLAB_SCENARIO_LIST[3];
+        const goal = collabGoal.trim();
+        await base44.entities.Task.create({
+          title: pending.title,
+          description: goal || firstUserText || "",
+          category: "collab",
+          priority: "medium",
+          status: "pending",
+          metadata: { collab: { scenario: scenarioMeta.key, goal, agent: { enabled: true, paused: false }, confirmRule: scenarioMeta.confirmRule } },
+        });
+        doneLabel = pending.title;
       } else if (pending.type === "heart") {
         // 对话中纠正过子类型（"这是账本签"）时以纠正为准；否则本地识别账本
         const HEART_TYPES = {
@@ -440,7 +469,9 @@ export default function SmartInputBar() {
       const isBrowserTask = pending.type === "task" && /https?:\/\//i.test(pending.description || firstUserText);
       const confirmMsg = pending.type === "plan"
         ? `已生成母约定「${doneLabel}」和 ${planChildCount} 条子约定 ✓ 到点我会轻轻唤你～`
-        : isBrowserTask
+        : pending.type === "collab"
+          ? `协同约定「${doneLabel}」已生成 ✓ 去约定页点卡片就能进共创空间，邀请伙伴和 Agent 一起完善～`
+          : isBrowserTask
           ? `「${doneLabel}」已为你记下了 ✓ 浏览器小助手开始帮你办这件事，进度和结果在守护记录里随时看～`
           : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？`;
       setMessages((m) => [...m, { role: "assistant", content: confirmMsg }]);
@@ -766,6 +797,35 @@ export default function SmartInputBar() {
                   )}
                   {pending.type === "link" && (
                     <p className="mt-2 break-words text-[13px] leading-relaxed" style={{ color: C.ink3 }}>{pending.text}</p>
+                  )}
+                  {pending.type === "collab" && (
+                    <>
+                      <p className="mt-2 break-words text-[15px] font-medium" style={{ color: C.ink }}>{pending.title}</p>
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {COLLAB_SCENARIO_LIST.map((s) => (
+                          <button
+                            key={s.key}
+                            type="button"
+                            onClick={() => setCollabScenario(s.key)}
+                            className="rounded-full px-2.5 py-1 text-[11px] transition-opacity hover:opacity-80"
+                            style={collabScenario === s.key ? { background: C.sentinel, color: "#fff" } : { background: C.mist, color: C.ink3 }}
+                          >
+                            {s.label}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        value={collabGoal}
+                        onChange={(e) => setCollabGoal(e.target.value)}
+                        placeholder="共同目标（一句话，可留白）"
+                        maxLength={120}
+                        className="mt-2 w-full rounded-lg border px-3 py-2 text-[12.5px] focus:outline-none"
+                        style={{ borderColor: C.hairline, background: "#fff", color: C.ink }}
+                      />
+                      <p className="mt-1.5 text-[11px]" style={{ color: C.ink4 }}>
+                        场景决定确认规则与 Agent 语气；生成后点卡片即可邀请伙伴、进共创空间
+                      </p>
+                    </>
                   )}
 
                   <div className="mt-3.5 flex items-center gap-2">

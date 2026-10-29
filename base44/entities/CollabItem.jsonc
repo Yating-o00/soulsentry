@@ -1,0 +1,111 @@
+{
+  "name": "CollabItem",
+  "type": "object",
+  "description": "\u534f\u540c\u7a7a\u95f4\u6c89\u6dc0\u7269\uff1a\u5b50\u7ea6\u5b9a / \u8282\u70b9 / \u6587\u4ef6",
+  "properties": {
+    "space_id": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "subagreement",
+        "milestone",
+        "document"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "done_criteria": {
+      "type": "string",
+      "description": "\u600e\u6837\u7b97\u5b8c\u6210"
+    },
+    "content": {
+      "type": "string",
+      "description": "\u6587\u4ef6\u6b63\u6587 / \u8865\u5145\u8bf4\u660e"
+    },
+    "owner_name": {
+      "type": "string"
+    },
+    "milestone_type": {
+      "type": "string",
+      "enum": [
+        "time",
+        "stage",
+        "decision",
+        "review"
+      ],
+      "default": "time"
+    },
+    "due_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "pending_confirm",
+        "in_progress",
+        "pending_accept",
+        "done"
+      ],
+      "default": "draft"
+    },
+    "confirmed_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "member",
+        "agent"
+      ],
+      "default": "member"
+    },
+    "version": {
+      "type": "number",
+      "default": 1
+    },
+    "member_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  },
+  "required": [
+    "space_id",
+    "kind",
+    "title"
+  ],
+  "rls": {
+    "read": {
+      "data.member_ids": {
+        "$in": [
+          "{{user.id}}"
+        ]
+      }
+    },
+    "update": {
+      "data.member_ids": {
+        "$in": [
+          "{{user.id}}"
+        ]
+      }
+    },
+    "delete": {
+      "data.member_ids": {
+        "$in": [
+          "{{user.id}}"
+        ]
+      }
+    }
+  }
+}

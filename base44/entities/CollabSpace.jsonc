@@ -1,0 +1,117 @@
+{
+  "name": "CollabSpace",
+  "type": "object",
+  "description": "\u534f\u540c\u7ea6\u5b9a\u7a7a\u95f4\uff1a\u6210\u5458\u4e0e Agent \u56f4\u7ed5\u5171\u540c\u4e3b\u9898\u5171\u5efa\u7ea6\u5b9a",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "\u4e3b\u9898"
+    },
+    "goal": {
+      "type": "string",
+      "description": "\u5171\u540c\u76ee\u6807/\u671f\u671b\u7ed3\u679c"
+    },
+    "scene": {
+      "type": "string",
+      "enum": [
+        "couple",
+        "friends",
+        "colleagues",
+        "custom"
+      ],
+      "default": "friends"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "discussing",
+        "executing",
+        "completed",
+        "archived"
+      ],
+      "default": "discussing"
+    },
+    "confirm_mode": {
+      "type": "string",
+      "enum": [
+        "all",
+        "owner",
+        "creator"
+      ],
+      "default": "all",
+      "description": "\u5b50\u7ea6\u5b9a\u751f\u6548\u65b9\u5f0f"
+    },
+    "agent_enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "agent_paused": {
+      "type": "boolean",
+      "default": false
+    },
+    "invite_token": {
+      "type": "string"
+    },
+    "member_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "default": []
+    }
+  },
+  "required": [
+    "title"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "data.member_ids": {
+            "$in": [
+              "{{user.id}}"
+            ]
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "created_by_id": "{{user.id}}"
+        },
+        {
+          "data.member_ids": {
+            "$in": [
+              "{{user.id}}"
+            ]
+          }
+        }
+      ]
+    },
+    "delete": {
+      "created_by_id": "{{user.id}}"
+    }
+  }
+}

@@ -675,14 +675,19 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   let extracted = agentGoal && result.extracted?.type === "task"
     ? null
     : sanitizeExtracted(result.extracted);
-  // 协同约定强兜底：「建立/创建…协同约定」模式明确，Kimi 未出提案（去追问）时用本地识别补上
+  let reply = trim(result.reply, 120);
+  // 协同约定强兜底：「建立/创建…协同约定」模式明确，Kimi 未出提案（去追问）时用本地识别补上，
+  // 话术同步换成提案口吻，避免「卡片在、回复却在追问」的割裂感
   if (!extracted) {
     const lastUserMsg = [...messages].reverse().find((m) => m && m.role === "user" && typeof m.content === "string");
     const localCollab = tryCollabExtract(lastUserMsg?.content || "");
-    if (localCollab) extracted = localCollab;
+    if (localCollab) {
+      extracted = localCollab;
+      reply = fallbackReply(lastUserMsg.content, localCollab, lastExtracted) || reply;
+    }
   }
   return {
-    reply: trim(result.reply, 120),
+    reply,
     agentGoal,
     extracted,
     usage

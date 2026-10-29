@@ -750,6 +750,11 @@ tasksRouter.patch("/:id", async (req, res) => {
     const requestedStatus = toPrismaTaskStatus(payload.data.status);
     const recurrenceDoneToday = prevExtra.recurrence_last_done === chinaToday;
 
+    // 今日已打卡再勾一次 = 幂等返回，不重复推进排期/计数（每日打卡一天一次）
+    if (requestedStatus === "DONE" && recurrenceDoneToday) {
+      return res.json({ task: serializeTask(existing) });
+    }
+
     if (requestedStatus === "DONE" && existing.status !== "DONE") {
       snoozeNormalize.recurrence_last_done = chinaToday;
       snoozeNormalize.recurrence_done_count = Number(prevExtra.recurrence_done_count || 0) + 1;

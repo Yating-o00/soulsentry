@@ -62,11 +62,13 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
   const total = data?.total ?? 0;
   const firstAt = data?.first_at;
   const cheerTotal = data?.cheer_total ?? 0;
+  // 每日打卡约定：今天已赴约后按钮变为「今日已赴约」，不再产生新打卡
+  const todayDone = Boolean(data?.done_today);
   const items = useMemo(() => data?.items || [], [data]);
   const subDone = subtaskTree.filter(isTaskEffectivelyCompleted).length;
 
   const doCheckin = () => {
-    if (completed || createMut.isPending) return;
+    if (completed || todayDone || createMut.isPending) return;
     createMut.mutate(
       {},
       {
@@ -81,7 +83,7 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
             setTimeout(() => setMilestone(res.total), 700);
           }
         },
-        onError: () => toast.error("打卡失败，请稍后再试"),
+        onError: (err) => toast.error(err?.message || "打卡失败，请稍后再试"),
       }
     );
   };
@@ -122,9 +124,11 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
   const nextMilestone = CHECKIN_MILESTONES.find((m) => total < m);
   const checkinTitle = completed
     ? "约定已完成"
-    : nextMilestone
-      ? `打卡：记录这次赴约（距 ${nextMilestone} 次里程碑还差 ${nextMilestone - total} 次）`
-      : "打卡：记录这次赴约（已集齐全部里程碑，继续！）";
+    : todayDone
+      ? "今日已赴约，明天再打卡～分享出去还能收到朋友的加油"
+      : nextMilestone
+        ? `打卡：记录这次赴约（距 ${nextMilestone} 次里程碑还差 ${nextMilestone - total} 次）`
+        : "打卡：记录这次赴约（已集齐全部里程碑，继续！）";
 
   const metaText = total > 0
     ? `已打卡 ${total} 次${firstAt ? ` · 从 ${formatShanghai(firstAt, "M月d日")} 开始` : ""}`
@@ -135,32 +139,35 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
       <div className="relative flex flex-col items-center gap-1">
         <button
           onClick={doCheckin}
-          disabled={completed || createMut.isPending}
+          disabled={completed || todayDone || createMut.isPending}
           title={checkinTitle}
           className={cn(
             "relative w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-300",
             completed
               ? "border-stone-100 bg-stone-50 text-stone-300 cursor-not-allowed"
-              : justDone
+              : (justDone || todayDone)
                 ? "border-transparent bg-gradient-to-br from-[#3b5aa2] to-[#384877] text-white shadow-lg shadow-[#384877]/30"
                 : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF] hover:shadow-lg hover:shadow-[#384877]/15 hover:-translate-y-0.5"
           )}
         >
-          <Footprints className={cn("w-5 h-5", justDone && "hidden")} />
+          <Footprints className={cn("w-5 h-5", (justDone || todayDone) && "hidden")} />
           {/* 打卡完成 = 盖下一枚「如约」印记，而非普通对勾 */}
           <span
-            className={cn("hidden text-[8px] font-bold leading-none text-white select-none", justDone && "inline-flex")}
+            className={cn("hidden text-[8px] font-bold leading-none text-white select-none", (justDone || todayDone) && "inline-flex")}
             style={{ writingMode: "vertical-rl", letterSpacing: "0.1em" }}
           >
             如约
           </span>
-          {!justDone && !completed && (
+          {!justDone && !todayDone && !completed && (
             <span
               className="absolute inset-0 rounded-full border-2 border-[#8fa3cf] animate-ping opacity-30 pointer-events-none"
               style={{ animationDuration: "2.8s" }}
             />
           )}
         </button>
+        {todayDone && !justDone && (
+          <span className="text-[10px] whitespace-nowrap text-center text-[#384877] font-medium">今日已赴约</span>
+        )}
         {metaText && (
           <button
             onClick={() => setTimelineOpen(true)}

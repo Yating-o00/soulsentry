@@ -3,9 +3,10 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { computeNextReminderTime } from "../lib/recurrence.js";
-import { countedCheckinsWhere } from "../lib/checkinStats.js";
+import { countedCheckinsWhere, VISITOR_CHECKIN_SOURCE } from "../lib/checkinStats.js";
 import { syncParentProgress } from "./tasks.js";
 import { isDemoUser } from "../lib/ensureDemoUser.js";
+import { beijingToday, beijingDayRange } from "../lib/behavior.js";
 
 /**
  * 约定打卡（Checkin）：同一个约定可多次打卡，每次可附带一句话或照片。
@@ -106,6 +107,29 @@ checkinsRouter.post("/:id/checkins", async (req, res) => {
     return res.status(403).json({ error: "FORBIDDEN", message: "体验账号不能为别人的约定打卡，请先注册登录" });
   }
 
+  // 每日打卡约定：每天只能赴约一次（按北京日期）。当日已打卡后不再产生新记录，
+  // 打卡计数只能随天数增长；想收获更多鼓励，分享出去让朋友在落地页「为 TA 加油」。
+  const extraFields = task.metadata?._extraFields && typeof task.metadata._extraFields === "object" ? task.metadata._extraFields : {};
+  const isDailyRecurrence = extraFields.repeat_rule === "daily"
+    || (extraFields.custom_recurrence?.frequency === "daily" && !extraFields.custom_recurrence?.interval);
+  if (isDailyRecurrence) {
+    const todayStr = beijingToday();
+    let alreadyCounted = extraFields.recurrence_last_done === todayStr;
+    if (!alreadyCounted) {
+      const [start, end] = beijingDayRange(todayStr);
+      const todayCount = await prisma.checkin.count({
+        where: { taskId: task.id, source: { not: VISITOR_CHECKIN_SOURCE }, createdAt: { gte: start, lt: end } }
+      });
+      alreadyCounted = todayCount > 0;
+    }
+    if (alreadyCounted) {
+      return res.status(409).json({
+        error: "ALREADY_CHECKED_TODAY",
+        message: "今日已赴约，明天再打卡～想收获更多鼓励，分享出去让朋友为你加油"
+      });
+    }
+  }
+
   const checkin = await prisma.checkin.create({
     data: {
       userId: req.user.id,
@@ -177,7 +201,8 @@ checkinsRouter.get("/:id/checkins", async (req, res) => {
   if (!task) return res.status(404).json({ error: "NOT_FOUND", message: "约定不存在或无权限" });
 
   const limit = Math.min(Number(req.query.limit) || 100, 200);
-  const [items, total, first, cheerTotal] = await Promise.all([
+  const [todayStart, todayEnd] = beijingDayRange(beijingToday());
+  const [items, total, first, cheerTotal, todayCount] = await Promise.all([
     prisma.checkin.findMany({
       where: { taskId: task.id },
       orderBy: { createdAt: "desc" },
@@ -191,12 +216,17 @@ checkinsRouter.get("/:id/checkins", async (req, res) => {
     }),
     // 鼓励数据：分享落地页访客"为 TA 加油"的累计（打卡卡片展示）
     prisma.cheer.count({ where: { taskId: task.id } }),
+    // 今日是否已赴约（每日打卡约定一天一次，前端据此显示「今日已赴约」并禁用打卡）
+    prisma.checkin.count({
+      where: { taskId: task.id, source: { not: VISITOR_CHECKIN_SOURCE }, createdAt: { gte: todayStart, lt: todayEnd } },
+    }),
   ]);
 
   return res.json({
     total,
     first_at: first?.createdAt?.toISOString?.() || null,
     cheer_total: cheerTotal,
+    done_today: todayCount > 0,
     items: items.map(serializeCheckin),
   });
 });

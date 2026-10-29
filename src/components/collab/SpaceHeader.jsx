@@ -12,7 +12,7 @@ export default function SpaceHeader({ space, onUpdate }) {
   };
   return (
     <div className="bg-gradient-to-b from-[#f4f6fb] to-white rounded-[28px] p-6 md:p-8 border border-slate-100">
-      <Link to="/collab-spaces" className="inline-flex items-center text-xs text-slate-400 hover:text-[#384877] mb-4"><ChevronLeft className="w-4 h-4" />协同约定</Link>
+      <Link to="/Tasks?view=collab" className="inline-flex items-center text-xs text-slate-400 hover:text-[#384877] mb-4"><ChevronLeft className="w-4 h-4" />约定 · 协同</Link>
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xs px-2.5 py-1 rounded-full bg-[#384877]/10 text-[#384877] font-medium">{SCENES[space.scene]?.label}</span>
         <span className="text-xs text-slate-400">{(space.members || []).length} 人共建</span>

@@ -62,11 +62,6 @@ const getNavigationItems = (t) => [
     icon: Users,
   },
   {
-    title: '协同约定',
-    url: '/collab-spaces',
-    icon: Heart,
-  },
-  {
     title: '外部连接',
     url: '/connections',
     icon: Plug,

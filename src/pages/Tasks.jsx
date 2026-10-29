@@ -22,12 +22,13 @@ import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
 import CombineParentDialog from "../components/tasks/CombineParentDialog";
 import AgreementCapture from "../components/agreements/AgreementCapture";
+import CollabSection from "@/components/collab/CollabSection";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
 export default function Tasks() {
   const { t } = useTranslation();
-  const [viewMode, setViewMode] = useState("overview"); // 'overview', 'milestone', 'life'
+  const [viewMode, setViewMode] = useState(() => new URLSearchParams(window.location.search).get("view") === "collab" ? "collab" : "overview"); // 'overview', 'milestone', 'life'
   const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedParents, setExpandedParents] = useState(new Set());
@@ -501,6 +502,17 @@ export default function Tasks() {
 
               <span>生活</span>
             </button>
+            <button
+              onClick={() => setViewMode('collab')}
+              className={cn(
+                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                viewMode === 'collab' ?
+                "bg-[#384877] text-white shadow-md" :
+                "text-slate-600 hover:bg-slate-50"
+              )}>
+
+              <span>协同</span>
+            </button>
           </div>
         </div>
 
@@ -764,6 +776,8 @@ export default function Tasks() {
               </div>
             </div>
           }
+
+          {viewMode === 'collab' && <CollabSection />}
 
           {/* 已完成约定 - 点击展开 */}
           <div className="mt-8 pt-8 border-t border-stone-200">

@@ -45,7 +45,13 @@ function normalizeCustom(custom) {
  * 返回 { repeat_rule, custom_recurrence } 或 null
  */
 export function parseRecurrenceFromText(text) {
-  const t = String(text || "").replace(/\s+/g, "");
+  // 引号内是转述/引用的内容（如 把"每天6点吃药…"这个设成约定），不代表本约定本身重复；
+  // 先剥掉引号段再做识别，避免把一次性任务误判成重复约定
+  const t = String(text || "")
+    .replace(/[“「『][^”」』]*[”」』]?/g, "")
+    .replace(/"[^"]*"?/g, "")
+    .replace(/'[^']*'?/g, "")
+    .replace(/\s+/g, "");
   if (!t) return null;
 
   // 工作日 / 周末（无"每"前缀也算重复习惯）

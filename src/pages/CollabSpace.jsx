@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2 } from "lucide-react";
 import SpaceHeader from "@/components/collab/SpaceHeader";
+import SpaceProgress from "@/components/collab/SpaceProgress";
+import FoldSection from "@/components/collab/FoldSection";
+import ActivityFeed from "@/components/collab/ActivityFeed";
 import DiscussionTab from "@/components/collab/DiscussionTab";
 import ItemsTab from "@/components/collab/ItemsTab";
 import DocsTab from "@/components/collab/DocsTab";
-
-const TAB = "px-1 pb-3 mr-6 text-sm font-medium text-slate-400 bg-transparent rounded-none border-b-2 border-transparent data-[state=active]:text-[#384877] data-[state=active]:border-[#384877] data-[state=active]:shadow-none data-[state=active]:bg-transparent";
 
 export default function CollabSpace() {
   const params = new URLSearchParams(window.location.search);
@@ -16,6 +16,7 @@ export default function CollabSpace() {
   const invite = params.get("invite");
   const qc = useQueryClient();
   const [joining, setJoining] = useState(!!invite);
+  const [view, setView] = useState("discussion");
 
   useEffect(() => {
     if (!invite) return;
@@ -42,27 +43,34 @@ export default function CollabSpace() {
   const refresh = () => qc.invalidateQueries({ queryKey: ["collab-space", id] });
 
   if (joining || isLoading) return <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto mt-24" />;
-  if (!data.space) return <p className="text-center text-slate-500 mt-24">协同约定不存在或你还不是成员</p>;
+  if (!data?.space) return <p className="text-center text-slate-500 mt-24">协同约定不存在或你还不是成员</p>;
   const { me, space, messages, items } = data;
   const update = async (patch) => { await base44.entities.CollabSpace.update(space.id, patch); refresh(); };
   const props = { space, me, messages, items, refresh };
   const count = (k) => items.filter((i) => i.kind === k).length;
+  const pill = (v, label) => (
+    <button onClick={() => setView(v)} className={`px-4 h-9 rounded-full text-sm font-medium transition-colors ${view === v ? "bg-[#384877] text-white" : "text-slate-500 hover:bg-slate-100"}`}>{label}</button>
+  );
 
   return (
-    <div className="max-w-3xl mx-auto px-5 md:px-8 py-8 space-y-8">
-      <SpaceHeader space={space} onUpdate={update} />
-      <Tabs defaultValue="discuss">
-        <TabsList className="bg-transparent p-0 h-auto border-b border-slate-100 w-full justify-start rounded-none">
-          <TabsTrigger value="discuss" className={TAB}>讨论</TabsTrigger>
-          <TabsTrigger value="subs" className={TAB}>子约定 ({count("subagreement")})</TabsTrigger>
-          <TabsTrigger value="ms" className={TAB}>节点 ({count("milestone")})</TabsTrigger>
-          <TabsTrigger value="docs" className={TAB}>沉淀 ({count("document")})</TabsTrigger>
-        </TabsList>
-        <TabsContent value="discuss" className="mt-6"><DiscussionTab {...props} /></TabsContent>
-        <TabsContent value="subs" className="mt-6"><ItemsTab kind="subagreement" {...props} /></TabsContent>
-        <TabsContent value="ms" className="mt-6"><ItemsTab kind="milestone" {...props} /></TabsContent>
-        <TabsContent value="docs" className="mt-6"><DocsTab {...props} /></TabsContent>
-      </Tabs>
+    <div className="min-[900px]:grid min-[900px]:grid-cols-2 min-[900px]:h-[calc(100vh-0px)] bg-white">
+      {/* 左窗：心栈约定卡片 */}
+      <div className="min-[900px]:overflow-y-auto border-r border-slate-100 px-5 md:px-8 py-8">
+        <SpaceHeader space={space} onUpdate={update} />
+        <div className="mt-6"><SpaceProgress items={items} /></div>
+        <FoldSection title="子约定" count={count("subagreement")}><ItemsTab kind="subagreement" {...props} /></FoldSection>
+        <FoldSection title="共同节点" count={count("milestone")}><ItemsTab kind="milestone" {...props} /></FoldSection>
+        <FoldSection title="沉淀文件" count={count("document")} defaultOpen={false}><DocsTab {...props} /></FoldSection>
+      </div>
+
+      {/* 右窗：讨论 / 共同动态 */}
+      <div className="min-[900px]:overflow-y-auto bg-[#f8f9fb] px-5 md:px-8 py-8">
+        <div className="flex items-center gap-1 mb-6 bg-white rounded-full p-1 w-fit border border-slate-100 sticky top-0 z-10">
+          {pill("discussion", `成员讨论 ${messages.length}`)}
+          {pill("activity", "共同动态")}
+        </div>
+        {view === "discussion" ? <DiscussionTab {...props} /> : <ActivityFeed messages={messages} items={items} />}
+      </div>
     </div>
   );
 }

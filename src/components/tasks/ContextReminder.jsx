@@ -32,7 +32,7 @@ export default function ContextReminder({
         </div>
         <div className="flex-1">
           <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-stone-800 mb-1">该买油回家啦</h4>
+            <h4 className="font-semibold text-stone-800 mb-1">买一束花回家～</h4>
             <button 
               onClick={() => setVisible(false)} 
               className="text-stone-400 hover:text-stone-600 p-1 rounded-full hover:bg-stone-50"
@@ -40,7 +40,7 @@ export default function ContextReminder({
               <X className="w-4 h-4" />
             </button>
           </div>
-          <p className="text-sm text-stone-500 mb-3">检测到你现在离开公司，顺路经过便利店</p>
+          <p className="text-sm text-stone-500 mb-3">检测到你正在离开公司，顺路经过花店</p>
           
           <div className="flex items-center gap-2 text-xs text-green-600 mb-3 font-medium bg-green-50 px-2 py-1 rounded-lg w-fit">
             <MapPin className="w-3 h-3" />

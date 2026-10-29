@@ -311,6 +311,14 @@ export default function Tasks() {
     })();
   });
 
+  // 下拉刷新：手动强制与服务端同步（在 Web 端做完操作后，下拉即可拉到最新状态）
+  Taro.usePullDownRefresh(() => {
+    (async () => {
+      await ensureDemoSession();
+      if (getToken()) await fetchData();
+    })().finally(() => Taro.stopPullDownRefresh());
+  });
+
   // 约定详情页改了子约定后发事件，这里定向刷新对应卡片的子约定，保证回到列表时数据同步
   useEffect(() => {
     const handler = ({ taskId } = {}) => {
@@ -652,7 +660,7 @@ export default function Tasks() {
               justifyContent: "space-between"
             }}
           >
-            <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>游客模式 · 登录后管理你的约定</Text>
+            <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>正在浏览演示数据，不是你的约定 · 登录后查看我的约定</Text>
             <Text style={{ fontSize: "24rpx", color: theme.primary, fontWeight: 500 }}>去登录 →</Text>
           </View>
         )}

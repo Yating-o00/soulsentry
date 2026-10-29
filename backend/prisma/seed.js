@@ -37,9 +37,14 @@ async function main() {
 
   console.log(`Seeded demo user: ${user.email}`);
 
-  // ---------- 演示数据（每次运行先清后建，保持新鲜） ----------
-  await prisma.task.deleteMany({ where: { userId: user.id } });
-  await prisma.note.deleteMany({ where: { userId: user.id } });
+  // ---------- 演示数据：仅在首次（空库）时初始化 ----------
+  // 不再每次先清后建——访客在演示模式下的勾选/打卡也是他们的操作记录，
+  // 重复 seed 不应把它们重置回未完成（否则"划掉的约定下次打开又回来了"）。
+  const existingTaskCount = await prisma.task.count({ where: { userId: user.id } });
+  if (existingTaskCount > 0) {
+    console.log(`Demo content already present (${existingTaskCount} tasks), keep as-is.`);
+    return;
+  }
 
   const now = new Date();
   const at = (d, h, m = 0) => {

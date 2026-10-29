@@ -163,13 +163,20 @@ collabRouter.post("/:taskId/members", async (req, res) => {
   if (!result) return;
   const { task } = result;
 
+  // 协同约定的邀请是协作的基础动作：发起人与其余成员都可邀请（与邀请链接的权限口径一致）
   if (req.user.id !== task.userId) {
-    return res.status(403).json({ error: "FORBIDDEN", message: "只有约定创建者可以添加成员" });
+    const myMembership = await prisma.taskMember.findUnique({
+      where: { taskId_userId: { taskId: task.id, userId: req.user.id } }
+    });
+    if (!myMembership) {
+      return res.status(403).json({ error: "FORBIDDEN", message: "只有约定成员可以邀请协作人员" });
+    }
   }
   const schema = z.object({
     phone: z.string().min(3).max(30).optional(),
-    email: z.string().email().max(100).optional()
-  }).refine((data) => data.phone || data.email, { message: "phone 或 email 至少提供一个" });
+    email: z.string().email().max(100).optional(),
+    user_id: z.string().min(1).max(64).optional()
+  }).refine((data) => data.phone || data.email || data.user_id, { message: "user_id、phone 或 email 至少提供一个" });
   const payload = schema.safeParse(req.body);
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
@@ -177,11 +184,12 @@ collabRouter.post("/:taskId/members", async (req, res) => {
 
   const email = payload.data.email ? payload.data.email.trim().toLowerCase() : undefined;
   const phone = payload.data.phone ? payload.data.phone.trim() : undefined;
-  const user = await prisma.user.findFirst({ where: { OR: [{ phone }, { email }] } });
+  const userId = payload.data.user_id ? payload.data.user_id.trim() : undefined;
+  const user = await prisma.user.findFirst({ where: { OR: [{ phone }, { email }, { id: userId }] } });
   if (!user) {
     return res.status(404).json({
       error: "USER_NOT_FOUND",
-      hint: "该手机号/邮箱还未注册心栈，请通过邀请链接邀请对方加入"
+      hint: "未找到该用户（ID/手机号/邮箱），请确认对方已注册心栈，或通过邀请卡片/链接邀请"
     });
   }
   if (user.id === task.userId) {

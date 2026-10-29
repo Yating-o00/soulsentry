@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Check, ChevronRight, MessageSquare, Bot, Sparkles, AlertCircle } from "lucide-react";
+import { Check, ChevronRight, MessageSquare, Bot, Sparkles, AlertCircle, Pin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { httpRequest } from "@/api/httpClient";
 import { toast } from "sonner";
@@ -109,6 +109,27 @@ export default function CollabTaskCard({ task }) {
     }
   };
 
+  // 置顶/取消置顶：与普通约定同一套 pinned_at 语义，列表排序置顶优先
+  const [isPinning, setIsPinning] = useState(false);
+  const handleTogglePin = async (e) => {
+    e.stopPropagation();
+    if (isPinning) return;
+    setIsPinning(true);
+    try {
+      const pinned = Boolean(task.pinned_at);
+      await httpRequest(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: { pinned_at: pinned ? null : new Date().toISOString() },
+      });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success(pinned ? "已取消置顶" : "已置顶，会排在列表最前");
+    } catch (_err) {
+      toast.error("操作没成功，再试一次");
+    } finally {
+      setIsPinning(false);
+    }
+  };
+
   if (!collab) return null;
 
   const assigneeOf = (sub) => {
@@ -120,8 +141,24 @@ export default function CollabTaskCard({ task }) {
   return (
     <div
       onClick={openSpace}
-      className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md hover:border-[#384877]/30 transition-all cursor-pointer p-5 md:p-6"
+      className={cn(
+        "group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md hover:border-[#384877]/30 transition-all cursor-pointer p-5 md:p-6",
+        task.pinned_at && "border-[#c9d5ef] shadow-md"
+      )}
     >
+      {/* 置顶/取消置顶：置顶时常显（实心图钉），未置顶悬停卡片显示 */}
+      <button
+        onClick={handleTogglePin}
+        title={task.pinned_at ? "取消置顶" : "置顶"}
+        className={cn(
+          "absolute right-3 top-3 z-10 p-1.5 rounded-full transition-all",
+          task.pinned_at
+            ? "text-[#384877] bg-[#eef2ff]/80"
+            : "text-slate-300 hover:text-[#384877] hover:bg-stone-50 md:opacity-0 md:group-hover:opacity-100"
+        )}
+      >
+        <Pin className="w-4 h-4" fill={task.pinned_at ? "currentColor" : "none"} />
+      </button>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           {/* 徽标行 */}

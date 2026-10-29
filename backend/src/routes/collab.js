@@ -93,6 +93,60 @@ function serializeSubtaskTree(nodes) {
 }
 
 // GET /api/collab/:taskId/summary — 空间聚合：任务、成员、子约定树（全部层级）、节点、文档、统计、最近动态
+// GET /api/collab/invite-candidates?q=&task_id= - @邀请候选
+// 候选范围 = 与我协作过的人（我发起的约定的成员 + 我作为成员参与的约定的发起人），排除当前约定已有成员与本人
+collabRouter.get("/invite-candidates", async (req, res) => {
+  const me = req.user.id;
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const taskId = String(req.query.task_id || "");
+
+  if (taskId) {
+    const result = await assertTaskAccess(req, res, taskId);
+    if (!result) return;
+  }
+
+  try {
+    const [myTaskMembers, myMemberships] = await Promise.all([
+      prisma.taskMember.findMany({ where: { task: { userId: me } }, include: { user: true }, take: 200 }),
+      prisma.taskMember.findMany({ where: { userId: me }, include: { task: { include: { user: true } } }, take: 200 })
+    ]);
+    const byId = new Map();
+    for (const m of myTaskMembers) {
+      if (m.user && m.userId !== me) byId.set(m.userId, m.user);
+    }
+    for (const m of myMemberships) {
+      if (m.task?.user && m.task.userId !== me) byId.set(m.task.userId, m.task.user);
+    }
+    let users = [...byId.values()];
+
+    if (taskId) {
+      const task = await prisma.task.findUnique({ where: { id: taskId }, include: { members: true } });
+      if (task) {
+        const exclude = new Set([me, task.userId, ...task.members.map((m) => m.userId)]);
+        users = users.filter((u) => !exclude.has(u.id));
+      }
+    }
+    if (q) {
+      users = users.filter((u) =>
+        (u.displayName || "").toLowerCase().includes(q) ||
+        (u.email || "").toLowerCase().includes(q)
+      );
+    }
+    users = users.slice(0, 6);
+
+    return res.json({
+      candidates: users.map((u) => ({
+        user_id: u.id,
+        display_name: u.displayName || u.email || "用户",
+        email: u.email || null
+      }))
+    });
+  } catch (error) {
+    console.error("[collab] invite-candidates failed:", error);
+    return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
+  }
+});
+
 collabRouter.get("/:taskId/summary", async (req, res) => {
   const result = await loadCollabSpace(req, res);
   if (!result) return;

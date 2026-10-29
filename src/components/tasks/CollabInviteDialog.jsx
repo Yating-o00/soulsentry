@@ -59,6 +59,10 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
   const [identifier, setIdentifier] = useState("");
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // @直接邀请：输入 @ 检索协作过的伙伴，选中后点邀请即刻发出
+  const [mentionText, setMentionText] = useState("");
+  const [mentionCandidates, setMentionCandidates] = useState([]);
+  const [mentionSelected, setMentionSelected] = useState(null);
   const cardRef = useRef(null);
 
   const { data: currentUser } = useQuery({
@@ -99,6 +103,30 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
     return name;
   }, [currentUser]);
 
+  // @邀请候选检索（防抖 250ms）：候选来自与我协作过的伙伴，排除本约定已有成员
+  useEffect(() => {
+    if (!open || !task?.id || mentionSelected) {
+      setMentionCandidates([]);
+      return;
+    }
+    const q = mentionText.replace(/^@+/, "").trim();
+    if (!q) {
+      setMentionCandidates([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await httpRequest(
+          `/api/collab/invite-candidates?task_id=${encodeURIComponent(task.id)}&q=${encodeURIComponent(q)}`
+        );
+        setMentionCandidates(res?.candidates || []);
+      } catch {
+        setMentionCandidates([]);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [mentionText, open, task?.id, mentionSelected]);
+
   const memberList = members.filter((m) => m.role !== "owner");
   const ownerMember = members.find((m) => m.role === "owner");
 
@@ -109,22 +137,40 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
     }).catch(() => toast.error("复制失败"));
   };
 
-  // 卡片导出为 PNG：优先系统分享（手机可直接发微信/QQ）；分享不可用或失败时回退为下载保存
+  // 渲染卡片为 PNG blob（保存/分享 与 复制卡片 共用）
+  const renderCardBlob = async () => {
+    const canvas = await html2canvas(cardRef.current, {
+      scale: 2,
+      backgroundColor: "#2e3a62",
+      logging: false,
+      useCORS: true,
+    });
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("生成图片失败");
+    return blob;
+  };
+
+  const downloadBlob = (blob, fileName) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // 延迟回收：立即 revoke 可能让部分浏览器取消刚触发的下载
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  // 卡片导出：手机端直接调系统分享面板（分享面板真正可用）；桌面端一律下载保存
   const handleShareCard = async () => {
     if (!cardRef.current || exporting) return;
     setExporting(true);
     const fileName = `心栈协同邀请-${(task?.title || "约定").slice(0, 12)}.png`;
     try {
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 2,
-        backgroundColor: "#2e3a62",
-        logging: false,
-        useCORS: true,
-      });
-      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-      if (!blob) throw new Error("生成图片失败");
+      const blob = await renderCardBlob();
       const file = new File([blob], fileName, { type: "image/png" });
-      // 仅触屏设备走系统分享（分享面板真正可用）；桌面端及分享超时一律回退为下载保存
+      // 仅触屏设备走系统分享；桌面端及分享超时一律回退为下载保存
       const isTouchFirst =
         (typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches) ||
         /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
@@ -149,15 +195,7 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
         }
       }
       if (!shared) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        // 延迟回收：立即 revoke 可能让部分浏览器取消刚触发的下载
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        downloadBlob(blob, fileName);
         toast.success("邀请卡片已保存，去发给伙伴吧");
       }
     } catch (error) {
@@ -165,6 +203,81 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
       toast.error("卡片生成失败，请稍后再试");
     } finally {
       setExporting(false);
+    }
+  };
+
+  // 复制卡片：卡片 PNG 写入剪贴板，可直接粘贴到微信/QQ；不支持时回退为下载
+  const handleCopyCard = async () => {
+    if (!cardRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const blob = await renderCardBlob();
+      if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+        try {
+          await Promise.race([
+            navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("CLIPBOARD_TIMEOUT")), 5000)),
+          ]);
+          toast.success("卡片已复制，可直接粘贴给好友");
+        } catch {
+          // 剪贴板不可用/超时：回退为下载
+          downloadBlob(blob, `心栈协同邀请-${(task?.title || "约定").slice(0, 12)}.png`);
+          toast.success("当前浏览器不支持复制图片，已改为下载卡片");
+        }
+      } else {
+        downloadBlob(blob, `心栈协同邀请-${(task?.title || "约定").slice(0, 12)}.png`);
+        toast.success("当前浏览器不支持复制图片，已改为下载卡片");
+      }
+    } catch (error) {
+      console.error("[collab] 复制卡片失败:", error);
+      toast.error("复制卡片失败，可尝试保存/分享");
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // 链接邀请：复制成功后提示并关闭弹窗
+  const handleCopyLinkAndClose = () => {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl).then(() => {
+      toast.success("已复制链接");
+      onClose?.();
+    }).catch(() => toast.error("复制失败"));
+  };
+
+  // @直接邀请：优先按选中的候选 user_id 邀请；无候选时按输入内容智能识别（邮箱/手机号/用户ID）
+  const handleMentionInvite = async () => {
+    const value = mentionText.replace(/^@+/, "").trim();
+    if (!mentionSelected && !value) return;
+    setAdding(true);
+    try {
+      const body = mentionSelected
+        ? { user_id: mentionSelected.user_id }
+        : /@/.test(value)
+          ? { email: value }
+          : /^\d{5,}$/.test(value)
+            ? { phone: value }
+            : { user_id: value };
+      const result = await httpRequest(`/api/collab/${task.id}/members`, { method: "POST", body });
+      toast.success(
+        result?.already_member
+          ? `${result?.member?.display_name || "对方"} 已是成员`
+          : `已邀请 ${result?.member?.display_name || "对方"} 加入协同约定`
+      );
+      setMentionText("");
+      setMentionSelected(null);
+      setMentionCandidates([]);
+      onChanged?.();
+    } catch (error) {
+      if (error?.status === 404 && error?.data?.error === "USER_NOT_FOUND") {
+        toast.warning(error.data.hint || "未找到该用户，请通过邀请卡片或链接邀请对方加入");
+      } else if (error?.status === 409) {
+        toast.info(error?.message || "对方已是成员");
+      } else {
+        toast.error(error?.message || "邀请失败，请稍后再试");
+      }
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -346,10 +459,10 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
                     disabled={exporting}
                   >
                     {exporting ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Share2 className="w-4 h-4 mr-1.5" />}
-                    {exporting ? "正在生成…" : "保存 / 分享卡片"}
+                    保存 / 分享
                   </Button>
-                  <Button variant="outline" className="flex-1" onClick={handleCopy}>
-                    <Copy className="w-4 h-4 mr-1.5" /> 复制链接
+                  <Button variant="outline" className="flex-1" onClick={handleCopyCard} disabled={exporting}>
+                    <Copy className="w-4 h-4 mr-1.5" /> 复制卡片
                   </Button>
                 </div>
                 <p className="text-[11px] text-slate-400 text-center">卡片内含邀请二维码，对方扫码即可加入协作</p>
@@ -371,8 +484,8 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
                 placeholder={linkLoading ? "正在生成链接…" : "未能生成链接"}
                 onFocus={(e) => e.target.select()}
               />
-              <Button size="sm" className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]" onClick={handleCopy} disabled={!inviteUrl}>
-                <Copy className="w-3.5 h-3.5 mr-1" /> 复制
+              <Button size="sm" className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]" onClick={handleCopyLinkAndClose} disabled={!inviteUrl}>
+                <Copy className="w-3.5 h-3.5 mr-1" /> 复制链接
               </Button>
             </div>
             {inviteUrl && (
@@ -439,6 +552,81 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
               </div>
             ))}
           </div>
+        </div>
+
+        {/* @直接邀请（当前成员下方） */}
+        <div className="border-t border-slate-100 pt-3">
+          <p className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">
+            <AtSign className="w-3.5 h-3.5" /> @ 邀请朋友
+          </p>
+          <div className="relative">
+            {mentionSelected ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center justify-between rounded-lg border border-[#384877]/30 bg-[#384877]/5 pl-2 pr-1.5 py-1.5 min-w-0">
+                  <span className="text-xs font-medium text-[#384877] truncate">
+                    @{mentionSelected.display_name}
+                    <span className="text-[10px] text-slate-400 font-normal ml-1.5">{mentionSelected.email}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMentionSelected(null)}
+                    className="w-5 h-5 shrink-0 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-sm leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+                <Button
+                  size="sm"
+                  className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]"
+                  onClick={handleMentionInvite}
+                  disabled={adding}
+                >
+                  {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "邀请"}
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#384877] text-sm font-semibold select-none">
+                    @
+                  </span>
+                  <Input
+                    value={mentionText}
+                    onChange={(e) => setMentionText(e.target.value)}
+                    placeholder="输入朋友昵称或邮箱"
+                    className="pl-7 text-xs h-9"
+                    onKeyDown={(e) => { if (e.key === "Enter") handleMentionInvite(); }}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]"
+                  onClick={handleMentionInvite}
+                  disabled={adding || !mentionText.replace(/^@+/, "").trim()}
+                >
+                  {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "邀请"}
+                </Button>
+              </div>
+            )}
+            {!mentionSelected && mentionCandidates.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 z-20 mb-1 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                {mentionCandidates.map((c) => (
+                  <button
+                    key={c.user_id}
+                    type="button"
+                    onClick={() => { setMentionSelected(c); setMentionCandidates([]); }}
+                    className="w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-slate-50 text-left"
+                  >
+                    <span className="text-xs font-medium text-slate-800 truncate">{c.display_name}</span>
+                    <span className="text-[10px] text-slate-400 truncate">{c.email}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-1.5">
+            候选来自与你协作过的伙伴；也可直接输入邮箱 / 手机号 / 用户ID
+          </p>
         </div>
       </DialogContent>
     </Dialog>

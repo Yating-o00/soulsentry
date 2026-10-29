@@ -36,8 +36,7 @@ export default function ItemRow({ item, space, me, refresh }) {
         <div className="flex-1 min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <span className={`text-[11px] px-2 py-0.5 rounded-full ${cls}`}>{label}</span>
-            {item.kind === "milestone" && <span className="text-[11px] text-slate-500">{MS[item.milestone_type] || "时间"}节点</span>}
-            {item.source === "agent" && <span className="text-[11px] text-[#384877] flex items-center gap-0.5"><Bot className="w-3 h-3" />Agent 建议</span>}
+            {item.source === "agent" && <Bot className="w-3.5 h-3.5 text-[#384877]" />}
             {item.due_date && <span className="text-[11px] text-slate-400">{item.due_date}</span>}
           </div>
           <p className="text-[15px] font-medium text-slate-900 leading-snug">{item.title}</p>

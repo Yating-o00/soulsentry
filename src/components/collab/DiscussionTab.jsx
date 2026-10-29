@@ -44,7 +44,6 @@ export default function DiscussionTab({ space, me, messages, items, refresh }) {
             <div className="flex items-center gap-2 mb-1.5">
               {m.is_agent && <Bot className="w-4 h-4 text-[#384877]" />}
               <span className="text-sm font-semibold text-slate-800">{m.author_name}</span>
-              {m.is_agent && <span className="text-[11px] text-slate-400">建议 · 需成员确认</span>}
               {TAGS[m.tag] && <span className={`text-[11px] px-2 py-0.5 rounded-full ${TAGS[m.tag][1]}`}>{TAGS[m.tag][0]}</span>}
               <span className="text-[11px] text-slate-400 ml-auto">{new Date(m.created_date).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
             </div>
@@ -64,11 +63,10 @@ export default function DiscussionTab({ space, me, messages, items, refresh }) {
         {agentOn && (
           <div className="flex flex-wrap gap-2">
             <button disabled={agentBusy} onClick={() => callAgent("organize")} className="text-xs px-3 py-1.5 rounded-full bg-[#384877] text-white flex items-center gap-1"><Bot className="w-3.5 h-3.5" />@Agent 整理</button>
-            {QUICK.map((q) => <button key={q} disabled={agentBusy} onClick={() => callAgent(q)} className="text-xs px-3 py-1.5 rounded-full border border-slate-200 text-slate-600 hover:border-[#384877]/40">{q}</button>)}
           </div>
         )}
         <div className="flex gap-2">
-          <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={agentOn ? "发表观点…输入 @Agent 召唤整理或协调" : "发表观点…"} className="rounded-2xl min-h-[52px] bg-slate-50"
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="发表观点…" className="rounded-2xl min-h-[52px] bg-slate-50"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
           <Button onClick={send} className="h-auto rounded-2xl bg-[#384877] hover:bg-[#2d3a62] px-5"><Send className="w-4 h-4" /></Button>
         </div>

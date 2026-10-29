@@ -8,7 +8,7 @@ export default function DocsTab({ items, refresh }) {
   const [openId, setOpenId] = useState(null);
   const confirm = async (d) => { await base44.entities.CollabItem.update(d.id, { status: "done" }); refresh(); };
 
-  if (!docs.length) return <p className="text-center text-sm text-slate-400 py-12 border border-dashed border-slate-200 rounded-2xl">暂无沉淀文件，让 Agent 整理讨论即可生成共识纪要</p>;
+  if (!docs.length) return <p className="text-center text-sm text-slate-400 py-12 border border-dashed border-slate-200 rounded-2xl">暂无文件</p>;
   return (
     <div className="space-y-3">
       {docs.map((d) => (

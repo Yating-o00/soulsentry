@@ -432,11 +432,15 @@ export default function Share() {
         method: "POST",
         body: { visitor_token: visitorToken }
       });
-      toast.success(result.type === "task" ? "已添加到你的约定" : "已添加你的心签");
+      toast.success(
+        result.type === "task"
+          ? result.joined ? "已加入协同约定" : "已添加到你的约定"
+          : "已添加你的心签"
+      );
       setImportConfirmOpen(false);
-      // Navigate to the imported item
+      // Navigate to the imported item；协同约定直接落进协同工作区
       if (result.type === "task") {
-        navigate(`/tasks?taskId=${result.item.id}`);
+        navigate(result.joined ? `/collabspace?taskId=${result.item.id}` : `/tasks?taskId=${result.item.id}`);
       } else {
         navigate(`/notes?noteId=${result.item.id}`);
       }
@@ -488,6 +492,8 @@ export default function Share() {
 
   const isTask = data?.type === "task";
   const item = data?.item;
+  // 协同约定：落地页"添加至我的列表"变为"加入协同约定"——成为成员实时共享原约定内容（复制副本会是空的）
+  const isCollab = isTask && data?.is_collab === true;
   // 打卡类约定：访客点"为 TA 打卡"= 留下打卡记录（附言同步访客称呼）但不计入累计；
   // 拥有者/共有成员本人扫码打卡才计入（后端按登录态区分，见 checkinStats）
   const isCheckinTask = isTask && item?.category === "checkin";
@@ -632,6 +638,11 @@ export default function Share() {
               {isTask && item.category && (
                 <Badge variant="outline" className="text-xs">
                   {CATEGORY_LABELS[item.category] || item.category}
+                </Badge>
+              )}
+              {isCollab && (
+                <Badge className="text-xs bg-[#384877]/10 text-[#384877] hover:bg-[#384877]/10 border-0">
+                  多人协同
                 </Badge>
               )}
               {isTask && item.priority && (
@@ -899,10 +910,18 @@ export default function Share() {
                 </div>
                 <div className="text-left">
                   <p className="text-sm font-medium text-slate-800">
-                    {currentUser === undefined ? "检查中..." : currentUser ? "添加至我的列表" : "登录后添加至我的列表"}
+                    {currentUser === undefined
+                      ? "检查中..."
+                      : isCollab
+                        ? (currentUser ? "加入协同约定" : "登录后加入协同约定")
+                        : (currentUser ? "添加至我的列表" : "登录后添加至我的列表")}
                   </p>
                   <p className="text-xs text-slate-500">
-                    {currentUser ? "导入到你的约定/心签" : "登录/注册后即可保存"}
+                    {isCollab
+                      ? "成为成员，实时共享子约定、讨论与沉淀"
+                      : currentUser
+                        ? "导入到你的约定/心签"
+                        : "登录/注册后即可保存"}
                   </p>
                 </div>
               </Button>
@@ -993,9 +1012,11 @@ export default function Share() {
         <Dialog open={importConfirmOpen} onOpenChange={setImportConfirmOpen}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle className="text-base">加入个人列表？</DialogTitle>
+              <DialogTitle className="text-base">{isCollab ? "加入协同约定？" : "加入个人列表？"}</DialogTitle>
               <DialogDescription className="text-sm text-slate-500">
-                是否将该{isTask ? "约定" : "心签"}《{item?.title || "未命名"}》加入你的列表？确认后将立刻导入。
+                {isCollab
+                  ? `《${item?.title || "未命名"}》是一个多人协同约定。加入后你将成为成员，与发起人及其他成员实时共享全部子约定、讨论与沉淀内容。`
+                  : `是否将该${isTask ? "约定" : "心签"}《${item?.title || "未命名"}》加入你的列表？确认后将立刻导入。`}
               </DialogDescription>
             </DialogHeader>
             <div className="flex gap-3 pt-2">

@@ -401,6 +401,8 @@ publicShareRouter.get("/:token", optionalAuth, async (req, res) => {
         item: serializeTask(item),
         owner_name: item.user?.displayName || "",
         is_owner: req.user?.id === item.userId,
+        // 协同约定：落地页据此把"添加至我的列表"变为"加入协同约定"（成为成员实时共享，而非导入一份空副本）
+        is_collab: !!(item.metadata && typeof item.metadata === "object" && item.metadata.collab),
         subtasks,
         checkin_total: checkinTotal,
         checkins: checkinPayload,
@@ -920,6 +922,7 @@ publicShareRouter.post("/:token/subscribe", async (req, res) => {
 });
 
 // POST /api/public/share/:token/import - 登录用户导入分享内容到个人列表
+// 协同约定走"加入"而非复制：成为原约定的成员，与子约定/讨论/沉淀实时共享（复制副本无法同步，内容会为空）
 publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
   const result = await findSharedItem(req.params.token);
   if (!result) return res.status(404).json({ error: "NOT_FOUND" });
@@ -929,6 +932,50 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
 
   try {
     const ownerName = item.user?.displayName || item.user?.email || "未知分享者";
+
+    if (type === "task" && item.metadata && typeof item.metadata === "object" && item.metadata.collab) {
+      // 协同约定：加入原约定共享（逻辑与 /join 一致，落地页统一走 import 入口）
+      if (item.userId === req.user.id) {
+        return res.json({ type: "task", joined: true, already: true, is_owner: true, item: serializeTask(item) });
+      }
+      if (isDemoUser(req.user)) {
+        return res.status(403).json({ error: "FORBIDDEN", message: "体验账号不能加入协同约定，请先注册登录" });
+      }
+      const existing = await prisma.taskMember.findUnique({
+        where: { taskId_userId: { taskId: item.id, userId: req.user.id } }
+      });
+      if (!existing) {
+        await prisma.taskMember.create({
+          data: { taskId: item.id, userId: req.user.id, invitedBy: req.user.id }
+        });
+        logBehavior(req.user.id, "join_created", { taskId: item.id, metadata: { via: "public_share_collab" } });
+
+        await notifyOwner(item.userId, {
+          type: "shared_task_joined",
+          title: "有人加入了协同约定",
+          body: `${req.user.displayName || req.user.email || "某用户"} 通过分享链接加入了协同约定「${item.title}」，将与所有成员实时共享子约定、讨论与沉淀内容`,
+          shareToken: req.params.token,
+          targetType: "task",
+          targetId: item.id,
+          link: `/tasks?taskId=${item.id}`
+        });
+      }
+
+      await prisma.sharedActionLog.create({
+        data: {
+          shareToken: req.params.token,
+          targetType: "task",
+          targetId: item.id,
+          visitorToken: req.user.id,
+          visitorName: req.user.displayName || req.user.email || "注册用户",
+          actionType: "join_collab",
+          payload: { taskId: item.id, userId: req.user.id, already: !!existing }
+        }
+      });
+
+      return res.json({ type: "task", joined: true, already: !!existing, item: serializeTask(item) });
+    }
+
     const sharedFromTag = `来自 ${ownerName} 的分享`;
     let imported;
     if (type === "task") {

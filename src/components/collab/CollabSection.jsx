@@ -8,7 +8,7 @@ import CollabSpaceCard from "@/components/collab/CollabSpaceCard";
 export default function CollabSection() {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
-    queryKey: ["collab-spaces"],
+    queryKey: ["collab-spaces-section"],
     queryFn: async () => {
       const spaces = await base44.entities.CollabSpace.list("-updated_date", 50);
       const ids = spaces.map((s) => s.id);
@@ -41,7 +41,7 @@ export default function CollabSection() {
         <button onClick={() => setOpen(true)} className="flex items-center gap-1 rounded-full bg-[#384877] hover:bg-[#2d3a62] text-white text-sm h-10 px-4"><Plus className="w-4 h-4" />新建协同约定</button>
       </div>
       {isLoading ? <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto my-12" /> :
-        data.spaces.length === 0 ? (
+        !data?.spaces?.length ? (
           <div className="text-center py-16 rounded-[24px] border border-dashed border-slate-200 text-slate-500">还没有协同约定，邀请身边的人一起共建吧</div>
         ) : (
           <div className="grid sm:grid-cols-2 gap-5">{data.spaces.map((s) => <CollabSpaceCard key={s.id} space={s} stats={data.stats[s.id]} />)}</div>

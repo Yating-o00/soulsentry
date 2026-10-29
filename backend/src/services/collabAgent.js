@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { callKimiChat, invokeKimiWebSearch, parseModelJson } from "../lib/kimi.js";
 import { assertAICredits, chargeAICredits } from "./aiCredits.js";
 import { AI_CALL_COSTS } from "../routes/functions.js";
-import { collectSubtasks, logCollabChange } from "./collabSpace.js";
+import { collectSubtasks, logCollabChange, nestSubtasks } from "./collabSpace.js";
 import { syncParentProgress } from "../routes/tasks.js";
 
 const COST = () => AI_CALL_COSTS.collab_agent || 2;
@@ -100,6 +100,94 @@ export function buildSystem(scenario) {
   return `${TRUST_RULES}\n\n${SCENARIO_TAILS[scenario] || SCENARIO_TAILS.custom}`;
 }
 
+// ── 子约定编号与树：空间数据展示与 parentHint 解析共用同一套标签（S1、S1-1…），保证对齐 ──
+const SUBTASK_LABEL_LIMIT = 30;
+
+function buildSubtaskLabelTree(rootTaskId, subtasks) {
+  const slice = subtasks.slice(0, SUBTASK_LABEL_LIMIT);
+  const tree = nestSubtasks(rootTaskId, slice);
+  const labelMap = new Map();
+  const lines = [];
+  const walk = (nodes, prefix, depth) => {
+    nodes.forEach((node, i) => {
+      const label = `${prefix}${i + 1}`;
+      labelMap.set(label, node);
+      const meta = node.metadata?.collab || {};
+      const state = meta.state === "draft" ? "草案待确认" : (node.status === "DONE" ? "已完成" : "进行中");
+      const standard = meta.standard ? `（完成标准：${String(meta.standard).slice(0, 60)}）` : "";
+      lines.push(`${depth === 0 ? "-" : `${"  ".repeat(depth)}·`} [${label}] [${state}] ${node.title}${standard}`);
+      walk(node.children || [], `${label}-`, depth + 1);
+    });
+  };
+  walk(tree, "S", 0);
+  return { labelMap, lines };
+}
+
+// 匹配用归一化：小写 + 去空白与标点，保留中英文与数字
+function normalizeForMatch(s) {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9一-龥]/g, "");
+}
+
+function bigramSet(s) {
+  const str = normalizeForMatch(s);
+  const set = new Set();
+  if (!str) return set;
+  if (str.length === 1) {
+    set.add(str);
+    return set;
+  }
+  for (let i = 0; i < str.length - 1; i++) set.add(str.slice(i, i + 2));
+  return set;
+}
+
+// a 被 b 覆盖的程度（0-1）：hint 的主题词被候选标题包含越多，越可能是其从属
+function containment(a, b) {
+  const A = bigramSet(a);
+  const B = bigramSet(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const g of A) if (B.has(g)) inter++;
+  return inter / A.size;
+}
+
+// 从属归属解析：Agent 给出已有子约定的编号/标题提示，匹配到已有子约定（含本次刚创建的）
+function resolveParentSubtask(pool, hint, labelMap) {
+  if (!isNonEmptyString(hint)) return null;
+  const h = hint.trim();
+  const byLabel = labelMap?.get(h) || labelMap?.get(h.toUpperCase());
+  if (byLabel) return byLabel;
+  const direct = pool.find((s) => s.id === h)
+    || pool.find((s) => s.title === h)
+    || pool.find((s) => normalizeForMatch(s.title) === normalizeForMatch(h))
+    || pool.find((s) => s.title.includes(h) || h.includes(s.title));
+  if (direct) return direct;
+  // 模糊兜底：hint 的主题被某子约定标题大部分覆盖（如「目的地」→「定目的地和出行日期」）
+  if (normalizeForMatch(h).length < 2) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const s of pool) {
+    const score = containment(h, s.title);
+    if (score > bestScore) {
+      bestScore = score;
+      best = s;
+    }
+  }
+  return bestScore >= 0.6 ? best : null;
+}
+
+// 合并同类项：与已有（或本次刚创建的）子约定近重复（≥90% 覆盖）的提取项不再重复创建
+function findDuplicateSubtask(pool, title) {
+  const t = normalizeForMatch(title);
+  if (!t) return null;
+  for (const s of pool) {
+    const st = normalizeForMatch(s.title);
+    if (!st) continue;
+    if (st === t) return s;
+    if (t.length >= 4 && st.length >= 4 && containment(title, s.title) >= 0.9) return s;
+  }
+  return null;
+}
+
 export function formatSpaceData(task, snapshot) {
   const collab = task.metadata?.collab || {};
   const memberNames = [task.user, ...task.members.map((m) => m.user)]
@@ -112,13 +200,9 @@ export function formatSpaceData(task, snapshot) {
     `成员：${[...new Set(memberNames)].join("、")}`
   ];
   if (snapshot.subtasks.length > 0) {
-    lines.push("\n子约定：");
-    for (const st of snapshot.subtasks.slice(0, 30)) {
-      const meta = st.metadata?.collab || {};
-      const state = meta.state === "draft" ? "草案待确认" : (st.status === "DONE" ? "已完成" : "进行中");
-      const standard = meta.standard ? `（完成标准：${String(meta.standard).slice(0, 60)}）` : "";
-      lines.push(`- [${state}] ${st.title}${standard}`);
-    }
+    const { lines: subtaskLines } = buildSubtaskLabelTree(task.id, snapshot.subtasks);
+    lines.push("\n子约定（编号 S1/S1-1… 可用于指认从属；缩进为从属约定）：");
+    lines.push(...subtaskLines);
   }
   if (snapshot.nodes.length > 0) {
     lines.push("\n执行节点：");
@@ -255,16 +339,7 @@ async function createDraftSubtask(task, user, { title, standard = "", assigneeHi
   return subtask;
 }
 
-// 从属归属解析：Agent 给出已有子约定的标题/ID 提示，匹配到已有子约定（含本次刚创建的）
-function resolveParentSubtask(pool, hint) {
-  if (!isNonEmptyString(hint)) return null;
-  const h = hint.trim();
-  return pool.find((s) => s.id === h)
-    || pool.find((s) => s.title === h)
-    || pool.find((s) => s.title.includes(h) || h.includes(s.title))
-    || null;
-}
-
+// ── 动作执行 ──
 async function runAction({ action, task, snapshot, system, user, commentId }) {
   const spaceText = formatSpaceData(task, snapshot);
 
@@ -354,7 +429,25 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
       const who = c.agent ? "Agent" : (c.user?.displayName || c.user?.email || c.user?.phone || "成员");
       return `- ${who}：${String(c.content).slice(0, 300)}`;
     }).join("\n");
-    const prompt = `约定主题：${task.title}\n\n已有的子约定清单：\n${snapshot.subtasks.length ? snapshot.subtasks.map((s) => `- ${s.title}`).join("\n") : "（暂无）"}\n\n以下是一条讨论线程：\n${threadText}\n\n请从线程中提取可执行的行动项，每项给出：标题 title（30 字以内）、完成标准 standard（怎样算完成）、负责人建议 assigneeHint（成员姓名，不确定就空字符串）、parentHint（若该行动项明显从属于上面某个已有子约定，填那个子约定的标题；是独立事项则空字符串）。\n\n只输出 JSON：{"items": [{"title": "...", "standard": "...", "assigneeHint": "...", "parentHint": ""}]}`;
+    const prompt = `约定主题：${task.title}
+
+已有的子约定清单（编号可用于指认从属）：
+${(() => {
+  const { lines } = buildSubtaskLabelTree(task.id, snapshot.subtasks);
+  return lines.length ? lines.join("\n") : "（暂无）";
+})()}
+
+以下是一条讨论线程：
+${threadText}
+
+请从线程中提取可执行的行动项，严格遵守：
+1. 先合并同类项：同一主题的多条信息只提取一项核心，不要把细节逐条拆成平级约定；
+2. 分级挂载：某项若属于某个已有子约定的范畴，作为它的从属约定——parentHint 填该子约定的编号（如 S1）或标题。例：已有「定目的地和出行日期」，讨论中确定了目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」；真正独立的事项才开新的顶层约定（parentHint 留空）；
+3. 宁缺毋滥：只提取真正推进约定的核心决定与行动项，闲聊、重复、纯细节不提取。
+
+每项给出：title（30 字以内，写清具体决定）、standard（怎样算完成）、assigneeHint（成员姓名，不确定就空字符串）、parentHint（编号或标题，顶层留空）。
+
+只输出 JSON：{"items": [{"title": "...", "standard": "...", "assigneeHint": "...", "parentHint": ""}]}`;
     const data = await invokeLLM({ system, prompt, json: true, kind: action });
     const items = Array.isArray(data?.items) ? data.items.slice(0, MAX_SUBTASKS_PER_RUN) : [];
     if (items.length === 0 || items.every((item) => !isNonEmptyString(item?.title))) {
@@ -362,9 +455,12 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
     }
     const created = [];
     const pool = [...snapshot.subtasks];
+    const labelMap = buildSubtaskLabelTree(task.id, pool).labelMap;
     for (const item of items) {
       if (!isNonEmptyString(item.title)) continue;
-      const parent = resolveParentSubtask(pool, item.parentHint);
+      // 合并同类项：与已有/刚创建的子约定近重复（≥90% 覆盖）则不再重复创建
+      if (findDuplicateSubtask(pool, item.title)) continue;
+      const parent = resolveParentSubtask(pool, item.parentHint, labelMap);
       const subtask = await createDraftSubtask(task, user, {
         title: item.title,
         standard: item.standard,
@@ -421,7 +517,7 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
 
     // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息。
     // 结构化输出：除回复外，按讨论内容把可执行项落成子约定草案、执行节点、沉淀文件（均为草案，待人确认）。
-    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：若讨论中出现了可执行的行动项（成员要做的事），提取为子约定草案，每项含 title（30 字以内）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（若明显从属于某个已有子约定——清单见上方空间数据——填那个子约定的标题；独立事项留空）；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null。\n\n所有对象都是草案，需成员确认后才生效；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null}`;
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null。\n\n所有对象都是草案，需成员确认后才生效；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action });
@@ -438,9 +534,12 @@ async function runAction({ action, task, snapshot, system, user, commentId }) {
     if (data && typeof data === "object") {
       const items = Array.isArray(data.subtasks) ? data.subtasks : [];
       const pool = [...snapshot.subtasks];
+      const labelMap = buildSubtaskLabelTree(task.id, pool).labelMap;
       for (const item of items.slice(0, MAX_SUBTASKS_PER_RUN)) {
         if (!isNonEmptyString(item?.title)) continue;
-        const parent = resolveParentSubtask(pool, item.parentHint);
+        // 合并同类项：与已有/刚创建的子约定近重复（≥90% 覆盖）则不再重复创建
+        if (findDuplicateSubtask(pool, item.title)) continue;
+        const parent = resolveParentSubtask(pool, item.parentHint, labelMap);
         const subtask = await createDraftSubtask(task, user, {
           title: item.title,
           standard: item.standard,

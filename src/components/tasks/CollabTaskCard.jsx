@@ -4,9 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Check, ChevronRight, MessageSquare, Bot, Sparkles, AlertCircle, Pin } from "lucide-react";
+import { Check, ChevronRight, MessageSquare, Bot, Sparkles, AlertCircle, Pin, Trash2, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { httpRequest } from "@/api/httpClient";
+import { base44 } from "@/api/base44Client";
 import { toast } from "sonner";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import CollabInviteDialog from "./CollabInviteDialog";
@@ -60,7 +61,17 @@ export default function CollabTaskCard({ task }) {
     refetchInterval: 20000,
   });
 
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    enabled: !!collab,
+  });
+
   const members = summary?.members || [];
+  // 创建者判定：summary 成员列表里 role=owner 的成员；成员判定：自己在成员列表中
+  const ownerMember = members.find((m) => m.role === "owner");
+  const isOwner = Boolean(currentUser?.id && ownerMember?.user_id === currentUser.id);
+  const amMember = Boolean(currentUser?.id && members.some((m) => m.user_id === currentUser.id));
   const memberCount = members.length || 1;
   const subtasks = useMemo(() => flattenTree(summary?.subtasks), [summary?.subtasks]);
   const docs = summary?.docs || [];
@@ -130,6 +141,49 @@ export default function CollabTaskCard({ task }) {
     }
   };
 
+  // 删除（仅创建者）：软删除，所有成员不可见；创建者可在垃圾箱中恢复
+  const [isDeleting, setIsDeleting] = useState(false);
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    if (isDeleting) return;
+    const ok = window.confirm(
+      `确定删除协同约定「${task.title}」吗？\n删除后所有成员都将看不到它；你可以稍后在垃圾箱中恢复。`
+    );
+    if (!ok) return;
+    setIsDeleting(true);
+    try {
+      await httpRequest(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: { deleted_at: new Date().toISOString() },
+      });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("已删除，可在垃圾箱中恢复");
+    } catch (err) {
+      toast.error(err?.message || "删除失败，请稍后再试");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // 退出共有（仅成员）：自己从成员列表移除，约定对本人消失，对其他成员保留
+  const [isLeaving, setIsLeaving] = useState(false);
+  const handleLeave = async (e) => {
+    e.stopPropagation();
+    if (isLeaving) return;
+    const ok = window.confirm(`确定退出协同约定「${task.title}」吗？\n退出后它将不再出现在你的列表中。`);
+    if (!ok) return;
+    setIsLeaving(true);
+    try {
+      await httpRequest(`/api/tasks/${task.id}/members/${currentUser.id}`, { method: "DELETE" });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("已退出该协同约定");
+    } catch (err) {
+      toast.error(err?.message || "退出失败，请稍后再试");
+    } finally {
+      setIsLeaving(false);
+    }
+  };
+
   if (!collab) return null;
 
   const assigneeOf = (sub) => {
@@ -159,6 +213,26 @@ export default function CollabTaskCard({ task }) {
       >
         <Pin className="w-4 h-4" fill={task.pinned_at ? "currentColor" : "none"} />
       </button>
+      {/* 删除（创建者）/ 退出共有（成员）：与置顶同排的次级操作，悬停卡片显示 */}
+      {isOwner ? (
+        <button
+          onClick={handleDelete}
+          disabled={isDeleting}
+          title="删除这条协同约定（所有成员都将移除，可在垃圾箱恢复）"
+          className="absolute right-11 top-3 z-10 p-1.5 rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all md:opacity-0 md:group-hover:opacity-100 disabled:opacity-50"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ) : amMember ? (
+        <button
+          onClick={handleLeave}
+          disabled={isLeaving}
+          title="退出这条协同约定"
+          className="absolute right-11 top-3 z-10 p-1.5 rounded-full text-slate-300 hover:text-amber-600 hover:bg-amber-50 transition-all md:opacity-0 md:group-hover:opacity-100 disabled:opacity-50"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
+      ) : null}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           {/* 徽标行 */}

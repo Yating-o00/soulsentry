@@ -75,10 +75,10 @@ export default function AgentStoreDialog({ open, onOpenChange, taskId, currentAg
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl overflow-hidden p-0 gap-0"
+        className="flex max-h-[85vh] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden p-0 gap-0"
         style={{ backgroundColor: "#f7f7f2", borderColor: C.line }}
       >
-        <DialogHeader className="border-b px-5 py-4" style={{ borderColor: C.lineSoft }}>
+        <DialogHeader className="shrink-0 border-b px-5 py-4" style={{ borderColor: C.lineSoft }}>
           <DialogTitle className="flex items-center gap-2 text-sm" style={{ color: "#312e2c" }}>
             <Store className="h-4 w-4" style={{ color: "#384877" }} /> Agent 市场
           </DialogTitle>
@@ -88,7 +88,7 @@ export default function AgentStoreDialog({ open, onOpenChange, taskId, currentAg
         </DialogHeader>
 
         {/* 搜索 + 领域筛选 */}
-        <div className="border-b px-5 py-3" style={{ borderColor: C.lineSoft }}>
+        <div className="shrink-0 border-b px-5 py-3" style={{ borderColor: C.lineSoft }}>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: "#99958d" }} />
             <Input
@@ -134,7 +134,7 @@ export default function AgentStoreDialog({ open, onOpenChange, taskId, currentAg
         </div>
 
         {/* 方案卡片 */}
-        <div className="grid flex-1 auto-rows-min grid-cols-1 gap-2.5 overflow-y-auto px-5 py-4 sm:grid-cols-2">
+        <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-2.5 overflow-y-auto px-5 py-4 sm:grid-cols-2">
           {isLoading && (
             <div className="col-span-full flex items-center justify-center py-10 text-xs" style={{ color: "#99958d" }}>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 正在载入 Agent 市场…
@@ -208,7 +208,7 @@ export default function AgentStoreDialog({ open, onOpenChange, taskId, currentAg
           })}
         </div>
 
-        <div className="border-t px-5 py-2.5" style={{ borderColor: C.lineSoft }}>
+        <div className="shrink-0 border-t px-5 py-2.5" style={{ borderColor: C.lineSoft }}>
           <p className="text-[10px] leading-4" style={{ color: "#99958d" }}>
             Agent 仍只读取当前约定空间；生成的子约定与文件均为草案，需成员确认后生效。法律/医疗/财务类建议仅供参考。
           </p>

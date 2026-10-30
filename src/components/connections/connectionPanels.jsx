@@ -1,12 +1,20 @@
 import { base44 } from "@/api/base44Client";
+import { toast } from "sonner";
 
 const invoke = async (name, payload = {}) => (await base44.functions.invoke(name, payload)).data;
 
 async function syncCalendar() {
-  let cursor = 0, synced = 0, done = false;
-  while (!done) {
-    const r = await invoke("bulkSyncTasksToCalendar", { cursor });
-    synced += r.synced || 0; cursor = r.cursor; done = r.done;
+  let cursor = 0, synced = 0, done = false, total = null;
+  const id = toast.loading("正在连接 Google 日历…");
+  try {
+    while (!done) {
+      const r = await invoke("bulkSyncTasksToCalendar", { cursor, batch_size: 25 });
+      total ??= r.eligible;
+      synced += r.synced || 0; cursor = r.cursor; done = r.done;
+      toast.loading(`正在同步 ${synced}/${total}…`, { id });
+    }
+  } finally {
+    toast.dismiss(id);
   }
   return `已同步 ${synced} 个约定到日历，日历会在开始前 10 分钟弹出提醒`;
 }

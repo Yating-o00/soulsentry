@@ -24,8 +24,9 @@ Deno.serve(async (req) => {
 
     // 仅同步当前用户自己的、未删除的、且有 reminder_time 的任务
     const allTasks = await base44.entities.Task.filter({ created_by: user.email });
+    const since = Date.now() - 86400000; // 只同步昨天以后的约定，过去的无需推送
     const eligible = allTasks.filter(t =>
-      !t.deleted_at && t.reminder_time &&
+      !t.deleted_at && t.reminder_time && new Date(t.reminder_time).getTime() >= since &&
       (!onlyUnsynced || !t.google_calendar_event_id)
     );
     const tasks = eligible.slice(cursor, cursor + batchSize);
@@ -125,8 +126,9 @@ Deno.serve(async (req) => {
     }
 
     skipped = allTasks.length - eligible.length;
-    const nextCursor = cursor + tasks.length;
-    const done = nextCursor >= eligible.length;
+    // 只同步未同步时，成功的任务会从 eligible 中消失，游标只需跳过失败的
+    const nextCursor = onlyUnsynced ? cursor + failed : cursor + tasks.length;
+    const done = tasks.length === 0 || (onlyUnsynced ? eligible.length - created - updated <= nextCursor : nextCursor >= eligible.length);
 
     return Response.json({
       success: true,

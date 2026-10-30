@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import AppConnectionsGrid from "@/components/connections/AppConnectionsGrid";
 import MailboxPanel from "@/components/connections/MailboxPanel";
+import AmapLocationPanel from "@/components/connections/AmapLocationPanel";
 import ActionPanel from "@/components/connections/ActionPanel";
 import { PANELS } from "@/components/connections/connectionPanels";
 import RecommendedHardware from "@/components/connections/RecommendedHardware";
@@ -31,7 +32,7 @@ export default function Connections() {
               <p className="text-sm text-slate-500 mt-1">{PANELS[active].desc}</p>
               <p className="text-xs text-slate-400 mt-3">即将开放，敬请期待。</p>
             </div>
-          ) : <ActionPanel key={active} {...PANELS[active]} />)}
+          ) : active === "location" ? <AmapLocationPanel /> : <ActionPanel key={active} {...PANELS[active]} />)}
         </div>
       </section>
 

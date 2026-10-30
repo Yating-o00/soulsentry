@@ -1,7 +1,7 @@
 // 执行节点：圆点时间线 + 勾选完成 + 按类型添加
 import React, { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronRight, Clock, Flag, Plus, RefreshCw, Scale } from "lucide-react";
+import { Check, ChevronRight, Clock, Flag, Plus, RefreshCw, Scale, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { httpRequest } from "@/api/httpClient";
@@ -99,7 +99,8 @@ export default function MilestonesPanel({ summary, taskId }) {
                 </span>
                 <span className="mt-1 flex items-center gap-1 text-[10px]" style={{ color: "#858179" }}>
                   {done ? <Check className="h-3 w-3" style={{ color: C.green }} /> : <ChevronRight className="h-3 w-3" />}
-                  {done ? "已完成 · 点击重新打开" : "点击标记完成"}
+                  {done && node.agent_done && <Sparkles className="h-3 w-3" style={{ color: "#384877" }} />}
+                  {done ? (node.agent_done ? "心栈确定完成 · 点击可重新打开" : "已完成 · 点击重新打开") : "点击标记完成"}
                 </span>
               </span>
             </button>

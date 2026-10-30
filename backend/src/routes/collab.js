@@ -26,6 +26,7 @@ const serializeNode = (node) => ({
   done_at: node.doneAt,
   sort_order: node.sortOrder,
   created_by: node.createdBy,
+  agent_done: node.agentDone || false,
   created_date: node.createdAt
 });
 
@@ -39,6 +40,7 @@ const serializeDoc = (doc) => ({
   version: doc.version,
   history: doc.history || [],
   status: doc.status,
+  agent_confirmed: doc.agentConfirmed || false,
   source_comment_id: doc.sourceCommentId,
   created_date: doc.createdAt,
   updated_date: doc.updatedAt
@@ -364,6 +366,7 @@ collabRouter.patch("/:taskId/nodes/:nodeId", async (req, res) => {
   if (payload.data.done_at !== undefined) {
     const doneAt = payload.data.done_at ? new Date(payload.data.done_at) : null;
     data.doneAt = doneAt;
+    data.agentDone = false; // 人工操作覆盖「心栈确定」标记
     if (doneAt && !node.doneAt) {
       changeType = "collab_node_done";
       details.push({ field: "done_at", field_label: "完成时间", old_value: node.doneAt, new_value: doneAt });
@@ -469,6 +472,7 @@ collabRouter.patch("/:taskId/docs/:docId", async (req, res) => {
     data.version = doc.version + 1;
     data.history = history;
     data.status = "draft";
+    data.agentConfirmed = false; // 内容变更后回到待确认，清除「心栈确定」标记
     details.push({ field: "content", field_label: "文档内容", old_value: "（上一版已存入历史）", new_value: `v${doc.version} → v${data.version}` });
   }
 
@@ -489,7 +493,7 @@ collabRouter.post("/:taskId/docs/:docId/confirm", async (req, res) => {
   history.push({ content: doc.content, at: new Date().toISOString(), by: req.user.id, event: "confirm" });
   const updated = await prisma.collabDoc.update({
     where: { id: doc.id },
-    data: { status: "confirmed", version: doc.version + 1, history }
+    data: { status: "confirmed", version: doc.version + 1, agentConfirmed: false, history }
   });
   await logCollabChange(req.user.id, task, "collab_doc_confirmed", [
     { field: "status", field_label: "文档状态", old_value: doc.status, new_value: "confirmed" },
@@ -504,9 +508,8 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
   if (!result) return;
   const { task } = result;
 
-  const subtask = await prisma.task.findFirst({
-    where: { id: req.params.subId, parentTaskId: task.id, deletedAt: null }
-  });
+  // 从属子约定的 parentTaskId 是其他子约定的 id，需在整棵树中查找
+  const subtask = (await collectSubtasks(task.id)).find((s) => s.id === req.params.subId);
   if (!subtask) return res.status(404).json({ error: "NOT_FOUND", message: "子约定不存在" });
   const subMeta = subtask.metadata?.collab;
   if (subMeta?.state !== "draft") {
@@ -552,6 +555,71 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
     confirmed_by: metadata.collab.confirmedBy,
     pending_confirm_users: memberIds.filter((id) => !confirmedBy.has(id))
   });
+});
+
+// PATCH /api/collab/:taskId/subtasks/:subId/reparent — 拖动挂载：把子约定挂到其他子约定下（parent_id 为空则回到顶层）
+const reparentSchema = z.object({
+  parent_id: z.string().max(64).nullable().optional()
+});
+
+collabRouter.patch("/:taskId/subtasks/:subId/reparent", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+  const payload = reparentSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const subtasks = await collectSubtasks(task.id);
+  const subtask = subtasks.find((s) => s.id === req.params.subId);
+  if (!subtask) return res.status(404).json({ error: "NOT_FOUND", message: "子约定不存在" });
+
+  const requested = payload.data.parent_id || null;
+  let targetParentId = task.id; // 顶层
+  if (requested) {
+    if (requested === subtask.id) {
+      return res.status(400).json({ error: "INVALID_PARENT", message: "不能挂载到自身" });
+    }
+    const parent = subtasks.find((s) => s.id === requested);
+    if (!parent) return res.status(404).json({ error: "NOT_FOUND", message: "目标父约定不存在" });
+    // 防循环：从目标父约定沿父链向上，命中自己则说明目标在自己的从属树下
+    const chain = [];
+    let cursor = parent;
+    while (cursor) {
+      if (cursor.id === subtask.id) {
+        return res.status(400).json({ error: "CYCLE", message: "不能挂载到自己的从属约定下" });
+      }
+      chain.push(cursor.id);
+      if (!cursor.parentTaskId || cursor.parentTaskId === task.id) break;
+      cursor = subtasks.find((s) => s.id === cursor.parentTaskId);
+      if (!cursor) break;
+    }
+    if (chain.length >= 3) {
+      return res.status(400).json({ error: "TOO_DEEP", message: "从属层级最多3级，请先调整上层结构" });
+    }
+    targetParentId = parent.id;
+  }
+
+  const currentParentId = subtask.parentTaskId || task.id;
+  if (currentParentId === targetParentId) {
+    return res.json({ subtask: serializeTask(subtask), moved: false });
+  }
+
+  const updated = await prisma.task.update({
+    where: { id: subtask.id },
+    data: { parentTaskId: targetParentId }
+  });
+  await syncParentProgress(task.id);
+  await logCollabChange(req.user.id, task, "collab_subtask_moved", [
+    { field: "subtask", field_label: "子约定", new_value: subtask.title },
+    {
+      field: "parent", field_label: "挂载到",
+      old_value: currentParentId === task.id ? "顶层" : (subtasks.find((s) => s.id === currentParentId)?.title || currentParentId),
+      new_value: targetParentId === task.id ? "顶层" : (subtasks.find((s) => s.id === targetParentId)?.title || targetParentId)
+    }
+  ]);
+  return res.json({ subtask: serializeTask(updated), moved: true });
 });
 
 // POST /api/collab/:taskId/messages — 发讨论；内容含 @Agent|@心栈 时后台触发沟通 Agent

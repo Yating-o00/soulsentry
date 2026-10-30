@@ -7,6 +7,7 @@ import { assertAICredits, chargeAICredits } from "./aiCredits.js";
 import { AI_CALL_COSTS } from "../routes/functions.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "./collabSpace.js";
 import { syncParentProgress } from "../routes/tasks.js";
+import { notifyTaskParties } from "./taskSharing.js";
 
 const COST = () => AI_CALL_COSTS.collab_agent || 2;
 const MAX_SUBTASKS_PER_RUN = 10;
@@ -40,7 +41,8 @@ function mockLLM({ json, kind }) {
         { title: "（mock）确认时间地点", standard: "所有成员给出可行时间", assigneeHint: "", parentHint: "" }
       ],
       nodes: [{ title: "（mock）出发前确认清单", node_type: "review" }],
-      doc: null
+      doc: null,
+      completed: { subtasks: [], nodes: [], docs: [], reason: "" }
     };
   }
   if (kind === "disputes") {
@@ -85,7 +87,7 @@ const TRUST_RULES = [
   "严格约束：",
   "1. 只能使用消息中给出的空间数据（共同目标、子约定、讨论、执行节点、沉淀文档），不得臆测或引用成员的私人记录、其他约定、心签等空间外信息。",
   "2. 中性呈现各方观点，不评判谁对谁错，不替任何人做决定或承诺；数据不足就明说，不要编造。",
-  "3. 你生成的子约定只是草案，必须经成员确认后才生效。",
+  "3. 你生成的子约定只是草案，必须经成员确认后才生效；但讨论中已达成共识、且完成标准已被满足的事项，你可以标记为自动完成（completed），成员可随时手动改回。",
   "4. 情侣/朋友场景不做关系评分、不说教。"
 ].join("\n");
 
@@ -517,7 +519,7 @@ ${threadText}
 
     // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息。
     // 结构化输出：除回复外，按讨论内容把可执行项落成子约定草案、执行节点、沉淀文件（均为草案，待人确认）。
-    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null。\n\n所有对象都是草案，需成员确认后才生效；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null}`;
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null；\n5. completed：核对上方编号子约定清单（仅限「进行中」的，草案与已完成的不要动）、执行节点（未到完成的）与沉淀文档（待确认的）——若讨论内容已经满足某项的完成条件（完成标准已被讨论兑现、节点对应阶段已经走过、沉淀内容已被各方认可），就把它填进 completed 并给一句依据；没有把握就全部留空数组。\n\n所有对象都是草案，需成员确认后才生效；completed 里的自动完成同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action });
@@ -527,6 +529,7 @@ ${threadText}
     }
 
     const createdNotes = [];
+    const autoDoneNotes = [];
     let created = [];
     let createdNodes = [];
     let doc = null;
@@ -597,6 +600,79 @@ ${threadText}
         ]);
         createdNotes.push(`沉淀文件「${doc.title}」`);
       }
+
+      // ── 共识达成 → 自动完成（子约定/执行节点/沉淀）：打「心栈确定完成」标记，成员可手动改回 ──
+      const completedHints = data.completed && typeof data.completed === "object" ? data.completed : null;
+      if (completedHints) {
+        const reason = String(completedHints.reason || "").trim().slice(0, 200);
+        const doneLabel = reason ? `心栈确定完成（${reason}）` : "心栈确定完成";
+
+        const subHints = Array.isArray(completedHints.subtasks) ? completedHints.subtasks : [];
+        let subtaskProgressChanged = false;
+        for (const hint of subHints.slice(0, 10)) {
+          const target = resolveParentSubtask(pool, hint, labelMap);
+          if (!target || target.status === "DONE") continue;
+          const meta = target.metadata?.collab || {};
+          if (meta.state === "draft") continue; // 草案走成员确认流程，不自动完成
+          await prisma.task.update({
+            where: { id: target.id },
+            data: {
+              status: "DONE",
+              completedAt: new Date(),
+              metadata: {
+                ...(target.metadata || {}),
+                collab: {
+                  ...meta,
+                  autoCompleted: true,
+                  autoCompletedAt: new Date().toISOString(),
+                  autoCompletedReason: reason
+                }
+              }
+            }
+          });
+          subtaskProgressChanged = true;
+          autoDoneNotes.push(`子约定「${target.title}」`);
+          await logCollabChange(user.id, task, "collab_subtask_auto_done", [
+            { field: "subtask", field_label: "子约定", new_value: target.title },
+            { field: "auto", field_label: "完成方式", new_value: doneLabel }
+          ]);
+        }
+        if (subtaskProgressChanged) await syncParentProgress(task.id);
+
+        const allNodes = [...snapshot.nodes, ...createdNodes];
+        const nodeHints = Array.isArray(completedHints.nodes) ? completedHints.nodes : [];
+        for (const hint of nodeHints.slice(0, 10)) {
+          const hs = String(hint || "").trim();
+          if (!hs) continue;
+          const node = allNodes.find((n) => !n.doneAt && (n.title === hs || n.title.includes(hs) || hs.includes(n.title)));
+          if (!node) continue;
+          await prisma.collabNode.update({ where: { id: node.id }, data: { doneAt: new Date(), agentDone: true } });
+          autoDoneNotes.push(`执行节点「${node.title}」`);
+          await logCollabChange(user.id, task, "collab_node_auto_done", [
+            { field: "node", field_label: "执行节点", new_value: node.title },
+            { field: "auto", field_label: "完成方式", new_value: doneLabel }
+          ]);
+        }
+
+        const docHints = Array.isArray(completedHints.docs) ? completedHints.docs : [];
+        for (const hint of docHints.slice(0, 5)) {
+          const hs = String(hint || "").trim();
+          if (!hs) continue;
+          const target = snapshot.docs.find((d) => d.status !== "confirmed" && (d.title === hs || d.title.includes(hs) || hs.includes(d.title)));
+          if (!target) continue;
+          const history = Array.isArray(target.history) ? [...target.history] : [];
+          history.push({ content: target.content, at: new Date().toISOString(), by: user.id, event: "auto_confirm" });
+          await prisma.collabDoc.update({
+            where: { id: target.id },
+            data: { status: "confirmed", agentConfirmed: true, version: target.version + 1, history }
+          });
+          autoDoneNotes.push(`沉淀「${target.title}」`);
+          await logCollabChange(user.id, task, "collab_doc_auto_confirmed", [
+            { field: "doc", field_label: "沉淀文档", new_value: target.title },
+            { field: "auto", field_label: "确认方式", new_value: doneLabel.replace("完成", "确认") }
+          ]);
+        }
+      }
     }
 
     let replyText = isNonEmptyString(data?.reply)
@@ -608,6 +684,9 @@ ${threadText}
     if (createdNotes.length > 0) {
       replyText += `\n\n—— 已落成草案：${createdNotes.join("、")}，待成员确认。`;
     }
+    if (autoDoneNotes.length > 0) {
+      replyText += `\n\n—— 心栈根据讨论共识自动完成：${autoDoneNotes.join("、")}（可随时手动调整）。`;
+    }
 
     // 保持一层回复：目标是根则挂其下，目标是回复则挂在同根线程下
     const reply = await postAgentMessage(task.id, {
@@ -615,6 +694,13 @@ ${threadText}
       parentId: target.parentId || target.id,
       topic: target.topic
     });
+    if (autoDoneNotes.length > 0) {
+      await notifyTaskParties(task, user, {
+        type: "collab_auto_completed",
+        title: "心栈已自动完成约定事项",
+        body: `根据讨论共识，${autoDoneNotes.join("、")}已由心栈标记完成，可在协同空间中查看并手动调整。`
+      });
+    }
     return {
       reply_comment_id: reply.id,
       searched,

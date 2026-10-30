@@ -1,7 +1,7 @@
-// 子约定面板：全部/待处理/已完成胶囊过滤（>4 折叠）+ 草案确认
+// 子约定面板：全部/待处理/已完成胶囊过滤（>4 折叠）+ 草案确认 + 拖动挂载合并同类项
 import React, { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronDown, ChevronUp, Circle, Clock3, Plus, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Circle, Clock3, GripVertical, Plus, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { httpRequest } from "@/api/httpClient";
@@ -17,7 +17,12 @@ const subStatusMeta = (sub, done) => {
   return { label: "进行中", className: "bg-[#e4e6f8] text-[#2a2861]" };
 };
 
-function ChildRow({ sub, members, currentUserId, confirmingId, togglingId, onConfirm, onToggleDone, onJumpToDiscussion }) {
+function ChildRow({
+  sub, depth, members, currentUserId, confirmingId, togglingId,
+  isDragging, isDropTarget, descendantIds,
+  onConfirm, onToggleDone, onJumpToDiscussion,
+  onRowDragStart, onRowDragEnd, onRowDragOver, onRowDrop
+}) {
   const done = isTaskEffectivelyCompleted(sub);
   const subCollab = sub.metadata?.collab;
   const isDraft = subCollab?.state === "draft";
@@ -26,12 +31,37 @@ function ChildRow({ sub, members, currentUserId, confirmingId, togglingId, onCon
   const assigneeId = subCollab?.assignee;
   const assignee = assigneeId ? members.find((m) => m.user_id === assigneeId || m.id === assigneeId) : null;
   const isAgentDraft = !!subCollab?.sourceCommentId;
+  const autoDone = done && !!subCollab?.autoCompleted;
   const meta = subStatusMeta(sub, done);
   const busy = confirmingId === sub.id || togglingId === sub.id;
+  const droppable = !isDragging && !descendantIds.has(sub.id);
 
   return (
-    <article className="border-b py-4 last:border-b-0" style={{ borderColor: "#dfddd6" }} aria-label={`子约定 ${sub.title}`}>
-      <div className="flex items-start gap-3">
+    <article
+      aria-label={`子约定 ${sub.title}`}
+      draggable
+      onDragStart={(e) => onRowDragStart(e, sub)}
+      onDragEnd={onRowDragEnd}
+      onDragOver={(e) => onRowDragOver(e, sub, droppable)}
+      onDrop={(e) => onRowDrop(e, sub)}
+      className={cn(
+        "group border-b py-4 transition-colors last:border-b-0",
+        isDragging ? "opacity-40" : "",
+        isDropTarget ? "rounded-md bg-[#efeee8] shadow-[inset_0_0_0_1.5px_#38487755]" : ""
+      )}
+      style={{
+        borderColor: "#dfddd6",
+        marginLeft: depth * 18,
+        ...(depth > 0 ? { borderLeft: "2px solid #ecebe5", paddingLeft: 12 } : {})
+      }}
+    >
+      <div className="flex items-start gap-2">
+        {/* 拖动把手：拖到其他子约定上=挂载为其从属 */}
+        <GripVertical
+          className="mt-1 h-4 w-4 shrink-0 cursor-grab opacity-0 transition-opacity active:cursor-grabbing group-hover:opacity-60"
+          style={{ color: "#b8b4ab" }}
+          aria-hidden="true"
+        />
         {/* 勾选：草案=确认；进行中=标记完成/重新打开 */}
         <button
           type="button"
@@ -50,6 +80,11 @@ function ChildRow({ sub, members, currentUserId, confirmingId, togglingId, onCon
             <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium leading-none", meta.className)}>
               {meta.label}
             </span>
+            {autoDone && (
+              <span className="flex items-center gap-0.5 text-[10px] font-medium" style={{ color: "#384877" }} title={subCollab?.autoCompletedReason || "心栈根据讨论共识自动完成"}>
+                <Sparkles className="h-3 w-3" /> 心栈确定完成
+              </span>
+            )}
             {isAgentDraft && (
               <span className="flex items-center gap-0.5 text-[10px] font-medium" style={{ color: "#384877" }}>
                 <Sparkles className="h-3 w-3" /> Agent 草案
@@ -104,15 +139,48 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
   const [addingSub, setAddingSub] = useState(false);
   const [confirmingId, setConfirmingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [draggingId, setDraggingId] = useState(null);
+  const [dropHintId, setDropHintId] = useState(null); // "root" 或某个子约定 id
+  const [reparenting, setReparenting] = useState(false);
 
   const task = summary?.task;
   const members = summary?.members || [];
+  // 扁平化（带层级深度），保留树用于从属关系判断
   const subtasks = useMemo(() => {
     const out = [];
-    const walk = (list) => { for (const n of list || []) { out.push(n); walk(n.children); } };
-    walk(summary?.subtasks);
+    const walk = (list, depth) => {
+      for (const n of list || []) {
+        out.push({ node: n, depth });
+        walk(n.children || [], depth + 1);
+      }
+    };
+    walk(summary?.subtasks, 0);
     return out;
   }, [summary?.subtasks]);
+
+  const childIdMap = useMemo(() => {
+    const map = new Map();
+    const walk = (list) => {
+      for (const n of list || []) {
+        map.set(n.id, (n.children || []).map((c) => c.id));
+        walk(n.children);
+      }
+    };
+    walk(summary?.subtasks);
+    return map;
+  }, [summary?.subtasks]);
+
+  const descendantsOf = (id) => {
+    const out = new Set();
+    const stack = [...(childIdMap.get(id) || [])];
+    while (stack.length > 0) {
+      const cur = stack.pop();
+      if (out.has(cur)) continue;
+      out.add(cur);
+      stack.push(...(childIdMap.get(cur) || []));
+    }
+    return out;
+  };
 
   useEffect(() => { setFilter("all"); setExpanded(false); }, [taskId]);
 
@@ -121,7 +189,7 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
     queryClient.invalidateQueries({ queryKey: ['tasks'] });
   };
 
-  const filtered = subtasks.filter((sub) => {
+  const filtered = subtasks.filter(({ node: sub }) => {
     const done = isTaskEffectivelyCompleted(sub);
     if (filter === "attention") return !done;
     if (filter === "done") return done;
@@ -178,17 +246,23 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
   };
 
   // 勾选完成/重新打开：与全站任务卡片同一口径（PATCH status + completed_at）
+  // 人工操作会覆盖「心栈确定完成」标记（清掉 metadata.collab.autoCompleted）
   const handleToggleDone = async (subtask) => {
     const done = isTaskEffectivelyCompleted(subtask);
     setTogglingId(subtask.id);
+    const collabMeta = subtask.metadata?.collab;
+    const body = {
+      status: done ? "pending" : "completed",
+      completed_at: done ? null : new Date().toISOString(),
+    };
+    if (collabMeta?.autoCompleted) {
+      body.metadata = {
+        ...subtask.metadata,
+        collab: { ...collabMeta, autoCompleted: false, autoCompletedAt: null, autoCompletedReason: "" },
+      };
+    }
     try {
-      await httpRequest(`/api/tasks/${subtask.id}`, {
-        method: "PATCH",
-        body: {
-          status: done ? "pending" : "completed",
-          completed_at: done ? null : new Date().toISOString(),
-        },
-      });
+      await httpRequest(`/api/tasks/${subtask.id}`, { method: "PATCH", body });
       invalidateAll();
       toast.success(done ? "已重新打开" : "已完成该子约定");
     } catch (error) {
@@ -198,12 +272,58 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
     }
   };
 
+  // ── 拖动挂载：把子约定挂到其他子约定下（合并同类项），或拖回顶层 ──
+  const handleReparent = async (subId, parentId) => {
+    if (reparenting) return;
+    setReparenting(true);
+    try {
+      const res = await httpRequest(`/api/collab/${taskId}/subtasks/${subId}/reparent`, {
+        method: "PATCH",
+        body: { parent_id: parentId },
+      });
+      invalidateAll();
+      if (res?.moved) {
+        const targetTitle = parentId ? subtasks.find((s) => s.node.id === parentId)?.node?.title : null;
+        toast.success(parentId ? `已挂载到「${targetTitle}」下` : "已移回顶层");
+      }
+    } catch (error) {
+      toast.error(error?.message || "挂载失败");
+    } finally {
+      setReparenting(false);
+      setDraggingId(null);
+      setDropHintId(null);
+    }
+  };
+
+  const handleRowDragStart = (e, sub) => {
+    e.dataTransfer.setData("text/plain", sub.id);
+    e.dataTransfer.effectAllowed = "move";
+    setDraggingId(sub.id);
+  };
+  const handleRowDragEnd = () => { setDraggingId(null); setDropHintId(null); };
+  const handleRowDragOver = (e, sub, droppable) => {
+    if (!draggingId || draggingId === sub.id || !droppable) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDropHintId((prev) => (prev === sub.id ? prev : sub.id));
+  };
+  const handleRowDrop = (e, sub) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData("text/plain") || draggingId;
+    if (draggedId && draggedId !== sub.id) {
+      void handleReparent(draggedId, sub.id);
+    } else {
+      setDraggingId(null);
+      setDropHintId(null);
+    }
+  };
+
   return (
     <section id="content-children" className="border-b px-4 py-5 sm:px-6" style={{ borderColor: C.line }}>
       <PanelHeader
         eyebrow="Agreements"
         title={`子约定 · ${subtasks.length}`}
-        description="完成内容、负责人和确认状态都集中在这里。"
+        description="完成内容、负责人和确认状态都集中在这里；拖动可把同类项挂载到一起。"
       />
       <div className="mt-3 flex flex-wrap gap-1.5">
         {([["all", "全部"], ["attention", "待处理"], ["done", "已完成"]]).map(([id, label]) => (
@@ -222,23 +342,51 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
         ))}
       </div>
 
+      {/* 拖动中的回到顶层放置区 */}
+      {draggingId && (
+        <div
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; setDropHintId((prev) => (prev === "root" ? prev : "root")); }}
+          onDragLeave={() => setDropHintId((prev) => (prev === "root" ? null : prev))}
+          onDrop={(e) => {
+            e.preventDefault();
+            const draggedId = e.dataTransfer.getData("text/plain") || draggingId;
+            if (draggedId) void handleReparent(draggedId, null);
+          }}
+          className={cn(
+            "mt-2 flex items-center justify-center gap-1.5 rounded-md border border-dashed py-2 text-[11px] font-medium transition-colors",
+            dropHintId === "root" ? "bg-[#e4e6f8] text-[#2a2861]" : "text-[#8a867e]"
+          )}
+          style={dropHintId === "root" ? { borderColor: "#384877" } : { borderColor: "#cfcdc6" }}
+        >
+          <GripVertical className="h-3.5 w-3.5" /> 拖到此处移回顶层
+        </div>
+      )}
+
       <div className="mt-1">
         {visible.length === 0 && (
           <p className="py-6 text-center text-xs italic" style={{ color: "#99958d" }}>
             {filter === "all" ? "还没有子约定：在讨论里「转为子约定」，或在下方添加" : "该筛选下暂无子约定"}
           </p>
         )}
-        {visible.map((sub) => (
+        {visible.map(({ node: sub, depth }) => (
           <ChildRow
             key={sub.id}
             sub={sub}
+            depth={depth}
             members={members}
             currentUserId={currentUserId}
             confirmingId={confirmingId}
             togglingId={togglingId}
+            isDragging={draggingId === sub.id}
+            isDropTarget={dropHintId === sub.id}
+            descendantIds={draggingId ? descendantsOf(draggingId) : new Set()}
             onConfirm={handleConfirm}
             onToggleDone={handleToggleDone}
             onJumpToDiscussion={onJumpToDiscussion}
+            onRowDragStart={handleRowDragStart}
+            onRowDragEnd={handleRowDragEnd}
+            onRowDragOver={handleRowDragOver}
+            onRowDrop={handleRowDrop}
           />
         ))}
       </div>

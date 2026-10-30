@@ -22,7 +22,23 @@ export async function findTaskWithAccess(taskId, userId) {
     include: { members: true, user: true }
   });
   if (!task) return { task: null, role: null };
-  return { task, role: taskAccess(task, userId) };
+  const direct = taskAccess(task, userId);
+  if (direct) return { task, role: direct };
+  // 子约定本身没有直接授权时，沿父链向上查找：协同约定树的成员可管理整棵子约定树
+  let parentId = task.parentTaskId;
+  let guard = 0;
+  while (parentId && guard < 10) {
+    const parent = await prisma.task.findUnique({
+      where: { id: parentId },
+      include: { members: true, user: true }
+    });
+    if (!parent) break;
+    const inherited = taskAccess(parent, userId);
+    if (inherited) return { task, role: inherited };
+    parentId = parent.parentTaskId;
+    guard += 1;
+  }
+  return { task, role: null };
 }
 
 // 无权限时统一 404，不泄露约定存在性；返回 null 表示已响应错误

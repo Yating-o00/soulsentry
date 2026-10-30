@@ -144,7 +144,7 @@ export default function DocsPanel({ docs, taskId, onJumpToSource }) {
               className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium")}
               style={isDraft ? { backgroundColor: C.amberBg, color: C.amberInk } : { backgroundColor: C.greenBg, color: C.greenInk }}
             >
-              {isDraft ? "待确认" : "已确认"}
+              {isDraft ? "待确认" : selected.agent_confirmed ? "心栈确定 · 已确认" : "已确认"}
             </span>
             <span className="font-mono text-[9px]" style={{ color: "#8a867e" }}>v{selected.version}</span>
             <span className="font-mono text-[9px]" style={{ color: "#8a867e" }}>{DOC_TYPE_LABELS[selected.doc_type] || selected.doc_type}</span>

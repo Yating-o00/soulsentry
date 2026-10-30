@@ -441,13 +441,34 @@ export default function TaskShareCard({ task, open, onClose }) {
     }
   };
 
-  const handleCopyPublicLink = () => {
+  const handleCopyPublicLink = async () => {
     if (!publicShareUrl) return;
-    navigator.clipboard.writeText(publicShareUrl).then(() => {
-      toast.success("公开链接已复制");
-    }).catch(() => {
-      toast.error("复制失败");
-    });
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(publicShareUrl);
+        ok = true;
+      }
+    } catch (_e) {
+      ok = false;
+    }
+    if (!ok) {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = publicShareUrl;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        ok = document.execCommand("copy");
+        ta.remove();
+      } catch (_e) {
+        ok = false;
+      }
+    }
+    if (ok) toast.success("公开链接已复制");
+    else toast.error("复制失败，请长按选择链接后手动复制");
   };
 
   const handleCopyText = () => {
@@ -985,7 +1006,13 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
 
             {publicShareEnabled && publicShareUrl && (
               <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200">
-                <p className="text-xs text-slate-500 truncate flex-1">{publicShareUrl}</p>
+                <p
+                  className="text-xs text-slate-500 truncate flex-1 cursor-pointer hover:text-[#384877]"
+                  title="点击即可复制链接"
+                  onClick={handleCopyPublicLink}
+                >
+                  {publicShareUrl}
+                </p>
                 <Button size="sm" variant="outline" onClick={handleCopyPublicLink}>
                   <Copy className="w-4 h-4 mr-1.5" />
                   复制链接

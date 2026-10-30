@@ -72,30 +72,28 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
   });
 
   // 打开时确保分享链接已生成：二维码/卡片指向 /share/<token> 公开协作页（与 TaskShareCard 同一链路）
+  const generateInviteLink = async () => {
+    if (!task?.id) return;
+    setLinkLoading(true);
+    try {
+      const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
+        method: "POST",
+        body: { enabled: true },
+      });
+      if (result?.url) {
+        setInviteUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
+      }
+    } catch (error) {
+      console.error("[collab] 邀请链接生成失败:", error?.message || error);
+      toast.error(error?.data?.message || error?.message || "邀请链接生成失败，请稍后再试");
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!open || !task?.id) return;
-    let cancelled = false;
-    setLinkLoading(true);
-    (async () => {
-      try {
-        const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
-          method: "POST",
-          body: { enabled: true },
-        });
-        if (cancelled) return;
-        if (result?.url) {
-          setInviteUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error("[collab] 邀请链接生成失败:", error?.message || error);
-          toast.error(error?.data?.message || error?.message || "邀请链接生成失败，请稍后再试");
-        }
-      } finally {
-        if (!cancelled) setLinkLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+    generateInviteLink();
   }, [open, task?.id]);
 
   const inviterName = useMemo(() => {
@@ -130,11 +128,37 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
   const memberList = members.filter((m) => m.role !== "owner");
   const ownerMember = members.find((m) => m.role === "owner");
 
-  const handleCopy = () => {
+  // 剪贴板写入：优先现代 API，失败（权限/非安全上下文）回退隐藏 textarea 方案，确保一定有反馈
+  const copyText = async (text) => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (_e) {
+      // fall through
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch (_e) {
+      return false;
+    }
+  };
+
+  const handleCopy = async () => {
     if (!inviteUrl) return;
-    navigator.clipboard.writeText(inviteUrl).then(() => {
-      toast.success("邀请链接已复制");
-    }).catch(() => toast.error("复制失败"));
+    const ok = await copyText(inviteUrl);
+    if (ok) toast.success("邀请链接已复制");
+    else toast.error("复制失败，请长按选择链接后手动复制");
   };
 
   // 渲染卡片为 PNG blob（保存/分享 与 复制卡片 共用）
@@ -237,12 +261,15 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
   };
 
   // 链接邀请：复制成功后提示并关闭弹窗
-  const handleCopyLinkAndClose = () => {
+  const handleCopyLinkAndClose = async () => {
     if (!inviteUrl) return;
-    navigator.clipboard.writeText(inviteUrl).then(() => {
+    const ok = await copyText(inviteUrl);
+    if (ok) {
       toast.success("已复制链接");
       onClose?.();
-    }).catch(() => toast.error("复制失败"));
+    } else {
+      toast.error("复制失败，请长按选择链接后手动复制");
+    }
   };
 
   // @直接邀请：优先按选中的候选 user_id 邀请；无候选时按输入内容智能识别（邮箱/手机号/用户ID）
@@ -477,13 +504,15 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
         {tab === "link" && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Input
-                value={inviteUrl}
-                readOnly
-                className="text-xs h-9"
-                placeholder={linkLoading ? "正在生成链接…" : "未能生成链接"}
-                onFocus={(e) => e.target.select()}
-              />
+              <div className="flex-1 min-w-0" onClick={handleCopy} title="点击即可复制链接">
+                <Input
+                  value={inviteUrl}
+                  readOnly
+                  className="text-xs h-9 cursor-pointer"
+                  placeholder={linkLoading ? "正在生成链接…" : "未能生成链接"}
+                  onFocus={(e) => e.target.select()}
+                />
+              </div>
               <Button size="sm" className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]" onClick={handleCopyLinkAndClose} disabled={!inviteUrl}>
                 <Copy className="w-3.5 h-3.5 mr-1" /> 复制链接
               </Button>
@@ -495,7 +524,22 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
                 </div>
               </div>
             )}
-            <p className="text-[11px] text-slate-400 text-center">链接发到微信/QQ 后，对方打开登录即可加入协同</p>
+            <p className="text-[11px] text-slate-400 text-center">
+              {inviteUrl ? (
+                <>
+                  点击上方链接可复制，也可
+                  <a href={inviteUrl} target="_blank" rel="noreferrer" className="text-[#384877] underline underline-offset-2"> 打开预览 ↗</a>
+                  ；发到微信/QQ 后，对方打开登录即可加入协同
+                </>
+              ) : linkLoading ? (
+                "正在生成链接…"
+              ) : (
+                <>
+                  未能生成链接，
+                  <button type="button" onClick={generateInviteLink} className="text-[#384877] underline underline-offset-2">点击重试</button>
+                </>
+              )}
+            </p>
           </div>
         )}
 

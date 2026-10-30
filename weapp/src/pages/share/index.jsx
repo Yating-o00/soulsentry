@@ -337,6 +337,11 @@ export default function Share() {
               点一次就是一声加油，会计入 TA 约定卡片的鼓励数据
             </Text>
           )}
+          {isCheckinTask && share.is_owner && (
+            <Text className="ss-muted" style={{ display: "block", marginTop: "12rpx", fontSize: "24rpx" }}>
+              这是你本人的约定（拥有者视角）；访客打开同一链接时，按钮会显示为「为 TA 加油」
+            </Text>
+          )}
         </View>
 
         {/* 打卡约定：直接呈现打卡内容——累计次数、最近赴约（附言/照片）与鼓励的话 */}
@@ -587,9 +592,9 @@ export default function Share() {
         </View>
 
         <View style={{ height: "40rpx" }} />
-        {/* 构建标记：确认线上/体验版跑的是不是新包（v20261028-1 = Demo 账号禁止加入共有约定） */}
+        {/* 构建标记：确认线上/体验版跑的是不是新包（v20261030-1 = 分享页拥有者/访客视角标识） */}
         <Text style={{ display: "block", textAlign: "center", fontSize: "20rpx", color: "#c0c4cc", marginBottom: "16rpx" }}>
-          v20261028-1
+          v20261030-1
         </Text>
       </ScrollView>
 

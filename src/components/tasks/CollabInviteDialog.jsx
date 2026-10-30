@@ -640,7 +640,7 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
             )}
           </div>
           <p className="text-[10px] text-slate-400 mt-1.5">
-            候选来自与你协作过的伙伴；也可直接输入邮箱 / 手机号 / 用户ID
+            候选可以来自你协作过的伙伴，也可以来自其他用户
           </p>
         </div>
       </DialogContent>

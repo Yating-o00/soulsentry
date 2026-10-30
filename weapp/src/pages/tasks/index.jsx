@@ -11,6 +11,7 @@ import { useShare } from "@/hooks/useShare";
 import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
 import CheckinCard from "@/components/tasks/CheckinCard";
+import CollabCard from "@/components/tasks/CollabCard";
 import { MILESTONE_QUOTES } from "@/components/tasks/checkinMeta";
 import { SnoozeSheet, ExecPreview } from "@/components/tasks/Sheets";
 import EvolutionRail, { computeEvolution } from "@/components/tasks/EvolutionRail";
@@ -755,7 +756,14 @@ export default function Tasks() {
                       key={task.id}
                       className={`promise-card-slot${collapsingIds.has(task.id) ? " collapsing" : ""}`}
                     >
-                      {task.category === "checkin" ? (
+                      {task.metadata?.collab ? (
+                        <CollabCard
+                          task={task}
+                          onComplete={handleComplete}
+                          onChanged={fetchData}
+                          onSharePrepare={prepareTaskShare}
+                        />
+                      ) : task.category === "checkin" ? (
                         <CheckinCard
                           task={task}
                           analysis={mergeAnalysis(task, analysisMap[task.id])}
@@ -886,6 +894,17 @@ export default function Tasks() {
             }}
           >
             坚定守护 · 适时轻唤 · 心栈 SOULSENTRY
+          </Text>
+          {/* 构建标记：确认线上/体验版跑的是不是新包（v20261030-2 = 协同约定卡片） */}
+          <Text
+            style={{
+              textAlign: "center",
+              fontSize: "18rpx",
+              color: theme.inkQuaternary,
+              marginTop: "10rpx",
+            }}
+          >
+            v20261030-2
           </Text>
         </View>
 

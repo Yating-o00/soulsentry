@@ -154,11 +154,34 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
     }
   };
 
+  // 已复制内联反馈：点击链接或按钮复制成功后亮出 ✓，2.5s 后复位
+  const [copied, setCopied] = useState(false);
+  const markCopied = () => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
   const handleCopy = async () => {
     if (!inviteUrl) return;
     const ok = await copyText(inviteUrl);
-    if (ok) toast.success("邀请链接已复制");
-    else toast.error("复制失败，请长按选择链接后手动复制");
+    if (ok) {
+      toast.success("邀请链接已复制");
+      markCopied();
+    } else {
+      toast.error("复制失败，请长按选择链接后手动复制");
+    }
+  };
+
+  // 主按钮：复制链接并给出内联 ✓ 反馈（不自动关闭弹窗，让用户确认复制成功）
+  const handleCopyPrimary = async () => {
+    if (!inviteUrl) return;
+    const ok = await copyText(inviteUrl);
+    if (ok) {
+      toast.success("邀请链接已复制");
+      markCopied();
+    } else {
+      toast.error("复制失败，请长按选择链接后手动复制");
+    }
   };
 
   // 渲染卡片为 PNG blob（保存/分享 与 复制卡片 共用）
@@ -257,18 +280,6 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
       toast.error("复制卡片失败，可尝试保存/分享");
     } finally {
       setExporting(false);
-    }
-  };
-
-  // 链接邀请：复制成功后提示并关闭弹窗
-  const handleCopyLinkAndClose = async () => {
-    if (!inviteUrl) return;
-    const ok = await copyText(inviteUrl);
-    if (ok) {
-      toast.success("已复制链接");
-      onClose?.();
-    } else {
-      toast.error("复制失败，请长按选择链接后手动复制");
     }
   };
 
@@ -513,8 +524,8 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
                   onFocus={(e) => e.target.select()}
                 />
               </div>
-              <Button size="sm" className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]" onClick={handleCopyLinkAndClose} disabled={!inviteUrl}>
-                <Copy className="w-3.5 h-3.5 mr-1" /> 复制链接
+              <Button size="sm" className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]" onClick={handleCopyPrimary} disabled={!inviteUrl}>
+                <Copy className="w-3.5 h-3.5 mr-1" /> 复制邀请链接
               </Button>
             </div>
             {inviteUrl && (
@@ -526,11 +537,11 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
             )}
             <p className="text-[11px] text-slate-400 text-center">
               {inviteUrl ? (
-                <>
-                  点击上方链接可复制，也可
-                  <a href={inviteUrl} target="_blank" rel="noreferrer" className="text-[#384877] underline underline-offset-2"> 打开预览 ↗</a>
-                  ；发到微信/QQ 后，对方打开登录即可加入协同
-                </>
+                copied ? (
+                  <span className="text-emerald-600 font-medium">✓ 已复制，去微信/QQ 粘贴给伙伴吧</span>
+                ) : (
+                  "点击上方链接或「复制邀请链接」即可复制；发到微信/QQ 后，对方打开登录即可加入协同"
+                )
               ) : linkLoading ? (
                 "正在生成链接…"
               ) : (

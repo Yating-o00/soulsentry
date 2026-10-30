@@ -56,7 +56,6 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
   const [tab, setTab] = useState("card");
   const [inviteUrl, setInviteUrl] = useState("");
   const [linkLoading, setLinkLoading] = useState(false);
-  const [identifier, setIdentifier] = useState("");
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
   // @直接邀请：输入 @ 检索协作过的伙伴，选中后点邀请即刻发出
@@ -64,6 +63,8 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
   const [mentionCandidates, setMentionCandidates] = useState([]);
   const [mentionSelected, setMentionSelected] = useState(null);
   const cardRef = useRef(null);
+  // 「直接邀请」点击后滚动定位到下方 @ 邀请区块
+  const mentionRef = useRef(null);
 
   const { data: currentUser } = useQuery({
     queryKey: ["currentUser"],
@@ -319,33 +320,13 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
     }
   };
 
-  const handleAddMember = async () => {
-    const value = identifier.trim();
-    if (!value) return;
-    setAdding(true);
-    try {
-      // 智能识别：含@按邮箱，纯数字按手机号，其余按用户ID
-      const body = /@/.test(value)
-        ? { email: value }
-        : /^\d{5,}$/.test(value)
-          ? { phone: value }
-          : { user_id: value };
-      const result = await httpRequest(`/api/collab/${task.id}/members`, { method: "POST", body });
-      toast.success(result?.already_member
-        ? `${result?.member?.display_name || "对方"} 已是成员`
-        : `已邀请 ${result?.member?.display_name || "对方"} 加入协同约定`);
-      setIdentifier("");
-      onChanged?.();
-    } catch (error) {
-      if (error?.status === 404 && error?.data?.error === "USER_NOT_FOUND") {
-        toast.warning(error.data.hint || "未找到该用户，请通过邀请卡片或链接邀请对方加入");
-      } else if (error?.status === 409) {
-        toast.info(error?.message || "对方已是成员");
-      } else {
-        toast.error(error?.message || "邀请失败，请稍后再试");
-      }
-    } finally {
-      setAdding(false);
+  // 切到「直接邀请」时滚动到下方 @ 邀请区块（输入框统一收在一处，避免两处重复）
+  const switchTab = (key) => {
+    setTab(key);
+    if (key === "direct") {
+      setTimeout(() => {
+        mentionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 80);
     }
   };
 
@@ -365,7 +346,7 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key)}
+              onClick={() => switchTab(key)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-colors ${
                 tab === key
                   ? "bg-white text-[#384877] shadow-sm"
@@ -554,33 +535,12 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
           </div>
         )}
 
-        {/* ③ 直接邀请：输入用户ID（支持手机号/邮箱） */}
+        {/* ③ 直接邀请：输入统一收在下方「@ 邀请朋友」，这里只做引导 */}
         {tab === "direct" && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Input
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="输入对方的用户ID（或手机号/邮箱）"
-                className="text-xs h-9"
-                onKeyDown={(e) => { if (e.key === "Enter") handleAddMember(); }}
-              />
-              <Button
-                size="sm"
-                className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]"
-                onClick={handleAddMember}
-                disabled={adding || !identifier.trim()}
-              >
-                {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "邀请"}
-              </Button>
-            </div>
-            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 space-y-1.5">
-              <p className="text-[11px] text-slate-500">
-                用户ID 形如 <span className="font-mono text-[10px] bg-white border border-slate-200 rounded px-1 py-0.5">cmrolg6mm0000ljtu…</span>
-              </p>
-              <p className="text-[11px] text-slate-500">对方可在「我的 → 账号信息」里复制自己的用户ID 发给你</p>
-              <p className="text-[11px] text-slate-500">对方已注册的话会立刻加入并收到通知；未注册则引导使用邀请卡片/链接</p>
-            </div>
+          <div className="rounded-xl border border-dashed border-[#c9d5ef] bg-[#eef2ff]/50 px-3 py-3 text-center">
+            <p className="text-xs text-[#384877]">
+              已为你定位到下方「@ 邀请朋友」：搜索协作过的伙伴，或直接输入邮箱 / 手机号 / 用户ID 邀请
+            </p>
           </div>
         )}
 
@@ -609,8 +569,8 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
           </div>
         </div>
 
-        {/* @直接邀请（当前成员下方） */}
-        <div className="border-t border-slate-100 pt-3">
+        {/* @直接邀请（当前成员下方）：直接邀请的唯一输入入口 */}
+        <div ref={mentionRef} className="border-t border-slate-100 pt-3">
           <p className="text-xs font-medium text-slate-500 mb-2 flex items-center gap-1.5">
             <AtSign className="w-3.5 h-3.5" /> @ 邀请朋友
           </p>
@@ -648,7 +608,7 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
                   <Input
                     value={mentionText}
                     onChange={(e) => setMentionText(e.target.value)}
-                    placeholder="输入朋友昵称或邮箱"
+                    placeholder="输入昵称、邮箱、手机号或用户ID"
                     className="pl-7 text-xs h-9"
                     onKeyDown={(e) => { if (e.key === "Enter") handleMentionInvite(); }}
                   />

@@ -46,6 +46,19 @@ function mockLLM({ json, kind }) {
       completed: { subtasks: [], nodes: [], docs: [], reason: "" }
     };
   }
+  if (kind === "drive") {
+    return {
+      reply: "",
+      digest: "## 大方向\n- （mock）确认时间地点：待成员给出可行时间\n\n## 新进展\n- 讨论已启动\n\n## 待确认\n- 暂无",
+      subtasks: [
+        { title: "（mock）确认时间地点", standard: "所有成员给出可行时间", assigneeHint: "", parentHint: "" }
+      ],
+      updates: [],
+      nodes: [{ title: "（mock）出发前确认清单", node_type: "review" }],
+      doc: null,
+      completed: { subtasks: [], nodes: [], docs: [], reason: "" }
+    };
+  }
   if (kind === "disputes") {
     return {
       analysis: "（本地 mock）当前分歧主要集中在时间安排与分工两点，各方偏好尚未完全对齐，需要进一步澄清。",
@@ -443,6 +456,43 @@ async function createDraftSubtask(task, user, { title, standard = "", assigneeHi
   return subtask;
 }
 
+// 合并同类项的核心通道：把对已有子约定的新结论/修正写回原约定，而不是再建一条。
+// 只允许更新「进行中」的子约定（草案内容未定、同样允许更新；已完成的不动），并记录变更日志。
+async function applySubtaskUpdates({ task, user, pool, labelMap, updates }) {
+  const applied = [];
+  const list = Array.isArray(updates) ? updates.slice(0, 10) : [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const target = resolveParentSubtask(pool, item.target, labelMap);
+    if (!target || target.status === "DONE") continue;
+    const nextTitle = isNonEmptyString(item.title) ? String(item.title).trim().slice(0, 120) : null;
+    const nextStandard = isNonEmptyString(item.standard) ? String(item.standard).trim().slice(0, 500) : null;
+    if (!nextTitle && !nextStandard) continue;
+    const meta = target.metadata?.collab || {};
+    await prisma.task.update({
+      where: { id: target.id },
+      data: {
+        title: nextTitle || target.title,
+        metadata: {
+          ...(target.metadata || {}),
+          collab: { ...meta, standard: nextStandard || meta.standard || "" }
+        }
+      }
+    });
+    if (nextTitle) target.title = nextTitle;
+    if (nextStandard) target.metadata = { ...(target.metadata || {}), collab: { ...meta, standard: nextStandard } };
+    applied.push(target);
+    await logCollabChange(user.id, task, "collab_subtask_updated", [
+      { field: "subtask", field_label: "子约定", new_value: target.title },
+      ...(nextTitle ? [{ field: "title", field_label: "新结论", new_value: nextTitle }] : []),
+      ...(nextStandard ? [{ field: "standard", field_label: "完成标准", new_value: nextStandard }] : []),
+      { field: "agent", field_label: "来源", new_value: "Agent 合并更新" }
+    ]);
+  }
+  if (applied.length > 0) await syncParentProgress(task.id);
+  return applied;
+}
+
 // ── 动作执行 ──
 async function runAction({ action, task, snapshot, system, user, commentId }) {
   const spaceText = formatSpaceData(task, snapshot);
@@ -751,6 +801,146 @@ ${threadText}
     };
   }
 
+  if (action === "drive") {
+    // 执行驱动：成员只聊天，Agent 每轮自动把讨论落成/更新空间对象，并维护「执行概览」
+    const anchor = [...snapshot.comments].reverse().find((c) => !c.agent);
+    if (!anchor) throw errorWith(404, "NOT_FOUND", "暂无成员讨论可驱动");
+    const anchorWho = anchor.user?.displayName || anchor.user?.email || anchor.user?.phone || "成员";
+    const confirmRuleText = task.metadata?.collab?.confirmRule === "owner" ? "发起人确认" : "全员确认";
+    const prompt = `${spaceText}\n\n你刚刚旁听了成员讨论，最新一条来自 ${anchorWho}：\n- ${anchorWho}：${String(anchor.content).slice(0, 300)}\n\n你是本空间的「执行驱动」：成员只负责交流，你负责持续把讨论变成清晰、不重复、可确认的空间对象，让任何人一眼看清全局。本轮按需输出（宁缺毋滥）：\n1. reply：只有确有值得说的时候才回复（澄清疑问、协调分歧、补充外部信息建议、推动停滞的事项）；没有就返回空字符串；\n2. digest：重写「执行概览」，严格按以下结构、每节极简（全文 250 字以内），让成员一眼看清「有哪几个大方向、讨论出了什么、还差谁确认」：\n## 大方向\n（进行中/草案的顶层子约定，每项一句当前状态；没有则写「暂无」）\n## 新进展\n（本轮及最近讨论敲定/更新的要点，最多 3 条；没有则写「暂无」）\n## 待确认\n（草案子约定、未确认沉淀、待办节点，统一注明由谁确认——当前确认规则为${confirmRuleText}；没有则写「暂无」）\n3. updates：讨论若推进/修正了某个已有子约定，用 {"target":"编号如 S1","title":"可选的新结论标题","standard":"可选的新完成标准","note":"一句更新原因"} 把它写回该约定，而不是新建第二条——同一方向永远只保留一个约定；只更新「进行中」和「草案」的，已完成的不要动；没有则空数组；\n4. subtasks：仅当出现真正新的、独立的核心决定/行动项才新建草案（遵守合并同类项与 parentHint 分级挂载）；与已有约定同方向的放 updates，不要建新的；没有则空数组；\n5. nodes：讨论中出现了关键时间点、阶段或决策才落成执行节点（含 node_type：time|stage|decision|review）；没有则空数组；\n6. doc：讨论内容值得长期保留（定稿方案、攻略汇总、清单）才生成 {title, content} 沉淀文件；否则 null；\n7. completed：核对「进行中」子约定、未完成节点、待确认沉淀——讨论已兑现完成条件就填 completed 并给一句依据（宁缺毋滥，切勿漏掉已达成项）；没有把握留空。\n\n所有对象都是草案，需成员确认后生效；completed 同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 控制在 200 字以内、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","digest":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"updates":[{"target":"S1","title":"...","standard":"...","note":"..."}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
+    let data;
+    try {
+      data = await invokeLLM({ system, prompt, json: true, kind: action });
+    } catch (error) {
+      console.warn("[collabAgent] drive 结构化输出解析失败，本轮静默跳过:", error?.message || error);
+      return { silent: true };
+    }
+
+    const createdNotes = [];
+    const autoDoneNotes = [];
+    let created = [];
+    let createdNodes = [];
+    let doc = null;
+    let updatedSubs = [];
+    let digestDoc = null;
+
+    if (data && typeof data === "object") {
+      const pool = [...snapshot.subtasks];
+      const labelMap = buildSubtaskLabelTree(task.id, pool).labelMap;
+
+      // ① 合并更新（同方向的新结论写回原约定）
+      updatedSubs = await applySubtaskUpdates({ task, user, pool, labelMap, updates: data.updates });
+      if (updatedSubs.length > 0) {
+        createdNotes.push(`更新 ${updatedSubs.length} 条子约定（${updatedSubs.map((s) => `「${s.title}」`).join("、")}）`);
+      }
+
+      // ② 新建草案（严格去重：≥90% 覆盖视为同一条，已有方向走 updates 而不是新建）
+      const items = Array.isArray(data.subtasks) ? data.subtasks : [];
+      for (const item of items.slice(0, MAX_SUBTASKS_PER_RUN)) {
+        if (!isNonEmptyString(item?.title)) continue;
+        if (findDuplicateSubtask(pool, item.title)) continue;
+        const parent = resolveParentSubtask(pool, item.parentHint, labelMap);
+        const subtask = await createDraftSubtask(task, user, {
+          title: item.title,
+          standard: item.standard,
+          assigneeHint: item.assigneeHint,
+          sourceCommentId: anchor.id,
+          parentId: parent?.id || null
+        });
+        created.push(subtask);
+        pool.push(subtask);
+      }
+      if (created.length > 0) {
+        await syncParentProgress(task.id);
+        createdNotes.push(`新增 ${created.length} 条子约定草案`);
+      }
+
+      // ③ 执行节点
+      const NODE_TYPES = new Set(["time", "stage", "decision", "review"]);
+      const nodeItems = Array.isArray(data.nodes) ? data.nodes : [];
+      for (const item of nodeItems.slice(0, 10)) {
+        if (!isNonEmptyString(item?.title)) continue;
+        if (snapshot.nodes.some((n) => n.title === item.title)) continue;
+        const sortOrder = await prisma.collabNode.count({ where: { taskId: task.id } });
+        const node = await prisma.collabNode.create({
+          data: {
+            taskId: task.id,
+            title: String(item.title).trim().slice(0, 120),
+            nodeType: NODE_TYPES.has(item.node_type) ? item.node_type : "stage",
+            sortOrder,
+            createdBy: user.id
+          }
+        });
+        createdNodes.push(node);
+        await logCollabChange(user.id, task, "collab_node_created", [
+          { field: "node", field_label: "执行节点", new_value: node.title },
+          { field: "agent", field_label: "来源", new_value: "Agent 执行驱动" }
+        ]);
+      }
+      if (createdNodes.length > 0) createdNotes.push(`新增 ${createdNodes.length} 个执行节点`);
+
+      // ④ 沉淀文件
+      if (data.doc && isNonEmptyString(data.doc.title)) {
+        doc = await prisma.collabDoc.create({
+          data: {
+            taskId: task.id,
+            userId: user.id,
+            title: String(data.doc.title).trim().slice(0, 120),
+            docType: "file",
+            content: String(data.doc.content || "").slice(0, 50000),
+            version: 1,
+            history: [],
+            status: "draft",
+            sourceCommentId: anchor.id
+          }
+        });
+        await logCollabChange(user.id, task, "collab_doc_created", [
+          { field: "doc", field_label: "沉淀文档", new_value: doc.title },
+          { field: "agent", field_label: "来源", new_value: "Agent 执行驱动" }
+        ]);
+        createdNotes.push(`沉淀「${doc.title}」`);
+      }
+
+      // ⑤ 共识自动完成
+      if (data.completed && typeof data.completed === "object") {
+        autoDoneNotes.push(...await applyAutoCompletions({ task, user, snapshot, pool, labelMap, completed: data.completed, createdNodes }));
+      }
+
+      // ⑥ 执行概览（单例文档，始终维护——没有新东西也刷新时间戳以外的内容）
+      if (isNonEmptyString(data.digest)) {
+        digestDoc = await upsertTypedDoc(task.id, user.id, {
+          docType: "digest", title: "执行概览", content: String(data.digest).trim().slice(0, 5000)
+        });
+      }
+    }
+
+    let replyText = isNonEmptyString(data?.reply) ? String(data.reply).trim().slice(0, 3000) : "";
+    if (createdNotes.length > 0) {
+      replyText += `${replyText ? "\n\n" : ""}—— 已自动更新空间：${createdNotes.join("；")}，待成员确认。`;
+    }
+    if (autoDoneNotes.length > 0) {
+      replyText += `${replyText ? "\n\n" : ""}—— 心栈根据讨论共识自动完成：${autoDoneNotes.join("、")}（可随时手动调整）。`;
+    }
+    if (!replyText) return { silent: true, digest: digestDoc };
+
+    const reply = await postAgentMessage(task.id, { content: replyText, parentId: anchor.parentId || anchor.id, topic: anchor.topic });
+    if (autoDoneNotes.length > 0) {
+      await notifyTaskParties(task, user, {
+        type: "collab_auto_completed",
+        title: "心栈已自动完成约定事项",
+        body: `根据讨论共识，${autoDoneNotes.join("、")}已由心栈标记完成，可在协同空间中查看并手动调整。`
+      });
+    }
+    return {
+      reply_comment_id: reply.id,
+      ...(created.length > 0 ? { created } : {}),
+      ...(updatedSubs.length > 0 ? { updated: updatedSubs } : {}),
+      ...(createdNodes.length > 0 ? { nodes: createdNodes } : {}),
+      ...(doc ? { doc } : {}),
+      ...(digestDoc ? { digest: digestDoc } : {})
+    };
+  }
+
   throw errorWith(400, "INVALID_ACTION", `未知 Agent 动作：${action}`);
 }
 
@@ -780,6 +970,13 @@ export async function runCollabAgent({ taskId, action, user, commentId = null })
   await assertAICredits(user.id, COST(), "collab_agent");
 
   const snapshot = await loadSpaceSnapshot(task);
+  if (action === "drive") {
+    // 循环防护：最新一条发言若来自 Agent（或空间还没有成员发言），本轮驱动没有意义
+    const last = snapshot.comments[snapshot.comments.length - 1];
+    if (!last || last.agent) {
+      throw errorWith(409, "NO_NEW_MEMBER_INPUT", "最新发言来自 Agent 或暂无成员发言，跳过本轮驱动");
+    }
+  }
   const system = buildSystem(collab.scenario, collab.agent);
   const result = await runAction({ action, task, snapshot, system, user, commentId });
 
@@ -803,6 +1000,30 @@ export async function runCollabAgent({ taskId, action, user, commentId = null })
     { field: "agent_action", field_label: "Agent 动作", new_value: action },
     ...(commentId ? [{ field: "comment", field_label: "来源讨论", new_value: commentId }] : [])
   ]);
+
+  // 记录本轮驱动时间：防抖调度器用它做最短间隔守卫
+  if (action === "drive") {
+    try {
+      const fresh = await prisma.task.findUnique({ where: { id: taskId } });
+      const freshCollab = fresh?.metadata?.collab;
+      if (fresh && freshCollab) {
+        await prisma.task.update({
+          where: { id: taskId },
+          data: {
+            metadata: {
+              ...(fresh.metadata || {}),
+              collab: {
+                ...freshCollab,
+                agent: { ...(freshCollab.agent || { enabled: true }), lastDriveAt: new Date().toISOString() }
+              }
+            }
+          }
+        });
+      }
+    } catch (error) {
+      console.warn("[collabAgent] 记录 lastDriveAt 失败（不影响本轮结果）:", error?.message || error);
+    }
+  }
 
   return { ok: true, action, degraded: Boolean(result.degraded), result };
 }

@@ -9,6 +9,7 @@ import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js"
 import { serializeTask, syncParentProgress } from "./tasks.js";
 import { serializeComment } from "./comments.js";
 import { runCollabAgent, postAgentMessage } from "../services/collabAgent.js";
+import { scheduleCollabDrive } from "../services/collabDrive.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "../services/collabSpace.js";
 import { AGENT_DOMAINS, AGENT_TEMPLATES, findAgentTemplate } from "../services/agentStore.js";
 
@@ -834,6 +835,9 @@ collabRouter.post("/:taskId/messages", async (req, res) => {
         .catch((error) => console.error("[collab] @Agent 沟通失败:", error?.message || error));
     });
   }
+
+  // 执行驱动：成员每条发言都调度一轮自动驱动（内部防抖 + 最短间隔守卫，失败静默）
+  scheduleCollabDrive(task.id);
 });
 
 // POST /api/collab/:taskId/convert — 讨论转对象：subtask（草案子约定）| node（执行节点）| doc（沉淀文件）

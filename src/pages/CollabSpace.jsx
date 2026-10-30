@@ -14,6 +14,7 @@ import AgreementHead from "@/components/collab/AgreementHead";
 import ChildrenPanel from "@/components/collab/ChildrenPanel";
 import MilestonesPanel from "@/components/collab/MilestonesPanel";
 import DocsPanel from "@/components/collab/DocsPanel";
+import DigestCard from "@/components/collab/DigestCard";
 import ConversationPane from "@/components/collab/ConversationPane";
 import AgentDrawer from "@/components/collab/AgentDrawer";
 import AgentStoreDialog from "@/components/collab/AgentStoreDialog";
@@ -34,6 +35,7 @@ export default function CollabSpace() {
   const [highlightCommentId, setHighlightCommentId] = useState(null);
   const [mobileNavActive, setMobileNavActive] = useState("content");
   const [togglingAgent, setTogglingAgent] = useState(false);
+  const [togglingDrive, setTogglingDrive] = useState(false);
 
   const { data: currentUser } = useQuery({
     queryKey: ['currentUser'],
@@ -89,6 +91,30 @@ export default function CollabSpace() {
       toast.error(e?.message || "操作失败");
     } finally {
       setTogglingAgent(false);
+    }
+  };
+
+  // 自动执行驱动开关（PATCH metadata.collab.agent.drive，默认开启）
+  const handleToggleDrive = async () => {
+    if (!task || togglingDrive) return;
+    const meta = task.metadata || {};
+    const nextDrive = collab?.agent?.drive === false ? true : false;
+    const nextCollab = {
+      ...collab,
+      agent: { ...(collab?.agent || { enabled: true }), drive: nextDrive },
+    };
+    setTogglingDrive(true);
+    try {
+      await httpRequest(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: { metadata: { ...meta, collab: nextCollab } },
+      });
+      invalidateAll();
+      toast.success(nextDrive ? "自动执行驱动已开启：每轮讨论后 Agent 自动整理空间" : "自动执行驱动已关闭：仅 @Agent 时响应");
+    } catch (e) {
+      toast.error(e?.message || "操作失败");
+    } finally {
+      setTogglingDrive(false);
     }
   };
 
@@ -183,6 +209,7 @@ export default function CollabSpace() {
 
         {summary && (
           <>
+            <DigestCard doc={summary.docs?.find((d) => d.doc_type === "digest")} />
             <ChildrenPanel
               summary={summary}
               taskId={taskId}
@@ -191,7 +218,7 @@ export default function CollabSpace() {
             />
             <MilestonesPanel summary={summary} taskId={taskId} />
             <DocsPanel
-              docs={summary.docs || []}
+              docs={(summary.docs || []).filter((d) => d.doc_type !== "digest")}
               taskId={taskId}
               onJumpToSource={jumpToDiscussion}
             />
@@ -227,6 +254,9 @@ export default function CollabSpace() {
         agentMeta={collab?.agent}
         toggling={togglingAgent}
         onToggleAgent={handleToggleAgent}
+        driveEnabled={collab?.agent?.drive !== false}
+        togglingDrive={togglingDrive}
+        onToggleDrive={handleToggleDrive}
         onOpenStore={() => setAgentStoreOpen(true)}
       />
 

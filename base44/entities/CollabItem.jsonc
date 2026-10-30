@@ -28,6 +28,15 @@
     "owner_name": {
       "type": "string"
     },
+    "is_theme": {
+      "type": "boolean",
+      "default": false,
+      "description": "\u662f\u5426\u4e3a\u5927\u4e3b\u9898\uff08\u7528\u4e8e\u5f52\u5e76\u540c\u7c7b\u5b50\u7ea6\u5b9a\uff09"
+    },
+    "parent_id": {
+      "type": "string",
+      "description": "\u6240\u5c5e\u5927\u4e3b\u9898\u7684\u5b50\u7ea6\u5b9a ID"
+    },
     "milestone_type": {
       "type": "string",
       "enum": [

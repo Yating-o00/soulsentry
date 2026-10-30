@@ -1,35 +1,31 @@
-import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import React from "react";
 import ItemRow from "./ItemRow";
 
-const LABEL = { subagreement: ["子约定", "做什么"], milestone: ["节点", "节点，如：周五前确认预算"] };
-
-export default function ItemsTab({ kind, space, me, items, refresh }) {
-  const [title, setTitle] = useState("");
-  const [extra, setExtra] = useState("");
+export default function ItemsTab({ kind, items, refresh }) {
   const list = items.filter((i) => i.kind === kind);
-  const done = list.filter((i) => i.status === "done").length;
+  if (!list.length) return <p className="text-sm text-slate-400 py-4">讨论中形成的内容会自动出现在这里</p>;
+  if (kind !== "subagreement") return list.map((i) => <ItemRow key={i.id} item={i} refresh={refresh} />);
 
-  const add = async () => {
-    if (!title.trim()) return;
-    await base44.entities.CollabItem.create({
-      space_id: space.id, member_ids: space.member_ids, kind, title: title.trim(), status: "draft",
-      ...(kind === "subagreement" ? { done_criteria: extra, owner_name: me.full_name } : { due_date: extra || undefined }),
-    });
-    setTitle(""); setExtra(""); refresh();
-  };
+  const themes = list.filter((i) => i.is_theme);
+  const themeIds = new Set(themes.map((t) => t.id));
+  const loose = list.filter((i) => !i.is_theme && !themeIds.has(i.parent_id));
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col md:flex-row gap-2">
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={LABEL[kind][1]} className="h-11 rounded-2xl bg-slate-50 flex-1" />
-        <Input value={extra} onChange={(e) => setExtra(e.target.value)} type={kind === "milestone" ? "date" : "text"} placeholder="怎样算完成" className="h-11 rounded-2xl bg-slate-50 md:w-64" />
-        <Button onClick={add} className="h-11 rounded-2xl bg-[#384877] hover:bg-[#2d3a62] px-6">添加</Button>
-      </div>
-      {list.length === 0 ? <p className="text-center text-sm text-slate-400 py-12 border border-dashed border-slate-200 rounded-2xl">暂无{LABEL[kind][0]}</p> :
-        list.map((i) => <ItemRow key={i.id} item={i} space={space} me={me} refresh={refresh} />)}
+    <div className="space-y-4">
+      {themes.map((t) => {
+        const kids = list.filter((i) => i.parent_id === t.id);
+        const done = kids.filter((k) => k.status === "done").length;
+        return (
+          <div key={t.id} className="rounded-2xl border border-slate-100 bg-white px-4 py-3">
+            <div className="flex items-center justify-between">
+              <p className="font-semibold text-slate-900">{t.title}</p>
+              <span className="text-xs text-slate-400">{done}/{kids.length}</span>
+            </div>
+            <div className="pl-1 mt-1">{kids.map((k) => <ItemRow key={k.id} item={k} refresh={refresh} />)}</div>
+          </div>
+        );
+      })}
+      {loose.length > 0 && <div className="px-1">{loose.map((i) => <ItemRow key={i.id} item={i} refresh={refresh} />)}</div>}
     </div>
   );
 }

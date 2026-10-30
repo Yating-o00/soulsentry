@@ -8,7 +8,7 @@ import { rejectIfRisky } from "../services/contentSecurity.js";
 import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js";
 import { serializeTask, syncParentProgress } from "./tasks.js";
 import { serializeComment } from "./comments.js";
-import { runCollabAgent } from "../services/collabAgent.js";
+import { runCollabAgent, postAgentMessage } from "../services/collabAgent.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "../services/collabSpace.js";
 
 export const collabRouter = Router();
@@ -294,7 +294,7 @@ collabRouter.post("/:taskId/members", async (req, res) => {
 // ── 执行节点 ──
 const nodeInputSchema = z.object({
   title: z.string().min(1).max(120),
-  node_type: z.enum(["time", "stage", "decision", "review"]).optional(),
+  node_type: z.string().min(1).max(20).optional(),
   due_at: isoDateTime.optional().nullable(),
   sort_order: z.number().int().optional()
 });
@@ -326,7 +326,7 @@ collabRouter.post("/:taskId/nodes", async (req, res) => {
 
 const nodePatchSchema = z.object({
   title: z.string().min(1).max(120).optional(),
-  node_type: z.enum(["time", "stage", "decision", "review"]).optional(),
+  node_type: z.string().min(1).max(20).optional(),
   due_at: isoDateTime.optional().nullable(),
   done_at: isoDateTime.optional().nullable(),
   sort_order: z.number().int().optional()
@@ -518,17 +518,21 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
 
   const confirmedBy = new Set(Array.isArray(subMeta.confirmedBy) ? subMeta.confirmedBy : []);
   confirmedBy.add(req.user.id);
+  const rejectedBy = new Set(Array.isArray(subMeta.rejectedBy) ? subMeta.rejectedBy : []);
+  rejectedBy.delete(req.user.id); // 勾选视为撤回勾掉
   const rule = task.metadata?.collab?.confirmRule === "owner" ? "owner" : "all";
   const memberIds = [...new Set([task.userId, ...task.members.map((m) => m.userId)])];
-  const active = rule === "owner"
+  const noReject = rejectedBy.size === 0;
+  const active = noReject && (rule === "owner"
     ? confirmedBy.has(task.userId)
-    : memberIds.every((id) => confirmedBy.has(id));
+    : memberIds.every((id) => confirmedBy.has(id)));
 
   const metadata = {
     ...(subtask.metadata || {}),
     collab: {
       ...subMeta,
       confirmedBy: [...confirmedBy],
+      rejectedBy: [...rejectedBy],
       state: active ? "active" : "draft"
     }
   };
@@ -546,6 +550,9 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
       title: "子约定已确认生效",
       body: `子约定「${subtask.title}」已按确认规则（${rule === "owner" ? "发起人确认" : "全员确认"}）生效`
     });
+  } else {
+    // 大多数已确认、仅剩少数人时：Agent 自动标记并提醒待确认成员（有人勾掉则不提醒）
+    await maybeRemindPendingConfirms(task, updated);
   }
 
   return res.json({
@@ -553,9 +560,101 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
     state: metadata.collab.state,
     confirm_rule: rule,
     confirmed_by: metadata.collab.confirmedBy,
+    rejected_by: metadata.collab.rejectedBy,
     pending_confirm_users: memberIds.filter((id) => !confirmedBy.has(id))
   });
 });
+
+// POST /api/collab/:taskId/subtasks/:subId/reject — 勾掉草案：表达不同意，阻止其生效（可再勾选撤回）
+collabRouter.post("/:taskId/subtasks/:subId/reject", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+
+  const subtask = (await collectSubtasks(task.id)).find((s) => s.id === req.params.subId);
+  if (!subtask) return res.status(404).json({ error: "NOT_FOUND", message: "子约定不存在" });
+  const subMeta = subtask.metadata?.collab;
+  if (subMeta?.state !== "draft") {
+    return res.status(409).json({ error: "NOT_DRAFT", message: "该子约定不是草案，无需勾掉" });
+  }
+
+  const rejectedBy = new Set(Array.isArray(subMeta.rejectedBy) ? subMeta.rejectedBy : []);
+  rejectedBy.add(req.user.id);
+  const confirmedBy = new Set(Array.isArray(subMeta.confirmedBy) ? subMeta.confirmedBy : []);
+  confirmedBy.delete(req.user.id);
+
+  const metadata = {
+    ...(subtask.metadata || {}),
+    collab: { ...subMeta, confirmedBy: [...confirmedBy], rejectedBy: [...rejectedBy], state: "draft" }
+  };
+  const updated = await prisma.task.update({ where: { id: subtask.id }, data: { metadata } });
+
+  await logCollabChange(req.user.id, task, "collab_subtask_rejected", [
+    { field: "subtask", field_label: "子约定", new_value: subtask.title },
+    { field: "rejected_by", field_label: "勾掉人", new_value: [...rejectedBy].join("、") }
+  ]);
+
+  return res.json({
+    subtask: serializeTask(updated),
+    state: "draft",
+    confirmed_by: metadata.collab.confirmedBy,
+    rejected_by: metadata.collab.rejectedBy
+  });
+});
+
+// 「仅剩少数人未确认」提醒：Agent 在讨论中标记 + 通知待确认成员；有人勾掉（rejectedBy 非空）则不提醒
+async function maybeRemindPendingConfirms(task, subtask) {
+  try {
+    const meta = subtask.metadata?.collab || {};
+    if (meta.state !== "draft") return;
+    const rejectedBy = Array.isArray(meta.rejectedBy) ? meta.rejectedBy : [];
+    if (rejectedBy.length > 0) return; // 已被勾掉：尊重否决，不再提醒
+    const memberIds = [...new Set([task.userId, ...task.members.map((m) => m.userId)])];
+    const confirmedBy = new Set(Array.isArray(meta.confirmedBy) ? meta.confirmedBy : []);
+    const pending = memberIds.filter((id) => !confirmedBy.has(id));
+    if (pending.length === 0) return;
+    // 大多数已认可：待确认的是少数（≤2 人）且其余都已确认
+    const minority = pending.length <= 2 && confirmedBy.size >= memberIds.length - 2 && confirmedBy.size >= 1;
+    if (!minority) return;
+    const pendingKey = pending.slice().sort().join(",");
+    if (meta.reminder?.pendingKey === pendingKey) return; // 同一批待确认人只提醒一次
+
+    const pendingUsers = await prisma.user.findMany({ where: { id: { in: pending } } });
+    const nameOf = (id) => {
+      const u = pendingUsers.find((x) => x.id === id);
+      return u?.displayName || u?.email || u?.phone || "成员";
+    };
+
+    await postAgentMessage(task.id, {
+      content: `子约定「${subtask.title}」已获 ${confirmedBy.size}/${memberIds.length} 位成员确认，还差 ${pending.map(nameOf).join("、")} 勾选生效；如有不同意见，直接勾掉即可。`,
+      topic: "提醒"
+    });
+    for (const id of pending) {
+      await prisma.notification.create({
+        data: {
+          userId: id,
+          title: "协同约定：待你确认",
+          body: `「${task.title}」的子约定「${subtask.title}」已获大多数成员确认，还差你勾选生效（不同意可勾掉）。`,
+          channel: "in_app",
+          status: "SENT",
+          payload: { type: "collab_pending_confirm", taskId: task.id, link: `/collabspace?taskId=${task.id}` }
+        }
+      });
+    }
+
+    const nextCollab = { ...meta, reminder: { at: new Date().toISOString(), pendingKey } };
+    await prisma.task.update({
+      where: { id: subtask.id },
+      data: { metadata: { ...(subtask.metadata || {}), collab: nextCollab } }
+    });
+    await logCollabChange(task.userId, task, "collab_pending_reminder", [
+      { field: "subtask", field_label: "子约定", new_value: subtask.title },
+      { field: "pending", field_label: "待确认成员", new_value: pending.map(nameOf).join("、") }
+    ]);
+  } catch (error) {
+    console.error("[collab] maybeRemindPendingConfirms failed:", error?.message || error);
+  }
+}
 
 // PATCH /api/collab/:taskId/subtasks/:subId/reparent — 拖动挂载：把子约定挂到其他子约定下（parent_id 为空则回到顶层）
 const reparentSchema = z.object({

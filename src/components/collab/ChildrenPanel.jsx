@@ -13,27 +13,36 @@ import { MemberAvatar, PanelHeader } from "./Common";
 
 const subStatusMeta = (sub, done) => {
   if (done) return { label: "已完成", className: "bg-[#edf0ea] text-[#4c5b48]" };
-  if (sub.metadata?.collab?.state === "draft") return { label: "草案待确认", className: "bg-[#fff0d5] text-[#7b4500]" };
+  const collab = sub.metadata?.collab;
+  if (collab?.state === "draft") {
+    if (Array.isArray(collab.rejectedBy) && collab.rejectedBy.length > 0) {
+      return { label: "已被勾掉", className: "bg-rose-50 text-rose-700" };
+    }
+    return { label: "草案待确认", className: "bg-[#fff0d5] text-[#7b4500]" };
+  }
   return { label: "进行中", className: "bg-[#e4e6f8] text-[#2a2861]" };
 };
 
 function ChildRow({
-  sub, depth, members, currentUserId, confirmingId, togglingId,
+  sub, depth, members, currentUserId, confirmingId, togglingId, rejectingId,
   isDragging, isDropTarget, descendantIds,
-  onConfirm, onToggleDone, onJumpToDiscussion,
+  onConfirm, onReject, onToggleDone, onJumpToDiscussion,
   onRowDragStart, onRowDragEnd, onRowDragOver, onRowDrop
 }) {
   const done = isTaskEffectivelyCompleted(sub);
   const subCollab = sub.metadata?.collab;
   const isDraft = subCollab?.state === "draft";
   const confirmedCount = Array.isArray(subCollab?.confirmedBy) ? subCollab.confirmedBy.length : 0;
+  const rejectedBy = Array.isArray(subCollab?.rejectedBy) ? subCollab.rejectedBy : [];
+  const rejectedCount = rejectedBy.length;
+  const iRejected = currentUserId && rejectedBy.includes(currentUserId);
   const alreadyConfirmed = currentUserId && Array.isArray(subCollab?.confirmedBy) && subCollab.confirmedBy.includes(currentUserId);
   const assigneeId = subCollab?.assignee;
   const assignee = assigneeId ? members.find((m) => m.user_id === assigneeId || m.id === assigneeId) : null;
   const isAgentDraft = !!subCollab?.sourceCommentId;
   const autoDone = done && !!subCollab?.autoCompleted;
   const meta = subStatusMeta(sub, done);
-  const busy = confirmingId === sub.id || togglingId === sub.id;
+  const busy = confirmingId === sub.id || togglingId === sub.id || rejectingId === sub.id;
   const droppable = !isDragging && !descendantIds.has(sub.id);
 
   return (
@@ -98,6 +107,26 @@ function ChildRow({
                 来源讨论
               </button>
             )}
+            {isDraft && !iRejected && (
+              <button
+                onClick={() => onReject(sub)}
+                disabled={busy}
+                className="text-[10px] text-[#b3443c] hover:underline underline-offset-2 disabled:opacity-50"
+                title="不同意该草案：勾掉后它不会生效，可随时恢复"
+              >
+                勾掉
+              </button>
+            )}
+            {isDraft && iRejected && (
+              <button
+                onClick={() => onConfirm(sub)}
+                disabled={busy}
+                className="text-[10px] font-medium text-[#384877] hover:underline underline-offset-2 disabled:opacity-50"
+                title="撤回勾掉，重新参与确认"
+              >
+                已勾掉 · 点击恢复
+              </button>
+            )}
           </div>
           <h3 className={cn("mt-2 text-sm font-semibold leading-6", done ? "text-[#7d7972] line-through" : "")} style={done ? undefined : { color: "#35312f" }}>
             {sub.title}
@@ -119,9 +148,12 @@ function ChildRow({
                 <span className="flex items-center gap-1"><Clock3 className="h-3.5 w-3.5" />{formatTime(sub.reminder_time)}</span>
               )}
               {isDraft && (
-                <span style={{ color: C.amberInk }}>
-                  {alreadyConfirmed ? "已确认" : "待确认"} · {confirmedCount}/{members.length || 1}
+                <span style={{ color: rejectedCount > 0 ? "#b3443c" : C.amberInk }}>
+                  {rejectedCount > 0 ? `已被 ${rejectedCount} 人勾掉 · ` : ""}{alreadyConfirmed ? "已确认" : iRejected ? "已勾掉" : "待确认"} · {confirmedCount}/{members.length || 1}
                 </span>
+              )}
+              {isDraft && subCollab?.reminder && (
+                <span style={{ color: "#8a867e" }}>已提醒待确认成员</span>
               )}
             </div>
           </div>
@@ -138,6 +170,7 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
   const [newSubTitle, setNewSubTitle] = useState("");
   const [addingSub, setAddingSub] = useState(false);
   const [confirmingId, setConfirmingId] = useState(null);
+  const [rejectingId, setRejectingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [draggingId, setDraggingId] = useState(null);
   const [dropHintId, setDropHintId] = useState(null); // "root" 或某个子约定 id
@@ -242,6 +275,20 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
       toast.error(error?.message || "确认失败");
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  // 勾掉草案：表达不同意，阻止生效（再点「恢复勾选」即撤回）
+  const handleReject = async (subtask) => {
+    setRejectingId(subtask.id);
+    try {
+      await httpRequest(`/api/collab/${taskId}/subtasks/${subtask.id}/reject`, { method: "POST" });
+      invalidateAll();
+      toast.success(`已勾掉「${subtask.title}」，该草案不会生效`);
+    } catch (error) {
+      toast.error(error?.message || "操作失败");
+    } finally {
+      setRejectingId(null);
     }
   };
 
@@ -377,10 +424,12 @@ export default function ChildrenPanel({ summary, taskId, currentUserId, onJumpTo
             currentUserId={currentUserId}
             confirmingId={confirmingId}
             togglingId={togglingId}
+            rejectingId={rejectingId}
             isDragging={draggingId === sub.id}
             isDropTarget={dropHintId === sub.id}
             descendantIds={draggingId ? descendantsOf(draggingId) : new Set()}
             onConfirm={handleConfirm}
+            onReject={handleReject}
             onToggleDone={handleToggleDone}
             onJumpToDiscussion={onJumpToDiscussion}
             onRowDragStart={handleRowDragStart}

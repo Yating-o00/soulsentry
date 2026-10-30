@@ -1,5 +1,5 @@
-// 执行节点：圆点时间线 + 勾选完成 + 按类型添加
-import React, { useState } from "react";
+// 执行节点：按类别分栏（同一类别一个栏，栏内进度一目了然）+ 勾选完成 + 自定义类别
+import React, { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronRight, Clock, Flag, Plus, RefreshCw, Scale, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import { C, NODE_TYPE_LABELS, formatTime } from "./constants";
 import { PanelHeader } from "./Common";
 
 const NODE_ICONS = { time: Clock, stage: Flag, decision: Scale, review: RefreshCw };
+const PRESET_TYPES = ["time", "stage", "decision", "review"];
+const typeLabel = (t) => NODE_TYPE_LABELS[t] || t || "阶段";
 
 export default function MilestonesPanel({ summary, taskId }) {
   const queryClient = useQueryClient();
@@ -23,6 +25,28 @@ export default function MilestonesPanel({ summary, taskId }) {
     queryClient.invalidateQueries({ queryKey: ['collab', taskId] });
     queryClient.invalidateQueries({ queryKey: ['tasks'] });
   };
+
+  // 分组：四个预设类别按固定顺序在前，自定义类别按出现顺序跟在后面
+  const groups = useMemo(() => {
+    const order = [];
+    const map = new Map();
+    for (const node of nodes) {
+      const t = node.node_type || "stage";
+      if (!map.has(t)) { map.set(t, []); order.push(t); }
+      map.get(t).push(node);
+    }
+    order.sort((a, b) => {
+      const ia = PRESET_TYPES.indexOf(a);
+      const ib = PRESET_TYPES.indexOf(b);
+      return (ia === -1 ? PRESET_TYPES.length : ia) - (ib === -1 ? PRESET_TYPES.length : ib);
+    });
+    return order.map((t) => ({ type: t, nodes: map.get(t) }));
+  }, [nodes]);
+
+  const customTypes = useMemo(
+    () => [...new Set(nodes.map((n) => n.node_type || "stage"))].filter((t) => !PRESET_TYPES.includes(t)),
+    [nodes]
+  );
 
   const handleToggleNode = async (node) => {
     setTogglingNodeId(node.id);
@@ -46,9 +70,9 @@ export default function MilestonesPanel({ summary, taskId }) {
     try {
       await httpRequest(`/api/collab/${taskId}/nodes`, {
         method: "POST",
-        body: { title, node_type: newNode.node_type },
+        body: { title, node_type: newNode.node_type.trim() || "stage" },
       });
-      setNewNode({ title: "", node_type: "stage" });
+      setNewNode({ title: "", node_type: newNode.node_type });
       invalidateAll();
       toast.success("节点已添加");
     } catch (error) {
@@ -58,12 +82,14 @@ export default function MilestonesPanel({ summary, taskId }) {
     }
   };
 
+  const doneTotal = nodes.filter((n) => n.done_at).length;
+
   return (
     <section id="content-milestones" className="border-b px-4 py-5 sm:px-6" style={{ borderColor: C.line }}>
       <PanelHeader
         eyebrow="Milestones"
-        title={`执行节点 · ${nodes.filter((n) => n.done_at).length}/${nodes.length}`}
-        description="用时间、阶段或决策节点标记共同进度。"
+        title={`执行节点 · ${doneTotal}/${nodes.length}`}
+        description="同一类别的节点归在一个栏里，栏内进度就是该类别的推进情况。"
       />
       <div className="mt-2">
         {nodes.length === 0 && (
@@ -71,67 +97,89 @@ export default function MilestonesPanel({ summary, taskId }) {
             还没有执行节点：把讨论「标记节点」，或在下方添加
           </p>
         )}
-        {nodes.map((node) => {
-          const Icon = NODE_ICONS[node.node_type] || Flag;
-          const done = !!node.done_at;
+        {groups.map((group) => {
+          const Icon = NODE_ICONS[group.type] || Flag;
+          const doneCount = group.nodes.filter((n) => n.done_at).length;
+          const ratio = group.nodes.length > 0 ? doneCount / group.nodes.length : 0;
           return (
-            <button
-              key={node.id}
-              type="button"
-              onClick={() => handleToggleNode(node)}
-              disabled={togglingNodeId === node.id}
-              className="group flex w-full items-start gap-3 border-b py-3.5 text-left last:border-b-0 disabled:opacity-50 min-h-8 focus-visible:outline-none"
-              style={{ borderColor: "#dfddd6" }}
-            >
-              <span
-                className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-                style={{ boxShadow: "0 0 0 4px #e8e7e1", backgroundColor: done ? C.green : "#b8b4ab" }}
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-start justify-between gap-3">
-                  <span className={cn("flex items-center gap-1.5 text-xs font-semibold leading-5", done ? "text-[#858179] line-through" : "")} style={done ? undefined : { color: "#45413d" }}>
-                    <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: done ? "#b8b4ab" : "#384877" }} />
-                    <span className="truncate">{node.title}</span>
-                  </span>
-                  <span className="shrink-0 font-mono text-[9px]" style={{ color: "#858179" }}>
-                    {done ? formatTime(node.done_at) : node.due_at ? formatTime(node.due_at) : NODE_TYPE_LABELS[node.node_type] || node.node_type}
-                  </span>
+            <div key={group.type} className="mt-3 first:mt-1">
+              {/* 类别栏头：类别名 + 进度 */}
+              <div className="flex items-center gap-2">
+                <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: "#384877" }} />
+                <span className="text-xs font-semibold" style={{ color: "#45413d" }}>{typeLabel(group.type)}</span>
+                <span className="shrink-0 font-mono text-[9px]" style={{ color: "#858179" }}>
+                  {doneCount}/{group.nodes.length}
                 </span>
-                <span className="mt-1 flex items-center gap-1 text-[10px]" style={{ color: "#858179" }}>
-                  {done ? <Check className="h-3 w-3" style={{ color: C.green }} /> : <ChevronRight className="h-3 w-3" />}
-                  {done && node.agent_done && <Sparkles className="h-3 w-3" style={{ color: "#384877" }} />}
-                  {done ? (node.agent_done ? "心栈确定完成 · 点击可重新打开" : "已完成 · 点击重新打开") : "点击标记完成"}
+                <span className="h-1 min-w-10 flex-1 overflow-hidden rounded-full" style={{ backgroundColor: "#e8e7e1" }}>
+                  <span
+                    className="block h-1 rounded-full transition-all"
+                    style={{ width: `${ratio * 100}%`, backgroundColor: ratio === 1 ? C.green : "#384877" }}
+                  />
                 </span>
-              </span>
-            </button>
+              </div>
+              {/* 栏内节点 */}
+              <div className="mt-0.5">
+                {group.nodes.map((node) => {
+                  const done = !!node.done_at;
+                  return (
+                    <button
+                      key={node.id}
+                      type="button"
+                      onClick={() => handleToggleNode(node)}
+                      disabled={togglingNodeId === node.id}
+                      className="group flex w-full items-start gap-3 border-b py-3.5 text-left last:border-b-0 disabled:opacity-50 min-h-8 focus-visible:outline-none"
+                      style={{ borderColor: "#dfddd6" }}
+                    >
+                      <span
+                        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ boxShadow: "0 0 0 4px #e8e7e1", backgroundColor: done ? C.green : "#b8b4ab" }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-start justify-between gap-3">
+                          <span className={cn("flex items-center gap-1.5 text-xs font-semibold leading-5", done ? "text-[#858179] line-through" : "")} style={done ? undefined : { color: "#45413d" }}>
+                            <span className="truncate">{node.title}</span>
+                          </span>
+                          <span className="shrink-0 font-mono text-[9px]" style={{ color: "#858179" }}>
+                            {done ? formatTime(node.done_at) : node.due_at ? formatTime(node.due_at) : typeLabel(node.node_type)}
+                          </span>
+                        </span>
+                        <span className="mt-1 flex items-center gap-1 text-[10px]" style={{ color: "#858179" }}>
+                          {done ? <Check className="h-3 w-3" style={{ color: C.green }} /> : <ChevronRight className="h-3 w-3" />}
+                          {done && node.agent_done && <Sparkles className="h-3 w-3" style={{ color: "#384877" }} />}
+                          {done ? (node.agent_done ? "心栈确定完成 · 点击可重新打开" : "已完成 · 点击重新打开") : "点击标记完成"}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </div>
 
-      {/* 添加节点：四类型 chip + 输入 */}
+      {/* 添加节点：内容 + 类别（预设四选一或输入自定义类别） */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <Plus className="h-4 w-4 shrink-0" style={{ color: "#99958d" }} />
-        {(["time", "stage", "decision", "review"]).map((type) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => setNewNode((prev) => ({ ...prev, node_type: type }))}
-            className={cn(
-              "rounded-full border px-2.5 text-[11px] transition-colors min-h-7",
-              newNode.node_type === type ? "border-[#384877] text-[#384877]" : "hover:border-slate-300"
-            )}
-            style={newNode.node_type === type ? { backgroundColor: C.brandTint } : { borderColor: "#d8d6cf", color: "#77736c" }}
-          >
-            {NODE_TYPE_LABELS[type]}
-          </button>
-        ))}
         <Input
           value={newNode.title}
           onChange={(e) => setNewNode((prev) => ({ ...prev, title: e.target.value }))}
           onKeyDown={(e) => { if (e.key === "Enter") handleAddNode(); }}
           placeholder="节点内容，回车保存"
-          className="h-8 min-w-[180px] flex-1 text-xs border-dashed"
+          className="h-8 min-w-[140px] flex-1 text-xs border-dashed"
         />
+        <Input
+          value={newNode.node_type}
+          onChange={(e) => setNewNode((prev) => ({ ...prev, node_type: e.target.value }))}
+          list="collab-node-types"
+          placeholder="类别"
+          aria-label="节点类别"
+          className="h-8 w-28 text-xs border-dashed"
+        />
+        <datalist id="collab-node-types">
+          {PRESET_TYPES.map((t) => <option key={t} value={t} label={NODE_TYPE_LABELS[t]} />)}
+          {customTypes.map((t) => <option key={t} value={t} />)}
+        </datalist>
         <Button
           size="sm"
           variant="outline"

@@ -18,6 +18,7 @@ import About from '@/pages/About';
 import Contact from '@/pages/Contact';
 import Connections from '@/pages/Connections';
 import CollabSpace from '@/pages/CollabSpace';
+import ShareIn from '@/pages/ShareIn';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import ForgotPassword from '@/pages/ForgotPassword';
@@ -68,6 +69,7 @@ const AuthenticatedApp = () => {
           element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>}
         />
         <Route path="/connections" element={<LayoutWrapper currentPageName="Connections"><Connections /></LayoutWrapper>} />
+        <Route path="/share-in" element={<LayoutWrapper currentPageName="ShareIn"><ShareIn /></LayoutWrapper>} />
         <Route path="/collab-space" element={<LayoutWrapper currentPageName="CollabSpace"><CollabSpace /></LayoutWrapper>} />
         {Object.entries(Pages).map(([path, Page]) => (
           <Route

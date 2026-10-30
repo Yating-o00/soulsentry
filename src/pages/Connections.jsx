@@ -5,6 +5,9 @@ import ActionPanel from "@/components/connections/ActionPanel";
 import { PANELS } from "@/components/connections/connectionPanels";
 import RecommendedHardware from "@/components/connections/RecommendedHardware";
 import ConnectedDevicesPanel from "@/components/devices/ConnectedDevicesPanel";
+import QrPairCard from "@/components/connections/QrPairCard";
+import ShareShortcutCard from "@/components/connections/ShareShortcutCard";
+import BluetoothCard from "@/components/connections/BluetoothCard";
 
 export default function Connections() {
   const [mailConnected, setMailConnected] = useState(false);
@@ -29,6 +32,15 @@ export default function Connections() {
               <p className="text-xs text-slate-400 mt-3">即将开放，敬请期待。</p>
             </div>
           ) : <ActionPanel key={active} {...PANELS[active]} />)}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="font-semibold text-slate-800">快速连接</h2>
+        <div className="grid md:grid-cols-3 gap-4">
+          <QrPairCard />
+          <ShareShortcutCard />
+          <BluetoothCard />
         </div>
       </section>
 

@@ -390,6 +390,8 @@ async function applyAutoCompletions({ task, user, snapshot, pool, labelMap, comp
       { field: "node", field_label: "执行节点", new_value: node.title },
       { field: "auto", field_label: "完成方式", new_value: doneLabel }
     ]);
+    // 归口传导：子项全部完成 → 归口节点自动完成
+    await cascadeNodeCompletion({ ...node, doneAt: new Date() }, { byAgent: true });
   }
 
   const docHints = Array.isArray(completed.docs) ? completed.docs : [];
@@ -491,6 +493,130 @@ async function applySubtaskUpdates({ task, user, pool, labelMap, updates }) {
   }
   if (applied.length > 0) await syncParentProgress(task.id);
   return applied;
+}
+
+// ── 执行节点归口合并：同一主题（如预算）的持续推进只保留一个「归口节点」，相关推进挂为其子项 ──
+function resolveNodeByTitle(nodes, hint) {
+  if (!isNonEmptyString(hint)) return null;
+  const h = String(hint).trim();
+  return nodes.find((n) => n.id === h)
+    || nodes.find((n) => n.title === h)
+    || nodes.find((n) => n.title.includes(h) || h.includes(n.title))
+    || null;
+}
+
+async function ensureNodeContainer({ task, user, title, nodeType, allNodes }) {
+  const existing = resolveNodeByTitle(allNodes, title);
+  if (existing) return existing;
+  const sortOrder = await prisma.collabNode.count({ where: { taskId: task.id } });
+  const node = await prisma.collabNode.create({
+    data: {
+      taskId: task.id,
+      title: String(title).trim().slice(0, 120),
+      nodeType: nodeType || "stage",
+      sortOrder,
+      createdBy: user.id
+    }
+  });
+  allNodes.push(node);
+  await logCollabChange(user.id, task, "collab_node_created", [
+    { field: "node", field_label: "归口节点", new_value: node.title },
+    { field: "agent", field_label: "来源", new_value: "Agent 归口" }
+  ]);
+  return node;
+}
+
+// 子项落位：parentHint 指向已有/新建归口节点；同标题全局去重；同归口下子项去重
+async function applyNodeItems({ task, user, snapshot, items, allNodes, sourceLabel }) {
+  const created = [];
+  const NODE_TYPES = new Set(["time", "stage", "decision", "review"]);
+  for (const item of (Array.isArray(items) ? items : []).slice(0, 10)) {
+    if (!isNonEmptyString(item?.title)) continue;
+    const title = String(item.title).trim().slice(0, 120);
+    if (allNodes.some((n) => n.title === title)) continue;
+    let parent = null;
+    if (isNonEmptyString(item.parentHint)) {
+      parent = await ensureNodeContainer({ task, user, title: item.parentHint, nodeType: item.node_type, allNodes });
+      if (parent.title === title) parent = null; // 归口节点与子项同名时按平级处理，避免自引用
+    }
+    if (parent && (await prisma.collabNode.findFirst({ where: { parentId: parent.id, title } }))) continue;
+    const sortOrder = await prisma.collabNode.count({ where: { taskId: task.id } });
+    const node = await prisma.collabNode.create({
+      data: {
+        taskId: task.id,
+        title,
+        nodeType: NODE_TYPES.has(item.node_type) ? item.node_type : "stage",
+        sortOrder,
+        createdBy: user.id,
+        parentId: parent?.id || null
+      }
+    });
+    created.push(node);
+    allNodes.push(node);
+    await logCollabChange(user.id, task, "collab_node_created", [
+      { field: "node", field_label: "执行节点", new_value: node.title },
+      ...(parent ? [{ field: "parent", field_label: "归口于", new_value: parent.title }] : []),
+      { field: "agent", field_label: "来源", new_value: sourceLabel }
+    ]);
+  }
+  return created;
+}
+
+// 既有平级节点归入归口（讨论越多越整齐）：nodeMoves=[{title, parent}]，父节点不存在则创建
+async function applyNodeMoves({ task, user, moves, allNodes }) {
+  const moved = [];
+  for (const move of (Array.isArray(moves) ? moves : []).slice(0, 10)) {
+    if (!isNonEmptyString(move?.title) || !isNonEmptyString(move?.parent)) continue;
+    const node = resolveNodeByTitle(allNodes, move.title);
+    if (!node) continue;
+    const container = await ensureNodeContainer({ task, user, title: move.parent, nodeType: node.nodeType, allNodes });
+    if (container.id === node.id) continue;
+    if (node.parentId === container.id) continue;
+    // 只允许两级：归口节点本身不能再有父节点；也不能把归口节点挂到它的子孙下
+    if (container.parentId) continue;
+    if (node.id === container.parentId) continue;
+    await prisma.collabNode.update({ where: { id: node.id }, data: { parentId: container.id } });
+    node.parentId = container.id;
+    moved.push(node);
+    await logCollabChange(user.id, task, "collab_node_moved", [
+      { field: "node", field_label: "执行节点", new_value: node.title },
+      { field: "parent", field_label: "归口于", new_value: container.title },
+      { field: "agent", field_label: "来源", new_value: "Agent 合并同类项" }
+    ]);
+  }
+  return moved;
+}
+
+// 完成状态向上传导：子项全部完成 → 归口节点自动完成（可手动改回）；任一子项重新打开 → 自动完成的归口回退
+export async function cascadeNodeCompletion(node, { byAgent = false } = {}) {
+  if (!node?.parentId) return;
+  const parent = await prisma.collabNode.findUnique({
+    where: { id: node.parentId },
+    include: { children: true }
+  });
+  if (!parent) return;
+  const allChildrenDone = parent.children.length > 0 && parent.children.every((c) => c.doneAt);
+  if (node.doneAt && allChildrenDone && !parent.doneAt) {
+    const rootTask = await prisma.task.findUnique({
+      where: { id: node.taskId },
+      select: { id: true, title: true, parentTaskId: true }
+    });
+    const updated = await prisma.collabNode.update({
+      where: { id: parent.id },
+      data: { doneAt: new Date(), agentDone: byAgent, autoDone: true }
+    });
+    await logCollabChange(node.createdBy || null, rootTask || { id: node.taskId }, "collab_node_auto_done", [
+      { field: "node", field_label: "归口节点", new_value: parent.title },
+      { field: "auto", field_label: "完成方式", new_value: "子项全部完成，自动归口完成" }
+    ]);
+    await cascadeNodeCompletion(updated, { byAgent });
+  } else if (!node.doneAt && parent.autoDone && parent.doneAt) {
+    const updated = await prisma.collabNode.update({
+      where: { id: parent.id },
+      data: { doneAt: null, agentDone: false, autoDone: false }
+    });
+    await cascadeNodeCompletion(updated, { byAgent });
+  }
 }
 
 // ── 动作执行 ──
@@ -678,7 +804,7 @@ ${threadText}
 
     // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息。
     // 结构化输出：除回复外，按讨论内容把可执行项落成子约定草案、执行节点、沉淀文件（均为草案，待人确认）。
-    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title 与 node_type（time|stage|decision|review）；没有则返回空数组；\n4. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null；\n5. completed：核对上方编号子约定清单（仅限「进行中」的，草案与已完成的不要动）、执行节点（未到完成的）与沉淀文档（待确认的）——若讨论内容已经满足某项的完成条件（完成标准已被讨论兑现、节点对应阶段已经走过、沉淀内容已被各方认可），就把它填进 completed 并给一句依据；不要全部留空——只要讨论确实兑现了某项的完成条件就应当填上，宁缺毋滥但切勿漏掉已达成的事项；没有把握的对象不要勉强。\n\n所有对象都是草案，需成员确认后才生效；completed 里的自动完成同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title、node_type（time|stage|decision|review）与 parentHint。合并同类项：同一主题（如预算）的持续推进只保留一个归口节点（标题用统一口径，如「确定预算统一口径」），相关推进作为其子项——parentHint 填归口节点标题（不存在会自动创建）；同标题节点不重复创建；没有则返回空数组；\n4. nodeMoves：已有节点中若存在同主题的多个平级节点，用 [{"title":"节点标题","parent":"归口节点标题"}] 归并；没有则空数组；\n5. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null；\n6. completed：核对上方编号子约定清单（仅限「进行中」的，草案与已完成的不要动）、执行节点（未到完成的，含归口节点）与沉淀文档（待确认的）——若讨论内容已经满足某项的完成条件（完成标准已被讨论兑现、节点对应阶段已经走过、归口节点内容已被成员确认、沉淀内容已被各方认可），就把它填进 completed 并给一句依据；不要全部留空——只要讨论确实兑现了某项的完成条件就应当填上，宁缺毋滥但切勿漏掉已达成的事项；没有把握的对象不要勉强。\n\n所有对象都是草案，需成员确认后才生效；completed 里的自动完成同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"doc":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action });
@@ -717,27 +843,12 @@ ${threadText}
         createdNotes.push(`${created.length} 条子约定草案`);
       }
 
-      const NODE_TYPES = new Set(["time", "stage", "decision", "review"]);
-      const nodeItems = Array.isArray(data.nodes) ? data.nodes : [];
-      for (const item of nodeItems.slice(0, 10)) {
-        if (!isNonEmptyString(item?.title)) continue;
-        const sortOrder = await prisma.collabNode.count({ where: { taskId: task.id } });
-        const node = await prisma.collabNode.create({
-          data: {
-            taskId: task.id,
-            title: String(item.title).trim().slice(0, 120),
-            nodeType: NODE_TYPES.has(item.node_type) ? item.node_type : "stage",
-            sortOrder,
-            createdBy: user.id
-          }
-        });
-        createdNodes.push(node);
-        await logCollabChange(user.id, task, "collab_node_created", [
-          { field: "node", field_label: "执行节点", new_value: node.title },
-          { field: "agent", field_label: "来源", new_value: "Agent 沉淀" }
-        ]);
-      }
+      // 执行节点（归口合并）+ 既有同主题节点归并
+      const allNodes = [...snapshot.nodes];
+      createdNodes.push(...await applyNodeItems({ task, user, snapshot, items: data.nodes, allNodes, sourceLabel: "Agent 沉淀" }));
+      const movedNodes = await applyNodeMoves({ task, user, moves: data.nodeMoves, allNodes });
       if (createdNodes.length > 0) createdNotes.push(`${createdNodes.length} 个执行节点`);
+      if (movedNodes.length > 0) createdNotes.push(`归并 ${movedNodes.length} 个同主题节点`);
 
       if (data.doc && isNonEmptyString(data.doc.title)) {
         doc = await prisma.collabDoc.create({
@@ -807,7 +918,7 @@ ${threadText}
     if (!anchor) throw errorWith(404, "NOT_FOUND", "暂无成员讨论可驱动");
     const anchorWho = anchor.user?.displayName || anchor.user?.email || anchor.user?.phone || "成员";
     const confirmRuleText = task.metadata?.collab?.confirmRule === "owner" ? "发起人确认" : "全员确认";
-    const prompt = `${spaceText}\n\n你刚刚旁听了成员讨论，最新一条来自 ${anchorWho}：\n- ${anchorWho}：${String(anchor.content).slice(0, 300)}\n\n你是本空间的「执行驱动」：成员只负责交流，你负责持续把讨论变成清晰、不重复、可确认的空间对象，让任何人一眼看清全局。本轮按需输出（宁缺毋滥）：\n1. reply：只有确有值得说的时候才回复（澄清疑问、协调分歧、补充外部信息建议、推动停滞的事项）；没有就返回空字符串；\n2. digest：重写「执行概览」，严格按以下结构、每节极简（全文 250 字以内），让成员一眼看清「有哪几个大方向、讨论出了什么、还差谁确认」：\n## 大方向\n（进行中/草案的顶层子约定，每项一句当前状态；没有则写「暂无」）\n## 新进展\n（本轮及最近讨论敲定/更新的要点，最多 3 条；没有则写「暂无」）\n## 待确认\n（草案子约定、未确认沉淀、待办节点，统一注明由谁确认——当前确认规则为${confirmRuleText}；没有则写「暂无」）\n3. updates：讨论若推进/修正了某个已有子约定，用 {"target":"编号如 S1","title":"可选的新结论标题","standard":"可选的新完成标准","note":"一句更新原因"} 把它写回该约定，而不是新建第二条——同一方向永远只保留一个约定；只更新「进行中」和「草案」的，已完成的不要动；没有则空数组；\n4. subtasks：仅当出现真正新的、独立的核心决定/行动项才新建草案（遵守合并同类项与 parentHint 分级挂载）；与已有约定同方向的放 updates，不要建新的；没有则空数组；\n5. nodes：讨论中出现了关键时间点、阶段或决策才落成执行节点（含 node_type：time|stage|decision|review）；没有则空数组；\n6. doc：讨论内容值得长期保留（定稿方案、攻略汇总、清单）才生成 {title, content} 沉淀文件；否则 null；\n7. completed：核对「进行中」子约定、未完成节点、待确认沉淀——讨论已兑现完成条件就填 completed 并给一句依据（宁缺毋滥，切勿漏掉已达成项）；没有把握留空。\n\n所有对象都是草案，需成员确认后生效；completed 同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 控制在 200 字以内、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","digest":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"updates":[{"target":"S1","title":"...","standard":"...","note":"..."}],"nodes":[{"title":"...","node_type":"stage"}],"doc":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
+    const prompt = `${spaceText}\n\n你刚刚旁听了成员讨论，最新一条来自 ${anchorWho}：\n- ${anchorWho}：${String(anchor.content).slice(0, 300)}\n\n你是本空间的「执行驱动」：成员只负责交流，你负责持续把讨论变成清晰、不重复、可确认的空间对象，让任何人一眼看清全局。本轮按需输出（宁缺毋滥）：\n1. reply：只有确有值得说的时候才回复（澄清疑问、协调分歧、补充外部信息建议、推动停滞的事项）；没有就返回空字符串；\n2. digest：重写「执行概览」，严格按以下结构、每节极简（全文 250 字以内），让成员一眼看清「有哪几个大方向、讨论出了什么、还差谁确认」：\n## 大方向\n（进行中/草案的顶层子约定，每项一句当前状态；没有则写「暂无」）\n## 新进展\n（本轮及最近讨论敲定/更新的要点，最多 3 条；没有则写「暂无」）\n## 待确认\n（草案子约定、未确认沉淀、待办节点，统一注明由谁确认——当前确认规则为${confirmRuleText}；没有则写「暂无」）\n3. updates：讨论若推进/修正了某个已有子约定，用 {"target":"编号如 S1","title":"可选的新结论标题","standard":"可选的新完成标准","note":"一句更新原因"} 把它写回该约定，而不是新建第二条——同一方向永远只保留一个约定；只更新「进行中」和「草案」的，已完成的不要动；没有则空数组；\n4. subtasks：仅当出现真正新的、独立的核心决定/行动项才新建草案（遵守合并同类项与 parentHint 分级挂载）；与已有约定同方向的放 updates，不要建新的；没有则空数组；\n5. nodes：讨论中出现了关键时间点、阶段或决策才落成执行节点。必须合并同类项：同一主题（如预算、目的地）的持续推进只保留一个归口节点，标题用统一口径（如「确定预算统一口径」），本轮相关推进作为它的子项——parentHint 填归口节点标题（不存在会自动创建）；同一主题的每次推进不要新建平级节点；没有则空数组；\n6. nodeMoves：已有节点中若存在同主题的多个平级节点（如「5w预算口径确认」「人均预算确认为5万元」都属于预算口径），用 [{"title":"节点标题","parent":"归口节点标题"}] 把它们归并到统一归口节点下；没有则空数组；\n7. doc：讨论内容值得长期保留（定稿方案、攻略汇总、清单）才生成 {title, content} 沉淀文件；否则 null；\n8. completed：核对「进行中」子约定、未完成节点、待确认沉淀——讨论已兑现完成条件就填 completed 并给一句依据（宁缺毋滥，切勿漏掉已达成项）；归口节点的子项全部完成或内容已被成员确认时，把归口节点标题填进 completed.nodes；没有把握留空。\n\n所有对象都是草案，需成员确认后生效；completed 同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 控制在 200 字以内、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","digest":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"updates":[{"target":"S1","title":"...","standard":"...","note":"..."}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"doc":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action });
@@ -855,29 +966,12 @@ ${threadText}
         createdNotes.push(`新增 ${created.length} 条子约定草案`);
       }
 
-      // ③ 执行节点
-      const NODE_TYPES = new Set(["time", "stage", "decision", "review"]);
-      const nodeItems = Array.isArray(data.nodes) ? data.nodes : [];
-      for (const item of nodeItems.slice(0, 10)) {
-        if (!isNonEmptyString(item?.title)) continue;
-        if (snapshot.nodes.some((n) => n.title === item.title)) continue;
-        const sortOrder = await prisma.collabNode.count({ where: { taskId: task.id } });
-        const node = await prisma.collabNode.create({
-          data: {
-            taskId: task.id,
-            title: String(item.title).trim().slice(0, 120),
-            nodeType: NODE_TYPES.has(item.node_type) ? item.node_type : "stage",
-            sortOrder,
-            createdBy: user.id
-          }
-        });
-        createdNodes.push(node);
-        await logCollabChange(user.id, task, "collab_node_created", [
-          { field: "node", field_label: "执行节点", new_value: node.title },
-          { field: "agent", field_label: "来源", new_value: "Agent 执行驱动" }
-        ]);
-      }
+      // ③ 执行节点（归口合并：同主题持续推进挂到同一归口节点下，既有平级同类项归并进去）
+      const allNodes = [...snapshot.nodes];
+      createdNodes.push(...await applyNodeItems({ task, user, snapshot, items: data.nodes, allNodes, sourceLabel: "Agent 执行驱动" }));
+      const movedNodes = await applyNodeMoves({ task, user, moves: data.nodeMoves, allNodes });
       if (createdNodes.length > 0) createdNotes.push(`新增 ${createdNodes.length} 个执行节点`);
+      if (movedNodes.length > 0) createdNotes.push(`将 ${movedNodes.length} 个同主题节点归并到「${[...new Set(movedNodes.map((n) => allNodes.find((p) => p.id === n.parentId)?.title).filter(Boolean))].join("、")}」`);
 
       // ④ 沉淀文件
       if (data.doc && isNonEmptyString(data.doc.title)) {

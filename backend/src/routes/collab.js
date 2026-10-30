@@ -8,7 +8,7 @@ import { rejectIfRisky } from "../services/contentSecurity.js";
 import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js";
 import { serializeTask, syncParentProgress } from "./tasks.js";
 import { serializeComment } from "./comments.js";
-import { runCollabAgent, postAgentMessage } from "../services/collabAgent.js";
+import { runCollabAgent, postAgentMessage, cascadeNodeCompletion } from "../services/collabAgent.js";
 import { scheduleCollabDrive } from "../services/collabDrive.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "../services/collabSpace.js";
 import { AGENT_DOMAINS, AGENT_TEMPLATES, findAgentTemplate } from "../services/agentStore.js";
@@ -29,6 +29,8 @@ const serializeNode = (node) => ({
   sort_order: node.sortOrder,
   created_by: node.createdBy,
   agent_done: node.agentDone || false,
+  parent_id: node.parentId || null,
+  auto_done: node.autoDone || false,
   created_date: node.createdAt
 });
 
@@ -426,6 +428,10 @@ collabRouter.patch("/:taskId/nodes/:nodeId", async (req, res) => {
 
   const updated = await prisma.collabNode.update({ where: { id: node.id }, data });
   await logCollabChange(req.user.id, task, changeType, details);
+  // 归口传导：子项完成/重开时，归口节点自动完成或回退（仅限自动完成的归口）
+  if (payload.data.done_at !== undefined) {
+    await cascadeNodeCompletion(updated, { byAgent: false });
+  }
   return res.json(serializeNode(updated));
 });
 

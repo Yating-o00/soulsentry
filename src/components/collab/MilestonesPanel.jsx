@@ -1,7 +1,7 @@
 // 执行节点：按类别分栏（同一类别一个栏，栏内进度一目了然）+ 勾选完成 + 自定义类别
 import React, { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronRight, Clock, Flag, Plus, RefreshCw, Scale, Sparkles } from "lucide-react";
+import { Clock, Flag, Plus, RefreshCw, Scale, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { httpRequest } from "@/api/httpClient";
@@ -117,41 +117,62 @@ export default function MilestonesPanel({ summary, taskId }) {
                   />
                 </span>
               </div>
-              {/* 栏内节点 */}
+              {/* 栏内节点：归口节点在上，同主题推进作为子项缩进挂在下面 */}
               <div className="mt-0.5">
-                {group.nodes.map((node) => {
-                  const done = !!node.done_at;
-                  return (
-                    <button
-                      key={node.id}
-                      type="button"
-                      onClick={() => handleToggleNode(node)}
-                      disabled={togglingNodeId === node.id}
-                      className="group flex w-full items-start gap-3 border-b py-3.5 text-left last:border-b-0 disabled:opacity-50 min-h-8 focus-visible:outline-none"
-                      style={{ borderColor: "#dfddd6" }}
-                    >
-                      <span
-                        className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ boxShadow: "0 0 0 4px #e8e7e1", backgroundColor: done ? C.green : "#b8b4ab" }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-start justify-between gap-3">
-                          <span className={cn("flex items-center gap-1.5 text-xs font-semibold leading-5", done ? "text-[#858179] line-through" : "")} style={done ? undefined : { color: "#45413d" }}>
-                            <span className="truncate">{node.title}</span>
+                {(() => {
+                  const byParent = new Map();
+                  for (const n of group.nodes) {
+                    const key = n.parent_id || "";
+                    if (!byParent.has(key)) byParent.set(key, []);
+                    byParent.get(key).push(n);
+                  }
+                  const topNodes = byParent.get("") || [];
+                  const renderNode = (node, isChild) => {
+                    const done = !!node.done_at;
+                    const children = byParent.get(node.id) || [];
+                    const doneKids = children.filter((c) => c.done_at).length;
+                    return (
+                      <div key={node.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleNode(node)}
+                          disabled={togglingNodeId === node.id}
+                          className={cn(
+                            "group flex w-full items-start gap-3 text-left disabled:opacity-50 min-h-8 focus-visible:outline-none",
+                            isChild ? "py-2 pl-7" : "py-3.5",
+                            (!isChild || children.length === 0) && "border-b border-[#dfddd6]"
+                          )}
+                        >
+                          <span
+                            className={cn("shrink-0 rounded-full", isChild ? "mt-1.5 h-2 w-2" : "mt-1.5 h-2.5 w-2.5")}
+                            style={isChild
+                              ? { backgroundColor: done ? C.green : "#c4c0b7" }
+                              : { boxShadow: "0 0 0 4px #e8e7e1", backgroundColor: done ? C.green : "#b8b4ab" }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-start justify-between gap-3">
+                              <span className={cn("text-xs font-semibold leading-5", done ? "text-[#858179] line-through" : "")} style={done ? undefined : { color: "#45413d" }}>
+                                <span className={cn(!isChild && "truncate", "break-words")}>{node.title}</span>
+                              </span>
+                              <span className="flex shrink-0 items-center gap-1 font-mono text-[9px]" style={{ color: "#858179" }}>
+                                {node.agent_done && done && <Sparkles className="h-3 w-3" style={{ color: "#384877" }} />}
+                                {children.length > 0
+                                  ? `${doneKids}/${children.length}`
+                                  : done ? formatTime(node.done_at) : node.due_at ? formatTime(node.due_at) : typeLabel(node.node_type)}
+                              </span>
+                            </span>
                           </span>
-                          <span className="shrink-0 font-mono text-[9px]" style={{ color: "#858179" }}>
-                            {done ? formatTime(node.done_at) : node.due_at ? formatTime(node.due_at) : typeLabel(node.node_type)}
-                          </span>
-                        </span>
-                        <span className="mt-1 flex items-center gap-1 text-[10px]" style={{ color: "#858179" }}>
-                          {done ? <Check className="h-3 w-3" style={{ color: C.green }} /> : <ChevronRight className="h-3 w-3" />}
-                          {done && node.agent_done && <Sparkles className="h-3 w-3" style={{ color: "#384877" }} />}
-                          {done ? (node.agent_done ? "心栈确定完成 · 点击可重新打开" : "已完成 · 点击重新打开") : "点击标记完成"}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
+                        </button>
+                        {children.length > 0 && (
+                          <div className="border-b border-[#dfddd6] pb-1">
+                            {children.map((child) => renderNode(child, true))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
+                  return topNodes.map((node) => renderNode(node, false));
+                })()}
               </div>
             </div>
           );

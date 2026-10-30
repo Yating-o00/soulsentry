@@ -773,6 +773,10 @@ model CollabNode {
   sortOrder Int       @default(0)
   createdBy String?
   agentDone Boolean?
+  parentId  String?
+  parent    CollabNode?  @relation("NodeChildren", fields: [parentId], references: [id], onDelete: SetNull)
+  children  CollabNode[] @relation("NodeChildren")
+  autoDone  Boolean?
   createdAt DateTime  @default(now())
   task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
 

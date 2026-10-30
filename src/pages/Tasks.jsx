@@ -28,7 +28,8 @@ const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
 
 export default function Tasks() {
   const { t } = useTranslation();
-  const [viewMode, setViewMode] = useState(() => new URLSearchParams(window.location.search).get("view") === "collab" ? "collab" : "overview"); // 'overview', 'milestone', 'life'
+  const [viewMode, setViewMode] = useState(() => new URLSearchParams(window.location.search).get("view") === "collab" || sessionStorage.getItem("tasks_view") === "collab" ? "collab" : "overview");
+  React.useEffect(() => { sessionStorage.setItem("tasks_view", viewMode); }, [viewMode]); // 'overview', 'milestone', 'life'
   const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedParents, setExpandedParents] = useState(new Set());

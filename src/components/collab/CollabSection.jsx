@@ -9,6 +9,8 @@ export default function CollabSection() {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["collab-spaces-section"],
+    refetchOnMount: "always",
+    staleTime: 0,
     queryFn: async () => {
       const spaces = await base44.entities.CollabSpace.list("-updated_date", 50);
       const ids = spaces.map((s) => s.id);

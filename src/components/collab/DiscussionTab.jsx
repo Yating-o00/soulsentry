@@ -17,12 +17,19 @@ export default function DiscussionTab({ space, me, messages, items, refresh }) {
     setText("");
     const msg = await base44.entities.CollabMessage.create({ space_id: space.id, member_ids: space.member_ids, author_name: me.full_name || me.email, content });
     refresh();
-    if (!agentOn || !/@(心栈)?Agent/i.test(content)) return;
+    if (!agentOn || agentBusy) return;
+    const mentioned = /@(心栈)?Agent/i.test(content);
+    // 未 @ 时 Agent 静默整理：每 2 条成员消息更新一次看板，不插话
+    const memberCount = messages.filter((m) => !m.is_agent).length + 1;
+    if (!mentioned && memberCount % 2 !== 0) return;
     setAgentBusy(true);
-    const r = await runCollabAgent({ space, messages: [...messages, msg], items, request: content.replace(/@(心栈)?Agent/gi, "").trim() || "整理一下目前的对话" });
-    await persistAgentResult(space, r, items);
-    setAgentBusy(false);
-    refresh();
+    try {
+      const r = await runCollabAgent({ space, messages: [...messages, msg], items, request: mentioned ? (content.replace(/@(心栈)?Agent/gi, "").trim() || "整理一下目前的对话") : null });
+      await persistAgentResult(space, r, items);
+    } finally {
+      setAgentBusy(false);
+      refresh();
+    }
   };
 
   return (
@@ -37,7 +44,7 @@ export default function DiscussionTab({ space, me, messages, items, refresh }) {
           <div className="text-[15px] text-slate-700 leading-relaxed prose prose-sm max-w-none"><ReactMarkdown>{m.content}</ReactMarkdown></div>
         </div>
       ))}
-      {agentBusy && <p className="text-sm text-[#384877] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Agent 正在思考并整理…</p>}
+      {agentBusy && <p className="text-sm text-[#384877] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Agent 正在合并整理讨论要点…</p>}
 
       <div className="sticky bottom-0 bg-[#f8f9fb] pt-3 flex gap-2">
         {agentOn && <button type="button" onClick={() => setText((t) => (t.includes("@心栈Agent") ? t : `@心栈Agent ${t}`))} title="@心栈Agent" className="h-auto rounded-2xl border border-[#384877]/20 bg-white px-3 text-[#384877] hover:bg-[#384877]/5"><Bot className="w-4 h-4" /></button>}

@@ -7,46 +7,70 @@ export const SCENES = {
   custom: { label: "自定义", tone: "中性、清晰" },
 };
 
+const ITEM = { type: "object", properties: { id: { type: "string" }, title: { type: "string" }, done_criteria: { type: "string" }, owner_name: { type: "string" }, due_date: { type: "string" }, status: { type: "string", enum: ["in_progress", "pending_confirm", "done"] } } };
+
+// 整个空间的"全量快照"：Agent 每次输出的是最新的完整结构，而不是增量追加
 const SCHEMA = {
   type: "object",
   properties: {
     reply: { type: "string" },
-    subagreements: { type: "array", items: { type: "object", properties: { theme: { type: "string" }, title: { type: "string" }, done_criteria: { type: "string" }, owner_name: { type: "string" } } } },
-    regroup: { type: "array", items: { type: "object", properties: { id: { type: "string" }, theme: { type: "string" } } } },
-    completed_ids: { type: "array", items: { type: "string" } },
-    milestones: { type: "array", items: { type: "object", properties: { title: { type: "string" }, due_date: { type: "string" } } } },
-    document: { type: "object", properties: { title: { type: "string" }, content: { type: "string" } } },
+    themes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" }, title: { type: "string" },
+          status: { type: "string", enum: ["discussing", "pending_confirm", "decided"] },
+          conclusion: { type: "string" }, next_step: { type: "string" }, confirm_by: { type: "string" },
+          subagreements: { type: "array", items: ITEM },
+        },
+      },
+    },
+    milestones: { type: "array", items: ITEM },
+    remove_ids: { type: "array", items: { type: "string" } },
+    summary: { type: "string" },
   },
 };
 
-export async function runCollabAgent({ space, messages = [], items = [], request = "reply" }) {
+const STATUS_LABEL = { discussing: "讨论中", pending_confirm: "待确认", decided: "已定" };
+
+export async function runCollabAgent({ space, messages = [], items = [], request = null }) {
   const scene = SCENES[space.scene] || SCENES.custom;
-  const talk = messages.slice(-40).map((m) => `${m.author_name}: ${m.content}`).join("\n");
-  const byId = Object.fromEntries(items.map((i) => [i.id, i]));
-  const existing = items.filter((i) => !i.is_theme).map((i) =>
-    `[${i.id}] ${i.kind === "subagreement" ? "子约定" : i.kind === "milestone" ? "节点" : "沉淀"}:${i.title}(${i.status === "done" ? "已完成" : "未完成"})${i.parent_id ? ` 主题:${byId[i.parent_id]?.title || ""}` : ""}`).join("\n");
+  const talk = messages.slice(-60).map((m) => `${m.author_name}: ${m.content}`).join("\n");
+  const themes = items.filter((i) => i.is_theme);
+  const snapshot = themes.map((t) => {
+    const kids = items.filter((i) => i.parent_id === t.id && !i.is_theme).map((k) => `    - [${k.id}] ${k.title}｜完成标准:${k.done_criteria || "-"}｜负责人:${k.owner_name || "-"}｜${k.status}`).join("\n");
+    return `[${t.id}] 方向:${t.title}｜${t.status}｜结论:${t.content || "-"}｜下一步:${t.done_criteria || "-"}｜待谁确认:${t.owner_name || "-"}\n${kids}`;
+  }).join("\n");
+  const loose = items.filter((i) => !i.is_theme && i.kind !== "document" && !themes.some((t) => t.id === i.parent_id))
+    .map((i) => `[${i.id}] ${i.kind === "milestone" ? "节点" : "子约定"}:${i.title}｜${i.due_date || ""}｜${i.status}`).join("\n");
+
   const task = request === "init"
-    ? "这是空间刚创建。用 reply 欢迎大家，复述对共同目标的理解，并抛出 1-2 个最值得先讨论的问题；可给出初始子约定方向（按主题归类）。"
-    : `成员 @你 说：「${request}」。优先直接回应这个请求（回答问题 / 给建议 / 整理对话），同时按职责顺带整理子约定与完成状态。`;
+    ? "空间刚创建：reply 欢迎大家、复述目标，并提出 2-4 个需要讨论的大方向（写入 themes，status=discussing）。"
+    : request
+      ? `成员 @你 说：「${request}」。reply 直接回应（回答/建议/查资料），同时更新整体结构。`
+      : "这是后台静默整理：reply 必须留空字符串，只更新整体结构。";
 
   return base44.integrations.Core.InvokeLLM({
     model: "gemini_3_flash",
-    add_context_from_internet: true,
-    prompt: `你是「心栈」协同约定空间里的 Agent，像一位靠谱又温暖的伙伴参与讨论。你的职责：
-1. 推进对话：总结进展，抛出下一个需要决定的问题。
-2. 提供外部信息：涉及地点、价格、时间、天气、攻略、专业知识时，联网查询并给出简洁参考。
-3. 专业建议与情绪价值：给出可行建议，同时体察成员情绪，给予肯定与安抚。
-4. 化解分歧：中立呈现各方观点，提出折中方案，绝不站队、不替成员做决定。
-5. 自动整理：把讨论中新出现的行动项写成子约定（subagreements），每条写清"怎样算完成"，并用 theme 归入一个大主题（如"交通""住宿""预算"）；同类合并，不要重复已有内容。已有但未归类的子约定可通过 regroup 指定主题。
-6. 关键时间点写入 milestones（日期 YYYY-MM-DD，今天 ${new Date().toISOString().slice(0, 10)}）。
-7. 若讨论已就某条已有子约定/节点达成共识或明确完成，把其 ID 放入 completed_ids。
-8. 当形成了较完整的共识时，才输出一份简洁 Markdown 纪要 document，否则留空。
-reply 要简短自然（3-6 句），不要用清单堆砌。表达风格：${scene.tone}。
+    add_context_from_internet: !!request,
+    prompt: `你是「心栈」协同约定空间的 Agent，负责把成员的自由讨论，持续整理成一张"一眼看懂"的执行看板。
+
+整理原则（最重要）：
+1. 输出的是【最新的完整看板】，不是新增内容。已有条目必须带上原 id 并按讨论更新；只有真正新的事项才不带 id。
+2. 抓重点、强合并：大方向 themes 控制在 2-6 个；每个方向下子约定最多 4 条；同一件事只保留一条（措辞不同但实质相同即合并），被合并或已无意义的条目 id 放入 remove_ids。闲聊、玩笑、重复表态不产生条目。
+3. 每个方向写清：status（讨论中/待确认/已定）、conclusion（目前讨论结果，一句话，未定写目前倾向或分歧点）、next_step（还差什么一步）、confirm_by（需要谁拍板，没有则留空）。
+4. 子约定写清 title、done_criteria（怎样算完成）、owner_name（谁做，从讨论推断，不确定留空）；讨论明确完成的标 done，需要成员确认的标 pending_confirm。
+5. milestones 只放有明确日期或时间约束的关键节点（YYYY-MM-DD，今天 ${new Date().toISOString().slice(0, 10)}），同样带 id 更新，最多 5 个。
+6. summary：用 Markdown 写一份精炼的"讨论纪要"（共识 / 分歧 / 待办与负责人），整体覆盖更新，不超过 250 字。
+7. reply 简短自然（3-5 句），风格：${scene.tone}；中立，不站队，不替成员做决定。
+
 主题：${space.title}
 共同目标：${space.goal || "未填写"}
 成员：${(space.members || []).map((m) => m.name).join("、")}
-已有内容：
-${existing || "无"}
+当前看板：
+${snapshot || "（空）"}
+${loose ? `未归类条目：\n${loose}` : ""}
 讨论记录：
 ${talk || "（暂无）"}
 
@@ -56,31 +80,48 @@ ${talk || "（暂无）"}
   });
 }
 
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 export async function persistAgentResult(space, r, items = []) {
   const base = { space_id: space.id, member_ids: space.member_ids, source: "agent" };
-  if (r.reply) await base44.entities.CollabMessage.create({ ...base, is_agent: true, author_name: "心栈Agent", content: r.reply });
-
-  const themes = items.filter((i) => i.is_theme);
-  const themeId = async (name) => {
-    if (!name?.trim()) return undefined;
-    let t = themes.find((x) => x.title === name.trim());
-    if (!t) { t = await base44.entities.CollabItem.create({ ...base, kind: "subagreement", is_theme: true, status: "in_progress", title: name.trim() }); themes.push(t); }
-    return t.id;
-  };
-
   const ids = new Set(items.map((i) => i.id));
-  const updates = [];
-  for (const g of r.regroup || []) if (ids.has(g.id)) updates.push({ id: g.id, parent_id: await themeId(g.theme) });
-  for (const id of r.completed_ids || []) if (ids.has(id)) updates.push({ id, status: "done" });
-  if (updates.length) await base44.entities.CollabItem.bulkUpdate(updates);
+  if (r.reply?.trim()) await base44.entities.CollabMessage.create({ ...base, is_agent: true, author_name: "心栈Agent", content: r.reply });
 
-  const rows = [];
-  for (const s of r.subagreements || []) {
-    if (s.title) rows.push({ ...base, kind: "subagreement", status: "in_progress", title: s.title, done_criteria: s.done_criteria, owner_name: s.owner_name, parent_id: await themeId(s.theme) });
+  const updates = [];
+  const creates = [];
+  const keep = new Set();
+  const itemData = (s) => ({ title: s.title, done_criteria: s.done_criteria, owner_name: s.owner_name, status: s.status || "in_progress", ...(DATE.test(s.due_date || "") ? { due_date: s.due_date } : {}) });
+
+  for (const t of r.themes || []) {
+    if (!t.title) continue;
+    const themeData = { title: t.title, content: t.conclusion || "", done_criteria: t.next_step || "", owner_name: t.confirm_by || "", status: t.status === "decided" ? "done" : t.status === "pending_confirm" ? "pending_confirm" : "in_progress" };
+    let themeId = t.id;
+    if (ids.has(themeId)) updates.push({ id: themeId, ...themeData });
+    else themeId = (await base44.entities.CollabItem.create({ ...base, kind: "subagreement", is_theme: true, ...themeData })).id;
+    keep.add(themeId);
+    for (const s of t.subagreements || []) {
+      if (!s.title) continue;
+      if (ids.has(s.id)) { keep.add(s.id); updates.push({ id: s.id, parent_id: themeId, ...itemData(s) }); }
+      else creates.push({ ...base, kind: "subagreement", parent_id: themeId, ...itemData(s) });
+    }
   }
   for (const m of r.milestones || []) {
-    if (m.title) rows.push({ ...base, kind: "milestone", status: "in_progress", title: m.title, due_date: /^\d{4}-\d{2}-\d{2}$/.test(m.due_date || "") ? m.due_date : undefined });
+    if (!m.title) continue;
+    if (ids.has(m.id)) { keep.add(m.id); updates.push({ id: m.id, ...itemData(m) }); }
+    else creates.push({ ...base, kind: "milestone", ...itemData(m) });
   }
-  if (r.document?.title && r.document?.content) rows.push({ ...base, kind: "document", status: "done", title: r.document.title, content: r.document.content });
-  if (rows.length) await base44.entities.CollabItem.bulkCreate(rows);
+
+  // 纪要只保留一份，持续覆盖
+  if (r.summary?.trim()) {
+    const doc = items.find((i) => i.kind === "document" && i.source === "agent");
+    if (doc) updates.push({ id: doc.id, content: r.summary, version: (doc.version || 1) + 1 });
+    else creates.push({ ...base, kind: "document", status: "done", title: "讨论纪要", content: r.summary });
+  }
+
+  if (updates.length) await base44.entities.CollabItem.bulkUpdate(updates);
+  if (creates.length) await base44.entities.CollabItem.bulkCreate(creates);
+  const removes = (r.remove_ids || []).filter((id) => ids.has(id) && !keep.has(id));
+  await Promise.all(removes.map((id) => base44.entities.CollabItem.delete(id)));
 }
+
+export { STATUS_LABEL };

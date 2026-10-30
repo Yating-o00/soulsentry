@@ -184,6 +184,29 @@ export default function CollabTaskCard({ task }) {
     }
   };
 
+  // 完成/重开（创建者与成员均可）：勾选后 status=completed，进入列表底部「已完成约定」折叠区
+  const completed = isTaskEffectivelyCompleted(task);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const handleToggleComplete = async (e) => {
+    e.stopPropagation();
+    if (isCompleting) return;
+    const next = !completed;
+    setIsCompleting(true);
+    try {
+      await httpRequest(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        body: { status: next ? "completed" : "pending", completed_at: next ? new Date().toISOString() : null },
+      });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ['collab-card', task.id] });
+      toast.success(next ? "已完成，归入下方「已完成约定」" : "已重新打开");
+    } catch (err) {
+      toast.error(err?.message || "操作失败，请稍后再试");
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   if (!collab) return null;
 
   const assigneeOf = (sub) => {
@@ -200,39 +223,6 @@ export default function CollabTaskCard({ task }) {
         task.pinned_at && "border-[#c9d5ef] shadow-md"
       )}
     >
-      {/* 置顶/取消置顶：置顶时常显（实心图钉），未置顶悬停卡片显示 */}
-      <button
-        onClick={handleTogglePin}
-        title={task.pinned_at ? "取消置顶" : "置顶"}
-        className={cn(
-          "absolute right-3 top-3 z-10 p-1.5 rounded-full transition-all",
-          task.pinned_at
-            ? "text-[#384877] bg-[#eef2ff]/80"
-            : "text-slate-300 hover:text-[#384877] hover:bg-stone-50 md:opacity-0 md:group-hover:opacity-100"
-        )}
-      >
-        <Pin className="w-4 h-4" fill={task.pinned_at ? "currentColor" : "none"} />
-      </button>
-      {/* 删除（创建者）/ 退出共有（成员）：与置顶同排的次级操作，悬停卡片显示 */}
-      {isOwner ? (
-        <button
-          onClick={handleDelete}
-          disabled={isDeleting}
-          title="删除这条协同约定（所有成员都将移除，可在垃圾箱恢复）"
-          className="absolute right-11 top-3 z-10 p-1.5 rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all md:opacity-0 md:group-hover:opacity-100 disabled:opacity-50"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      ) : amMember ? (
-        <button
-          onClick={handleLeave}
-          disabled={isLeaving}
-          title="退出这条协同约定"
-          className="absolute right-11 top-3 z-10 p-1.5 rounded-full text-slate-300 hover:text-amber-600 hover:bg-amber-50 transition-all md:opacity-0 md:group-hover:opacity-100 disabled:opacity-50"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
-      ) : null}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           {/* 徽标行 */}
@@ -260,8 +250,25 @@ export default function CollabTaskCard({ task }) {
             )}
           </div>
 
-          {/* 标题 + 共同目标 */}
-          <h3 className="text-lg font-bold text-slate-900 truncate">{task.title}</h3>
+          {/* 标题 + 共同目标：前方勾选圆圈，勾选完成进入「已完成约定」折叠区 */}
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleToggleComplete}
+              disabled={isCompleting}
+              title={completed ? "重新打开" : "标记完成"}
+              aria-label={completed ? "重新打开" : "标记完成"}
+              className="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all disabled:opacity-50"
+              style={completed
+                ? { backgroundColor: "#384877", borderColor: "#384877", color: "#fff" }
+                : { borderColor: "#cbd5e1", color: "transparent" }}
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+            <h3 className={cn("text-lg font-bold truncate", completed ? "text-slate-400 line-through" : "text-slate-900")}>
+              {task.title}
+            </h3>
+          </div>
           {collab.goal && <p className="text-sm text-slate-500 mt-1 line-clamp-1">{collab.goal}</p>}
 
           {/* 成员行 */}
@@ -412,6 +419,41 @@ export default function CollabTaskCard({ task }) {
           )}
         </div>
       )}
+
+      {/* 右下角操作：置顶 + 删除（创建者）/ 退出共有（成员） */}
+      <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-0.5">
+        <button
+          onClick={handleTogglePin}
+          title={task.pinned_at ? "取消置顶" : "置顶"}
+          className={cn(
+            "p-1.5 rounded-full transition-all",
+            task.pinned_at
+              ? "text-[#384877] bg-[#eef2ff]/80"
+              : "text-slate-300 hover:text-[#384877] hover:bg-[#eef2ff]/60"
+          )}
+        >
+          <Pin className="w-4 h-4" fill={task.pinned_at ? "currentColor" : "none"} />
+        </button>
+        {isOwner ? (
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            title="删除这条协同约定（所有成员都将移除，可在垃圾箱恢复）"
+            className="p-1.5 rounded-full text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        ) : amMember ? (
+          <button
+            onClick={handleLeave}
+            disabled={isLeaving}
+            title="退出这条协同约定"
+            className="p-1.5 rounded-full text-slate-300 hover:text-amber-600 hover:bg-amber-50 transition-all disabled:opacity-50"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        ) : null}
+      </div>
 
       <CollabInviteDialog
         task={task}

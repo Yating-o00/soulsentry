@@ -74,7 +74,7 @@ async function maybeNudgeTask(task) {
   try {
     await assertAICredits(taskWithMembers.userId, COST(), "collab_agent");
     const snapshot = await loadSpaceSnapshot(taskWithMembers);
-    const system = buildSystem(collab.scenario);
+    const system = buildSystem(collab.scenario, collab.agent);
     const prompt = `${formatSpaceData(taskWithMembers, snapshot)}\n\n你是这个空间的推动者。空间进展停滞了：成员已有一段时间没有新发言，或有草案久未确认 / 节点临近。请写一条「推动消息」发到讨论：\n1. 自然点名相关成员（${parties.map((p) => p.name).join("、")}），指出卡住的具体事项（待确认草案、临期节点、久未推进的子约定）；\n2. 给出可立刻执行的下一步建议（谁、做什么、什么时候前）；\n3. 语气鼓励、不指责、不评判对错；200 字以内；不要用"Agent："开头。`;
     const result = await callKimiChat({
       messages: [{ role: "system", content: system }, { role: "user", content: prompt }],

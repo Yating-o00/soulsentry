@@ -8,6 +8,7 @@ import { AI_CALL_COSTS } from "../routes/functions.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "./collabSpace.js";
 import { syncParentProgress } from "../routes/tasks.js";
 import { notifyTaskParties } from "./taskSharing.js";
+import { findAgentTemplate } from "./agentStore.js";
 
 const COST = () => AI_CALL_COSTS.collab_agent || 2;
 const MAX_SUBTASKS_PER_RUN = 10;
@@ -106,8 +107,18 @@ const SCENARIO_TAILS = {
   custom: "当前是自定义约定空间：语气中性平和、清晰高效。"
 };
 
-export function buildSystem(scenario) {
-  return `${TRUST_RULES}\n\n${SCENARIO_TAILS[scenario] || SCENARIO_TAILS.custom}`;
+export function buildSystem(scenario, agentMeta) {
+  const base = `${TRUST_RULES}\n\n${SCENARIO_TAILS[scenario] || SCENARIO_TAILS.custom}`;
+  // 启用了 Agent 市场的专业方案：注入该领域的专业身份
+  const template = agentMeta?.templateId ? findAgentTemplate(agentMeta.templateId) : null;
+  if (!template) return base;
+  return [
+    base,
+    "",
+    `专业身份：当前以「${template.name}」（${template.domain}领域）身份协同。${template.expertise}`,
+    "回应时主动运用该领域的专业知识、常见流程与坑点，让建议更专业、更可落地；",
+    "涉及法律/医疗/财务等高风险事项时，提醒成员「仅供参考，必要时咨询持证专业人士」。"
+  ].join("\n");
 }
 
 // ── 子约定编号与树：空间数据展示与 parentHint 解析共用同一套标签（S1、S1-1…），保证对齐 ──
@@ -769,7 +780,7 @@ export async function runCollabAgent({ taskId, action, user, commentId = null })
   await assertAICredits(user.id, COST(), "collab_agent");
 
   const snapshot = await loadSpaceSnapshot(task);
-  const system = buildSystem(collab.scenario);
+  const system = buildSystem(collab.scenario, collab.agent);
   const result = await runAction({ action, task, snapshot, system, user, commentId });
 
   // 结算：竞态余额不足只告警放行（沿用 functions.js settleCredits 惯例）

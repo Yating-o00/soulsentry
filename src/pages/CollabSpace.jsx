@@ -16,6 +16,7 @@ import MilestonesPanel from "@/components/collab/MilestonesPanel";
 import DocsPanel from "@/components/collab/DocsPanel";
 import ConversationPane from "@/components/collab/ConversationPane";
 import AgentDrawer from "@/components/collab/AgentDrawer";
+import AgentStoreDialog from "@/components/collab/AgentStoreDialog";
 import MobileNav from "@/components/collab/MobileNav";
 import CollabInviteDialog from "@/components/tasks/CollabInviteDialog";
 
@@ -28,6 +29,7 @@ export default function CollabSpace() {
   const queryClient = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [agentDrawerOpen, setAgentDrawerOpen] = useState(false);
+  const [agentStoreOpen, setAgentStoreOpen] = useState(false);
   const [conversationView, setConversationView] = useState("discussion");
   const [highlightCommentId, setHighlightCommentId] = useState(null);
   const [mobileNavActive, setMobileNavActive] = useState("content");
@@ -222,8 +224,17 @@ export default function CollabSpace() {
         onOpenChange={setAgentDrawerOpen}
         agentEnabled={!!collab?.agent?.enabled}
         agentPaused={!!collab?.agent?.paused}
+        agentMeta={collab?.agent}
         toggling={togglingAgent}
         onToggleAgent={handleToggleAgent}
+        onOpenStore={() => setAgentStoreOpen(true)}
+      />
+
+      <AgentStoreDialog
+        open={agentStoreOpen}
+        onOpenChange={setAgentStoreOpen}
+        taskId={taskId}
+        currentAgent={collab?.agent}
       />
 
       <CollabInviteDialog

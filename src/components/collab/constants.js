@@ -52,6 +52,7 @@ export const ACTIVITY_LABELS = {
   collab_doc_updated: "更新文档",
   collab_node_done: "完成节点",
   collab_agent_action: "Agent 操作",
+  collab_agent_template: "切换 Agent 方案",
   collab_message: "新讨论",
   collab_node_created: "新增执行节点",
   collab_node_updated: "更新执行节点",

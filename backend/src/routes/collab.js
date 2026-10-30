@@ -10,6 +10,7 @@ import { serializeTask, syncParentProgress } from "./tasks.js";
 import { serializeComment } from "./comments.js";
 import { runCollabAgent, postAgentMessage } from "../services/collabAgent.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "../services/collabSpace.js";
+import { AGENT_DOMAINS, AGENT_TEMPLATES, findAgentTemplate } from "../services/agentStore.js";
 
 export const collabRouter = Router();
 
@@ -147,6 +148,53 @@ collabRouter.get("/invite-candidates", async (req, res) => {
     console.error("[collab] invite-candidates failed:", error);
     return res.status(500).json({ error: "INTERNAL_ERROR", message: error.message });
   }
+});
+
+// ── Agent 市场 ──
+// GET /api/collab/agent-store — 专业 Agent 方案目录（法律/旅行/教育等），无需 task 上下文
+collabRouter.get("/agent-store", async (req, res) => {
+  return res.json({ domains: AGENT_DOMAINS, templates: AGENT_TEMPLATES });
+});
+
+// POST /api/collab/:taskId/agent — 为当前空间启用/更换专业 Agent 方案（template_id 传 null 恢复默认）
+const agentTemplateSchema = z.object({
+  template_id: z.string().max(64).nullable().optional()
+});
+
+collabRouter.post("/:taskId/agent", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+  const payload = agentTemplateSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const templateId = payload.data.template_id || null;
+  const template = templateId ? findAgentTemplate(templateId) : null;
+  if (templateId && !template) {
+    return res.status(400).json({ error: "UNKNOWN_TEMPLATE", message: "Agent 市场里不存在该方案" });
+  }
+
+  const collab = task.metadata?.collab || {};
+  const agent = { ...(collab.agent || { enabled: true }) };
+  if (template) {
+    agent.templateId = template.id;
+    agent.templateName = template.name;
+    agent.templateDomain = template.domain;
+  } else {
+    delete agent.templateId;
+    delete agent.templateName;
+    delete agent.templateDomain;
+  }
+  const metadata = { ...(task.metadata || {}), collab: { ...collab, agent } };
+  await prisma.task.update({ where: { id: task.id }, data: { metadata } });
+
+  await logCollabChange(req.user.id, task, "collab_agent_template", [
+    { field: "agent_template", field_label: "Agent 方案", new_value: template ? `${template.name}（${template.domain}）` : "恢复默认 Agent" }
+  ]);
+
+  return res.json({ agent, template });
 });
 
 collabRouter.get("/:taskId/summary", async (req, res) => {

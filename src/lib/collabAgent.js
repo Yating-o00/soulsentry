@@ -27,7 +27,7 @@ export async function runCollabAgent({ space, messages = [], items = [], request
     `[${i.id}] ${i.kind === "subagreement" ? "子约定" : i.kind === "milestone" ? "节点" : "沉淀"}:${i.title}(${i.status === "done" ? "已完成" : "未完成"})${i.parent_id ? ` 主题:${byId[i.parent_id]?.title || ""}` : ""}`).join("\n");
   const task = request === "init"
     ? "这是空间刚创建。用 reply 欢迎大家，复述对共同目标的理解，并抛出 1-2 个最值得先讨论的问题；可给出初始子约定方向（按主题归类）。"
-    : "根据最新讨论，回应成员并推进对话。";
+    : `成员 @你 说：「${request}」。优先直接回应这个请求（回答问题 / 给建议 / 整理对话），同时按职责顺带整理子约定与完成状态。`;
 
   return base44.integrations.Core.InvokeLLM({
     model: "gemini_3_flash",
@@ -58,7 +58,7 @@ ${talk || "（暂无）"}
 
 export async function persistAgentResult(space, r, items = []) {
   const base = { space_id: space.id, member_ids: space.member_ids, source: "agent" };
-  if (r.reply) await base44.entities.CollabMessage.create({ ...base, is_agent: true, author_name: "Agent", content: r.reply });
+  if (r.reply) await base44.entities.CollabMessage.create({ ...base, is_agent: true, author_name: "心栈Agent", content: r.reply });
 
   const themes = items.filter((i) => i.is_theme);
   const themeId = async (name) => {

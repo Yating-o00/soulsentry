@@ -17,9 +17,9 @@ export default function DiscussionTab({ space, me, messages, items, refresh }) {
     setText("");
     const msg = await base44.entities.CollabMessage.create({ space_id: space.id, member_ids: space.member_ids, author_name: me.full_name || me.email, content });
     refresh();
-    if (!agentOn) return;
+    if (!agentOn || !/@(心栈)?Agent/i.test(content)) return;
     setAgentBusy(true);
-    const r = await runCollabAgent({ space, messages: [...messages, msg], items });
+    const r = await runCollabAgent({ space, messages: [...messages, msg], items, request: content.replace(/@(心栈)?Agent/gi, "").trim() || "整理一下目前的对话" });
     await persistAgentResult(space, r, items);
     setAgentBusy(false);
     refresh();
@@ -40,7 +40,8 @@ export default function DiscussionTab({ space, me, messages, items, refresh }) {
       {agentBusy && <p className="text-sm text-[#384877] flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Agent 正在思考并整理…</p>}
 
       <div className="sticky bottom-0 bg-[#f8f9fb] pt-3 flex gap-2">
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="发表观点…" className="rounded-2xl min-h-[52px] bg-white"
+        {agentOn && <button type="button" onClick={() => setText((t) => (t.includes("@心栈Agent") ? t : `@心栈Agent ${t}`))} title="@心栈Agent" className="h-auto rounded-2xl border border-[#384877]/20 bg-white px-3 text-[#384877] hover:bg-[#384877]/5"><Bot className="w-4 h-4" /></button>}
+        <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="和大家聊聊，或 @心栈Agent 提问、要建议、整理对话…" className="rounded-2xl min-h-[52px] bg-white"
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
         <Button onClick={send} disabled={agentBusy} className="h-auto rounded-2xl bg-[#384877] hover:bg-[#2d3a62] px-5"><Send className="w-4 h-4" /></Button>
       </div>

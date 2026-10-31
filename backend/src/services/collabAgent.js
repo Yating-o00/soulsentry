@@ -368,6 +368,65 @@ const isNonEmptyString = (value) => typeof value === "string" && value.trim().le
 // ── Agent 选项卡：候选方案结构化附件（机票/酒店/门票/餐厅/礼物…），成员在卡片上采纳/放弃 ──
 const OPTION_DOMAINS = new Set(["flight", "hotel", "ticket", "food", "gift", "other"]);
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// 常见城市 → IATA 代码（携程机票深链用；未收录的城市自动降级为仅去哪儿链接）
+const CITY_IATA = {
+  北京: "PEK", 上海: "SHA", 广州: "CAN", 深圳: "SZX", 成都: "CTU", 重庆: "CKG",
+  杭州: "HGH", 南京: "NKG", 武汉: "WUH", 西安: "SIA", 厦门: "XMN", 青岛: "TAO",
+  天津: "TSN", 长沙: "CSX", 昆明: "KMG", 哈尔滨: "HRB", 三亚: "SYX", 海口: "HAK",
+  香港: "HKG", 澳门: "MFM", 台北: "TPE",
+  新加坡: "SIN", 吉隆坡: "KUL", 曼谷: "BKK", 清迈: "CNX", 普吉: "HKT", 巴厘岛: "DPS",
+  东京: "TYO", 大阪: "OSA", 京都: "UKB", 首尔: "SEL", 济州岛: "CJU",
+  伦敦: "LON", 巴黎: "PAR", 阿姆斯特丹: "AMS", 法兰克福: "FRA", 苏黎世: "ZRH",
+  纽约: "NYC", 洛杉矶: "LAX", 旧金山: "SFO", 悉尼: "SYD", 墨尔本: "MEL",
+  马累: "MLE", 迪拜: "DXB", 伊斯坦布尔: "IST", 莫斯科: "MOW", 温哥华: "YVR"
+};
+
+// 用结构化行程参数构造「带参直达预订页」链接，减少成员操作成本；参数不全则不给对应平台
+export function buildBookingLinks(domain, search) {
+  const links = [];
+  if (!search || typeof search !== "object") return links;
+  const enc = encodeURIComponent;
+  const s = (v) => (typeof v === "string" ? v.trim() : "");
+  const dateOk = (v) => DATE_RE.test(s(v));
+  const adults = Number.isInteger(search.adults) && search.adults > 0 && search.adults <= 20 ? search.adults : 2;
+
+  if (domain === "flight") {
+    const from = s(search.from);
+    const to = s(search.to);
+    const depart = s(search.depart);
+    const back = s(search.ret);
+    if (from && to && dateOk(depart)) {
+      // 去哪儿：接受中文城市名，格式长期稳定
+      links.push({
+        label: "去哪儿比价",
+        url: `https://flight.qunar.com/site/oneway_list.htm?searchDepartureAirport=${enc(from)}&searchArrivalAirport=${enc(to)}&searchDepartureTime=${depart}&startSearch=true`
+      });
+      // 携程：需要 IATA 代码；往返优先 round 深链
+      const fc = CITY_IATA[from];
+      const tc = CITY_IATA[to];
+      if (fc && tc) {
+        const url = dateOk(back)
+          ? `https://flights.ctrip.com/online/list/round-${fc}-${tc}?depdate=${depart}&backdate=${back}&cabin=y_s`
+          : `https://flights.ctrip.com/online/list/oneway-${fc}-${tc}?depdate=${depart}&cabin=y_s`;
+        links.push({ label: "携程预订", url });
+      }
+    }
+  } else if (domain === "hotel") {
+    const city = s(search.city);
+    const checkin = s(search.checkin);
+    const checkout = s(search.checkout);
+    if (city && dateOk(checkin) && dateOk(checkout)) {
+      links.push({
+        label: "Booking 订房",
+        url: `https://www.booking.com/searchresults.html?ss=${enc(city)}&checkin=${checkin}&checkout=${checkout}&group_adults=${adults}&no_rooms=1&lang=zh-cn`
+      });
+    }
+  }
+  return links.slice(0, 3);
+}
+
 function sanitizeOptionsCard(raw) {
   if (!raw || typeof raw !== "object") return null;
   const list = Array.isArray(raw.options) ? raw.options : [];
@@ -395,12 +454,33 @@ function sanitizeOptionsCard(raw) {
     });
   });
   if (options.length === 0) return null;
+  const domain = OPTION_DOMAINS.has(raw.domain) ? raw.domain : "other";
+  // 结构化行程参数：用于服务端构造直达预订链接（不依赖模型编 URL）
+  const search = {};
+  const take = (key, rawKey, max = 40) => {
+    const v = String(raw.search?.[rawKey] ?? "").trim().slice(0, max);
+    if (v) search[key] = v;
+  };
+  if (raw.search && typeof raw.search === "object") {
+    take("from", "from", 20);
+    take("to", "to", 20);
+    take("city", "city", 20);
+    take("keyword", "keyword", 40);
+    for (const [key, rk] of [["depart", "depart"], ["ret", "return"], ["checkin", "checkin"], ["checkout", "checkout"]]) {
+      const v = String(raw.search?.[rk] ?? "").trim();
+      if (DATE_RE.test(v)) search[key] = v;
+    }
+    const adults = Number(raw.search?.adults);
+    if (Number.isInteger(adults) && adults > 0 && adults <= 20) search.adults = adults;
+  }
   return {
     type: "option_card",
-    domain: OPTION_DOMAINS.has(raw.domain) ? raw.domain : "other",
+    domain,
     query: String(raw.query || "").trim().slice(0, 120),
     options,
-    choices: {}
+    choices: {},
+    ...(Object.keys(search).length > 0 ? { search } : {}),
+    bookingLinks: buildBookingLinks(domain, search)
   };
 }
 
@@ -893,7 +973,7 @@ ${threadText}
 
     // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息。
     // 结构化输出：除回复外，按讨论内容把可执行项落成子约定草案、执行节点、沉淀文件（均为草案，待人确认）。
-    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息给出有指导意义的建议，凡引用检索到的事实（价格、日期、班次、政策等），末尾用「参考：链接」列出出处，方便成员点击核实" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；若本轮回给出 options 选项卡，reply 里只点出推荐排序与取舍逻辑，不要逐条复述卡片内容；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title、node_type（time|stage|decision|review）与 parentHint。合并同类项：同一主题的持续推进只保留一个归口节点（标题用统一口径，如「确定预算统一口径」），相关推进作为其子项——parentHint 填归口节点标题（不存在会自动创建）；同标题节点不重复创建；同一主题的每次推进不要新建平级节点。归类看「主题」而非措辞：凡是对同一件事的逐次调整、确认、修改都算同类——例：日期相关的「11月第二周出行日期」「确定日期策略（11月第二周或flexible）」「日期策略调整为fully flexible」都归「确定目的地与出行日期」；目的地相关的「新疆/新加坡/荷兰目的地确认」「目的地锁定新加坡」也归它；没有则返回空数组；\n4. nodeMoves：已有节点中凡属同一主题逐次递进的平级节点，用 [{"title":"节点标题","parent":"归口节点标题"}] 归并（如把日期/目的地节点归并到「确定目的地与出行日期」）；没有则空数组；\n5. nodeUpdates：讨论对某主题得出新结论时，用 [{"target":"该主题未完成的子项或归口节点的现标题","title":"新结论表述"}] 覆盖改写旧表述（只改写未完成的；已完成的是历史推进记录，保留不改）；没有则空数组；\n6. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null；\n7. completed：核对上方编号子约定清单（仅限「进行中」的，草案与已完成的不要动）、执行节点（未到完成的，含归口节点）与沉淀文档（待确认的）——若讨论内容已经满足某项的完成条件（完成标准已被讨论兑现、节点对应阶段已经走过、归口节点内容已被成员确认、沉淀内容已被各方认可），就把它填进 completed 并给一句依据；不要全部留空——只要讨论确实兑现了某项的完成条件就应当填上，宁缺毋滥但切勿漏掉已达成的事项；没有把握的对象不要勉强。\n8. options：当成员在比较/挑选具体的商品或服务（机票、酒店、门票、餐厅、礼物等）时，把联网检索与讨论中的候选整理成选项卡：{"domain":"flight|hotel|ticket|food|gift|other","query":"本次挑选的需求口径一句话","options":[{"id":"o1","title":"候选标题（航班号/酒店名/商品名）","summary":"一句话关键信息（起降时间/地段档位/规格）","price":"价格口径","link":"来源链接","points":["亮点1"],"concerns":["注意点1"]}]}——给 3-5 个候选、按推荐度排序；候选必须有检索结果或讨论事实支撑，绝不编造价格、班次与链接，link 只填能看到出处的链接、没有则空字符串；成员已在讨论中明确选定的，options 返回 null。\n\n所有对象都是草案，需成员确认后才生效；completed 里的自动完成同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"nodeUpdates":[{"target":"...","title":"..."}],"doc":null,"options":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息给出有指导意义的建议，凡引用检索到的事实（价格、日期、班次、政策等），末尾用「参考：链接」列出出处，方便成员点击核实" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；若本轮回给出 options 选项卡，reply 里只点出推荐排序与取舍逻辑，不要逐条复述卡片内容；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title、node_type（time|stage|decision|review）与 parentHint。合并同类项：同一主题的持续推进只保留一个归口节点（标题用统一口径，如「确定预算统一口径」），相关推进作为其子项——parentHint 填归口节点标题（不存在会自动创建）；同标题节点不重复创建；同一主题的每次推进不要新建平级节点。归类看「主题」而非措辞：凡是对同一件事的逐次调整、确认、修改都算同类——例：日期相关的「11月第二周出行日期」「确定日期策略（11月第二周或flexible）」「日期策略调整为fully flexible」都归「确定目的地与出行日期」；目的地相关的「新疆/新加坡/荷兰目的地确认」「目的地锁定新加坡」也归它；没有则返回空数组；\n4. nodeMoves：已有节点中凡属同一主题逐次递进的平级节点，用 [{"title":"节点标题","parent":"归口节点标题"}] 归并（如把日期/目的地节点归并到「确定目的地与出行日期」）；没有则空数组；\n5. nodeUpdates：讨论对某主题得出新结论时，用 [{"target":"该主题未完成的子项或归口节点的现标题","title":"新结论表述"}] 覆盖改写旧表述（只改写未完成的；已完成的是历史推进记录，保留不改）；没有则空数组；\n6. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null；\n7. completed：核对上方编号子约定清单（仅限「进行中」的，草案与已完成的不要动）、执行节点（未到完成的，含归口节点）与沉淀文档（待确认的）——若讨论内容已经满足某项的完成条件（完成标准已被讨论兑现、节点对应阶段已经走过、归口节点内容已被成员确认、沉淀内容已被各方认可），就把它填进 completed 并给一句依据；不要全部留空——只要讨论确实兑现了某项的完成条件就应当填上，宁缺毋滥但切勿漏掉已达成的事项；没有把握的对象不要勉强。\n8. options：当成员在比较/挑选具体的商品或服务（机票、酒店、门票、餐厅、礼物等）时，把联网检索与讨论中的候选整理成选项卡：{"domain":"flight|hotel|ticket|food|gift|other","query":"本次挑选的需求口径一句话","search":{"from":"出发城市","to":"到达城市","depart":"YYYY-MM-DD","return":"返程YYYY-MM-DD或空","adults":3,"city":"目的地城市","checkin":"YYYY-MM-DD","checkout":"YYYY-MM-DD","keyword":"区域/品牌关键词可选"},"options":[{"id":"o1","title":"候选标题（航班号/酒店名/商品名）","summary":"一句话关键信息（起降时间/地段档位/规格）","price":"价格口径","link":"来源链接","points":["亮点1"],"concerns":["注意点1"]}]}——给 3-5 个候选、按推荐度排序；候选必须有检索结果或讨论事实支撑，绝不编造价格、班次与链接；search 字段从讨论与检索结果里提取结构化行程参数（日期格式严格 YYYY-MM-DD，能确定多少填多少，用于生成直达预订链接，不确定的留空）；options.link 优先填能直接下单/预订的页面（如航司预订页、酒店详情页），减少成员跳转次数，没有则空字符串；成员已在讨论中明确选定的，options 返回 null。\n\n所有对象都是草案，需成员确认后才生效；completed 里的自动完成同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"nodeUpdates":[{"target":"...","title":"..."}],"doc":null,"options":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action, maxTokens: 12000, fetchTimeout: 120000 });
@@ -1000,7 +1080,7 @@ ${threadText}
     }
     const optionsCard = sanitizeOptionsCard(data?.options);
     if (optionsCard) {
-      replyText += `\n\n—— 已附上候选卡片（见下方）：点「采纳」表达倾向、点「放弃」表示不考虑，成员可从讨论中继续比较；选定后如需登录/支付，请本人点开链接完成。`;
+      replyText += `\n\n—— 已附上候选卡片（见下方）：卡片顶部按钮可直达预订/比价页面，点「采纳」表达倾向、点「放弃」表示不考虑；选定后如需登录/支付，请本人完成。`;
     }
 
     // 保持一层回复：目标是根则挂其下，目标是回复则挂在同根线程下

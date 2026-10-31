@@ -62,6 +62,23 @@ export default function OptionCardView({ taskId, commentId, card, currentUserId 
           </span>
         )}
       </div>
+      {Array.isArray(card.bookingLinks) && card.bookingLinks.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b px-3.5 py-2" style={{ borderColor: C.lineSoft }}>
+          <span className="text-[10px]" style={{ color: "#8a867e" }}>直达预订</span>
+          {card.bookingLinks.map((bl) => (
+            <a
+              key={bl.url}
+              href={bl.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10.5px] font-medium text-white transition-opacity hover:opacity-90 min-h-7"
+              style={{ backgroundColor: "#384877" }}
+            >
+              {bl.label}<ExternalLink className="h-2.5 w-2.5" />
+            </a>
+          ))}
+        </div>
+      )}
       <div className="space-y-2 p-2.5">
         {options.map((opt) => {
           const adoptCount = adoptCountOf(opt.id);

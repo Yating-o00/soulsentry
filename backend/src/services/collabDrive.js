@@ -39,5 +39,11 @@ async function runCollabDrive(taskId) {
   const lastRunAt = agent.lastDriveAt ? Date.parse(agent.lastDriveAt) : 0;
   if (lastRunAt && Date.now() - lastRunAt < MIN_INTERVAL_MS) return;
 
-  await runCollabAgent({ taskId: task.id, action: "drive", user: latest.user });
+  try {
+    await runCollabAgent({ taskId: task.id, action: "drive", user: latest.user });
+  } catch (error) {
+    // coordinate 等轮次正在执行：本轮自动驱动让行，避免同一快照并发跑两轮重复回复
+    if (error?.code === "AGENT_BUSY") return;
+    throw error;
+  }
 }

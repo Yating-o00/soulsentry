@@ -1086,13 +1086,30 @@ ${threadText}
   throw errorWith(400, "INVALID_ACTION", `未知 Agent 动作：${action}`);
 }
 
+// 任务级互斥：同一约定同一时间只允许一轮 Agent 执行。
+// coordinate（@Agent 立即触发）与 drive（防抖后自动触发）共用同一快照窗口时会并发跑两轮、
+// 几乎同时各回一条消息（重复回复的根因）；这里按 taskId 串行化，冲突方收到 AGENT_BUSY 让行。
+const runningTasks = new Set();
+
 /**
  * 协同约定 Agent 入口。
  * 前置：任务存在且开启协同（metadata.collab），Agent 未被暂停，余额充足（402）。
  * 结算口径：LLM 调用失败不扣点；动作成功后 chargeAICredits（结算竞态只告警，与 functions.js 一致）。
  * 返回 { ok, action, degraded, result }，result 内含原始 ORM 对象（路由层负责序列化）。
  */
-export async function runCollabAgent({ taskId, action, user, commentId = null }) {
+export async function runCollabAgent(params) {
+  if (runningTasks.has(params.taskId)) {
+    throw errorWith(409, "AGENT_BUSY", "Agent 正在处理本轮沟通，本次让行");
+  }
+  runningTasks.add(params.taskId);
+  try {
+    return await runCollabAgentLocked(params);
+  } finally {
+    runningTasks.delete(params.taskId);
+  }
+}
+
+async function runCollabAgentLocked({ taskId, action, user, commentId = null }) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     include: { members: { include: { user: true } }, user: true }
@@ -1118,6 +1135,8 @@ export async function runCollabAgent({ taskId, action, user, commentId = null })
     if (!last || last.agent) {
       throw errorWith(409, "NO_NEW_MEMBER_INPUT", "最新发言来自 Agent 或暂无成员发言，跳过本轮驱动");
     }
+    // 最短间隔守卫以「开始时间」为准，而不是结束时间（LLM 一轮可能跑 1-2 分钟）
+    await touchLastDriveAt(taskId);
   }
   const system = buildSystem(collab.scenario, collab.agent);
   const result = await runAction({ action, task, snapshot, system, user, commentId });
@@ -1143,29 +1162,28 @@ export async function runCollabAgent({ taskId, action, user, commentId = null })
     ...(commentId ? [{ field: "comment", field_label: "来源讨论", new_value: commentId }] : [])
   ]);
 
-  // 记录本轮驱动时间：防抖调度器用它做最短间隔守卫
-  if (action === "drive") {
-    try {
-      const fresh = await prisma.task.findUnique({ where: { id: taskId } });
-      const freshCollab = fresh?.metadata?.collab;
-      if (fresh && freshCollab) {
-        await prisma.task.update({
-          where: { id: taskId },
-          data: {
-            metadata: {
-              ...(fresh.metadata || {}),
-              collab: {
-                ...freshCollab,
-                agent: { ...(freshCollab.agent || { enabled: true }), lastDriveAt: new Date().toISOString() }
-              }
+  return { ok: true, action, degraded: Boolean(result.degraded), result };
+}
+
+async function touchLastDriveAt(taskId) {
+  try {
+    const fresh = await prisma.task.findUnique({ where: { id: taskId } });
+    const freshCollab = fresh?.metadata?.collab;
+    if (fresh && freshCollab) {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: {
+          metadata: {
+            ...(fresh.metadata || {}),
+            collab: {
+              ...freshCollab,
+              agent: { ...(freshCollab.agent || { enabled: true }), lastDriveAt: new Date().toISOString() }
             }
           }
-        });
-      }
-    } catch (error) {
-      console.warn("[collabAgent] 记录 lastDriveAt 失败（不影响本轮结果）:", error?.message || error);
+        }
+      });
     }
+  } catch (error) {
+    console.warn("[collabAgent] 记录 lastDriveAt 失败（不影响本轮结果）:", error?.message || error);
   }
-
-  return { ok: true, action, degraded: Boolean(result.degraded), result };
 }

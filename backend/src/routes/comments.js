@@ -181,7 +181,10 @@ commentsRouter.patch("/:id", async (req, res) => {
         .then(({ runCollabAgent }) =>
           runCollabAgent({ taskId: task.id, action: "disputes", user: req.user })
         )
-        .catch((error) => console.error("[collab] 分歧协调触发失败:", error?.message || error));
+        .catch((error) => {
+          if (error?.code === "AGENT_BUSY") return; // 其他 Agent 轮次执行中，让行
+          console.error("[collab] 分歧协调触发失败:", error?.message || error);
+        });
     });
   }
 

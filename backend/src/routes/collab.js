@@ -657,39 +657,64 @@ collabRouter.post("/:taskId/subtasks/:subId/reject", async (req, res) => {
   });
 });
 
-// 「仅剩少数人未确认」提醒：Agent 在讨论中标记 + 通知待确认成员；有人勾掉（rejectedBy 非空）则不提醒
+// 「仅剩少数人未确认」提醒：聚合 + 节流。
+// 旧实现：每确认一个草案就单独发一条提醒——用户连续确认多个草案时，同一时间刷出一批
+// 措辞几乎相同的提醒消息。现在改为：扫描全任务所有处于「少数待确认」状态的草案，
+// 合并成一条聚合提醒，并按任务级 10 分钟节流，避免刷屏。
+const PENDING_REMIND_THROTTLE_MS = Number(process.env.COLLAB_PENDING_REMIND_THROTTLE_MS || 10 * 60 * 1000);
+
 async function maybeRemindPendingConfirms(task, subtask) {
   try {
     const meta = subtask.metadata?.collab || {};
     if (meta.state !== "draft") return;
     const rejectedBy = Array.isArray(meta.rejectedBy) ? meta.rejectedBy : [];
     if (rejectedBy.length > 0) return; // 已被勾掉：尊重否决，不再提醒
-    const memberIds = [...new Set([task.userId, ...task.members.map((m) => m.userId)])];
-    const confirmedBy = new Set(Array.isArray(meta.confirmedBy) ? meta.confirmedBy : []);
-    const pending = memberIds.filter((id) => !confirmedBy.has(id));
-    if (pending.length === 0) return;
-    // 大多数已认可：待确认的是少数（≤2 人）且其余都已确认
-    const minority = pending.length <= 2 && confirmedBy.size >= memberIds.length - 2 && confirmedBy.size >= 1;
-    if (!minority) return;
-    const pendingKey = pending.slice().sort().join(",");
-    if (meta.reminder?.pendingKey === pendingKey) return; // 同一批待确认人只提醒一次
 
-    const pendingUsers = await prisma.user.findMany({ where: { id: { in: pending } } });
+    const memberIds = [...new Set([task.userId, ...task.members.map((m) => m.userId)])];
+    // 全任务聚合：所有「草案 + 已有人确认 + 无人勾掉 + 仅剩少数未确认」的子约定
+    const pendingItems = [];
+    for (const s of await collectSubtasks(task.id)) {
+      const m = s.metadata?.collab || {};
+      if (m.state !== "draft") continue;
+      const rej = Array.isArray(m.rejectedBy) ? m.rejectedBy : [];
+      if (rej.length > 0) continue;
+      const conf = new Set(Array.isArray(m.confirmedBy) ? m.confirmedBy : []);
+      const pending = memberIds.filter((id) => !conf.has(id));
+      if (pending.length === 0) continue;
+      // 大多数已认可：待确认的是少数（≤2 人）且其余都已确认
+      const minority = pending.length <= 2 && conf.size >= memberIds.length - 2 && conf.size >= 1;
+      if (!minority) continue;
+      pendingItems.push({ subtask: s, confirmed: conf.size, pending });
+    }
+    if (pendingItems.length === 0) return;
+
+    // 任务级节流：刚提醒过（10 分钟内）则跳过——同一批待确认人不需要反复提醒
+    const fresh = await prisma.task.findUnique({ where: { id: task.id } });
+    const freshCollab = fresh?.metadata?.collab;
+    const prev = freshCollab?.reminder;
+    if (prev?.at && Date.now() - Date.parse(prev.at) < PENDING_REMIND_THROTTLE_MS) return;
+
+    const pendingUserIds = [...new Set(pendingItems.flatMap((p) => p.pending))];
+    const pendingUsers = await prisma.user.findMany({ where: { id: { in: pendingUserIds } } });
     const nameOf = (id) => {
       const u = pendingUsers.find((x) => x.id === id);
       return u?.displayName || u?.email || u?.phone || "成员";
     };
 
-    await postAgentMessage(task.id, {
-      content: `子约定「${subtask.title}」已获 ${confirmedBy.size}/${memberIds.length} 位成员确认，还差 ${pending.map(nameOf).join("、")} 勾选生效；如有不同意见，直接勾掉即可。`,
-      topic: "提醒"
+    const lines = pendingItems.map((p) => {
+      const names = p.pending.map(nameOf).join("、");
+      return `· 「${p.subtask.title}」已获 ${p.confirmed}/${memberIds.length} 位成员确认，还差 ${names} 勾选生效`;
     });
-    for (const id of pending) {
+    const content = `以下草案子约定已获大多数成员确认，勾选即生效：\n${lines.join("\n")}\n如有不同意见，直接勾掉即可。`;
+    await postAgentMessage(task.id, { content, topic: "提醒" });
+
+    const titles = pendingItems.map((p) => `「${p.subtask.title}」`).join("、");
+    for (const id of pendingUserIds) {
       await prisma.notification.create({
         data: {
           userId: id,
           title: "协同约定：待你确认",
-          body: `「${task.title}」的子约定「${subtask.title}」已获大多数成员确认，还差你勾选生效（不同意可勾掉）。`,
+          body: `「${task.title}」的 ${titles} 已获大多数成员确认，还差你勾选生效（不同意可勾掉）。`,
           channel: "in_app",
           status: "SENT",
           payload: { type: "collab_pending_confirm", taskId: task.id, link: `/collabspace?taskId=${task.id}` }
@@ -697,14 +722,22 @@ async function maybeRemindPendingConfirms(task, subtask) {
       });
     }
 
-    const nextCollab = { ...meta, reminder: { at: new Date().toISOString(), pendingKey } };
+    const aggKey = pendingItems
+      .map((p) => `${p.subtask.id}:${p.pending.slice().sort().join("|")}`)
+      .sort()
+      .join(",");
     await prisma.task.update({
-      where: { id: subtask.id },
-      data: { metadata: { ...(subtask.metadata || {}), collab: nextCollab } }
+      where: { id: task.id },
+      data: {
+        metadata: {
+          ...(fresh?.metadata || {}),
+          collab: { ...(freshCollab || {}), reminder: { at: new Date().toISOString(), key: aggKey } }
+        }
+      }
     });
     await logCollabChange(task.userId, task, "collab_pending_reminder", [
-      { field: "subtask", field_label: "子约定", new_value: subtask.title },
-      { field: "pending", field_label: "待确认成员", new_value: pending.map(nameOf).join("、") }
+      { field: "subtasks", field_label: "子约定", new_value: pendingItems.map((p) => p.subtask.title).join("、") },
+      { field: "pending", field_label: "待确认成员", new_value: pendingUserIds.map(nameOf).join("、") }
     ]);
   } catch (error) {
     console.error("[collab] maybeRemindPendingConfirms failed:", error?.message || error);
@@ -838,7 +871,10 @@ collabRouter.post("/:taskId/messages", async (req, res) => {
   if (mentionAgent) {
     setImmediate(() => {
       runCollabAgent({ taskId: task.id, action: "coordinate", user: req.user, commentId: comment.id })
-        .catch((error) => console.error("[collab] @Agent 沟通失败:", error?.message || error));
+        .catch((error) => {
+          if (error?.code === "AGENT_BUSY") return; // 上一轮 Agent 仍在执行，本条消息由该轮覆盖
+          console.error("[collab] @Agent 沟通失败:", error?.message || error);
+        });
     });
   }
 

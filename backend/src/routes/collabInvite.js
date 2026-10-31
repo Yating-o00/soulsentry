@@ -81,16 +81,27 @@ ${activeItems}
 下一执行节点：${nextNode ? nextNode.title : "（暂无）"}
 
 请为即将受邀加入的新成员写一段「30 秒前情摘要」（120 字以内）：让 TA 快速明白这个约定在做什么、目前进展到哪、加入后大概要做什么。口吻亲切、信息密度高，不要客套话。只输出摘要正文。`;
-    const result = await callKimiChat({
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: prompt }
-      ],
-      temperature: 0.4,
-      maxTokens: 500,
-      fetchTimeout: 30000
-    });
-    const text = String(result?.content || "").trim().slice(0, 500);
+    const buildMessages = () => [
+      { role: "system", content: system },
+      { role: "user", content: prompt }
+    ];
+    let text = "";
+    // 推理型模型可能把内容放在 reasoning_content 而 content 为空：换一个候选模型再试一次
+    for (const candidate of [null, "kimi-k2.6"]) {
+      const result = await callKimiChat({
+        messages: buildMessages(),
+        ...(candidate ? { model: candidate } : {}),
+        temperature: 0.4,
+        maxTokens: 500,
+        fetchTimeout: 30000
+      });
+      text = String(result?.content || "").trim().slice(0, 500);
+      if (text) break;
+    }
+    if (!text) {
+      console.warn("[collabInvite] 前情摘要为空（已尝试备选模型），邀请照常创建");
+      return "";
+    }
     try {
       await chargeAICredits({ userId: user.id, cost: COST(), feature: "collab_agent", description: "协同邀请前情摘要" });
     } catch (error) {

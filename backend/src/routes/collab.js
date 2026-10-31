@@ -900,6 +900,62 @@ collabRouter.post("/:taskId/messages", async (req, res) => {
   scheduleCollabDrive(task.id);
 });
 
+// POST /api/collab/:taskId/messages/:commentId/options/:optionId/choice — 成员对 Agent 选项卡表达倾向
+const optionChoiceSchema = z.object({ action: z.enum(["adopt", "discard", "reset"]) });
+
+collabRouter.post("/:taskId/messages/:commentId/options/:optionId/choice", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+  const payload = optionChoiceSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const comment = await prisma.comment.findFirst({ where: { id: req.params.commentId, taskId: task.id } });
+  if (!comment || !comment.agent) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "选项卡片不存在" });
+  }
+  const attachments = Array.isArray(comment.attachments) ? [...comment.attachments] : [];
+  const idx = attachments.findIndex(
+    (a) => a?.type === "option_card" && (Array.isArray(a.options) ? a.options : []).some((o) => o?.id === req.params.optionId)
+  );
+  if (idx < 0) return res.status(404).json({ error: "NOT_FOUND", message: "选项不存在" });
+
+  const card = { ...attachments[idx] };
+  const opt = (Array.isArray(card.options) ? card.options : []).find((o) => o?.id === req.params.optionId);
+  const choices = { ...(card.choices || {}) };
+  const prev = choices[req.user.id] || {};
+  if (payload.data.action === "reset") {
+    delete choices[req.user.id];
+  } else if (payload.data.action === "adopt") {
+    // 一张卡片一个采纳：改采纳其他候选会自动替换
+    choices[req.user.id] = {
+      adopt: req.params.optionId,
+      discard: Array.isArray(prev.discard) ? prev.discard : [],
+      at: new Date().toISOString()
+    };
+  } else {
+    const discard = new Set(Array.isArray(prev.discard) ? prev.discard : []);
+    if (discard.has(req.params.optionId)) discard.delete(req.params.optionId);
+    else discard.add(req.params.optionId);
+    if (discard.size === 0 && !prev.adopt) delete choices[req.user.id];
+    else choices[req.user.id] = { adopt: prev.adopt || null, discard: [...discard], at: new Date().toISOString() };
+  }
+  card.choices = choices;
+  attachments[idx] = card;
+  const updated = await prisma.comment.update({
+    where: { id: comment.id },
+    data: { attachments }
+  });
+
+  await logCollabChange(req.user.id, task, "collab_option_choice", [
+    { field: "option", field_label: "候选", new_value: opt?.title || req.params.optionId },
+    { field: "choice", field_label: "选择", new_value: { adopt: "采纳", discard: "放弃", reset: "撤销" }[payload.data.action] }
+  ]);
+  return res.json(serializeComment(updated));
+});
+
 // POST /api/collab/:taskId/convert — 讨论转对象：subtask（草案子约定）| node（执行节点）| doc（沉淀文件）
 const convertSchema = z.object({
   comment_id: z.string().min(1).optional(),

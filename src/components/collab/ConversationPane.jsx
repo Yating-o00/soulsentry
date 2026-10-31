@@ -21,6 +21,7 @@ import {
   ACTIVITY_LABELS, MARK_LABELS, MARK_STYLES, agentIntentFor, C, formatTime,
 } from "./constants";
 import { AgentAvatar, EmptyState, MemberAvatar } from "./Common";
+import OptionCardView from "./OptionCardView";
 
 const msgActionCls = "inline-flex items-center rounded px-1.5 text-[10px] font-medium text-[#77736c] transition-colors hover:bg-[#efefe9] hover:text-[#384877] min-h-7 focus-visible:outline-none";
 
@@ -31,11 +32,11 @@ const formatSize = (bytes) => {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 };
 
-// 消息附件：图片内联预览，其他文件卡片下载
+// 消息附件：图片内联预览，其他文件卡片下载；Agent 选项卡由 OptionCardView 单独渲染
 function AttachmentView({ attachments }) {
   if (!attachments || attachments.length === 0) return null;
   const images = attachments.filter((a) => (a?.type || "").startsWith("image/"));
-  const files = attachments.filter((a) => !(a?.type || "").startsWith("image/"));
+  const files = attachments.filter((a) => !(a?.type || "").startsWith("image/") && a?.type !== "option_card");
   return (
     <div className="mt-2 space-y-2">
       {images.length > 0 && (
@@ -360,6 +361,17 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
               {message.content}
             </p>
             <AttachmentView attachments={message.attachments} />
+            {(message.attachments || [])
+              .filter((a) => a?.type === "option_card")
+              .map((card, i) => (
+                <OptionCardView
+                  key={`${message.id}-card-${i}`}
+                  taskId={taskId}
+                  commentId={message.id}
+                  card={card}
+                  currentUserId={currentUserId}
+                />
+              ))}
 
             {!isAgent && !isReply && (
               <MessageActions

@@ -49,6 +49,7 @@ export const ACTIVITY_LABELS = {
   collab_node_auto_done: "心栈自动完成节点",
   collab_doc_auto_confirmed: "心栈自动确认沉淀",
   collab_pending_reminder: "提醒待确认成员",
+  collab_option_choice: "对候选表达倾向",
   collab_doc_updated: "更新文档",
   collab_node_done: "完成节点",
   collab_agent_action: "Agent 操作",

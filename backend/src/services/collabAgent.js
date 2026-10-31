@@ -237,7 +237,8 @@ export function formatSpaceData(task, snapshot) {
     `约定主题：${task.title}`,
     `共同目标：${collab.goal || "（未填写）"}`,
     `场景：${collab.scenario || "custom"}；确认规则：${collab.confirmRule === "owner" ? "发起人确认" : "全员确认"}`,
-    `成员：${[...new Set(memberNames)].join("、")}`
+    `成员：${[...new Set(memberNames)].join("、")}`,
+    `今天：${new Date().toISOString().slice(0, 10)}（讨论里没写年份的日期，一律按最临近的未来日期理解；输出日期用 YYYY-MM-DD）`
   ];
   if (snapshot.subtasks.length > 0) {
     const { lines: subtaskLines } = buildSubtaskLabelTree(task.id, snapshot.subtasks);

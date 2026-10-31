@@ -39,6 +39,7 @@ import { functionsRouter } from "./routes/functions.js";
 import { weatherRouter } from "./routes/weather.js";
 import { chatRouter } from "./routes/chat.js";
 import { collabRouter } from "./routes/collab.js";
+import { collabInviteRouter } from "./routes/collabInvite.js";
 import { adminStatsRouter } from "./routes/adminStats.js";
 import { handleWechatNotify } from "./routes/wechatNotify.js";
 
@@ -104,6 +105,7 @@ app.use("/api/functions", functionsRouter);
 app.use("/api/weather", weatherRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/collab", collabRouter);
+app.use("/api", collabInviteRouter);
 app.use("/api/admin/stats", adminStatsRouter);
 
 // 上传的图片会被小程序/网页跨域嵌入展示：helmet 默认 CORP same-origin 会挡住 <Image> 加载，

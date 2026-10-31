@@ -11,7 +11,7 @@ const isStandalonePricingPreview = () => {
 export const isPublicSharePage = () => {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname;
-  return path.startsWith("/share/") || path.startsWith("/Share/");
+  return path.startsWith("/share/") || path.startsWith("/Share/") || path.startsWith("/invite/") || path.startsWith("/Invite/");
 };
 const isLoginPage = () => {
   if (typeof window === "undefined") return false;

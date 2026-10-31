@@ -1,5 +1,5 @@
 import Login from "./pages/Login";
-import { useEffect } from "react";
+import React, { useEffect } from "react";
 import { httpRequest } from "@/api/httpClient";
 import './App.css'
 import { Toaster } from "@/components/ui/toaster"
@@ -22,6 +22,7 @@ const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const SharePage = Pages.Share;
+const InviteLanding = React.lazy(() => import("./pages/InviteLanding"));
 
 setupIframeMessaging();
 
@@ -74,6 +75,7 @@ const AuthenticatedApp = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<MainPage />} />
         <Route path="/share/:token" element={<SharePage />} />
+        <Route path="/invite/:code" element={<React.Suspense fallback={null}><InviteLanding /></React.Suspense>} />
         {Object.entries(Pages).flatMap(([path, Page]) => {
           const normalizedPath = createPageUrl(path);
           const legacyPath = `/${path}`;

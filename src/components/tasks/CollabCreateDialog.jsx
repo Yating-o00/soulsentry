@@ -1,5 +1,6 @@
 // 新建「协同约定」/ 已有约定「开启协同」共用的轻量 Dialog：
 // 主题 + 场景三选一（决定确认规则与 Agent 语气）+ 共同目标一句话 + Agent 开关
+// prefill：「由此发起下一场约定」带出的预填（主题/场景/共同目标）
 import React, { useEffect, useState } from "react";
 import {
   Dialog,
@@ -44,7 +45,7 @@ const SCENARIOS = [
   },
 ];
 
-export default function CollabCreateDialog({ open, onClose, existingTask = null, onCreated }) {
+export default function CollabCreateDialog({ open, onClose, existingTask = null, prefill = null, onCreated }) {
   const [title, setTitle] = useState("");
   const [scenario, setScenario] = useState("couple");
   const [goal, setGoal] = useState("");
@@ -53,11 +54,12 @@ export default function CollabCreateDialog({ open, onClose, existingTask = null,
 
   useEffect(() => {
     if (!open) return;
-    setTitle(existingTask?.title || "");
-    setScenario(existingTask?.metadata?.collab?.scenario || "couple");
-    setGoal(existingTask?.metadata?.collab?.goal || "");
-    setAgentEnabled(existingTask?.metadata?.collab?.agent?.enabled ?? true);
-  }, [open, existingTask]);
+    const source = existingTask || prefill || {};
+    setTitle(source.title || "");
+    setScenario(source.metadata?.collab?.scenario || prefill?.scenario || "couple");
+    setGoal(source.metadata?.collab?.goal || prefill?.goal || "");
+    setAgentEnabled(source.metadata?.collab?.agent?.enabled ?? true);
+  }, [open, existingTask, prefill]);
 
   const scenarioMeta = SCENARIOS.find((s) => s.key === scenario) || SCENARIOS[0];
 
@@ -112,7 +114,7 @@ export default function CollabCreateDialog({ open, onClose, existingTask = null,
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users2 className="w-5 h-5 text-[#384877]" />
-            {existingTask ? "开启协同" : "新建协同约定"}
+            {existingTask ? "开启协同" : prefill ? "发起下一场约定" : "新建协同约定"}
           </DialogTitle>
         </DialogHeader>
 
@@ -187,7 +189,7 @@ export default function CollabCreateDialog({ open, onClose, existingTask = null,
             onClick={handleSubmit}
             disabled={submitting}
           >
-            {submitting ? "创建中…" : existingTask ? "开启协同空间" : "创建并进入共创空间"}
+            {submitting ? "创建中…" : existingTask ? "开启协同空间" : prefill ? "创建下一场约定" : "创建并进入共创空间"}
           </Button>
         </div>
       </DialogContent>

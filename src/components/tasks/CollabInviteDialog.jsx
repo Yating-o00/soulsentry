@@ -24,6 +24,9 @@ import {
   Image as ImageIcon,
   AtSign,
   Loader2,
+  ListTodo,
+  ExternalLink,
+  CircleCheck,
 } from "lucide-react";
 import QRCodeImage from "@/components/ui/QRCode";
 import { httpRequest } from "@/api/httpClient";
@@ -49,10 +52,18 @@ const CATEGORY_LABELS = {
 const TABS = [
   { key: "card", label: "邀请卡片", icon: ImageIcon },
   { key: "link", label: "邀请链接", icon: LinkIcon },
+  { key: "todo", label: "待办邀请", icon: ListTodo },
   { key: "direct", label: "直接邀请", icon: AtSign },
 ];
 
-export default function CollabInviteDialog({ task, members = [], open, onClose, onChanged }) {
+const INVITE_STATUS_LABELS = {
+  open: "待回应",
+  accepted: "已接受分工",
+  suggested: "已提出建议",
+  declined: "暂时无法参与",
+};
+
+export default function CollabInviteDialog({ task, members = [], subtasks = [], open, onClose, onChanged }) {
   const [tab, setTab] = useState("card");
   const [inviteUrl, setInviteUrl] = useState("");
   const [linkLoading, setLinkLoading] = useState(false);
@@ -62,6 +73,13 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
   const [mentionText, setMentionText] = useState("");
   const [mentionCandidates, setMentionCandidates] = useState([]);
   const [mentionSelected, setMentionSelected] = useState(null);
+  // ③ 待办邀请：受邀者昵称 + 绑定子约定 + 生成带前情摘要的邀请链接
+  const [todoName, setTodoName] = useState("");
+  const [todoNote, setTodoNote] = useState("");
+  const [todoSelected, setTodoSelected] = useState(() => new Set());
+  const [todoCreating, setTodoCreating] = useState(false);
+  const [todoInvite, setTodoInvite] = useState(null); // 最近一次生成的 {code,url}
+  const [recentInvites, setRecentInvites] = useState([]);
   const cardRef = useRef(null);
   // 「直接邀请」点击后滚动定位到下方 @ 邀请区块
   const mentionRef = useRef(null);
@@ -330,6 +348,58 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
     }
   };
 
+  // 待办邀请：可选子约定（未完成项，扁平化带完成标准）
+  const flatSubtasks = useMemo(() => {
+    const out = [];
+    const walk = (list) => {
+      for (const n of list || []) {
+        if (n.status !== "DONE" && n.status !== "completed") out.push(n);
+        walk(n.children || []);
+      }
+    };
+    walk(subtasks);
+    return out;
+  }, [subtasks]);
+
+  const loadRecentInvites = async () => {
+    if (!task?.id) return;
+    try {
+      const res = await httpRequest(`/api/collab/${task.id}/invites`);
+      setRecentInvites(res?.invites || []);
+    } catch {
+      setRecentInvites([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    setTodoInvite(null);
+    loadRecentInvites();
+  }, [open, task?.id]);
+
+  const handleCreateTodoInvite = async () => {
+    const name = todoName.trim();
+    if (!name || todoCreating) return;
+    setTodoCreating(true);
+    try {
+      const res = await httpRequest(`/api/collab/${task.id}/invites`, {
+        method: "POST",
+        body: { invitee_name: name, subtask_ids: [...todoSelected], note: todoNote.trim() || null },
+      });
+      const url = `${window.location.origin}${res.url}`;
+      setTodoInvite({ ...res.invite, url });
+      setTodoName("");
+      setTodoNote("");
+      setTodoSelected(new Set());
+      loadRecentInvites();
+      toast.success(`已生成给 ${res.invite.invitee_name} 的邀请链接`);
+    } catch (error) {
+      toast.error(error?.message || "邀请生成失败，请稍后再试");
+    } finally {
+      setTodoCreating(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose?.()}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
@@ -535,7 +605,114 @@ export default function CollabInviteDialog({ task, members = [], open, onClose, 
           </div>
         )}
 
-        {/* ③ 直接邀请：输入统一收在下方「@ 邀请朋友」，这里只做引导 */}
+        {/* ③ 待办邀请：绑定具体子约定 + Agent 前情摘要的邀请链接 */}
+        {tab === "todo" && (
+          <div className="space-y-3">
+            <Input
+              value={todoName}
+              onChange={(e) => setTodoName(e.target.value)}
+              placeholder="受邀者姓名 / 昵称"
+              maxLength={30}
+              className="h-9 text-xs"
+            />
+            <div className="rounded-xl border border-slate-200 max-h-44 overflow-y-auto divide-y divide-slate-100">
+              {flatSubtasks.length === 0 && (
+                <p className="text-[11px] text-slate-400 text-center py-5">暂无进行中的子约定可绑定</p>
+              )}
+              {flatSubtasks.map((s) => {
+                const checked = todoSelected.has(s.id);
+                return (
+                  <label key={s.id} className="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-slate-50">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        const next = new Set(todoSelected);
+                        if (next.has(s.id)) next.delete(s.id);
+                        else next.add(s.id);
+                        setTodoSelected(next);
+                      }}
+                      className="mt-0.5 accent-[#384877]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-slate-700 truncate">{s.title}</span>
+                      {s.metadata?.collab?.standard && (
+                        <span className="block text-[10px] text-slate-400 mt-0.5 line-clamp-1">完成标准：{s.metadata.collab.standard}</span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <Input
+              value={todoNote}
+              onChange={(e) => setTodoNote(e.target.value)}
+              placeholder="给对方的一句话（可选）"
+              maxLength={200}
+              className="h-9 text-xs"
+            />
+            <Button
+              className="w-full bg-[#384877] hover:bg-[#2e3a62]"
+              onClick={handleCreateTodoInvite}
+              disabled={todoCreating || !todoName.trim()}
+            >
+              {todoCreating ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <ListTodo className="w-4 h-4 mr-1.5" />}
+              生成邀请链接（含 Agent 前情摘要）
+            </Button>
+
+            {todoInvite && (
+              <div className="rounded-xl border border-[#c9d5ef] bg-[#eef2ff]/60 p-3 space-y-2">
+                <p className="text-[11px] text-[#384877]">
+                  已生成给 <span className="font-semibold">{todoInvite.invitee_name}</span> 的邀请（绑定 {todoInvite.subtask_ids?.length || 0} 项待办）
+                </p>
+                <div className="flex items-center gap-2">
+                  <Input value={todoInvite.url} readOnly onFocus={(e) => e.target.select()} className="text-[10px] h-8" />
+                  <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={async () => { if (await copyText(todoInvite.url)) { toast.success("链接已复制"); markCopied(); } }}>
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => window.open(todoInvite.url, "_blank")}>
+                    <ExternalLink className="w-3.5 h-3.5 mr-1" /> 预览受邀者页面
+                  </Button>
+                  <Button size="sm" className="flex-1 h-8 text-xs bg-[#384877] hover:bg-[#2e3a62]" onClick={async () => { if (await copyText(todoInvite.url)) { toast.success("链接已复制，去发给对方吧"); markCopied(); } }}>
+                    复制并关闭
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {recentInvites.length > 0 && (
+              <div className="border-t border-slate-100 pt-3">
+                <p className="text-xs font-medium text-slate-500 mb-2">最近邀请及回应</p>
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {recentInvites.map((inv) => (
+                    <div key={inv.id} className="flex items-center gap-2 rounded-lg border border-slate-100 px-2.5 py-2">
+                      <span className="text-xs font-medium text-slate-700 truncate flex-1">{inv.invitee_name}</span>
+                      <span className="text-[10px] text-slate-400 shrink-0">{(inv.subtask_ids || []).length} 项待办</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${inv.status === "accepted" ? "bg-emerald-50 text-emerald-700" : inv.status === "declined" ? "bg-slate-100 text-slate-500" : inv.status === "suggested" ? "bg-amber-50 text-amber-700" : "bg-[#eef2ff] text-[#384877]"}`}>
+                        {INVITE_STATUS_LABELS[inv.status] || inv.status}
+                      </span>
+                      <button
+                        type="button"
+                        title="复制该邀请链接"
+                        className="text-slate-400 hover:text-[#384877] shrink-0"
+                        onClick={async () => {
+                          const url = `${window.location.origin}/invite/${inv.code}`;
+                          if (await copyText(url)) toast.success("链接已复制");
+                        }}
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ④ 直接邀请：输入统一收在下方「@ 邀请朋友」，这里只做引导 */}
         {tab === "direct" && (
           <div className="rounded-xl border border-dashed border-[#c9d5ef] bg-[#eef2ff]/50 px-3 py-3 text-center">
             <p className="text-xs text-[#384877]">

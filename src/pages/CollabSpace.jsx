@@ -20,6 +20,7 @@ import AgentDrawer from "@/components/collab/AgentDrawer";
 import AgentStoreDialog from "@/components/collab/AgentStoreDialog";
 import MobileNav from "@/components/collab/MobileNav";
 import CollabInviteDialog from "@/components/tasks/CollabInviteDialog";
+import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
 
 const smooth = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 
@@ -36,6 +37,35 @@ export default function CollabSpace() {
   const [mobileNavActive, setMobileNavActive] = useState("content");
   const [togglingAgent, setTogglingAgent] = useState(false);
   const [togglingDrive, setTogglingDrive] = useState(false);
+  const [nextPactOpen, setNextPactOpen] = useState(false);
+  const [reusing, setReusing] = useState(false);
+
+  const handleReuse = async () => {
+    if (!taskId || reusing) return;
+    setReusing(true);
+    try {
+      const res = await httpRequest(`/api/collab/${taskId}/reuse`, { method: "POST" });
+      toast.success(`已创建「${res.title}」，结构已复用、状态已重置`);
+      invalidateAll();
+      navigate(`/collabspace?taskId=${res.task_id}`);
+    } catch (e) {
+      toast.error(e?.message || "复用失败，请稍后再试");
+    } finally {
+      setReusing(false);
+    }
+  };
+
+  // 由此发起下一场约定：创建后把原成员（除自己）静默带入
+  const handleNextPactCreated = async (newTaskId) => {
+    const others = (members || []).filter((m) => m.user_id && m.user_id !== currentUser?.id && m.role !== "owner");
+    await Promise.allSettled(
+      others.map((m) =>
+        httpRequest(`/api/collab/${newTaskId}/members`, { method: "POST", body: { user_id: m.user_id } })
+      )
+    );
+    invalidateAll();
+    navigate(`/collabspace?taskId=${newTaskId}`);
+  };
 
   const { data: currentUser } = useQuery({
     queryKey: ['currentUser'],
@@ -65,6 +95,17 @@ export default function CollabSpace() {
   const task = summary?.task;
   const collab = task?.metadata?.collab;
   const members = summary?.members || [];
+
+  // 「完成与延续」：全部子约定（含从属）都完成时出现
+  const allSubtasksDone = (() => {
+    const tree = summary?.subtasks;
+    if (!tree || tree.length === 0) return false;
+    const walk = (list) => list.every((n) => {
+      const done = n.status === "DONE" || n.status === "completed";
+      return done && walk(n.children || []);
+    });
+    return walk(tree);
+  })();
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['collab', taskId] });
@@ -209,6 +250,41 @@ export default function CollabSpace() {
 
         {summary && (
           <>
+            {allSubtasksDone && (
+              <section className="px-4 pt-5 sm:px-6" aria-label="完成与延续">
+                <div className="rounded-2xl border p-4 sm:p-5" style={{ borderColor: "#38487733", backgroundColor: "#eef2ff40" }}>
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full text-white" style={{ backgroundColor: "#4b7256" }}>✓</span>
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-[15px] font-semibold tracking-[-0.01em]" style={{ color: "#302c2a" }}>全部子约定已完成</h2>
+                      <p className="text-[10px]" style={{ color: "#77736c" }}>完成与延续：把这场约定的成果带到下一场</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={handleReuse}
+                      disabled={reusing}
+                      className="flex-1 rounded-full py-2.5 text-[13px] font-medium text-white transition-opacity disabled:opacity-50 min-h-9"
+                      style={{ backgroundColor: "#384877" }}
+                    >
+                      {reusing ? "创建中…" : "一键复用模板（结构继承·状态重置）"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNextPactOpen(true)}
+                      className="flex-1 rounded-full border py-2.5 text-[13px] font-medium min-h-9"
+                      style={{ borderColor: "#38487755", color: "#384877" }}
+                    >
+                      由此发起下一场约定
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-4" style={{ color: "#8a867e" }}>
+                    复用：继承子约定结构与执行节点、保留成员，重置确认与完成状态，不复制历史讨论/文件/邀请记录。
+                  </p>
+                </div>
+              </section>
+            )}
             <DigestCard doc={summary.docs?.find((d) => d.doc_type === "digest")} />
             <ChildrenPanel
               summary={summary}
@@ -270,9 +346,21 @@ export default function CollabSpace() {
       <CollabInviteDialog
         task={task}
         members={members}
+        subtasks={summary?.subtasks || []}
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
         onChanged={invalidateAll}
+      />
+
+      <CollabCreateDialog
+        open={nextPactOpen}
+        onClose={() => setNextPactOpen(false)}
+        prefill={task ? {
+          title: `${task.title} · 下一场`,
+          scenario: collab?.scenario,
+          goal: collab?.goal || "",
+        } : null}
+        onCreated={handleNextPactCreated}
       />
     </div>
   );

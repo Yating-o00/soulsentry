@@ -53,6 +53,7 @@ model User {
   memoryRecords     MemoryRecord[]
   vaultItems        VaultItem[]
   collabDocs        CollabDoc[]
+  collabInvites     CollabInvite[]
 }
 
 model UserPreference {
@@ -123,6 +124,7 @@ model Task {
   members          TaskMember[]
   collabNodes      CollabNode[]
   collabDocs       CollabDoc[]
+  collabInvites    CollabInvite[]
   checkins         Checkin[]
   cheers           Cheer[]
   createdAt        DateTime   @default(now())
@@ -763,6 +765,27 @@ model SmsVerification {
 }
 
 // 协同约定：执行节点（时间节点/阶段/决策/回顾）
+model CollabInvite {
+  id          String    @id @default(cuid())
+  taskId      String
+  code        String    @unique
+  inviterId   String
+  inviteeName String
+  subtaskIds  String    @default("[]") // JSON string[]：绑定给受邀者的具体子约定
+  note        String?
+  summary     String?   // Agent 生成的「30 秒前情摘要」（创建时生成，失败可空）
+  status      String    @default("open") // open | accepted | suggested | declined
+  responseMsg String?
+  respondedBy String?
+  respondedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  inviter     User      @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+}
+
 model CollabNode {
   id        String    @id @default(cuid())
   taskId    String

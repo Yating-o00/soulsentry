@@ -346,10 +346,28 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
         mentionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 80);
     }
+    if (key === "todo") loadSubtasks();
   };
 
   // 待办邀请：可选子约定（未完成项，扁平化带完成标准）
+  // 从约定卡片打开时父层不带 subtasks——切到本页签时按需拉取 summary 兜底
+  const [fetchedSubtasks, setFetchedSubtasks] = useState([]);
+  const [subtasksLoading, setSubtasksLoading] = useState(false);
+  const loadSubtasks = async () => {
+    if (!task?.id || subtasksLoading || subtasks.length > 0 || fetchedSubtasks.length > 0) return;
+    setSubtasksLoading(true);
+    try {
+      const res = await httpRequest(`/api/collab/${task.id}/summary`);
+      setFetchedSubtasks(res?.subtasks || []);
+    } catch {
+      setFetchedSubtasks([]);
+    } finally {
+      setSubtasksLoading(false);
+    }
+  };
+
   const flatSubtasks = useMemo(() => {
+    const source = subtasks.length > 0 ? subtasks : fetchedSubtasks;
     const out = [];
     const walk = (list) => {
       for (const n of list || []) {
@@ -357,9 +375,9 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
         walk(n.children || []);
       }
     };
-    walk(subtasks);
+    walk(source);
     return out;
-  }, [subtasks]);
+  }, [subtasks, fetchedSubtasks]);
 
   const loadRecentInvites = async () => {
     if (!task?.id) return;
@@ -617,7 +635,9 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
             />
             <div className="rounded-xl border border-slate-200 max-h-44 overflow-y-auto divide-y divide-slate-100">
               {flatSubtasks.length === 0 && (
-                <p className="text-[11px] text-slate-400 text-center py-5">暂无进行中的子约定可绑定</p>
+                <p className="text-[11px] text-slate-400 text-center py-5">
+                  {subtasksLoading ? "正在加载子约定…" : "暂无进行中的子约定可绑定"}
+                </p>
               )}
               {flatSubtasks.map((s) => {
                 const checked = todoSelected.has(s.id);

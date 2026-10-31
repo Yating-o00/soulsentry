@@ -35,6 +35,10 @@ function ChildRow({
   const confirmedCount = Array.isArray(subCollab?.confirmedBy) ? subCollab.confirmedBy.length : 0;
   const rejectedBy = Array.isArray(subCollab?.rejectedBy) ? subCollab.rejectedBy : [];
   const rejectedCount = rejectedBy.length;
+  const rejected = isDraft && rejectedCount > 0;
+  const rejectedNames = rejectedBy
+    .map((id) => members.find((m) => m.user_id === id)?.display_name || members.find((m) => m.id === id)?.display_name)
+    .map((name) => name || "成员");
   const iRejected = currentUserId && rejectedBy.includes(currentUserId);
   const alreadyConfirmed = currentUserId && Array.isArray(subCollab?.confirmedBy) && subCollab.confirmedBy.includes(currentUserId);
   const assigneeId = subCollab?.assignee;
@@ -128,7 +132,7 @@ function ChildRow({
               </button>
             )}
           </div>
-          <h3 className={cn("mt-2 text-sm font-semibold leading-6", done ? "text-[#7d7972] line-through" : "")} style={done ? undefined : { color: "#35312f" }}>
+          <h3 className={cn("mt-2 text-sm font-semibold leading-6", (done || rejected) ? "text-[#7d7972] line-through" : "")} style={(done || rejected) ? undefined : { color: "#35312f" }}>
             {sub.title}
           </h3>
           {subCollab?.standard && (
@@ -149,7 +153,7 @@ function ChildRow({
               )}
               {isDraft && (
                 <span style={{ color: rejectedCount > 0 ? "#b3443c" : C.amberInk }}>
-                  {rejectedCount > 0 ? `已被 ${rejectedCount} 人勾掉 · ` : ""}{alreadyConfirmed ? "已确认" : iRejected ? "已勾掉" : "待确认"} · {confirmedCount}/{members.length || 1}
+                  {rejectedCount > 0 ? `被 ${rejectedNames.join("、")} 勾掉 · ` : ""}{alreadyConfirmed ? "已确认" : iRejected ? "已勾掉" : "待确认"} · {confirmedCount}/{members.length || 1}
                 </span>
               )}
               {isDraft && subCollab?.reminder && (

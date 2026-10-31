@@ -95,7 +95,8 @@ function ChildRow({
             </span>
             {autoDone && (
               <span className="flex items-center gap-0.5 text-[10px] font-medium" style={{ color: "#384877" }} title={subCollab?.autoCompletedReason || "心栈根据讨论共识自动完成"}>
-                <Sparkles className="h-3 w-3" /> 心栈确定完成
+                <Sparkles className="h-3 w-3" />
+                {subCollab?.autoCompletedReason ? `心栈确定完成 · ${subCollab.autoCompletedReason}` : "心栈确定完成"}
               </span>
             )}
             {isAgentDraft && (

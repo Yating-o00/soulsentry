@@ -581,6 +581,8 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
   const active = noReject && (rule === "owner"
     ? confirmedBy.has(task.userId)
     : memberIds.every((id) => confirmedBy.has(id)));
+  // 全员确认（无人勾掉）：直接勾掉该子约定，标注「N人已全部同意」，保留人工改回
+  const allAgreed = noReject && memberIds.length > 0 && memberIds.every((id) => confirmedBy.has(id));
 
   const metadata = {
     ...(subtask.metadata || {}),
@@ -588,10 +590,20 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
       ...subMeta,
       confirmedBy: [...confirmedBy],
       rejectedBy: [...rejectedBy],
-      state: active ? "active" : "draft"
+      state: active ? "active" : "draft",
+      ...(allAgreed
+        ? { autoCompleted: true, autoCompletedAt: new Date().toISOString(), autoCompletedReason: `${memberIds.length}人已全部同意` }
+        : {})
     }
   };
-  const updated = await prisma.task.update({ where: { id: subtask.id }, data: { metadata } });
+  const updated = await prisma.task.update({
+    where: { id: subtask.id },
+    data: {
+      metadata,
+      ...(allAgreed ? { status: "DONE", completedAt: new Date() } : {})
+    }
+  });
+  if (allAgreed) await syncParentProgress(task.id);
 
   await logCollabChange(req.user.id, task, "collab_subtask_confirmed", [
     { field: "subtask", field_label: "子约定", new_value: subtask.title },
@@ -599,7 +611,13 @@ collabRouter.post("/:taskId/subtasks/:subId/confirm", async (req, res) => {
     { field: "confirmed_by", field_label: "确认人", new_value: [...confirmedBy].join("、") }
   ]);
 
-  if (active) {
+  if (allAgreed) {
+    // 全员同意：记一条自动勾掉日志（成员本人都已确认，无需再通知）
+    await logCollabChange(req.user.id, task, "collab_subtask_auto_done", [
+      { field: "subtask", field_label: "子约定", new_value: subtask.title },
+      { field: "auto", field_label: "完成方式", new_value: `${memberIds.length}人已全部同意，自动勾掉` }
+    ]);
+  } else if (active) {
     await notifyTaskParties(task, req.user, {
       type: "collab_subtask_confirmed",
       title: "子约定已确认生效",

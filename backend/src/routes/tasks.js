@@ -814,6 +814,20 @@ tasksRouter.patch("/:id", async (req, res) => {
     });
   }
 
+  // 人工改动完成状态：清除协同「自动勾掉（心栈确定完成）」标记，避免徽标误显
+  if (payload.data.status !== undefined
+    && isPlainObject(existing.metadata?.collab)
+    && existing.metadata.collab.autoCompleted) {
+    const base = nextMetadata === undefined
+      ? (isPlainObject(existing.metadata) ? { ...existing.metadata } : {})
+      : nextMetadata;
+    const collab = { ...(base.collab || {}) };
+    delete collab.autoCompleted;
+    delete collab.autoCompletedAt;
+    delete collab.autoCompletedReason;
+    nextMetadata = { ...base, collab };
+  }
+
   if (Object.keys(snoozeNormalize).length > 0) {
     const base = nextMetadata === undefined
       ? (isPlainObject(existing.metadata) ? { ...existing.metadata } : {})

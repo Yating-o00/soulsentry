@@ -428,6 +428,67 @@ export function buildBookingLinks(domain, search) {
   return links.slice(0, 3);
 }
 
+// ── 按讨论表态自动勾选草案子约定：方案提出者视为同意；参与讨论且未表示反对/疑虑的成员可勾选；
+//    从未就该主题发言的成员不得勾选（沉默≠同意）；有人勾掉则整项禁止自动勾选 ──
+async function applyAutoConfirms({ task, user, pool, labelMap, confirmHints }) {
+  const notes = [];
+  const hints = Array.isArray(confirmHints) ? confirmHints.slice(0, 10) : [];
+  if (hints.length === 0) return notes;
+  const memberList = [task.user, ...task.members.map((m) => m.user)].filter(Boolean);
+  const memberIds = [...new Set([task.userId, ...task.members.map((m) => m.userId)])];
+  const findMember = (name) => {
+    const n = normalizeForMatch(name);
+    if (!n) return null;
+    return memberList.find((u) => normalizeForMatch(u.displayName) === n || normalizeForMatch(u.email) === n)
+      || memberList.find((u) => {
+        const d = normalizeForMatch(u.displayName);
+        return d && (d.includes(n) || (n.length >= 2 && n.includes(d)));
+      })
+      || null;
+  };
+
+  for (const hint of hints) {
+    const target = resolveParentSubtask(pool, hint?.target, labelMap);
+    if (!target) continue;
+    const meta = target.metadata?.collab || {};
+    if (meta.state !== "draft") continue; // 只有草案走勾选
+    if (Array.isArray(meta.rejectedBy) && meta.rejectedBy.length > 0) continue; // 有勾掉：尊重否决
+    const confirmed = new Set(Array.isArray(meta.confirmedBy) ? meta.confirmedBy : []);
+    const added = [];
+    for (const nm of (Array.isArray(hint.members) ? hint.members : []).slice(0, 8)) {
+      const u = findMember(nm);
+      if (!u || !memberIds.includes(u.id) || confirmed.has(u.id)) continue;
+      confirmed.add(u.id);
+      added.push(u.displayName || u.email || u.phone || "成员");
+    }
+    if (added.length === 0) continue;
+    const rule = task.metadata?.collab?.confirmRule === "owner" ? "owner" : "all";
+    const active = rule === "owner" ? confirmed.has(task.userId) : memberIds.every((id) => confirmed.has(id));
+    const nextMeta = {
+      ...(target.metadata || {}),
+      collab: { ...meta, confirmedBy: [...confirmed], state: active ? "active" : "draft" }
+    };
+    await prisma.task.update({ where: { id: target.id }, data: { metadata: nextMeta } });
+    const basis = String(hint.basis || "").trim().slice(0, 80);
+    await logCollabChange(task.userId, task, "collab_auto_confirmed", [
+      { field: "subtask", field_label: "子约定", new_value: target.title },
+      { field: "members", field_label: "自动勾选", new_value: added.join("、") },
+      ...(basis ? [{ field: "basis", field_label: "讨论依据", new_value: basis }] : [])
+    ]);
+    if (active) {
+      await notifyTaskParties(task, user, {
+        type: "collab_subtask_confirmed",
+        title: "子约定已确认生效",
+        body: `子约定「${target.title}」已按确认规则（${rule === "owner" ? "发起人确认" : "全员确认"}）生效`
+      });
+      notes.push(`「${target.title}」已按讨论表态自动确认并生效`);
+    } else {
+      notes.push(`「${target.title}」已替 ${added.join("、")} 勾选（仍待其他成员确认）`);
+    }
+  }
+  return notes;
+}
+
 function sanitizeOptionsCard(raw) {
   if (!raw || typeof raw !== "object") return null;
   const list = Array.isArray(raw.options) ? raw.options : [];
@@ -974,7 +1035,7 @@ ${threadText}
 
     // 全量上下文：整个空间的讨论/子约定/节点/文档都喂给 Agent，并显式要求记住前文信息。
     // 结构化输出：除回复外，按讨论内容把可执行项落成子约定草案、执行节点、沉淀文件（均为草案，待人确认）。
-    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息给出有指导意义的建议，凡引用检索到的事实（价格、日期、班次、政策等），末尾用「参考：链接」列出出处，方便成员点击核实" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；若本轮回给出 options 选项卡，reply 里只点出推荐排序与取舍逻辑，不要逐条复述卡片内容；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title、node_type（time|stage|decision|review）与 parentHint。合并同类项：同一主题的持续推进只保留一个归口节点（标题用统一口径，如「确定预算统一口径」），相关推进作为其子项——parentHint 填归口节点标题（不存在会自动创建）；同标题节点不重复创建；同一主题的每次推进不要新建平级节点。归类看「主题」而非措辞：凡是对同一件事的逐次调整、确认、修改都算同类——例：日期相关的「11月第二周出行日期」「确定日期策略（11月第二周或flexible）」「日期策略调整为fully flexible」都归「确定目的地与出行日期」；目的地相关的「新疆/新加坡/荷兰目的地确认」「目的地锁定新加坡」也归它；没有则返回空数组；\n4. nodeMoves：已有节点中凡属同一主题逐次递进的平级节点，用 [{"title":"节点标题","parent":"归口节点标题"}] 归并（如把日期/目的地节点归并到「确定目的地与出行日期」）；没有则空数组；\n5. nodeUpdates：讨论对某主题得出新结论时，用 [{"target":"该主题未完成的子项或归口节点的现标题","title":"新结论表述"}] 覆盖改写旧表述（只改写未完成的；已完成的是历史推进记录，保留不改）；没有则空数组；\n6. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null；\n7. completed：核对上方编号子约定清单（仅限「进行中」的，草案与已完成的不要动）、执行节点（未到完成的，含归口节点）与沉淀文档（待确认的）——若讨论内容已经满足某项的完成条件（完成标准已被讨论兑现、节点对应阶段已经走过、归口节点内容已被成员确认、沉淀内容已被各方认可），就把它填进 completed 并给一句依据；不要全部留空——只要讨论确实兑现了某项的完成条件就应当填上，宁缺毋滥但切勿漏掉已达成的事项；没有把握的对象不要勉强。\n8. options：当成员在比较/挑选具体的商品或服务（机票、酒店、门票、餐厅、礼物等）时，把联网检索与讨论中的候选整理成选项卡：{"domain":"flight|hotel|ticket|food|gift|other","query":"本次挑选的需求口径一句话","search":{"from":"出发城市","to":"到达城市","depart":"YYYY-MM-DD","return":"返程YYYY-MM-DD或空","adults":3,"city":"目的地城市","checkin":"YYYY-MM-DD","checkout":"YYYY-MM-DD","keyword":"区域/品牌关键词可选"},"options":[{"id":"o1","title":"候选标题（航班号/酒店名/商品名）","summary":"一句话关键信息（起降时间/地段档位/规格）","price":"价格口径","link":"来源链接","points":["亮点1"],"concerns":["注意点1"]}]}——给 3-5 个候选、按推荐度排序；候选必须有检索结果或讨论事实支撑，绝不编造价格、班次与链接；search 字段从讨论与检索结果里提取结构化行程参数（日期格式严格 YYYY-MM-DD，能确定多少填多少，用于生成直达预订链接，不确定的留空）；options.link 优先填能直接下单/预订的页面（如航司预订页、酒店详情页），减少成员跳转次数，没有则空字符串；成员已在讨论中明确选定的，options 返回 null。\n\n所有对象都是草案，需成员确认后才生效；completed 里的自动完成同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"nodeUpdates":[{"target":"...","title":"..."}],"doc":null,"options":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
+    const prompt = `${spaceText}${searchBlock}\n\n成员在讨论中 @你（所在线程）：\n${threadText}\n\n请回应这位成员，并按需把讨论内容落成空间对象：\n1. reply：直接回复——回答疑问、汇总要点、比较方案，${searched ? "结合联网检索到的外部信息给出有指导意义的建议，凡引用检索到的事实（价格、日期、班次、政策等），末尾用「参考：链接」列出出处，方便成员点击核实" : "结合完整讨论"}给出有指导意义的建议。全程记住并使用完整讨论里的信息：成员在前面消息提到的地点、时间、预算、偏好等，即使这条 @ 消息没有重复，也视为仍然有效，要贯穿到建议里；建议要落到本约定的具体情境，不要泛泛而谈；若本轮回给出 options 选项卡，reply 里只点出推荐排序与取舍逻辑，不要逐条复述卡片内容；\n2. subtasks：把讨论中出现的【核心决定与待办】提取为子约定草案，严格遵守：①合并同类项——同一主题只提取一项核心，细节不逐条拆成平级约定；②分级挂载——某项属于上方某个已有子约定的范畴时，作为它的从属约定，parentHint 填该子约定的编号（如 S1）或标题（例：已有「定目的地和出行日期」，讨论确定目的地为新加坡 → title「出行目的地：新加坡」、parentHint「定目的地和出行日期」），只有真正独立的事项才开顶层约定（parentHint 留空）；③宁缺毋滥——闲聊、重复、纯细节不提取；没有则返回空数组，最多 ${MAX_SUBTASKS_PER_RUN} 项；每项含 title（30 字以内，写清具体决定）、standard（完成标准）、assigneeHint（负责人姓名，不确定留空）、parentHint（编号或标题，顶层留空）；\n3. nodes：若讨论中出现了关键时间点、阶段或决策，落成执行节点，含 title、node_type（time|stage|decision|review）与 parentHint。合并同类项：同一主题的持续推进只保留一个归口节点（标题用统一口径，如「确定预算统一口径」），相关推进作为其子项——parentHint 填归口节点标题（不存在会自动创建）；同标题节点不重复创建；同一主题的每次推进不要新建平级节点。归类看「主题」而非措辞：凡是对同一件事的逐次调整、确认、修改都算同类——例：日期相关的「11月第二周出行日期」「确定日期策略（11月第二周或flexible）」「日期策略调整为fully flexible」都归「确定目的地与出行日期」；目的地相关的「新疆/新加坡/荷兰目的地确认」「目的地锁定新加坡」也归它；没有则返回空数组；\n4. nodeMoves：已有节点中凡属同一主题逐次递进的平级节点，用 [{"title":"节点标题","parent":"归口节点标题"}] 归并（如把日期/目的地节点归并到「确定目的地与出行日期」）；没有则空数组；\n5. nodeUpdates：讨论对某主题得出新结论时，用 [{"target":"该主题未完成的子项或归口节点的现标题","title":"新结论表述"}] 覆盖改写旧表述（只改写未完成的；已完成的是历史推进记录，保留不改）；没有则空数组；\n6. doc：若成员明确要求沉淀/纪要/存档，或讨论内容值得长期保留（达成的方案、攻略汇总、清单），生成 {title, content} 存为沉淀文件；否则返回 null；\n7. completed：核对上方编号子约定清单（仅限「进行中」的，草案与已完成的不要动）、执行节点（未到完成的，含归口节点）与沉淀文档（待确认的）——若讨论内容已经满足某项的完成条件（完成标准已被讨论兑现、节点对应阶段已经走过、归口节点内容已被成员确认、沉淀内容已被各方认可），就把它填进 completed 并给一句依据；不要全部留空——只要讨论确实兑现了某项的完成条件就应当填上，宁缺毋滥但切勿漏掉已达成的事项；没有把握的对象不要勉强。\n8. options：当成员在比较/挑选具体的商品或服务（机票、酒店、门票、餐厅、礼物等）时，把联网检索与讨论中的候选整理成选项卡：{"domain":"flight|hotel|ticket|food|gift|other","query":"本次挑选的需求口径一句话","search":{"from":"出发城市","to":"到达城市","depart":"YYYY-MM-DD","return":"返程YYYY-MM-DD或空","adults":3,"city":"目的地城市","checkin":"YYYY-MM-DD","checkout":"YYYY-MM-DD","keyword":"区域/品牌关键词可选"},"options":[{"id":"o1","title":"候选标题（航班号/酒店名/商品名）","summary":"一句话关键信息（起降时间/地段档位/规格）","price":"价格口径","link":"来源链接","points":["亮点1"],"concerns":["注意点1"]}]}——给 3-5 个候选、按推荐度排序；候选必须有检索结果或讨论事实支撑，绝不编造价格、班次与链接；search 字段从讨论与检索结果里提取结构化行程参数（日期格式严格 YYYY-MM-DD，能确定多少填多少，用于生成直达预订链接，不确定的留空）；options.link 优先填能直接下单/预订的页面（如航司预订页、酒店详情页），减少成员跳转次数，没有则空字符串；成员已在讨论中明确选定的，options 返回 null。\n9. confirms：草案子约定的自动勾选——只有当讨论中出现了【明确无异议的表态】时才勾选：①方案/结论的提出者本人视为明确同意；②其他成员只有在该主题的讨论中实际发过言、且语气支持或平静推进（没有任何反对、疑虑或保留意见）时才可勾选；从未就该主题发言的成员一律不得勾选（沉默≠同意）；③该草案已被任何人勾掉（rejectedBy 非空）时禁止一切自动勾选。输出 [{"target":"子约定编号或标题","members":["成员名"],"basis":"讨论依据一句话"}]；没有则空数组。\n\n所有对象都是草案，需成员确认后才生效；completed 里的自动完成同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 200-400 字、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"nodeUpdates":[{"target":"...","title":"..."}],"doc":null,"options":null,"confirms":[{"target":"S1","members":["成员名"],"basis":"依据"}],"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action, maxTokens: 12000, fetchTimeout: 120000 });
@@ -1003,6 +1064,7 @@ ${threadText}
 
     const createdNotes = [];
     const autoDoneNotes = [];
+    const autoConfirmNotes = [];
     let created = [];
     let createdNodes = [];
     let doc = null;
@@ -1065,6 +1127,9 @@ ${threadText}
       if (data.completed && typeof data.completed === "object") {
         autoDoneNotes.push(...await applyAutoCompletions({ task, user, snapshot, pool, labelMap, completed: data.completed, createdNodes }));
       }
+
+      // ── 按讨论表态自动勾选草案子约定（提出者=同意；参与且未反对者可勾选；有勾掉则跳过）──
+      autoConfirmNotes.push(...await applyAutoConfirms({ task, user, pool, labelMap, confirmHints: data.confirms }));
     }
 
     let replyText = isNonEmptyString(data?.reply)
@@ -1078,6 +1143,9 @@ ${threadText}
     }
     if (autoDoneNotes.length > 0) {
       replyText += `\n\n—— 心栈根据讨论共识自动完成：${autoDoneNotes.join("、")}（可随时手动调整）。`;
+    }
+    if (autoConfirmNotes.length > 0) {
+      replyText += `\n\n—— 已按讨论表态自动勾选：${autoConfirmNotes.join("；")}（不同意可随时勾掉）。`;
     }
     const optionsCard = sanitizeOptionsCard(data?.options);
     if (optionsCard) {
@@ -1113,7 +1181,7 @@ ${threadText}
     if (!anchor) throw errorWith(404, "NOT_FOUND", "暂无成员讨论可驱动");
     const anchorWho = anchor.user?.displayName || anchor.user?.email || anchor.user?.phone || "成员";
     const confirmRuleText = task.metadata?.collab?.confirmRule === "owner" ? "发起人确认" : "全员确认";
-    const prompt = `${spaceText}\n\n你刚刚旁听了成员讨论，最新一条来自 ${anchorWho}：\n- ${anchorWho}：${String(anchor.content).slice(0, 300)}\n\n你是本空间的「执行驱动」：成员只负责交流，你负责持续把讨论变成清晰、不重复、可确认的空间对象，让任何人一眼看清全局。本轮按需输出（宁缺毋滥）：\n1. reply：只有确有值得说的时候才回复（澄清疑问、协调分歧、补充外部信息建议、推动停滞的事项）；没有就返回空字符串；\n2. digest：重写「执行概览」，严格按以下结构、每节极简（全文 250 字以内），让成员一眼看清「有哪几个大方向、讨论出了什么、还差谁确认」：\n## 大方向\n（进行中/草案的顶层子约定，每项一句当前状态；没有则写「暂无」）\n## 新进展\n（本轮及最近讨论敲定/更新的要点，最多 3 条；没有则写「暂无」）\n## 待确认\n（草案子约定、未确认沉淀、待办节点，统一注明由谁确认——当前确认规则为${confirmRuleText}；没有则写「暂无」）\n3. updates：讨论若推进/修正了某个已有子约定，用 {"target":"编号如 S1","title":"可选的新结论标题","standard":"可选的新完成标准","note":"一句更新原因"} 把它写回该约定，而不是新建第二条——同一方向永远只保留一个约定；只更新「进行中」和「草案」的，已完成的不要动；没有则空数组；\n4. subtasks：仅当出现真正新的、独立的核心决定/行动项才新建草案（遵守合并同类项与 parentHint 分级挂载）；与已有约定同方向的放 updates，不要建新的；没有则空数组；\n5. nodes：讨论中出现了关键时间点、阶段或决策才落成执行节点。必须合并同类项：同一主题的持续推进只保留一个归口节点（标题用统一口径），本轮相关推进作为它的子项——parentHint 填归口节点标题（不存在会自动创建）；同一主题的每次推进不要新建平级节点。归类看「主题」而非措辞：凡是对同一件事的逐次调整、确认、修改都算同类——例：日期相关的「11月第二周出行日期」「确定日期策略（11月第二周或flexible）」「日期策略调整为fully flexible」都归「确定目的地与出行日期」；目的地相关的「新疆/新加坡/荷兰目的地确认」「目的地锁定新加坡」也归「确定目的地与出行日期」；预算相关一律归「确定预算统一口径」；没有则空数组；\n6. nodeMoves：已有节点中凡属同一主题逐次递进的平级节点，用 [{"title":"节点标题","parent":"归口节点标题"}] 归并到统一归口节点下（如把上述日期/目的地节点归并到「确定目的地与出行日期」）；没有则空数组；\n7. nodeUpdates：讨论对某主题得出新结论时，用 [{"target":"该主题未完成的子项或归口节点的现标题","title":"新结论表述"}] 把旧表述改写为新结论——每一次调整都是一次推进，确认结论后覆盖此前表述（只改写未完成的；已完成的子项是历史推进记录，保留不改）；没有则空数组；\n8. doc：讨论内容值得长期保留（定稿方案、攻略汇总、清单）才生成 {title, content} 沉淀文件；否则 null；\n9. completed：核对「进行中」子约定、未完成节点、待确认沉淀——讨论已兑现完成条件就填 completed 并给一句依据（宁缺毋滥，切勿漏掉已达成项）；归口节点的子项全部完成或内容已被成员确认时，把归口节点标题填进 completed.nodes；没有把握留空。\n\n所有对象都是草案，需成员确认后生效；completed 同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 控制在 200 字以内、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","digest":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"updates":[{"target":"S1","title":"...","standard":"...","note":"..."}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"nodeUpdates":[{"target":"...","title":"..."}],"doc":null,"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
+    const prompt = `${spaceText}\n\n你刚刚旁听了成员讨论，最新一条来自 ${anchorWho}：\n- ${anchorWho}：${String(anchor.content).slice(0, 300)}\n\n你是本空间的「执行驱动」：成员只负责交流，你负责持续把讨论变成清晰、不重复、可确认的空间对象，让任何人一眼看清全局。本轮按需输出（宁缺毋滥）：\n1. reply：只有确有值得说的时候才回复（澄清疑问、协调分歧、补充外部信息建议、推动停滞的事项）；没有就返回空字符串；\n2. digest：重写「执行概览」，严格按以下结构、每节极简（全文 250 字以内），让成员一眼看清「有哪几个大方向、讨论出了什么、还差谁确认」：\n## 大方向\n（进行中/草案的顶层子约定，每项一句当前状态；没有则写「暂无」）\n## 新进展\n（本轮及最近讨论敲定/更新的要点，最多 3 条；没有则写「暂无」）\n## 待确认\n（草案子约定、未确认沉淀、待办节点，统一注明由谁确认——当前确认规则为${confirmRuleText}；没有则写「暂无」）\n3. updates：讨论若推进/修正了某个已有子约定，用 {"target":"编号如 S1","title":"可选的新结论标题","standard":"可选的新完成标准","note":"一句更新原因"} 把它写回该约定，而不是新建第二条——同一方向永远只保留一个约定；只更新「进行中」和「草案」的，已完成的不要动；没有则空数组；\n4. subtasks：仅当出现真正新的、独立的核心决定/行动项才新建草案（遵守合并同类项与 parentHint 分级挂载）；与已有约定同方向的放 updates，不要建新的；没有则空数组；\n5. nodes：讨论中出现了关键时间点、阶段或决策才落成执行节点。必须合并同类项：同一主题的持续推进只保留一个归口节点（标题用统一口径），本轮相关推进作为它的子项——parentHint 填归口节点标题（不存在会自动创建）；同一主题的每次推进不要新建平级节点。归类看「主题」而非措辞：凡是对同一件事的逐次调整、确认、修改都算同类——例：日期相关的「11月第二周出行日期」「确定日期策略（11月第二周或flexible）」「日期策略调整为fully flexible」都归「确定目的地与出行日期」；目的地相关的「新疆/新加坡/荷兰目的地确认」「目的地锁定新加坡」也归「确定目的地与出行日期」；预算相关一律归「确定预算统一口径」；没有则空数组；\n6. nodeMoves：已有节点中凡属同一主题逐次递进的平级节点，用 [{"title":"节点标题","parent":"归口节点标题"}] 归并到统一归口节点下（如把上述日期/目的地节点归并到「确定目的地与出行日期」）；没有则空数组；\n7. nodeUpdates：讨论对某主题得出新结论时，用 [{"target":"该主题未完成的子项或归口节点的现标题","title":"新结论表述"}] 把旧表述改写为新结论——每一次调整都是一次推进，确认结论后覆盖此前表述（只改写未完成的；已完成的子项是历史推进记录，保留不改）；没有则空数组；\n8. doc：讨论内容值得长期保留（定稿方案、攻略汇总、清单）才生成 {title, content} 沉淀文件；否则 null；\n9. completed：核对「进行中」子约定、未完成节点、待确认沉淀——讨论已兑现完成条件就填 completed 并给一句依据（宁缺毋滥，切勿漏掉已达成项）；归口节点的子项全部完成或内容已被成员确认时，把归口节点标题填进 completed.nodes；没有把握留空。\n10. confirms：草案子约定的自动勾选——①方案/结论的提出者本人视为明确同意；②其他成员只有在该主题讨论中实际发过言、且没有任何反对/疑虑/保留意见时才可勾选；从未就该主题发言的成员不得勾选（沉默≠同意）；③该草案已被任何人勾掉时禁止自动勾选。输出 [{"target":"子约定编号或标题","members":["成员名"],"basis":"讨论依据一句话"}]；没有则空数组。\n\n所有对象都是草案，需成员确认后生效；completed 同样允许成员随时手动改回；中性、不评判、不替人承诺。reply 控制在 200 字以内、分段清晰，不要用"Agent："开头。\n\n只输出 JSON：{"reply":"...","digest":"...","subtasks":[{"title":"...","standard":"...","assigneeHint":"...","parentHint":""}],"updates":[{"target":"S1","title":"...","standard":"...","note":"..."}],"nodes":[{"title":"...","node_type":"stage","parentHint":""}],"nodeMoves":[{"title":"...","parent":"..."}],"nodeUpdates":[{"target":"...","title":"..."}],"doc":null,"confirms":[{"target":"S1","members":["成员名"],"basis":"依据"}],"completed":{"subtasks":["S1"],"nodes":["节点标题"],"docs":["文档标题"],"reason":"依据"}}`;
     let data;
     try {
       data = await invokeLLM({ system, prompt, json: true, kind: action, maxTokens: 12000, fetchTimeout: 120000 });
@@ -1124,6 +1192,7 @@ ${threadText}
 
     const createdNotes = [];
     const autoDoneNotes = [];
+    const autoConfirmNotes = [];
     let created = [];
     let createdNodes = [];
     let doc = null;
@@ -1197,6 +1266,9 @@ ${threadText}
         autoDoneNotes.push(...await applyAutoCompletions({ task, user, snapshot, pool, labelMap, completed: data.completed, createdNodes }));
       }
 
+      // ⑤.5 按讨论表态自动勾选草案子约定（提出者=同意；参与且未反对者可勾选；有勾掉则跳过）
+      autoConfirmNotes.push(...await applyAutoConfirms({ task, user, pool, labelMap, confirmHints: data.confirms }));
+
       // ⑥ 执行概览（单例文档，始终维护——没有新东西也刷新时间戳以外的内容）
       if (isNonEmptyString(data.digest)) {
         digestDoc = await upsertTypedDoc(task.id, user.id, {
@@ -1211,6 +1283,9 @@ ${threadText}
     }
     if (autoDoneNotes.length > 0) {
       replyText += `${replyText ? "\n\n" : ""}—— 心栈根据讨论共识自动完成：${autoDoneNotes.join("、")}（可随时手动调整）。`;
+    }
+    if (autoConfirmNotes.length > 0) {
+      replyText += `${replyText ? "\n\n" : ""}—— 已按讨论表态自动勾选：${autoConfirmNotes.join("；")}（不同意可随时勾掉）。`;
     }
     if (!replyText) return { silent: true, digest: digestDoc };
 

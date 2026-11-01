@@ -110,8 +110,8 @@ export function useTaskOperations() {
       feedback.success("已移至垃圾箱");
       logUserBehavior("task_deleted", { id });
     },
-    onError: () => {
-        feedback.error("删除任务失败");
+    onError: (error) => {
+        feedback.error(error?.message || "删除任务失败");
     }
   });
 

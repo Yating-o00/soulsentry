@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
@@ -12,10 +12,11 @@ import {
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
   Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen,
-  Users2, Pin
+  Users2, Pin, LogOut
 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
+import { httpRequest } from "@/api/httpClient";
 import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
 import {
   DropdownMenu,
@@ -203,6 +204,33 @@ export default function LifeTaskCard({
   const [showExecDetail, setShowExecDetail] = useState(false);
   const queryClient = useQueryClient();
   const execState = execStateOverride || autoExec?.state;
+
+  // 共有约定（他人分享给我）：shared_role=member 时删除被后端拒绝（仅创建者可删），
+  // 替换为「退出共有」——自己退出成员列表，约定对其他成员保留
+  const isSharedMember = task.shared_role === "member";
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const [isLeaving, setIsLeaving] = useState(false);
+  const handleLeaveShare = async () => {
+    if (isLeaving || !currentUser?.id) return;
+    const ok = window.confirm(
+      `「${task.title}」是 ${task.owner_display_name || "对方"} 分享给你的共有约定，不能删除。\n确定退出吗？退出后它将不再出现在你的列表中，约定本身和其他成员不受影响。`
+    );
+    if (!ok) return;
+    setIsLeaving(true);
+    try {
+      await httpRequest(`/api/tasks/${task.id}/members/${currentUser.id}`, { method: "DELETE" });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("已退出该共有约定");
+    } catch (err) {
+      toast.error(err?.message || "退出失败，请稍后再试");
+    } finally {
+      setIsLeaving(false);
+    }
+  };
 
   // 置顶/取消置顶：置顶约定在列表最前（列表排序第 0 键）
   const [isPinning, setIsPinning] = useState(false);
@@ -715,12 +743,20 @@ export default function LifeTaskCard({
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onSettleKnowledge && onSettleKnowledge(task); }}>
                             <BookOpen className="w-4 h-4 mr-2" /> 沉淀为知识
                         </DropdownMenuItem>
+                        {!isSharedMember && (
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowAttachDialog(true); }}>
                             <CornerDownRight className="w-4 h-4 mr-2" /> 挂到其他约定下
                         </DropdownMenuItem>
+                        )}
+                        {isSharedMember ? (
+                        <DropdownMenuItem className="text-amber-600" disabled={isLeaving} onClick={(e) => { e.stopPropagation(); handleLeaveShare(); }}>
+                            <LogOut className="w-4 h-4 mr-2" /> 退出共有
+                        </DropdownMenuItem>
+                        ) : (
                         <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); onDelete && onDelete(task); }}>
                             <Trash2 className="w-4 h-4 mr-2" /> 删除
                         </DropdownMenuItem>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>

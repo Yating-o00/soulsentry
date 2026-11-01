@@ -977,6 +977,9 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
     }
 
     const sharedFromTag = `来自 ${ownerName} 的分享`;
+    // 副本不继承原约定的 _extraFields（含 id / 提醒已发标记等），避免污染新约定的序列化
+    const { _extraFields: _sourceExtraFields, ...sourceMetadataRest } =
+      item.metadata && typeof item.metadata === "object" ? item.metadata : {};
     let imported;
     if (type === "task") {
       imported = await prisma.task.create({
@@ -994,7 +997,7 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
           tags: item.tags,
           reminderStrategy: item.reminderStrategy,
           metadata: {
-            ...(item.metadata || {}),
+            ...sourceMetadataRest,
             importedFromShare: true,
             sharedByName: ownerName,
             sharedByUserId: item.userId,
@@ -1012,7 +1015,7 @@ publicShareRouter.post("/:token/import", requireAuth, async (req, res) => {
           plainText: [item.plainText || "", `（${sharedFromTag}）`].filter(Boolean).join("\n\n"),
           tags: item.tags,
           metadata: {
-            ...(item.metadata || {}),
+            ...sourceMetadataRest,
             importedFromShare: true,
             sharedByName: ownerName,
             sharedByUserId: item.userId,

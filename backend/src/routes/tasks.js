@@ -134,6 +134,9 @@ function getSerializedTaskExtraFields(task) {
 
 export function serializeTask(task) {
   const extraFields = getSerializedTaskExtraFields(task);
+  // _extraFields 里可能混入 id（如分享导入的副本继承了原约定的元数据），
+  // 绝不能让它覆盖任务真实 id——否则前端拿到错误 id，删除/编辑/勾选都会打到别的约定上
+  const { id: _extraFieldId, ...safeExtraFields } = extraFields;
 
   return {
     id: task.id,
@@ -166,7 +169,7 @@ export function serializeTask(task) {
     end_reminder_sent: !!(extraFields.end_reminder_sent_at && task.endTime && new Date(extraFields.end_reminder_sent_at).getTime() >= new Date(task.endTime).getTime()),
     // 重复约定：今天是否已打卡（按北京日期比对）
     done_today: extraFields.recurrence_last_done === new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10),
-    ...extraFields,
+    ...safeExtraFields,
     metadata: task.metadata,
     created_date: task.createdAt,
     updated_date: task.updatedAt

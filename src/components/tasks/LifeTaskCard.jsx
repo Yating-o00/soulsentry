@@ -136,6 +136,7 @@ export default function LifeTaskCard({
   onReparent,
   onSettleKnowledge,
   onEnableCollab,
+  onDelete,
   autoExec
 }) {
   const isRecurringTask = task.repeat_rule && task.repeat_rule !== 'none';
@@ -717,7 +718,7 @@ export default function LifeTaskCard({
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowAttachDialog(true); }}>
                             <CornerDownRight className="w-4 h-4 mr-2" /> 挂到其他约定下
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); /* onDelete */ }}>
+                        <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); onDelete && onDelete(task); }}>
                             <Trash2 className="w-4 h-4 mr-2" /> 删除
                         </DropdownMenuItem>
                     </DropdownMenuContent>

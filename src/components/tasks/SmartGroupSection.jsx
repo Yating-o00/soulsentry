@@ -29,6 +29,7 @@ export default function SmartGroupSection({
   onUpdateTask,
   onSettleKnowledge,
   onEnableCollab,
+  onDelete,
   getAutoExec,
 }) {
   if (!tasks || tasks.length === 0) {
@@ -88,6 +89,7 @@ export default function SmartGroupSection({
             onUpdateTask={onUpdateTask}
             onSettleKnowledge={onSettleKnowledge}
             onEnableCollab={onEnableCollab ? () => onEnableCollab(task) : undefined}
+            onDelete={() => onDelete && onDelete(task)}
             autoExec={getAutoExec ? getAutoExec(task) : undefined}
           />
         ))}

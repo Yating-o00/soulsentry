@@ -741,6 +741,7 @@ export default function Tasks() {
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
                 onEnableCollab={openEnableCollab}
+                onDelete={(task) => deleteTask(task.id)}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -765,6 +766,7 @@ export default function Tasks() {
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
                 onEnableCollab={openEnableCollab}
+                onDelete={(task) => deleteTask(task.id)}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -789,6 +791,7 @@ export default function Tasks() {
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
                 onEnableCollab={openEnableCollab}
+                onDelete={(task) => deleteTask(task.id)}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
 
@@ -813,6 +816,7 @@ export default function Tasks() {
                 onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                 onSettleKnowledge={handleSettleKnowledge}
                 onEnableCollab={openEnableCollab}
+                onDelete={(task) => deleteTask(task.id)}
                 getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
               />
             </div>
@@ -886,6 +890,7 @@ export default function Tasks() {
                     onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
                     onSettleKnowledge={handleSettleKnowledge}
                     onEnableCollab={() => openEnableCollab(task)}
+                    onDelete={(t) => deleteTask(t.id)}
                     onReparent={handleReparent}
                     autoExec={autoExecMap[task.id]?.autoExec}
                   />

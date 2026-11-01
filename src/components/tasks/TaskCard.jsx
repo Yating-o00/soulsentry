@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import AITaskAssistant from "./AITaskAssistant";
 
-export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSubtaskList = false, isTrash = false, onRestore, onDeleteForever, onComplete, onEdit }) {
+export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSubtaskList = false, isTrash = false, onRestore, onDeleteForever, onComplete, onEdit, onDelete }) {
   const [isCompleted, setIsCompleted] = useState(false);
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [showAttachDialog, setShowAttachDialog] = useState(false);
@@ -196,7 +196,7 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
               <CornerDownRight className="w-4 h-4 mr-2" />
               挂到其他约定下
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-red-600">删除</DropdownMenuItem>
+            <DropdownMenuItem className="text-red-600" onClick={(e) => { e.stopPropagation(); onDelete && onDelete(); }}>删除</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

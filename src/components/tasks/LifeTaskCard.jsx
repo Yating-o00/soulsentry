@@ -672,6 +672,24 @@ export default function LifeTaskCard({
                     )}
 
                     {/* Dynamic Context Badges */}
+                    {isSharedMember && (
+                        <span
+                            title="共有约定：内容与对方实时同步，点右上角退出按钮即可退出"
+                            className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-indigo-50 text-indigo-600 border-indigo-100"
+                        >
+                            <Users2 className="w-3 h-3" />
+                            {task.owner_display_name || "对方"}共享
+                        </span>
+                    )}
+                    {!isSharedMember && task.metadata?.importedFromShare && (
+                        <span
+                            title={`这是你保存的分享副本（来自 ${task.metadata?.sharedByName || "对方"}），不与原约定实时同步，可直接删除`}
+                            className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-50 text-stone-400 border-stone-100"
+                        >
+                            <Share2 className="w-3 h-3" />
+                            分享副本
+                        </span>
+                    )}
                     {badges.map((badge, idx) => (
                         <span key={idx} className={cn(
                             "px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border",
@@ -718,6 +736,17 @@ export default function LifeTaskCard({
                         <Pin className="w-4 h-4" fill="currentColor" />
                     </span>
                 )}
+                {/* 共有约定（成员）：卡片上直接给可见的退出按钮，不用翻菜单 */}
+                {isSharedMember && (
+                    <button
+                        title={`退出共有约定（来自 ${task.owner_display_name || "对方"}）`}
+                        disabled={isLeaving}
+                        onClick={(e) => { e.stopPropagation(); handleLeaveShare(); }}
+                        className="p-1.5 rounded-lg text-amber-500 hover:text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50"
+                    >
+                        <LogOut className="w-4 h-4" />
+                    </button>
+                )}
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <button 
@@ -731,9 +760,11 @@ export default function LifeTaskCard({
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onShare && onShare(); }}>
                             <Share2 className="w-4 h-4 mr-2" /> 分享
                         </DropdownMenuItem>
+                        {!isSharedMember && (
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEnableCollab && onEnableCollab(task); }}>
                             <Users2 className="w-4 h-4 mr-2" /> 开启协同
                         </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleTogglePin(e); }}>
                             <Pin className="w-4 h-4 mr-2" /> {task.pinned_at ? "取消置顶" : "置顶"}
                         </DropdownMenuItem>

@@ -72,7 +72,7 @@ import LocationReminderSettings from "@/components/notifications/LocationReminde
 import ReactMarkdown from "react-markdown";
 import { useTaskOperations } from "@/components/hooks/useTaskOperations";
 import { invokeAI } from "@/components/utils/aiHelper";
-import { isRecurringTask, isTaskEffectivelyCompleted } from "@/lib/taskStatus";
+import { isRecurringTask, isTaskEffectivelyCompleted, splitPlanGroupItems } from "@/lib/taskStatus";
 import { isSameShanghaiDay, formatShanghai } from "@/lib/timeCore";
 
 // 子约定只继承「未来的」时间安排：父约定时间已过时不带过来，
@@ -178,6 +178,14 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
       if (next.has(name)) next.delete(name);
       else next.add(name);
       return next;
+    });
+  };
+  // 组内二次折叠：未来条目与已完成条目默认收起（key = 组名，{ far, done }）
+  const [groupReveal, setGroupReveal] = useState({});
+  const toggleGroupReveal = (groupName, key) => {
+    setGroupReveal((prev) => {
+      const cur = prev[groupName] || {};
+      return { ...prev, [groupName]: { ...cur, [key]: !cur[key] } };
     });
   };
 
@@ -1369,13 +1377,38 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                               )}
                               <span className="ml-auto text-[11px] text-slate-400 tabular-nums flex-shrink-0">{gDone}/{g.items.length}</span>
                             </button>
-                            {!collapsed && (
-                              <div className="p-2 space-y-2">
-                                <AnimatePresence mode="popLayout">
-                                  {g.items.map(renderSubtaskRow)}
-                                </AnimatePresence>
-                              </div>
-                            )}
+                            {!collapsed && (() => {
+                              const { done, near, far } = splitPlanGroupItems(g.items, isEffectivelyCompleted);
+                              const reveal = groupReveal[g.name] || {};
+                              const foldBtn = "w-full flex items-center justify-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-50 transition-colors";
+                              return (
+                                <div className="p-2 space-y-2">
+                                  <AnimatePresence mode="popLayout">
+                                    {near.map(renderSubtaskRow)}
+                                  </AnimatePresence>
+                                  {far.length > 0 && (
+                                    <button type="button" onClick={() => toggleGroupReveal(g.name, "far")} className={foldBtn}>
+                                      {reveal.far ? "收起未来安排 ▴" : `未来 ${far.length} 条 ▾`}
+                                    </button>
+                                  )}
+                                  {reveal.far && (
+                                    <AnimatePresence mode="popLayout">
+                                      {far.map(renderSubtaskRow)}
+                                    </AnimatePresence>
+                                  )}
+                                  {done.length > 0 && (
+                                    <button type="button" onClick={() => toggleGroupReveal(g.name, "done")} className={foldBtn}>
+                                      {reveal.done ? "收起已完成 ▴" : `已完成 ${done.length} 条 ▾`}
+                                    </button>
+                                  )}
+                                  {reveal.done && (
+                                    <AnimatePresence mode="popLayout">
+                                      {done.map(renderSubtaskRow)}
+                                    </AnimatePresence>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })

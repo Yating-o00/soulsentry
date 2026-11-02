@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
-import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
+import { isTaskEffectivelyCompleted, splitPlanGroupItems } from "@/lib/taskStatus";
 import { 
   Check, Clock, MapPin, Repeat, MoreHorizontal, 
   ShoppingBag, Zap, Navigation, Footprints,
@@ -184,6 +184,14 @@ export default function LifeTaskCard({
       if (next.has(name)) next.delete(name);
       else next.add(name);
       return next;
+    });
+  };
+  // 组内二次折叠：未来条目与已完成条目默认收起（key = 组名，{ far, done }）
+  const [groupReveal, setGroupReveal] = useState({});
+  const toggleGroupReveal = (groupName, key) => {
+    setGroupReveal((prev) => {
+      const cur = prev[groupName] || {};
+      return { ...prev, [groupName]: { ...cur, [key]: !cur[key] } };
     });
   };
   // 子约定日期标签：今天不显示，其它日期显示「M·d 周X」（按北京时间、与时区无关）
@@ -1302,19 +1310,52 @@ export default function LifeTaskCard({
                               )}
                               <span className="ml-auto text-[11px] text-stone-400 tabular-nums flex-shrink-0">{doneCount}/{g.items.length}</span>
                             </button>
-                            {!collapsed && (
-                              <div className="px-2 pb-2 space-y-1.5">
-                                {g.items.map((subtask) => (
-                                  <PlanSubtaskRow
-                                    key={subtask.id}
-                                    subtask={subtask}
-                                    overdue={isSubtaskOverdue(subtask)}
-                                    dateLabel={subtaskDateLabel(subtask.reminder_time)}
-                                    onToggleSubtask={onToggleSubtask}
-                                  />
-                                ))}
-                              </div>
-                            )}
+                            {!collapsed && (() => {
+                              const { done, near, far } = splitPlanGroupItems(g.items, isTaskEffectivelyCompleted);
+                              const reveal = groupReveal[g.name] || {};
+                              const foldBtn = "w-full flex items-center justify-center gap-1 text-[11px] text-stone-400 hover:text-stone-600 px-2 py-1 rounded-md hover:bg-stone-100/60 transition-colors";
+                              return (
+                                <div className="px-2 pb-2 space-y-1.5">
+                                  {near.map((subtask) => (
+                                    <PlanSubtaskRow
+                                      key={subtask.id}
+                                      subtask={subtask}
+                                      overdue={isSubtaskOverdue(subtask)}
+                                      dateLabel={subtaskDateLabel(subtask.reminder_time)}
+                                      onToggleSubtask={onToggleSubtask}
+                                    />
+                                  ))}
+                                  {far.length > 0 && (
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleGroupReveal(g.name, "far"); }} className={foldBtn}>
+                                      {reveal.far ? "收起未来安排 ▴" : `未来 ${far.length} 条 ▾`}
+                                    </button>
+                                  )}
+                                  {reveal.far && far.map((subtask) => (
+                                    <PlanSubtaskRow
+                                      key={subtask.id}
+                                      subtask={subtask}
+                                      overdue={isSubtaskOverdue(subtask)}
+                                      dateLabel={subtaskDateLabel(subtask.reminder_time)}
+                                      onToggleSubtask={onToggleSubtask}
+                                    />
+                                  ))}
+                                  {done.length > 0 && (
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); toggleGroupReveal(g.name, "done"); }} className={foldBtn}>
+                                      {reveal.done ? "收起已完成 ▴" : `已完成 ${done.length} 条 ▾`}
+                                    </button>
+                                  )}
+                                  {reveal.done && done.map((subtask) => (
+                                    <PlanSubtaskRow
+                                      key={subtask.id}
+                                      subtask={subtask}
+                                      overdue={isSubtaskOverdue(subtask)}
+                                      dateLabel={subtaskDateLabel(subtask.reminder_time)}
+                                      onToggleSubtask={onToggleSubtask}
+                                    />
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}

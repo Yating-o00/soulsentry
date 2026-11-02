@@ -1045,6 +1045,50 @@ collabRouter.post("/:taskId/convert", async (req, res) => {
 });
 
 // GET /api/collab/:taskId/activity — 空间动态（collab_* 与常规变更），时间倒序 50 条
+// POST /api/collab/:taskId/convert — 共创约定转回普通约定/打卡约定（仅创建者；空间数据保留在库，可再开启恢复）
+const convertFromCollabSchema = z.object({ target: z.enum(["task", "checkin"]) });
+
+collabRouter.post("/:taskId/convert", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+  if (task.userId !== req.user.id) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "只有发起人可以把共创约定转回普通/打卡约定" });
+  }
+  const payload = convertFromCollabSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  const fresh = await prisma.task.findUnique({ where: { id: task.id } });
+  const meta = { ...(fresh?.metadata || {}) };
+  const archivedCollab = meta.collab;
+  delete meta.collab;
+  meta._archivedCollab = archivedCollab; // 协同配置归档；执行节点/沉淀/讨论不动，再开启协同时空间直接恢复
+  if (payload.data.target === "checkin") {
+    // 打卡约定需要每日重复语义（今日已赴约 / 滚存下一期）
+    const prevExtra = meta._extraFields && typeof meta._extraFields === "object" && !Array.isArray(meta._extraFields)
+      ? meta._extraFields
+      : {};
+    if (!prevExtra.repeat_rule || prevExtra.repeat_rule === "none") {
+      meta._extraFields = { ...prevExtra, repeat_rule: "daily" };
+    }
+  }
+  const updated = await prisma.task.update({
+    where: { id: task.id },
+    data: {
+      metadata: meta,
+      category: payload.data.target === "checkin"
+        ? "checkin"
+        : (fresh.category === "collab" ? "personal" : fresh.category)
+    }
+  });
+  await logCollabChange(req.user.id, task, "collab_converted", [
+    { field: "target", field_label: "转换为", new_value: payload.data.target === "checkin" ? "打卡约定" : "普通约定" }
+  ]);
+  return res.json(serializeTask(updated));
+});
+
 collabRouter.get("/:taskId/activity", async (req, res) => {
   const result = await loadCollabSpace(req, res);
   if (!result) return;

@@ -4,7 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Check, ChevronRight, MessageSquare, Bot, Sparkles, AlertCircle, Pin, Trash2, LogOut } from "lucide-react";
+import { Check, ChevronRight, MessageSquare, Bot, Sparkles, AlertCircle, Pin, Trash2, LogOut, Repeat, Briefcase, Footprints } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { httpRequest } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
@@ -181,6 +184,29 @@ export default function CollabTaskCard({ task }) {
       toast.error(err?.message || "退出失败，请稍后再试");
     } finally {
       setIsLeaving(false);
+    }
+  };
+
+  // 转回普通约定/打卡约定（仅创建者）：移除协同配置（归档保留），执行节点/沉淀/讨论留在库里，可再开启协同恢复
+  const [isConverting, setIsConverting] = useState(false);
+  const handleConvert = async (e, target) => {
+    e.stopPropagation();
+    if (isConverting) return;
+    const label = target === "checkin" ? "打卡约定" : "普通约定";
+    const ok = window.confirm(
+      `确定把协同约定「${task.title}」转为${label}吗？\n共创空间的执行节点、沉淀与讨论会保留在后台，子约定保留为普通子约定；之后随时可以重新开启协同。`
+    );
+    if (!ok) return;
+    setIsConverting(true);
+    try {
+      await httpRequest(`/api/collab/${task.id}/convert`, { method: "POST", body: { target } });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["collab-card", task.id] });
+      toast.success(`已转为${label}，可再开启协同恢复共创空间`);
+    } catch (err) {
+      toast.error(err?.message || "转换失败，请稍后再试");
+    } finally {
+      setIsConverting(false);
     }
   };
 
@@ -453,6 +479,28 @@ export default function CollabTaskCard({ task }) {
             <LogOut className="w-4 h-4" />
           </button>
         ) : null}
+        {isOwner && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                disabled={isConverting}
+                title="把这条协同约定转回普通约定或打卡约定"
+                className="p-1.5 rounded-full text-slate-300 hover:text-[#384877] hover:bg-[#eef2ff]/60 transition-all disabled:opacity-50"
+              >
+                <Repeat className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="text-xs">
+              <DropdownMenuItem onClick={(e) => handleConvert(e, "task")} className="gap-1.5">
+                <Briefcase className="w-3.5 h-3.5" /> 转为普通约定
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={(e) => handleConvert(e, "checkin")} className="gap-1.5">
+                <Footprints className="w-3.5 h-3.5" /> 转为打卡约定
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <CollabInviteDialog

@@ -438,8 +438,8 @@ export default function SmartInputBar() {
             category: plan.parent.category || "personal",
             priority: plan.parent.priority || "medium",
           });
-          const all = await base44.entities.Task.list("-created_date", 500);
-          const oldChildren = all.filter((t) => t.parent_task_id === existing.id && !t.deleted_at);
+          // 精确拉取该母约定下的现有子约定再删除（全量 list 可能拿到缓存旧数据，漏删会导致重复子约定越调越多）
+          const oldChildren = await base44.entities.Task.filter({ parent_task_id: existing.id });
           for (const c of oldChildren) {
             await base44.entities.Task.delete(c.id);
           }

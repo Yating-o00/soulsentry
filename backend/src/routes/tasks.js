@@ -201,7 +201,10 @@ function buildTaskCreateData(userId, payload) {
   const extraFields = getTaskExtraFields(payload);
   // 兜底：原文含重复语义而前端未显式传 repeat_rule 时自动识别——
   // 否则 cron 首次提醒后不推进排期，重复约定退化为一次性提醒（如"每天晚上6-7点吃药"只响一天）
-  if (!extraFields.repeat_rule) {
+  // 例外：智能规划的逐日子约定（plan_kind/plan_group）绝不推断重复——它们是带具体日期的实例，
+  // 误标 weekly/daily 会让序列化改按 recurrence_last_done 判定（status 被忽略），勾选次日就"回弹"
+  const isPlanInstance = Boolean(extraFields.plan_kind || extraFields.plan_group);
+  if (!extraFields.repeat_rule && !isPlanInstance) {
     const rec = parseRecurrenceFromText(payload.description) || parseRecurrenceFromText(payload.title);
     if (rec) {
       extraFields.repeat_rule = rec.repeat_rule;
@@ -470,11 +473,17 @@ tasksRouter.post("/batch", async (req, res) => {
 
   const tasks = await prisma.$transaction(async (tx) => {
     const created = [];
+    // 请求内去重：同一父约定+标题+提醒时刻的条目只建一次——AI 模板重复/前端重试会产生三条一模一样的子约定
+    const seen = new Set();
 
     for (const item of payload.data) {
+      const sig = `${item.parent_task_id || ""}|${String(item.title || "").trim()}|${String(item.reminder_time || "")}`;
+      if (seen.has(sig)) continue;
+      seen.add(sig);
       const task = await tx.task.create({
         data: buildTaskCreateData(req.user.id, item)
       });
+      task.__sourceItem = item;
 
       await tx.taskChangeLog.create({
         data: {
@@ -501,8 +510,8 @@ tasksRouter.post("/batch", async (req, res) => {
   }
 
   // 内容安全：异步逐条 msgSecCheck——先返回创建结果，命中违规的约定自动隐藏
-  tasks.forEach((task, idx) => {
-    const item = payload.data[idx] || {};
+  tasks.forEach((task) => {
+    const item = task.__sourceItem || {};
     checkTextSecurityAsync(
       `${item.title || ""}\n${item.description || ""}`,
       req.user.id,
@@ -657,7 +666,10 @@ tasksRouter.patch("/:id", async (req, res) => {
   const prevExtra = isPlainObject(existing.metadata?._extraFields) ? existing.metadata._extraFields : {};
   // 兜底：文本含重复语义但未设 repeat_rule 时自动识别（前端智能创建链路不总是显式传），
   // 存量的一次性任务被编辑保存后也能激活为重复约定
-  if (extraFields.repeat_rule === undefined && !prevExtra.repeat_rule) {
+  // 例外：智能规划的逐日子约定（plan_kind/plan_group）绝不推断/补加——它们是带日期的实例，
+  // 误标 repeat 后序列化改按 recurrence_last_done 判定（status 被忽略），勾选次日就"回弹"成未完成
+  const isPlanInstance = Boolean(extraFields.plan_kind || extraFields.plan_group || prevExtra.plan_kind || prevExtra.plan_group);
+  if (extraFields.repeat_rule === undefined && !prevExtra.repeat_rule && !isPlanInstance) {
     const rec = parseRecurrenceFromText(payload.data.description ?? existing.description)
       || parseRecurrenceFromText(payload.data.title ?? existing.title);
     if (rec) {

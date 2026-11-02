@@ -199,7 +199,7 @@ export default function CollabTaskCard({ task }) {
     if (!ok) return;
     setIsConverting(true);
     try {
-      await httpRequest(`/api/collab/${task.id}/convert`, { method: "POST", body: { target } });
+      await httpRequest(`/api/collab/${task.id}/convert-type`, { method: "POST", body: { target } });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({ queryKey: ["collab-card", task.id] });
       toast.success(`已转为${label}，可再开启协同恢复共创空间`);

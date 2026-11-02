@@ -1045,10 +1045,11 @@ collabRouter.post("/:taskId/convert", async (req, res) => {
 });
 
 // GET /api/collab/:taskId/activity — 空间动态（collab_* 与常规变更），时间倒序 50 条
-// POST /api/collab/:taskId/convert — 共创约定转回普通约定/打卡约定（仅创建者；空间数据保留在库，可再开启恢复）
+// POST /api/collab/:taskId/convert-type — 共创约定转回普通约定/打卡约定（仅创建者；空间数据保留在库，可再开启恢复）
+// 注意：路径不能用 /convert（已被「讨论转对象」占用）
 const convertFromCollabSchema = z.object({ target: z.enum(["task", "checkin"]) });
 
-collabRouter.post("/:taskId/convert", async (req, res) => {
+collabRouter.post("/:taskId/convert-type", async (req, res) => {
   const result = await loadCollabSpace(req, res);
   if (!result) return;
   const { task } = result;

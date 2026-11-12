@@ -1,12 +1,11 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Archive as ArchiveIcon, Heart, ChevronLeft, BarChart3 } from "lucide-react";
-import FloatingAssistantButton from "./components/assistant/FloatingAssistantButton";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Heart, ChevronLeft, BarChart3, Wallpaper } from "lucide-react";
+// 旧版右下角助手已移除：统一由 App.jsx 的 AssistantWidget（机器人形象）提供入口
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
-import WelcomeGuard from "@/components/WelcomeGuard";
 import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
 import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
 import NotificationManager from "./components/notifications/NotificationManager";
@@ -34,7 +33,7 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Trash2, MessageSquarePlus, Search, Archive as ArchiveBoxIcon } from "lucide-react";
+import { Trash2, MessageSquarePlus, Search, WifiOff } from "lucide-react";
 import FeedbackDialog from "@/components/feedback/FeedbackDialog";
 import GlobalSearch from "@/components/search/GlobalSearch";
 import CreditsBadge from "@/components/credits/CreditsBadge";
@@ -50,6 +49,11 @@ const getNavigationItems = (t) => [
     title: t('tasks'),
     url: createPageUrl("Tasks"),
     icon: ListTodo,
+  },
+  {
+    title: "锁屏待办",
+    url: createPageUrl("LockScreenTodo"),
+    icon: Wallpaper,
   },
   {
     title: t('notes'),
@@ -92,11 +96,11 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   };
 
   return (
-    <Sidebar className="border-r border-slate-200/50 bg-gradient-to-b from-slate-50 to-white">
-      <SidebarHeader className="border-b border-slate-200/50 p-6">
+    <Sidebar className="border-r border-stone-200/60 bg-white">
+      <SidebarHeader className="border-b border-stone-200/60 p-6">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20 flex-shrink-0 overflow-hidden">
+            <div className="h-10 w-10 rounded-xl bg-[#384877] flex items-center justify-center flex-shrink-0 overflow-hidden">
               <img
                 src={xinzhanLogo}
                 alt={t('soulSentry')}
@@ -104,19 +108,19 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
               />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="font-bold text-lg bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent whitespace-nowrap">
+              <h2 className="font-semibold text-lg text-stone-900 whitespace-nowrap">
                 {t('soulSentry')}
               </h2>
-              <p className="text-xs text-slate-500 truncate">{t('tagline')}</p>
+              <p className="text-xs text-stone-400 truncate">{t('tagline')}</p>
             </div>
           </div>
 
           <button
             onClick={toggleLanguage}
-            className="group relative h-7 w-7 rounded-full bg-gradient-to-r from-[#384877]/5 to-[#3b5aa2]/5 hover:from-[#384877] hover:to-[#3b5aa2] border border-slate-200 hover:border-transparent flex items-center justify-center transition-all duration-300 hover:shadow-md hover:shadow-[#384877]/20 active:scale-95 flex-shrink-0"
+            className="relative h-7 w-7 rounded-full bg-white border border-stone-200 hover:border-stone-300 flex items-center justify-center transition-colors flex-shrink-0"
             title={language === 'zh' ? '切换到英文 / Switch to English' : '切换到中文 / Switch to Chinese'}
           >
-            <Languages className="w-3.5 h-3.5 text-[#384877] group-hover:text-white transition-colors" />
+            <Languages className="w-3.5 h-3.5 text-stone-500" />
             <span className="absolute -bottom-1 -right-1 text-[8px] font-bold px-1 py-0 rounded-full bg-[#384877] text-white leading-tight">
               {language === 'zh' ? '中' : 'EN'}
             </span>
@@ -131,12 +135,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
               setSearchOpen(true);
               handleMobileClick();
             }}
-            className="w-full flex items-center gap-2 px-3 py-2.5 bg-slate-100 hover:bg-slate-200/70 rounded-xl text-slate-500 text-sm transition-colors border border-slate-200/50"
+            className="w-full flex items-center gap-2 px-3 py-2.5 bg-stone-100/70 hover:bg-stone-100 rounded-xl text-stone-500 text-sm transition-colors border border-stone-200/60"
           >
             <Search className="w-4 h-4" />
             <span>搜索...</span>
             <div className="ml-auto flex items-center gap-1">
-              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-slate-300 bg-white px-1.5 font-mono text-[10px] font-medium text-slate-500 opacity-100">
+              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-stone-300 bg-white px-1.5 font-mono text-[10px] font-medium text-stone-500 opacity-100">
                 <span className="text-xs">⌘</span>K
               </kbd>
             </div>
@@ -154,10 +158,10 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton 
                       asChild 
-                      className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
+                      className={`transition-colors duration-200 rounded-xl mb-1 ${
                         isActive 
-                          ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white shadow-lg shadow-[#384877]/25' 
-                          : 'hover:bg-[#f9fafb] text-slate-700'
+                          ? 'bg-stone-100 text-stone-900' 
+                          : 'hover:bg-stone-100/70 text-stone-600'
                       }`}
                     >
                       <Link 
@@ -165,8 +169,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                         onClick={handleMobileClick}
                         className="flex items-center gap-3 px-4 py-3"
                       >
-                        <item.icon className={`w-5 h-5 transition-transform duration-300 ${
-                          isActive ? 'scale-110' : 'group-hover:scale-110'
+                        <item.icon className={`w-5 h-5 ${
+                          isActive ? 'text-[#384877]' : 'text-stone-400'
                         }`} />
                         <span className="font-medium">{item.title}</span>
                       </Link>
@@ -178,7 +182,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="p-3 border-t border-slate-200/50">
+      <SidebarFooter className="p-3 border-t border-stone-200/60">
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton 
@@ -186,11 +190,11 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                 setFeedbackOpen(true);
                 handleMobileClick();
               }}
-              className="group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 hover:bg-[#f0f9ff] text-slate-700 cursor-pointer"
+              className="transition-colors duration-200 rounded-xl mb-1 hover:bg-stone-100/70 text-stone-600 cursor-pointer"
             >
               <div className="flex items-center gap-3 px-4 py-3 w-full">
-                <MessageSquarePlus className="w-5 h-5 text-slate-500 group-hover:text-[#384877] group-hover:scale-110 transition-all duration-300" />
-                <span className="font-medium group-hover:text-[#384877] transition-colors">{t('feedback')}</span>
+                <MessageSquarePlus className="w-5 h-5 text-stone-400" />
+                <span className="font-medium">{t('feedback')}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -198,10 +202,10 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
           <SidebarMenuItem>
             <SidebarMenuButton 
               asChild 
-              className={`group relative overflow-hidden transition-all duration-300 rounded-xl mb-2 ${
+              className={`transition-colors duration-200 rounded-xl mb-1 ${
                 location.pathname === createPageUrl("Trash") 
-                  ? 'bg-[#fff1f2] text-[#d5495f] shadow-sm border border-[#e0919e]' 
-                  : 'hover:bg-[#fff1f2] hover:text-[#d5495f] text-slate-700'
+                  ? 'bg-stone-100 text-stone-900' 
+                  : 'hover:bg-stone-100/70 text-stone-600'
               }`}
             >
               <Link 
@@ -209,8 +213,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                 onClick={handleMobileClick}
                 className="flex items-center gap-3 px-4 py-3"
               >
-                <Trash2 className={`w-5 h-5 transition-transform duration-300 ${
-                  location.pathname === createPageUrl("Trash") ? 'scale-110 text-[#d5495f]' : 'group-hover:scale-110 group-hover:text-[#d5495f] text-slate-500'
+                <Trash2 className={`w-5 h-5 ${
+                  location.pathname === createPageUrl("Trash") ? 'text-stone-900' : 'text-stone-400'
                 }`} />
                 <span className="font-medium">{t('trash')}</span>
               </Link>
@@ -252,7 +256,7 @@ function MobileHeader() {
             <ChevronLeft className="w-5 h-5 text-slate-700" />
           </button>
         )}
-        <h1 className="text-base font-semibold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+        <h1 className="text-base font-semibold text-stone-900">
           {t('soulSentry')}
         </h1>
       </div>
@@ -380,14 +384,13 @@ function LayoutContent({ children }) {
 
         {/* 离线状态提示 */}
         {!isOnline && (
-          <div className="md:hidden fixed top-0 inset-x-0 z-50 bg-amber-500 text-white text-center py-3 text-base font-medium">
-            📡 离线模式 {pendingSync > 0 && `· ${pendingSync} 项待同步`}
+          <div className="md:hidden fixed top-0 inset-x-0 z-50 bg-amber-500 text-white text-center py-3 text-base font-medium flex items-center justify-center gap-2">
+            <WifiOff className="w-4 h-4" /> 离线模式 {pendingSync > 0 && `· ${pendingSync} 项待同步`}
           </div>
         )}
 
         {/* 背景必须是纯色:半透明渐变做滚动容器底色会让 iOS 每帧重合成整个视口,造成滚动卡顿 */}
-        <main className="flex-1 flex flex-col bg-[#f8f9fa] relative w-full overflow-hidden pb-20 md:pb-0">
-          <FloatingAssistantButton />
+        <main className="flex-1 flex flex-col bg-[#FAF9F7] relative w-full overflow-hidden pb-20 md:pb-0">
           <MobileHeader />
 
           <div className="flex-1 overflow-auto">
@@ -410,9 +413,7 @@ function LayoutContent({ children }) {
       {isStandalonePricingPage ? (
         children
       ) : (
-        <WelcomeGuard>
-          <LayoutContent>{children}</LayoutContent>
-        </WelcomeGuard>
+        <LayoutContent>{children}</LayoutContent>
       )}
         </TranslationProvider>
       );

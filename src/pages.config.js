@@ -49,50 +49,38 @@
  */
 import Account from './pages/Account';
 import AdminStats from './pages/AdminStats.jsx';
-import Archive from './pages/Archive.jsx';
 import CollabSpace from './pages/CollabSpace.jsx';
 import Dashboard from './pages/Dashboard';
-import GeminiTest from './pages/GeminiTest';
 import HeartSign from './pages/HeartSign.jsx';
-import Knowledge from './pages/Knowledge';
 import KnowledgeBase from './pages/KnowledgeBase';
+import LockScreenTodo from './pages/LockScreenTodo.jsx';
 import Notes from './pages/Notes';
 import NotificationSettings from './pages/NotificationSettings';
 import Notifications from './pages/Notifications';
 import Pricing from './pages/Pricing';
-import ReminderSettings from './pages/ReminderSettings';
 import Share from './pages/Share';
 import Tasks from './pages/Tasks';
 import Teams from './pages/Teams';
-import Templates from './pages/Templates';
 import Trash from './pages/Trash';
-import Welcome from './pages/Welcome';
-import StructuredCards from './pages/StructuredCards.jsx';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
     "Account": Account,
     "AdminStats": AdminStats,
-    "Archive": Archive,
     "CollabSpace": CollabSpace,
     "Dashboard": Dashboard,
-    "GeminiTest": GeminiTest,
     "HeartSign": HeartSign,
-    "Knowledge": Knowledge,
     "KnowledgeBase": KnowledgeBase,
+    "LockScreenTodo": LockScreenTodo,
     "Notes": Notes,
     "NotificationSettings": NotificationSettings,
     "Notifications": Notifications,
     "Pricing": Pricing,
-    "ReminderSettings": ReminderSettings,
     "Share": Share,
     "Tasks": Tasks,
     "Teams": Teams,
-    "Templates": Templates,
     "Trash": Trash,
-    "Welcome": Welcome,
-    "StructuredCards": StructuredCards,
 }
 
 export const pagesConfig = {

@@ -23,7 +23,10 @@ import {
   StickyNote,
   Bell,
   History,
-  CornerDownRight
+  CornerDownRight,
+  NotebookPen, Users, Sprout, BookOpen, ShoppingCart, Wallet,
+  Footprints, Library, Dumbbell, ChefHat, Brush, Plane,
+  Clapperboard, BedDouble, Pill, Coffee, Flower, Package, Zap
 } from "lucide-react";
 import AttachToParentDialog from "@/components/tasks/AttachToParentDialog";
 import {
@@ -133,27 +136,28 @@ export default function MilestoneCard({
 
   const getCategoryIcon = () => {
     const title = (task.title || '').toLowerCase();
+    const cls = "w-6 h-6";
     switch (task.category) {
-      case 'work': return '📝';
-      case 'health': return '🌱';
-      case 'study': return '📖';
-      case 'family': return '👨\u200d👩\u200d👧';
-      case 'shopping': return '🛒';
-      case 'finance': return '💰';
-      case 'checkin': return '👣';
+      case 'work': return <NotebookPen className={cls} />;
+      case 'health': return <Sprout className={cls} />;
+      case 'study': return <BookOpen className={cls} />;
+      case 'family': return <Users className={cls} />;
+      case 'shopping': return <ShoppingCart className={cls} />;
+      case 'finance': return <Wallet className={cls} />;
+      case 'checkin': return <Footprints className={cls} />;
       default: // personal/other - smart icon based on title
-        if (/书|阅读|读|看书/.test(title)) return '📚';
-        if (/跑步|运动|健身/.test(title)) return '🏃';
-        if (/做饭|烹饪|煮/.test(title)) return '🍳';
-        if (/打扫|清洁|洗|整理/.test(title)) return '🧹';
-        if (/旅行|出行|机票/.test(title)) return '✈️';
-        if (/电影|看剧/.test(title)) return '🎬';
-        if (/睡|休息|午休/.test(title)) return '😴';
-        if (/寄|快递|带/.test(title)) return '📦';
-        if (/药|吃药|医/.test(title)) return '💊';
-        if (/喝水|咖啡|茶/.test(title)) return '☕';
-        if (/浇花|植物/.test(title)) return '🌸';
-        return '⚡';
+        if (/书|阅读|读|看书/.test(title)) return <Library className={cls} />;
+        if (/跑步|运动|健身/.test(title)) return <Dumbbell className={cls} />;
+        if (/做饭|烹饪|煮/.test(title)) return <ChefHat className={cls} />;
+        if (/打扫|清洁|洗|整理/.test(title)) return <Brush className={cls} />;
+        if (/旅行|出行|机票/.test(title)) return <Plane className={cls} />;
+        if (/电影|看剧/.test(title)) return <Clapperboard className={cls} />;
+        if (/睡|休息|午休/.test(title)) return <BedDouble className={cls} />;
+        if (/寄|快递|带/.test(title)) return <Package className={cls} />;
+        if (/药|吃药|医/.test(title)) return <Pill className={cls} />;
+        if (/喝水|咖啡|茶/.test(title)) return <Coffee className={cls} />;
+        if (/浇花|植物/.test(title)) return <Flower className={cls} />;
+        return <Zap className={cls} />;
     }
   };
 
@@ -173,7 +177,7 @@ export default function MilestoneCard({
         }
       }}
       className={cn(
-        "task-card group bg-white rounded-2xl shadow-sm border border-stone-100 relative overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer",
+        "task-card group bg-white rounded-2xl border border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] relative overflow-hidden transition-all duration-300 hover:border-stone-300 cursor-pointer",
         "border-l-[3px] border-l-[#384877]",
         dragEnabled && "active:cursor-grabbing",
         isCompleted && "opacity-60",
@@ -183,8 +187,8 @@ export default function MilestoneCard({
     >
       {/* 拖拽悬停提示 */}
       {isDragOver && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#384877]/5 backdrop-blur-[1px] pointer-events-none rounded-2xl">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#384877] text-white text-sm font-medium shadow-lg">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#384877]/10 pointer-events-none rounded-2xl">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#384877] text-white text-sm font-medium shadow-sm">
             <CornerDownRight className="w-4 h-4" />
             挂到「{task.title}」下
           </div>
@@ -202,14 +206,14 @@ export default function MilestoneCard({
       )}
 
       {/* Background decoration */}
-      <div className="absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-30 pointer-events-none bg-blue-100" />
+      <div className="absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl -mr-16 -mt-16 opacity-30 pointer-events-none bg-stone-100" />
 
       {/* Main Content Area */}
       <div className="p-5 relative z-10">
         {/* Header Tags */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="bg-blue-100 text-blue-500 px-2 py-1 text-xs font-medium rounded-lg flex items-center gap-1">
+            <span className="bg-stone-100 text-stone-600 px-2 py-1 text-xs font-medium rounded-lg flex items-center gap-1">
               <Briefcase className="w-3 h-3" />
               {getCategoryLabel()}
             </span>
@@ -224,31 +228,37 @@ export default function MilestoneCard({
               </span>
             )}
             {task.dependencies?.length > 0 && (
-              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("dependencies"); }} className="px-2 py-1 bg-amber-50 text-amber-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-amber-100 transition-colors">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("dependencies"); }} className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-stone-200 transition-colors">
                 <Link2 className="w-3 h-3" />
                 {task.dependencies.length}
               </span>
             )}
             {task.attachments?.length > 0 && (
-              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("attachments"); }} className="px-2 py-1 bg-purple-50 text-purple-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-purple-100 transition-colors">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("attachments"); }} className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-stone-200 transition-colors">
                 <Paperclip className="w-3 h-3" />
                 {task.attachments.length}
               </span>
             )}
             {task.notes?.length > 0 && (
-              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("notes"); }} className="px-2 py-1 bg-teal-50 text-teal-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-teal-100 transition-colors">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("notes"); }} className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-stone-200 transition-colors">
                 <StickyNote className="w-3 h-3" />
                 {task.notes.length}
               </span>
             )}
             {commentCount > 0 && (
-              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("comments"); }} className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-blue-100 transition-colors">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("comments"); }} className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-stone-200 transition-colors">
                 <MessageSquare className="w-3 h-3" />
                 {commentCount}
               </span>
             )}
+            {task.revisions?.length > 0 && (
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("revisions"); }} className="px-2 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-amber-100 transition-colors">
+                <History className="w-3 h-3" />
+                v{task.revisions.length + 1}
+              </span>
+            )}
             {(task.advance_reminders?.length > 0 || task.persistent_reminder) && (
-              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("reminders"); }} className="px-2 py-1 bg-orange-50 text-orange-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-orange-100 transition-colors">
+              <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("reminders"); }} className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1 cursor-pointer hover:bg-stone-200 transition-colors">
                 <Bell className="w-3 h-3" />
               </span>
             )}
@@ -349,7 +359,7 @@ export default function MilestoneCard({
                   <circle cx="28" cy="28" r="26" fill="none" stroke="#F1F5F9" strokeWidth="3" />
                   <circle
                     cx="28" cy="28" r="26" fill="none"
-                    stroke={isCompleted ? "#10B981" : "#3B82F6"}
+                    stroke={isCompleted ? "#10B981" : "#384877"}
                     strokeWidth="3"
                     strokeDasharray={163.3}
                     strokeDashoffset={163.3 - progress / 100 * 163.3}
@@ -357,12 +367,12 @@ export default function MilestoneCard({
                     className="transition-all duration-500"
                   />
                 </svg>
-                <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 z-10">
+                <div className="w-10 h-10 rounded-full bg-[#EEF2FF] flex items-center justify-center text-[#384877] z-10">
                   <span className="text-xs font-bold">{progress}%</span>
                 </div>
               </div>
             ) : (
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center text-2xl shadow-inner">
+              <div className="w-12 h-12 rounded-2xl bg-stone-100 text-stone-500 flex items-center justify-center">
                 {getCategoryIcon()}
               </div>
             )}
@@ -388,7 +398,7 @@ export default function MilestoneCard({
               >
                 <button
                   onClick={(e) => e.stopPropagation()}
-                  className="flex items-center gap-1 text-stone-400 hover:text-[#384877] hover:bg-stone-50 px-1.5 py-0.5 -ml-1.5 rounded transition-colors cursor-pointer"
+                  className="flex items-center gap-1 text-stone-400 hover:text-[#2E3A60] hover:bg-stone-50 px-1.5 py-0.5 -ml-1.5 rounded transition-colors cursor-pointer"
                   title="点击编辑时间"
                 >
                   <Calendar className="w-3 h-3" />
@@ -465,7 +475,7 @@ export default function MilestoneCard({
                   }
                 }}
                 className={cn(
-                  "group flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all bg-white border border-stone-200 hover:border-blue-300",
+                  "group flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all bg-white border border-stone-200 hover:border-stone-300",
                   isTaskEffectivelyCompleted(subtask) && !isSelectionMode && "opacity-60",
                   subSelected && "ring-2 ring-blue-500 border-blue-300 bg-blue-50/30"
                 )}
@@ -476,7 +486,7 @@ export default function MilestoneCard({
                     ? (subSelected ? "bg-blue-500 border-blue-500 text-white" : "border-stone-300 bg-white")
                     : (isTaskEffectivelyCompleted(subtask)
                         ? "bg-green-500 border-green-500 text-white"
-                        : "border-stone-300 bg-white group-hover:border-blue-400")
+                        : "border-stone-300 bg-white group-hover:border-stone-400")
                 )}>
                   {isSelectionMode
                     ? (subSelected && <Check className="w-3 h-3" />)
@@ -498,7 +508,7 @@ export default function MilestoneCard({
             <div className="flex items-center justify-between pt-2">
               <button
                 onClick={(e) => { e.stopPropagation(); onAddSubtask(); }}
-                className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                className="text-xs text-stone-600 hover:text-stone-700 flex items-center gap-1 px-2 py-1 rounded hover:bg-stone-100 transition-colors"
               >
                 <Plus className="w-3 h-3" />
                 查看详情或添加子任务
@@ -518,7 +528,7 @@ export default function MilestoneCard({
       {/* Bottom hint if not expanded but has subtasks */}
       {!expanded && subtasks.length > 0 && (
         <div onClick={() => setExpanded(true)} className="px-5 pb-3 pt-0 flex justify-center">
-          <div className="h-1 w-12 bg-stone-200 rounded-full group-hover:bg-blue-200 transition-colors" />
+          <div className="h-1 w-12 bg-stone-200 rounded-full group-hover:bg-stone-300 transition-colors" />
         </div>
       )}
 

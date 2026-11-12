@@ -91,10 +91,10 @@ export default function PromiseCard({
   onSnooze,
   onReview,
   onSubtaskToggle,
-  onShare,
   onDelegate,
   onExecRun,
   onSharePrepare,
+  commentCount = 0,
 }) {
   const done = task.status === "completed" || task.status === "done" || task.status === "archived";
   // 重复约定永不显示逾期，改显「规则 · 倒计时」徽标
@@ -140,21 +140,6 @@ export default function PromiseCard({
   const handleSubToggle = (sub) => (e) => {
     e.stopPropagation();
     onSubtaskToggle(sub);
-  };
-
-  const handleDemote = (e) => {
-    e.stopPropagation();
-    Taro.showToast({ title: "已降级为微任务", icon: "none" });
-  };
-
-  const handleShare = (e) => {
-    e.stopPropagation();
-    onShare(task);
-  };
-
-  const handleFeedback = (e) => {
-    e.stopPropagation();
-    Taro.showToast({ title: "已反馈给心栈", icon: "none" });
   };
 
   const handleDelegate = (e) => {
@@ -266,7 +251,7 @@ export default function PromiseCard({
                 }}
               >
                 <Text style={{ fontSize: "20rpx", color: theme.sage, letterSpacing: "2rpx" }}>
-                  共有 · {task.owner_display_name || "对方"}
+                  协作 · {task.owner_display_name || "对方"}
                 </Text>
               </View>
             )}
@@ -300,6 +285,28 @@ export default function PromiseCard({
               </View>
             ) : null}
           </View>
+
+          {/* 留言 / 附件 / 版本角标：数量一眼可见，点卡片进详情页查看（与 Web 端卡片角标对齐） */}
+          {(() => {
+            const attachCount = (task.attachments || []).length;
+            const versionNo = (task.revisions || []).length + 1;
+            const hasVersions = (task.revisions || []).length > 0;
+            if (!commentCount && !attachCount && !hasVersions) return null;
+            const badgeStyle = {
+              border: `1rpx solid ${theme.border}`,
+              borderRadius: "8rpx",
+              padding: "4rpx 14rpx",
+              fontSize: "20rpx",
+              color: theme.inkTertiary,
+            };
+            return (
+              <View style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "14rpx", marginTop: "16rpx" }}>
+                {commentCount > 0 && <Text style={badgeStyle}>💬 留言 {commentCount}</Text>}
+                {attachCount > 0 && <Text style={badgeStyle}>📎 附件 {attachCount}</Text>}
+                {hasVersions && <Text style={{ ...badgeStyle, color: "#b98a4e", borderColor: "#ecd9b8" }}>版本 v{versionNo}</Text>}
+              </View>
+            );
+          })()}
 
           {/* AI note */}
           {!done && (
@@ -459,18 +466,6 @@ export default function PromiseCard({
                   信任度 {analysis.autoExec.trust}% · {analysis.autoExec.trustLevel}
                 </Text>
                 <View style={{ display: "flex", alignItems: "center", gap: "16rpx" }}>
-                  <Text
-                    onClick={handleFeedback}
-                    style={{ fontSize: "24rpx", color: theme.water, letterSpacing: "2rpx" }}
-                  >
-                    调整
-                  </Text>
-                  <Text
-                    onClick={handleFeedback}
-                    style={{ fontSize: "24rpx", color: theme.water, letterSpacing: "2rpx" }}
-                  >
-                    我来接管
-                  </Text>
                   <View
                     onClick={analysis.autoExec.state === "confirm" ? handleExecRun : handleReview}
                     style={{
@@ -509,14 +504,7 @@ export default function PromiseCard({
             padding: "16rpx 28rpx",
           }}
         >
-          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>约定 · PROMISE</Text>
           <View style={{ display: "flex", alignItems: "center", gap: "28rpx" }}>
-            <Text
-              onClick={handleShare}
-              style={{ fontSize: "24rpx", color: theme.inkTertiary }}
-            >
-              分享
-            </Text>
             <ShareButton
               theme={theme}
               style={{ padding: "4rpx 14rpx", fontSize: "20rpx" }}
@@ -525,20 +513,6 @@ export default function PromiseCard({
                 onSharePrepare?.(task);
               }}
             />
-            {overdue && (
-              <Text
-                onClick={handleDemote}
-                style={{
-                  fontSize: "24rpx",
-                  color: theme.sage,
-                  textDecoration: "underline",
-                  textDecorationStyle: "dotted",
-                  textUnderlineOffset: "4rpx",
-                }}
-              >
-                降级为微任务
-              </Text>
-            )}
             <Text
               onClick={handleSnooze}
               style={{ fontSize: "24rpx", color: theme.inkTertiary }}

@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { formatShanghai, formatShanghaiTime, getShanghaiNow, isSameShanghaiDay, parseAsShanghai, toShanghaiDateStr, toShanghaiTimeStr } from "@/lib/timeCore";
 import { isTaskEffectivelyCompleted, splitPlanGroupItems } from "@/lib/taskStatus";
-import { 
-  Check, Clock, MapPin, Repeat, MoreHorizontal, 
+import {
+  Check, Clock, MapPin, Repeat, MoreHorizontal,
   ShoppingBag, Zap, Navigation, Footprints,
   Briefcase, Heart, Package, Sun, Moon, Sunrise, Sunset,
   Droplets, Leaf, Flower, Coffee, Utensils,
@@ -12,7 +12,10 @@ import {
   Sparkles, Lightbulb, CheckCircle2, Flag,
   Share2, Edit, Trash2, Calendar, ChevronDown, ChevronRight, MessageSquare,
   Link2, StickyNote, Paperclip, Bell, CornerDownRight, Bot, Loader2, RefreshCw, BookOpen,
-  Users2, Pin, LogOut
+  Users2, Pin, LogOut, GitBranch,
+  Users, Handshake, Library, ShoppingCart, ChefHat, Brush, Plane,
+  Clapperboard, Music, BedDouble, Pill, Phone, PencilLine, PawPrint,
+  NotebookPen, Wallet, Dumbbell
 } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -391,7 +394,7 @@ export default function LifeTaskCard({
       badges.push({
         label: task.location_reminder.trigger_on === 'enter' ? '到达触发' : '离开触发',
         icon: <Navigation className="w-3 h-3" />,
-        className: "bg-green-100 text-green-700 border-green-200"
+        className: "bg-stone-100 text-stone-600 border-stone-200"
       });
     }
 
@@ -401,18 +404,18 @@ export default function LifeTaskCard({
         const hour = time ? parseInt(toShanghaiTimeStr(time).split(':')[0], 10) : 9;
         let label = '日常习惯';
         let icon = <Repeat className="w-3 h-3" />;
-        let className = "bg-blue-100 text-blue-700 border-blue-200";
+        let className = "bg-stone-100 text-stone-600 border-stone-200";
 
         if (hour >= 5 && hour < 10) {
             label = '晨间习惯';
             icon = <Sun className="w-3 h-3" />;
-            className = "bg-orange-100 text-orange-700 border-orange-200";
+            className = "bg-stone-100 text-stone-600 border-stone-200";
         } else if (hour >= 18 && hour < 23) {
             label = '晚间惯例';
             icon = <Moon className="w-3 h-3" />;
-            className = "bg-indigo-100 text-indigo-700 border-indigo-200";
+            className = "bg-stone-100 text-stone-600 border-stone-200";
         }
-        
+
         badges.push({ label, icon, className });
     }
 
@@ -436,7 +439,7 @@ export default function LifeTaskCard({
         badges.push({
             label: '待取件',
             icon: <Package className="w-3 h-3" />,
-            className: "bg-purple-100 text-purple-700 border-purple-200"
+            className: "bg-stone-100 text-stone-600 border-stone-200"
         });
     }
 
@@ -447,69 +450,71 @@ export default function LifeTaskCard({
   const getTaskVisuals = () => {
     const title = task.title || '';
     const cat = task.category;
-    
-    let icon = <Zap className="w-6 h-6" />;
-    let bgGradient = "from-slate-100 to-slate-50";
-    let iconColor = "text-slate-600";
+
+    let icon = <Zap className="w-7 h-7" />;
+    let bgGradient = "bg-stone-100";
+    let iconColor = "text-stone-500";
     let emoji = null;
 
     // Keyword matching for specific icons
     if (/会议|开会|约见|见面/.test(title)) {
-        emoji = '🤝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+        emoji = <Handshake className="w-7 h-7" />;
     } else if (/书|阅读|读|看书|图书/.test(title)) {
-        emoji = '📚'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+        emoji = <Library className="w-7 h-7" />;
     } else if (/带|寄|快递|邮件|包裹|取件/.test(title)) {
-        emoji = '📦'; bgGradient = "from-purple-100 to-purple-50"; iconColor = "text-purple-600";
+        emoji = <Package className="w-7 h-7" />;
     } else if (/油|超市|买|购物|商场/.test(title)) {
-        emoji = '🛒'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+        emoji = <ShoppingCart className="w-7 h-7" />;
     } else if (/花|植物|浇/.test(title)) {
-        emoji = '🌸'; bgGradient = "from-rose-100 to-rose-50"; iconColor = "text-rose-600";
+        emoji = <Flower className="w-7 h-7" />;
     } else if (/药|医院|体检|吃药/.test(title)) {
-        emoji = '💊'; bgGradient = "from-red-100 to-red-50"; iconColor = "text-red-600";
+        emoji = <Pill className="w-7 h-7" />;
     } else if (/咖啡|茶|喝水/.test(title)) {
-        emoji = '☕'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+        emoji = <Coffee className="w-7 h-7" />;
     } else if (/车|加油|驾/.test(title)) {
-        emoji = '🚗'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+        emoji = <Car className="w-7 h-7" />;
     } else if (/跑步|运动|健身|锻炼|瑜伽/.test(title)) {
-        emoji = '🏃'; bgGradient = "from-emerald-100 to-emerald-50"; iconColor = "text-emerald-600";
+        emoji = <Dumbbell className="w-7 h-7" />;
     } else if (/做饭|烹饪|煮|下厨|菜/.test(title)) {
-        emoji = '🍳'; bgGradient = "from-orange-100 to-orange-50"; iconColor = "text-orange-600";
+        emoji = <ChefHat className="w-7 h-7" />;
     } else if (/打扫|清洁|卫生|洗|整理/.test(title)) {
-        emoji = '🧹'; bgGradient = "from-teal-100 to-teal-50"; iconColor = "text-teal-600";
+        emoji = <Brush className="w-7 h-7" />;
     } else if (/旅行|出行|出发|机票|酒店|飞/.test(title)) {
-        emoji = '✈️'; bgGradient = "from-sky-100 to-sky-50"; iconColor = "text-sky-600";
+        emoji = <Plane className="w-7 h-7" />;
     } else if (/电影|看剧|追剧|视频/.test(title)) {
-        emoji = '🎬'; bgGradient = "from-violet-100 to-violet-50"; iconColor = "text-violet-600";
+        emoji = <Clapperboard className="w-7 h-7" />;
     } else if (/音乐|听歌|弹琴|唱/.test(title)) {
-        emoji = '🎵'; bgGradient = "from-pink-100 to-pink-50"; iconColor = "text-pink-600";
+        emoji = <Music className="w-7 h-7" />;
     } else if (/睡|休息|午休|早起/.test(title)) {
-        emoji = '😴'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+        emoji = <BedDouble className="w-7 h-7" />;
     } else if (/电话|打电话|联系|沟通|打给/.test(title)) {
-        emoji = '📞'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+        emoji = <Phone className="w-7 h-7" />;
     } else if (/写|笔记|日记|作业/.test(title)) {
-        emoji = '✍️'; bgGradient = "from-slate-100 to-slate-50"; iconColor = "text-slate-600";
+        emoji = <PencilLine className="w-7 h-7" />;
     } else if (/遛狗|宠物|猫|狗/.test(title)) {
-        emoji = '🐾'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+        emoji = <PawPrint className="w-7 h-7" />;
     } else if (/报告|文档|PPT|方案|项目/.test(title)) {
-        emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+        emoji = <NotebookPen className="w-7 h-7" />;
     } else if (/提醒|备忘/.test(title)) {
-        emoji = '🔔'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+        emoji = <Bell className="w-7 h-7" />;
     } else if (cat === 'checkin') {
-        emoji = '👣'; bgGradient = "from-[#E7EDFB] to-[#F5F8FF]"; iconColor = "text-[#384877]";
+        emoji = <Footprints className="w-7 h-7" />;
+        bgGradient = "bg-[#E7EDFB]";
+        iconColor = "text-[#384877]";
     } else if (cat === 'work') {
-        emoji = '📝'; bgGradient = "from-blue-100 to-blue-50"; iconColor = "text-blue-600";
+        emoji = <NotebookPen className="w-7 h-7" />;
     } else if (cat === 'study') {
-        emoji = '📖'; bgGradient = "from-indigo-100 to-indigo-50"; iconColor = "text-indigo-600";
+        emoji = <BookOpen className="w-7 h-7" />;
     } else if (cat === 'health') {
-        emoji = '🌱'; bgGradient = "from-emerald-100 to-emerald-50"; iconColor = "text-emerald-600";
+        emoji = <Leaf className="w-7 h-7" />;
     } else if (cat === 'family') {
-        emoji = '👨‍👩‍👧'; bgGradient = "from-rose-100 to-rose-50"; iconColor = "text-rose-600";
+        emoji = <Users className="w-7 h-7" />;
     } else if (cat === 'shopping') {
-        emoji = '🛍️'; bgGradient = "from-purple-100 to-purple-50"; iconColor = "text-purple-600";
+        emoji = <ShoppingBag className="w-7 h-7" />;
     } else if (cat === 'finance') {
-        emoji = '💰'; bgGradient = "from-amber-100 to-amber-50"; iconColor = "text-amber-600";
+        emoji = <Wallet className="w-7 h-7" />;
     } else {
-        emoji = '⚡'; bgGradient = "from-green-100 to-green-50"; iconColor = "text-green-600";
+        emoji = <Zap className="w-7 h-7" />;
     }
 
     return { icon, bgGradient, iconColor, emoji };
@@ -603,19 +608,19 @@ export default function LifeTaskCard({
         }
       }}
       className={cn(
-        "group bg-white rounded-2xl p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-lg hover:-translate-y-1",
+        "group bg-white rounded-2xl p-5 border border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] relative overflow-hidden transition-all duration-300 hover:border-stone-300",
         dragEnabled && "cursor-grab active:cursor-grabbing",
         completed && "opacity-60",
-        isCheckinTask && "border-[#c9d5ef]/80 bg-gradient-to-br from-[#f8faff] via-white to-white",
+        isCheckinTask && "border-[#c9d5ef]/80 bg-[#f8faff]",
         isSelected && "ring-2 ring-blue-500 bg-blue-50/10",
-        task.pinned_at && "border-[#c9d5ef] shadow-md",
+        task.pinned_at && "border-[#c9d5ef]",
         isDragOver && "ring-2 ring-[#384877] ring-offset-2 bg-[#eef2ff]/50 scale-[1.01]"
       )}
     >
         {/* 拖拽悬停提示 */}
         {isDragOver && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#384877]/5 backdrop-blur-[1px] pointer-events-none rounded-2xl">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#384877] text-white text-sm font-medium shadow-lg">
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-[#384877]/10 pointer-events-none rounded-2xl">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#384877] text-white text-sm font-medium shadow-sm">
               <CornerDownRight className="w-4 h-4" />
               挂到「{task.title}」下
             </div>
@@ -637,14 +642,7 @@ export default function LifeTaskCard({
         )}
 
         {/* Decorative Background Blob */}
-        <div className={cn(
-            "absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl -mr-20 -mt-20 opacity-40 pointer-events-none transition-colors duration-500",
-            task.category === 'work' ? "bg-blue-100" :
-            task.category === 'health' ? "bg-rose-100" :
-            task.category === 'family' ? "bg-purple-100" :
-            task.category === 'checkin' ? "bg-[#EEF2FF]" :
-            "bg-green-100"
-        )} />
+        <div className="absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl -mr-20 -mt-20 opacity-40 pointer-events-none bg-stone-100" />
 
         <div className={cn("relative z-10", isSelectionMode && "pl-8")}>
             
@@ -653,11 +651,7 @@ export default function LifeTaskCard({
                 <div className="flex flex-wrap items-center gap-2">
                     {/* Category Badge */}
                     <span className={cn(
-                        "px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border",
-                        task.category === 'work' ? "bg-blue-50 text-blue-700 border-blue-100" :
-                        task.category === 'health' ? "bg-rose-50 text-rose-700 border-rose-100" :
-                        task.category === 'checkin' ? "bg-[#EEF2FF] text-[#384877] border-[#dbe3f7]" :
-                        "bg-stone-50 text-stone-600 border-stone-100"
+                        "px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-100 text-stone-600 border-stone-200"
                     )}>
                         {task.category === 'work' ? <Briefcase className="w-3 h-3" /> :
                          task.category === 'health' ? <Heart className="w-3 h-3" /> :
@@ -683,7 +677,7 @@ export default function LifeTaskCard({
                     {isSharedMember && (
                         <span
                             title="共有约定：内容与对方实时同步，点右上角退出按钮即可退出"
-                            className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-indigo-50 text-indigo-600 border-indigo-100"
+                            className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-100 text-stone-600 border-stone-200"
                         >
                             <Users2 className="w-3 h-3" />
                             {task.owner_display_name || "对方"}共享
@@ -708,31 +702,37 @@ export default function LifeTaskCard({
                         </span>
                     ))}
                     {task.dependencies?.length > 0 && (
-                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("dependencies"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-amber-50 text-amber-600 border-amber-100 cursor-pointer hover:bg-amber-100 transition-colors">
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("dependencies"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-100 text-stone-600 border-stone-200 cursor-pointer hover:bg-stone-200 transition-colors">
                             <Link2 className="w-3 h-3" />
                             {task.dependencies.length}
                         </span>
                     )}
                     {task.attachments?.length > 0 && (
-                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("attachments"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-purple-50 text-purple-600 border-purple-100 cursor-pointer hover:bg-purple-100 transition-colors">
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("attachments"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-100 text-stone-600 border-stone-200 cursor-pointer hover:bg-stone-200 transition-colors">
                             <Paperclip className="w-3 h-3" />
                             {task.attachments.length}
                         </span>
                     )}
                     {task.notes?.length > 0 && (
-                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("notes"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-teal-50 text-teal-600 border-teal-100 cursor-pointer hover:bg-teal-100 transition-colors">
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("notes"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-100 text-stone-600 border-stone-200 cursor-pointer hover:bg-stone-200 transition-colors">
                             <StickyNote className="w-3 h-3" />
                             {task.notes.length}
                         </span>
                     )}
                     {commentCount > 0 && (
-                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("comments"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-blue-50 text-blue-600 border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors">
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("comments"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-100 text-stone-600 border-stone-200 cursor-pointer hover:bg-stone-200 transition-colors">
                             <MessageSquare className="w-3 h-3" />
                             {commentCount}
                         </span>
                     )}
+                    {task.revisions?.length > 0 && (
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("revisions"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-amber-50 text-amber-700 border-amber-200 cursor-pointer hover:bg-amber-100 transition-colors">
+                            <GitBranch className="w-3 h-3" />
+                            v{task.revisions.length + 1}
+                        </span>
+                    )}
                     {(task.advance_reminders?.length > 0 || task.persistent_reminder) && (
-                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("reminders"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-orange-50 text-orange-600 border-orange-100 cursor-pointer hover:bg-orange-100 transition-colors">
+                        <span onClick={(e) => { e.stopPropagation(); onViewTab && onViewTab("reminders"); }} className="px-2.5 py-1 text-xs rounded-lg font-medium flex items-center gap-1.5 border bg-stone-100 text-stone-600 border-stone-200 cursor-pointer hover:bg-stone-200 transition-colors">
                             <Bell className="w-3 h-3" />
                         </span>
                     )}
@@ -805,8 +805,9 @@ export default function LifeTaskCard({
                 {/* Large Icon */}
                 <div className="flex-shrink-0 pt-1">
                     <div className={cn(
-                        "w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-sm border border-white/50 bg-gradient-to-br",
-                        visuals.bgGradient
+                        "w-14 h-14 rounded-2xl flex items-center justify-center",
+                        visuals.bgGradient,
+                        visuals.iconColor
                     )}>
                         {visuals.emoji || visuals.icon}
                     </div>
@@ -858,7 +859,7 @@ export default function LifeTaskCard({
 
                             {/* Recurrence */}
                             {task.repeat_rule !== 'none' && (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-50 text-blue-600 text-xs border border-blue-100">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-100 text-stone-600 text-xs border border-stone-200">
                                     <Repeat className="w-3 h-3" />
                                     {task.repeat_rule === 'daily' ? '每天' :
                                      task.repeat_rule === 'weekly' ? '每周' :
@@ -880,7 +881,7 @@ export default function LifeTaskCard({
 
                             {/* AI Suggestion Badge */}
                             {task.ai_analysis?.suggested_priority === 'urgent' && (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-purple-600 text-white text-xs border border-purple-600 shadow-sm shadow-purple-200">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#384877] text-white text-xs border border-[#384877] shadow-sm">
                                     <Sparkles className="w-3 h-3" />
                                     建议: 紧急
                                 </span>
@@ -888,7 +889,7 @@ export default function LifeTaskCard({
 
                              {/* Advance Reminder */}
                              {task.advance_reminders?.length > 0 && (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-50 text-cyan-600 text-xs border border-cyan-100">
+                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-stone-100 text-stone-600 text-xs border border-stone-200">
                                     <AlertCircle className="w-3 h-3" />
                                     提前{task.advance_reminders.length}次
                                 </span>
@@ -939,13 +940,13 @@ export default function LifeTaskCard({
                                         className={cn(
                                             "flex items-center gap-1.5 px-2 py-0.5 rounded-md transition-colors cursor-pointer border",
                                             task.tags?.includes('ai_suggested_time')
-                                                ? "text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200/60"
+                                                ? "text-stone-700 bg-stone-100 hover:bg-stone-200 border-stone-200"
                                                 : "text-stone-600 bg-stone-50 hover:bg-stone-100 border-transparent hover:border-stone-200"
                                         )}
                                         title={task.tags?.includes('ai_suggested_time') ? "AI 建议时间，点击调整" : "点击调整时间"}
                                     >
                                         {task.tags?.includes('ai_suggested_time')
-                                            ? <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                                            ? <Sparkles className="w-3.5 h-3.5 text-stone-500" />
                                             : <Clock className="w-3.5 h-3.5 text-stone-400" />
                                         }
                                         {(() => {
@@ -962,7 +963,7 @@ export default function LifeTaskCard({
                                             return '全天';
                                         })()}
                                         {task.tags?.includes('ai_suggested_time') && (
-                                            <span className="text-[10px] text-purple-500 font-medium">建议</span>
+                                            <span className="text-[10px] text-stone-500 font-medium">建议</span>
                                         )}
                                     </button>
                                 </MilestoneTimeEditor>
@@ -1033,13 +1034,11 @@ export default function LifeTaskCard({
             {/* 3. AI Smart Status Bar (Bottom) */}
             {!completed && (
                 <div className={cn(
-                    "mt-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 transition-all duration-300 relative group/statusbar backdrop-blur-sm",
-                    task.location_reminder?.enabled ? "bg-gradient-to-r from-emerald-50/80 to-green-50/40 border border-emerald-100/70 hover:border-emerald-200" :
+                    "mt-3 rounded-2xl px-3.5 py-2.5 flex items-center gap-3 transition-all duration-300 relative group/statusbar",
+                    task.location_reminder?.enabled ? "bg-emerald-50 border border-emerald-200 hover:border-emerald-300" :
                     (task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.length > 0) ?
-                        (task.category === 'work'
-                            ? "bg-gradient-to-r from-indigo-50/70 to-blue-50/30 border border-indigo-100/70 hover:border-indigo-200"
-                            : "bg-gradient-to-r from-purple-50/70 to-fuchsia-50/30 border border-purple-100/70 hover:border-purple-200") :
-                    "bg-gradient-to-r from-stone-50/80 to-stone-50/30 border border-stone-100 hover:border-stone-200"
+                        "bg-stone-50 border border-stone-200 hover:border-stone-300" :
+                    "bg-stone-50 border border-stone-200 hover:border-stone-300"
                 )}>
                     {/* Icon & Content Logic */}
                     {(() => {
@@ -1047,8 +1046,8 @@ export default function LifeTaskCard({
                             return (
                                 <>
                                     <div className="relative flex-shrink-0">
-                                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-green-500 flex items-center justify-center shadow-sm shadow-emerald-500/20">
-                                            <Navigation className="w-4 h-4 text-white" />
+                                        <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center">
+                                            <Navigation className="w-4 h-4 text-emerald-600" />
                                         </div>
                                         <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-white animate-pulse" />
                                     </div>
@@ -1063,22 +1062,16 @@ export default function LifeTaskCard({
                         // Check for AI Analysis
                         const aiContent = task.ai_analysis?.status_summary || task.ai_analysis?.suggestions?.[0];
                         if (aiContent) {
-                            const isWork = task.category === 'work';
                             return (
                                 <>
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm",
-                                        isWork
-                                            ? "bg-gradient-to-br from-indigo-400 to-blue-500 shadow-indigo-500/20"
-                                            : "bg-gradient-to-br from-purple-400 to-fuchsia-500 shadow-purple-500/20"
-                                    )}>
-                                        <Sparkles className="w-4 h-4 text-white" />
+                                    <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 bg-stone-100">
+                                        <Sparkles className="w-4 h-4 text-stone-500" />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className={cn("text-xs font-semibold tracking-tight", isWork ? "text-indigo-900" : "text-purple-900")}>
+                                        <p className="text-xs font-semibold tracking-tight text-stone-800">
                                             心栈守护中
                                         </p>
-                                        <p className={cn("text-[11px] truncate leading-relaxed", isWork ? "text-indigo-700/80" : "text-purple-700/80")}>
+                                        <p className="text-[11px] truncate leading-relaxed text-stone-500">
                                             {aiContent}
                                         </p>
                                     </div>
@@ -1092,8 +1085,8 @@ export default function LifeTaskCard({
                         if (isOnTheWay) {
                             return (
                                 <>
-                                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-300 to-green-400 flex items-center justify-center flex-shrink-0 shadow-sm shadow-emerald-500/20">
-                                        <Navigation className="w-4 h-4 text-white" />
+                                    <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                                        <Navigation className="w-4 h-4 text-emerald-600" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-semibold text-emerald-900 tracking-tight">顺路提醒已开启</p>
@@ -1116,8 +1109,8 @@ export default function LifeTaskCard({
                                     setShowAIAssistant(true);
                                 }}
                             >
-                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-stone-200 to-stone-300 flex items-center justify-center flex-shrink-0">
-                                    <Lightbulb className="w-4 h-4 text-stone-600" />
+                                <div className="w-8 h-8 rounded-xl bg-stone-100 flex items-center justify-center flex-shrink-0">
+                                    <Lightbulb className="w-4 h-4 text-stone-500" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="text-xs font-semibold text-stone-800 tracking-tight">智能助手守护中</p>

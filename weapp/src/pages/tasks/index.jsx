@@ -6,8 +6,11 @@ import { isEffectivelyDone } from "@/utils/recurrence";
 import { getToken, isDemoMode } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import SharePoster from "@/components/SharePoster";
-import ShareButton from "@/components/ShareButton";
 import { useShare } from "@/hooks/useShare";
+import AiBadge from "@/components/AiBadge";
+import AIDisclaimer from "@/components/AIDisclaimer";
+import GreetingHeader from "@/components/GreetingHeader";
+import VisitorBanner from "@/components/VisitorBanner";
 import Composer from "@/components/tasks/Composer";
 import PromiseCard from "@/components/tasks/PromiseCard";
 import CheckinCard from "@/components/tasks/CheckinCard";
@@ -18,21 +21,6 @@ import EvolutionRail, { computeEvolution } from "@/components/tasks/EvolutionRai
 import DailyReviewSheet from "@/components/tasks/DailyReviewSheet";
 import theme from "@/components/tasks/theme";
 import { generateCheckinCover } from "@/lib/shareCover";
-
-function AiBadge({ text = "AI 生成" }) {
-  return (
-    <View
-      style={{
-        padding: "2rpx 10rpx",
-        borderRadius: "8rpx",
-        background: "rgba(91,130,160,0.10)",
-        border: "1rpx solid rgba(91,130,160,0.20)"
-      }}
-    >
-      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
-    </View>
-  );
-}
 
 const groups = [
   { key: "now", zh: "现在能做" },
@@ -52,26 +40,10 @@ const categoryMap = {
   other: "其他",
 };
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 5) return "凌晨好";
-  if (h < 9) return "早上好";
-  if (h < 12) return "上午好";
-  if (h < 14) return "中午好";
-  if (h < 18) return "下午好";
-  return "晚上好";
-}
-
-const dateLabel = new Date().toLocaleDateString("zh-CN", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  weekday: "long",
-});
-
 function isTaskDone(task) {
-  // 打卡不杀系列：重复约定永不归档，完成只看当天（done_today），系列保持活跃
-  if (task.repeat_rule && task.repeat_rule !== "none") return false;
+  // 重复约定「打卡不杀系列」：今日已打卡（done_today）即视为"已勾掉"，归入已完成区；
+  // 明天 done_today 自动失效回到待办，系列照常继续
+  if (task.repeat_rule && task.repeat_rule !== "none") return Boolean(task.done_today);
   return task.status === "completed" || task.status === "done" || task.status === "archived";
 }
 
@@ -96,6 +68,8 @@ export default function Tasks() {
   const [showDailyReview, setShowDailyReview] = useState(false);
   // 已完成约定折叠区（列表最底部）：默认收起
   const [doneOpen, setDoneOpen] = useState(false);
+  // 卡片留言角标：taskId -> 留言数（附件/版本数直接读 task 字段，无需额外请求）
+  const [commentCountMap, setCommentCountMap] = useState({});
   // 本会话内刚盖章完成的约定 id：卡片先暂留列表显示「已盖章」样式（不移除节点，滚动位置不跳回页眉），
   // 短暂延迟后收起，归入底部「已完成」折叠区
   const [sessionDoneIds, setSessionDoneIds] = useState(() => new Set());
@@ -282,6 +256,17 @@ export default function Tasks() {
       setExecutions(execList);
       setSubtaskMap(subMap);
 
+      // 卡片留言角标：全量拉一次留言按约定计数（与 Web 端 all-comments 同口径），失败静默不挡主列表
+      get("/comments", { limit: 300 })
+        .then((cs) => {
+          const map = {};
+          (Array.isArray(cs) ? cs : []).forEach((c) => {
+            if (c.task_id) map[c.task_id] = (map[c.task_id] || 0) + 1;
+          });
+          setCommentCountMap(map);
+        })
+        .catch(() => {});
+
       // AI 分析（每条约定一次 Kimi 调用）不阻塞渲染：约定列表先展示，分析结果到了再更新分组/建议
       // 共有约定跳过：分析结果在共享行上天然同步，避免成员重复消耗 AI 点数
       const analyzableTasks = topTasks.filter((t) => t.shared_role !== "member");
@@ -369,27 +354,18 @@ export default function Tasks() {
   const evo = useMemo(() => computeEvolution(tasks, executions), [tasks, executions]);
 
   const handleComplete = (task) => {
-    // 重复约定：打卡/取消打卡只切换"今天已完成"，卡片保留在列表，系列继续
+    // 统一"勾掉即归档"：普通/协同约定切 status，重复约定只切"今天已完成"（done_today），
+    // 都先原位展示约 1s 盖章样式，再收起归入底部「已完成」折叠区；重复约定明天自动回到待办
     const recurring = task.repeat_rule && task.repeat_rule !== "none";
-    if (recurring) {
-      const marking = !task.done_today;
-      const prevDone = Boolean(task.done_today);
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done_today: marking } : t)));
-      showToast(marking ? "已盖章 · 今天已完成" : "已取消完成");
-      patch(`/tasks/${task.id}`, { status: marking ? "completed" : "pending" }).catch(() => {
-        setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, done_today: prevDone } : t)));
-        showToast("网络开小差了，请再试一次");
-      });
-      return;
-    }
-
-    const markingDone = !isTaskDone(task);
+    const markingDone = recurring ? !task.done_today : !isTaskDone(task);
     const prevStatus = task.status; // 网络失败回滚用
-    const nextStatus = markingDone ? "completed" : "pending";
+    const prevDone = Boolean(task.done_today);
     captureSvScroll(); // 记录当前滚动位置，归档移除后分次恢复，不跳回页眉
     lastCompleteAtRef.current = Date.now();
     // 就地标记完成/还原（卡片保留，切换盖章样式）：不触发整页刷新、不移除节点，页面不跳动
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
+    setTasks((prev) => prev.map((t) => (t.id === task.id
+      ? (recurring ? { ...t, done_today: markingDone } : { ...t, status: markingDone ? "completed" : "pending" })
+      : t)));
     setSessionDoneIds((prev) => {
       const next = new Set(prev);
       if (markingDone) next.add(task.id);
@@ -412,7 +388,7 @@ export default function Tasks() {
             next.delete(task.id);
             return next;
           });
-          // 不移除约定：从"原位暂留"转入底部「已完成」折叠区（status 已是 completed，doneItems 会接管）
+          // 不移除约定：从"原位暂留"转入底部「已完成」折叠区（doneItems 按统一完成口径接管）
           setSessionDoneIds((prev) => {
             const next = new Set(prev);
             next.delete(task.id);
@@ -433,10 +409,10 @@ export default function Tasks() {
       });
     }
 
-    showToast(markingDone ? "已盖章 · 如约而至" : "已取消完成");
-    patch(`/tasks/${task.id}`, { status: nextStatus }).catch(() => {
+    showToast(markingDone ? (recurring ? "已盖章 · 今天已完成" : "已盖章 · 如约而至") : "已取消完成");
+    patch(`/tasks/${task.id}`, { status: markingDone ? "completed" : "pending" }).catch(() => {
       // 失败回滚：还原状态与盖章标记
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus } : t)));
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: prevStatus, done_today: prevDone } : t)));
       setSessionDoneIds((prev) => {
         const next = new Set(prev);
         if (markingDone) next.delete(task.id);
@@ -638,56 +614,34 @@ export default function Tasks() {
             <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "6rpx" }}>SOULSENTRY</Text>
           </View>
           <View style={{ display: "flex", alignItems: "center", gap: "20rpx" }}>
+            <View
+              onClick={() => Taro.navigateTo({ url: "/pages/lockscreen/index" })}
+              style={{
+                padding: "10rpx 22rpx",
+                borderRadius: "999rpx",
+                background: theme.card,
+                border: `1rpx solid ${theme.border}`,
+              }}
+            >
+              <Text style={{ fontSize: "20rpx", color: theme.primary }}>锁屏待办</Text>
+            </View>
             <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
               <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: theme.seal }} />
               <Text style={{ fontSize: "20rpx", color: theme.inkSecondary }}>哨兵守护中 · 一切安好</Text>
             </View>
-            <Text style={{ fontSize: "20rpx", color: theme.inkTertiary }}>AI 点数 1,240</Text>
           </View>
         </View>
 
         {/* guest banner */}
         {isGuest && (
-          <View
-            onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
-            style={{
-              marginTop: "24rpx",
-              padding: "18rpx 24rpx",
-              borderRadius: "12rpx",
-              background: "#fff8e6",
-              border: "1rpx solid #f5d78e",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between"
-            }}
-          >
-            <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>正在浏览演示数据，不是你的约定 · 登录后查看我的约定</Text>
-            <Text style={{ fontSize: "24rpx", color: theme.primary, fontWeight: 500 }}>去登录 →</Text>
+          <View style={{ marginTop: "24rpx" }}>
+            <VisitorBanner />
           </View>
         )}
 
         {/* greeting + composer */}
         <View style={{ paddingTop: "40rpx" }}>
-          <View>
-            <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>{dateLabel}</Text>
-          </View>
-          <View style={{ marginTop: "16rpx" }}>
-            <Text style={{ fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
-              {greeting()}。
-            </Text>
-          </View>
-          <View style={{ marginTop: "24rpx" }}>
-            <Text
-              style={{
-                fontSize: "40rpx",
-                fontWeight: 500,
-                color: theme.inkSecondary,
-                lineHeight: "56rpx"
-              }}
-            >
-              你的点滴，都是最重要的事。
-            </Text>
-          </View>
+          <GreetingHeader sub="你的点滴，都是最重要的事。" />
 
           <View
             style={{
@@ -790,6 +744,7 @@ export default function Tasks() {
                           onSubtaskToggle={handleSubtaskToggle}
                           onShare={handleShare}
                           onSharePrepare={prepareTaskShare}
+                          commentCount={commentCountMap[task.id] || 0}
                         />
                       )}
                     </View>
@@ -817,9 +772,12 @@ export default function Tasks() {
                 <View style={{ paddingLeft: "20rpx" }}>
                   {doneItems.map((task) => {
                     const doneAt = task.completed_at ? new Date(task.completed_at) : null;
-                    const doneText = doneAt && !isNaN(doneAt.getTime())
-                      ? `${doneAt.getMonth() + 1}月${doneAt.getDate()}日 完成`
-                      : "";
+                    const isRecurring = task.repeat_rule && task.repeat_rule !== "none";
+                    const doneText = isRecurring
+                      ? "今日已打卡"
+                      : doneAt && !isNaN(doneAt.getTime())
+                        ? `${doneAt.getMonth() + 1}月${doneAt.getDate()}日 完成`
+                        : "";
                     return (
                       <View
                         key={task.id}
@@ -883,61 +841,8 @@ export default function Tasks() {
           onSaved={fetchData}
         />
 
-        {/* footer brand line */}
-        <View style={{ padding: "48rpx 0" }}>
-          <Text
-            style={{
-              textAlign: "center",
-              fontSize: "20rpx",
-              color: theme.inkQuaternary,
-              letterSpacing: "6rpx",
-            }}
-          >
-            坚定守护 · 适时轻唤 · 心栈 SOULSENTRY
-          </Text>
-          {/* 构建标记：确认线上/体验版跑的是不是新包（v20261030-2 = 协同约定卡片） */}
-          <Text
-            style={{
-              textAlign: "center",
-              fontSize: "18rpx",
-              color: theme.inkQuaternary,
-              marginTop: "10rpx",
-            }}
-          >
-            v20261030-2
-          </Text>
-        </View>
-
-        <View
-          style={{
-            margin: "0 0 24rpx",
-            padding: "18rpx 22rpx",
-            borderRadius: "14rpx",
-            background: "rgba(91,130,160,0.06)",
-            border: "1rpx solid rgba(91,130,160,0.12)",
-            display: "flex",
-            alignItems: "center"
-          }}
-        >
-          <View
-            style={{
-              width: "28rpx",
-              height: "28rpx",
-              borderRadius: "50%",
-              background: theme.water,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: "14rpx",
-              flexShrink: 0
-            }}
-          >
-            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
-          </View>
-          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
-            部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
-          </Text>
-        </View>
+        {/* AI 免责声明 */}
+        <AIDisclaimer />
 
         <View style={{ height: "160rpx" }} />
       </ScrollView>

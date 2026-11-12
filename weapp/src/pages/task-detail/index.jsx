@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Input, Button, ScrollView, Image, Textarea } from "@tarojs/components";
 import { get, post, patch, del, absoluteUrl } from "@/utils/api";
+import { getToken } from "@/utils/auth";
 import { useShare } from "@/hooks/useShare";
 import { CHECKIN_MILESTONES, checkinEncourage, milestoneQuote } from "@/components/tasks/checkinMeta";
 import { isEffectivelyDone } from "@/utils/recurrence";
@@ -44,6 +45,11 @@ export default function TaskDetail() {
   const [hideDoneSubs, setHideDoneSubs] = useState(false);
   // 打卡赴约记录折叠：默认只露最近 3 条，长的历史收起来
   const [expandHistory, setExpandHistory] = useState(false);
+  // 附件上传中（按钮防重）
+  const [attachBusy, setAttachBusy] = useState(false);
+  // 版本迭代弹层：把当前内容归档为历史版本，再用新内容覆盖（与 Web 端 TaskReviseDialog 同口径）
+  const [reviseSheet, setReviseSheet] = useState(null); // { title, description, update_note }
+  const [reviseBusy, setReviseBusy] = useState(false);
 
   const taskId = Taro.getCurrentInstance().router.params.id;
 
@@ -297,11 +303,169 @@ export default function TaskDetail() {
     });
   };
 
-  // 创建者移除共有成员
+  // ── 附件：上传 / 打开 / 移除（attachments 走后端 metadata._extraFields 透传，与 Web 端同字段）──
+  const uploadToServer = async (filePath) => {
+    const token = getToken();
+    const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
+    const apiBase = rawApi.replace(/\/$/, "");
+    const uploadUrl = apiBase.endsWith("/api") ? `${apiBase}/uploads` : `${apiBase}/api/uploads`;
+    const uploadRes = await Taro.uploadFile({
+      url: uploadUrl,
+      filePath,
+      name: "file",
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      timeout: 60000
+    });
+    const data = JSON.parse(uploadRes.data || "{}");
+    if (!(uploadRes.statusCode >= 200 && uploadRes.statusCode < 300 && data.file_url)) {
+      throw new Error(data?.message || "上传失败");
+    }
+    return data;
+  };
+
+  const doUploadAttachment = async (filePath, fallbackName, fallbackSize) => {
+    if (attachBusy || !taskId) return;
+    setAttachBusy(true);
+    try {
+      const data = await uploadToServer(filePath);
+      const att = {
+        file_url: data.file_url,
+        file_name: data.file_name || fallbackName || "附件",
+        file_size: data.file_size || fallbackSize || 0,
+        file_type: data.file_type || "",
+        uploaded_at: new Date().toISOString()
+      };
+      const next = [...(task?.attachments || []), att];
+      await patch(`/tasks/${taskId}`, { attachments: next });
+      setTask((prev) => (prev ? { ...prev, attachments: next } : prev));
+      Taro.showToast({ title: "附件已添加", icon: "success" });
+    } catch (err) {
+      Taro.showToast({ title: err?.message || "上传失败，请重试", icon: "none" });
+    } finally {
+      setAttachBusy(false);
+    }
+  };
+
+  const pickAttachment = () => {
+    if (attachBusy) return;
+    Taro.showActionSheet({ itemList: ["从聊天选择文件", "拍照或从相册选择"] })
+      .then(({ tapIndex }) => {
+        if (tapIndex === 0) {
+          Taro.chooseMessageFile({
+            count: 1,
+            type: "all",
+            success: (r) => {
+              const f = r.tempFiles?.[0];
+              if (f) doUploadAttachment(f.path, f.name, f.size);
+            }
+          });
+        } else if (tapIndex === 1) {
+          Taro.chooseMedia({
+            count: 1,
+            mediaType: ["image", "video"],
+            success: (r) => {
+              const f = r.tempFiles?.[0];
+              if (f) doUploadAttachment(f.tempFilePath, "", f.size);
+            }
+          });
+        }
+      })
+      .catch(() => {});
+  };
+
+  const isImageAttachment = (att) =>
+    /^image\//.test(att?.file_type || "") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(att?.file_name || "");
+
+  const openAttachment = (att) => {
+    const url = absoluteUrl(att?.file_url);
+    if (!url) return;
+    if (isImageAttachment(att)) {
+      Taro.previewImage({ urls: [url], current: url });
+      return;
+    }
+    Taro.showLoading({ title: "打开中…", mask: true });
+    Taro.downloadFile({
+      url,
+      success: (res) => {
+        Taro.hideLoading();
+        if (res.statusCode >= 200 && res.statusCode < 300 && res.tempFilePath) {
+          Taro.openDocument({
+            filePath: res.tempFilePath,
+            showMenu: true,
+            fail: () => Taro.showToast({ title: "暂不支持打开此类型文件", icon: "none" })
+          });
+        } else {
+          Taro.showToast({ title: "下载失败，请重试", icon: "none" });
+        }
+      },
+      fail: () => {
+        Taro.hideLoading();
+        Taro.showToast({ title: "下载失败，请重试", icon: "none" });
+      }
+    });
+  };
+
+  const removeAttachment = async (att) => {
+    const res = await Taro.showModal({
+      title: "移除附件",
+      content: `移除「${att?.file_name || "附件"}」？`,
+      confirmColor: "#e53935"
+    });
+    if (!res.confirm) return;
+    try {
+      const next = (task?.attachments || []).filter((a) => a !== att);
+      await patch(`/tasks/${taskId}`, { attachments: next });
+      setTask((prev) => (prev ? { ...prev, attachments: next } : prev));
+    } catch (err) {
+      // handled globally
+    }
+  };
+
+  // ── 版本迭代：当前内容归档为历史版本，新内容覆盖（与 Web 端同一份 revisions 数据）──
+  const startRevise = () => {
+    if (!task) return;
+    setReviseSheet({ title: task.title || "", description: task.description || "", update_note: "" });
+  };
+
+  const submitRevise = async () => {
+    if (!reviseSheet || !reviseSheet.title.trim() || reviseBusy) return;
+    setReviseBusy(true);
+    try {
+      const existing = task.revisions || [];
+      const archived = {
+        version: existing.length + 1,
+        title: task.title || "",
+        description: task.description || "",
+        archived_at: new Date().toISOString(),
+        update_note: (reviseSheet.update_note || "").trim()
+      };
+      await patch(`/tasks/${taskId}`, {
+        title: reviseSheet.title.trim(),
+        description: reviseSheet.description,
+        revisions: [...existing, archived]
+      });
+      setReviseSheet(null);
+      Taro.showToast({ title: "已发起新一轮更新，旧版本已归档", icon: "none" });
+      fetchAll();
+    } catch (err) {
+      // handled globally
+    } finally {
+      setReviseBusy(false);
+    }
+  };
+
+  const fmtFileSize = (bytes) => {
+    const n = Number(bytes) || 0;
+    if (n <= 0) return "";
+    if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))}KB`;
+    return `${(n / 1024 / 1024).toFixed(1)}MB`;
+  };
+
+  // 创建者移除协作成员
   const removeMember = async (member) => {
     const res = await Taro.showModal({
       title: "移除成员",
-      content: `将 ${member.display_name} 移出共有约定？对方将不再看到这条约定。`,
+      content: `将 ${member.display_name} 移出协作约定？对方将不再看到这条约定。`,
       confirmColor: "#e53935"
     });
     if (!res.confirm) return;
@@ -314,19 +478,19 @@ export default function TaskDetail() {
     }
   };
 
-  // 成员退出共有
+  // 成员退出协作
   const leaveShared = async () => {
     const self = (membersInfo?.members || []).find((m) => m.is_self);
     if (!self) return;
     const res = await Taro.showModal({
-      title: "退出共有",
+      title: "退出协作",
       content: "退出后将不再看到这条约定，创建者会收到通知。",
       confirmColor: "#e53935"
     });
     if (!res.confirm) return;
     try {
       await del(`/tasks/${taskId}/members/${self.user_id}`);
-      Taro.showToast({ title: "已退出共有约定", icon: "success" });
+      Taro.showToast({ title: "已退出协作约定", icon: "success" });
       setTimeout(() => Taro.switchTab({ url: "/pages/tasks/index" }), 600);
     } catch (err) {
       // handled globally
@@ -515,7 +679,7 @@ export default function TaskDetail() {
                 </View>
                 {historyItems.length === 0 ? (
                   <View className="ss-empty" style={{ padding: "20rpx 0" }}>
-                    {todayItems.length > 0 ? "之前的记录会出现在这里" : "还没有记录，点上方小脚印开始第一次打卡"}
+                    {todayItems.length > 0 ? "之前的记录会出现在这里" : "还没有打卡记录"}
                   </View>
                 ) : (
                   <View>
@@ -721,6 +885,89 @@ export default function TaskDetail() {
         </View>
 
         <View className="ss-card">
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <View className="ss-section-title" style={{ marginBottom: 0 }}>附件</View>
+            <Text
+              onClick={pickAttachment}
+              style={{ fontSize: "26rpx", color: attachBusy ? "#9ca0a8" : "#384877", padding: "6rpx 16rpx", border: `1rpx solid ${attachBusy ? "#9ca0a8" : "#384877"}`, borderRadius: "10rpx" }}
+            >
+              {attachBusy ? "上传中…" : "＋ 上传"}
+            </Text>
+          </View>
+          {(task.attachments || []).length === 0 ? (
+            <View className="ss-empty" style={{ padding: "24rpx 0" }}>暂无附件，可上传文件、图片或视频</View>
+          ) : (
+            <View style={{ marginTop: "12rpx" }}>
+              {(task.attachments || []).map((att, idx) => (
+                <View
+                  key={`${att.file_url}-${idx}`}
+                  style={{ display: "flex", alignItems: "center", gap: "16rpx", padding: "18rpx 0", borderBottom: "1rpx solid #e5e6eb" }}
+                >
+                  <View
+                    onClick={() => openAttachment(att)}
+                    style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "14rpx" }}
+                  >
+                    <Text style={{ fontSize: "32rpx", flexShrink: 0 }}>{isImageAttachment(att) ? "🖼" : "📎"}</Text>
+                    <Text style={{ flex: 1, minWidth: 0, fontSize: "28rpx", color: "#333", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {att.file_name || "附件"}
+                    </Text>
+                    {fmtFileSize(att.file_size) ? (
+                      <Text className="ss-muted" style={{ flexShrink: 0 }}>{fmtFileSize(att.file_size)}</Text>
+                    ) : null}
+                  </View>
+                  <Text
+                    onClick={() => removeAttachment(att)}
+                    style={{ color: "#e53935", fontSize: "36rpx", lineHeight: "36rpx", padding: "4rpx 12rpx", flexShrink: 0 }}
+                  >
+                    ×
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View className="ss-card">
+          <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <View className="ss-section-title" style={{ marginBottom: 0 }}>
+              版本 <Text style={{ fontSize: "24rpx", color: "#b98a4e" }}>v{(task.revisions || []).length + 1}</Text>
+            </View>
+            <Text
+              onClick={startRevise}
+              style={{ fontSize: "26rpx", color: "#b98a4e", padding: "6rpx 16rpx", border: "1rpx solid #b98a4e", borderRadius: "10rpx" }}
+            >
+              发起新一轮更新
+            </Text>
+          </View>
+
+          {/* 当前版本（最新） */}
+          <View style={{ marginTop: "20rpx", padding: "20rpx 24rpx", background: "#fdf8ef", border: "1rpx solid #ecd9b8", borderRadius: "14rpx" }}>
+            <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+              <Text style={{ fontSize: "22rpx", color: "#b98a4e", fontWeight: 600 }}>v{(task.revisions || []).length + 1} · 当前版本</Text>
+              <Text className="ss-muted">{task.updated_date ? new Date(task.updated_date).toLocaleString("zh-CN") : ""}</Text>
+            </View>
+            <Text style={{ display: "block", marginTop: "10rpx", fontSize: "28rpx", color: "#333", fontWeight: 500 }}>{task.title}</Text>
+            {task.description ? (
+              <Text style={{ display: "block", marginTop: "6rpx", fontSize: "26rpx", color: "#63666e", lineHeight: "38rpx" }}>{task.description}</Text>
+            ) : null}
+          </View>
+
+          {/* 历史版本（新→旧） */}
+          {[...(task.revisions || [])].sort((a, b) => (b.version || 0) - (a.version || 0)).map((rev) => (
+            <View key={rev.version} style={{ marginTop: "16rpx", padding: "20rpx 24rpx", background: "#fafbfb", border: "1rpx solid #e8ecef", borderRadius: "14rpx" }}>
+              <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
+                <Text style={{ fontSize: "22rpx", color: "#9ca0a8", fontWeight: 600 }}>v{rev.version}</Text>
+                <Text className="ss-muted">{rev.archived_at ? `归档于 ${new Date(rev.archived_at).toLocaleString("zh-CN")}` : ""}</Text>
+              </View>
+              <Text style={{ display: "block", marginTop: "10rpx", fontSize: "28rpx", color: "#63666e" }}>{rev.title}</Text>
+              {rev.update_note ? (
+                <Text style={{ display: "block", marginTop: "6rpx", fontSize: "24rpx", color: "#b98a4e" }}>更新说明：{rev.update_note}</Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+
+        <View className="ss-card">
           <View className="ss-section-title">评论</View>
           {comments.length === 0 && <View className="ss-empty">暂无评论</View>}
           {comments.map((c) => (
@@ -747,7 +994,7 @@ export default function TaskDetail() {
 
         {membersInfo && (membersInfo.members.length > 0 || membersInfo.my_role === "member") && (
           <View className="ss-card">
-            <View className="ss-section-title">共有成员</View>
+            <View className="ss-section-title">协作成员</View>
             <View style={{ display: "flex", alignItems: "center", padding: "14rpx 0", borderBottom: "1rpx solid #e5e6eb" }}>
               <Text style={{ flex: 1, fontSize: "30rpx", color: "#333" }}>
                 {membersInfo.owner.display_name}
@@ -773,7 +1020,7 @@ export default function TaskDetail() {
             ))}
             {membersInfo.my_role === "member" && (
               <Button className="ss-btn ss-btn-plain" style={{ marginTop: "20rpx" }} onClick={leaveShared}>
-                退出共有
+                退出协作
               </Button>
             )}
           </View>
@@ -844,7 +1091,7 @@ export default function TaskDetail() {
             <Textarea
               value={noteSheet.note}
               onInput={(e) => setNoteSheet((prev) => ({ ...prev, note: e.detail.value }))}
-              placeholder={"一句话就好，比如：跑了 3 公里，配速 6 分半"}
+              placeholder={"如:跑了 3 公里"}
               maxlength={500}
               style={{
                 width: "100%",
@@ -870,6 +1117,68 @@ export default function TaskDetail() {
                 onClick={saveCheckinNote}
               >
                 {noteSheet.note?.trim() ? "收下这句话" : "保存"}
+              </Button>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* 版本迭代弹层：当前内容归档为历史版本，新内容覆盖（与 Web 端 TaskReviseDialog 同口径） */}
+      {reviseSheet && (
+        <View
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "48rpx"
+          }}
+          onClick={() => setReviseSheet(null)}
+        >
+          <View
+            style={{ width: "100%", background: "#ffffff", borderRadius: "20rpx", padding: "32rpx" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Text style={{ fontSize: "30rpx", fontWeight: 600, color: "#1c1c1e" }}>发起新一轮更新</Text>
+            <Text style={{ display: "block", fontSize: "24rpx", color: "#9ca0a8", marginTop: "8rpx" }}>
+              当前内容会被归档为 v{(task.revisions || []).length + 1} 历史版本，并用下面的新内容覆盖。
+            </Text>
+            <Input
+              value={reviseSheet.title}
+              onInput={(e) => setReviseSheet((prev) => ({ ...prev, title: e.detail.value }))}
+              placeholder="本轮约定标题"
+              style={{ marginTop: "24rpx", background: "#f8f9fd", border: "1rpx solid #e8ecef", borderRadius: "14rpx", padding: "16rpx 24rpx", fontSize: "28rpx", color: "#3a3a3c" }}
+            />
+            <Textarea
+              value={reviseSheet.description}
+              onInput={(e) => setReviseSheet((prev) => ({ ...prev, description: e.detail.value }))}
+              placeholder="本轮约定的详细内容"
+              maxlength={2000}
+              style={{ width: "100%", minHeight: "160rpx", marginTop: "20rpx", background: "#f8f9fd", border: "1rpx solid #e8ecef", borderRadius: "14rpx", padding: "20rpx 24rpx", fontSize: "28rpx", color: "#3a3a3c", boxSizing: "border-box" }}
+            />
+            <Input
+              value={reviseSheet.update_note}
+              onInput={(e) => setReviseSheet((prev) => ({ ...prev, update_note: e.detail.value }))}
+              placeholder="更新说明（可选）：为什么发起这一轮更新？"
+              style={{ marginTop: "20rpx", background: "#f8f9fd", border: "1rpx solid #e8ecef", borderRadius: "14rpx", padding: "16rpx 24rpx", fontSize: "28rpx", color: "#3a3a3c" }}
+            />
+            <View style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "28rpx" }}>
+              <Text onClick={() => setReviseSheet(null)} style={{ fontSize: "26rpx", color: "#9ca0a8", padding: "12rpx 16rpx" }}>
+                取消
+              </Text>
+              <Button
+                className="ss-btn"
+                style={{ margin: 0, padding: "0 40rpx", background: reviseSheet.title.trim() ? "#b98a4e" : "#d8c9ae" }}
+                loading={reviseBusy}
+                onClick={submitRevise}
+              >
+                确认更新
               </Button>
             </View>
           </View>

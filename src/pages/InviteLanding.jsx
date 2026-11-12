@@ -1,6 +1,6 @@
 // 协同约定「待办邀请」落地页（公开）：前情摘要 + 共识 + 推进中事项 + 与我有关的待办 + 三种回应
 // 接受分工=加入成员并成为绑定子约定负责人；提出建议=留言进共同讨论；暂时无法参与=仅记录回应。
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -39,6 +39,17 @@ export default function InviteLanding() {
     }
   };
 
+  // 未登录点「接受/无法参与」→ 带 auto 意图跳登录页；登录回跳后自动完成该回应
+  const autoAction = new URLSearchParams(window.location.search).get("auto");
+  const autoFiredRef = useRef(false);
+
+  const clearAutoParam = () => {
+    window.history.replaceState(null, "", `/invite/${code}`);
+  };
+
+  const loginRedirect = (action) =>
+    `/login?redirect=${encodeURIComponent(`/invite/${code}${action ? `?auto=${action}` : ""}`)}`;
+
   useEffect(() => {
     load();
     // 登录态探测（裸 fetch，避免 httpClient 对匿名 401 弹错误提示）
@@ -46,6 +57,19 @@ export default function InviteLanding() {
       .then((r) => setLoggedIn(r.ok))
       .catch(() => setLoggedIn(false));
   }, [code]);
+
+  // 登录回跳后自动完成回应：仅 accept/decline 可自动（suggest 需要填写文本，回来手动再发）
+  useEffect(() => {
+    if (!data || !loggedIn || autoFiredRef.current) return;
+    if (autoAction !== "accept" && autoAction !== "decline") return;
+    // 已是成员 / 已回应 / 邀请已关闭：清掉 auto 参数即可，不重复回应
+    if (data.viewer?.is_member || data.viewer?.responded || data.invite?.status !== "open") {
+      clearAutoParam();
+      return;
+    }
+    autoFiredRef.current = true;
+    respond(autoAction);
+  }, [data, loggedIn]);
 
   const respond = async (action) => {
     if (responding) return;
@@ -60,10 +84,12 @@ export default function InviteLanding() {
       );
       setSuggestOpen(false);
       setSuggestText("");
+      if (autoAction) clearAutoParam();
       setData((prev) => ({ ...prev, invite: res.invite, viewer: { ...(prev?.viewer || { is_member: action === "accept" }), responded: true, status: res.invite.status } }));
     } catch (e) {
       if (e?.status === 401) {
-        window.location.href = `/login?redirect=${encodeURIComponent(`/invite/${code}`)}`;
+        // 未登录：带上本次意图跳登录页，登录回跳后由 auto 逻辑自动完成
+        window.location.href = loginRedirect(action === "suggest" ? "" : action);
         return;
       }
       toast.error(e?.data?.message || e?.message || "回应失败，请稍后再试");
@@ -213,7 +239,7 @@ export default function InviteLanding() {
                 {!suggestOpen ? (
                   <button
                     type="button"
-                    onClick={() => (loggedIn ? setSuggestOpen(true) : (window.location.href = `/login?redirect=${encodeURIComponent(`/invite/${code}`)}`))}
+                    onClick={() => (loggedIn ? setSuggestOpen(true) : (window.location.href = loginRedirect("")))}
                     className="flex items-center justify-center gap-1.5 rounded-full border py-2.5 text-[13px] font-medium"
                     style={{ borderColor: "#cfcdc6", color: "#45413d" }}
                   >

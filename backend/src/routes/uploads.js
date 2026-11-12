@@ -10,10 +10,23 @@ export const uploadsRouter = Router();
 const uploadRoot = path.resolve(process.cwd(), env.UPLOAD_DIR);
 fs.mkdirSync(uploadRoot, { recursive: true });
 
+// busboy 默认按 latin1 解 multipart 文件名，中文名会变成「æµè¯•」式乱码；
+// 含高位 latin1 字符（正常 UTF-8 文件名不会落在该区间）时按 UTF-8 重解码还原
+function decodeOriginalName(name) {
+  const raw = String(name || "upload");
+  if (/[\u0080-\u00ff]/.test(raw)) {
+    try {
+      const decoded = Buffer.from(raw, "latin1").toString("utf8");
+      if (decoded && !decoded.includes("�")) return decoded;
+    } catch (_e) {}
+  }
+  return raw;
+}
+
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadRoot),
   filename: (_req, file, cb) => {
-    const original = file.originalname || "upload";
+    const original = decodeOriginalName(file.originalname);
     const ext = path.extname(original) || "";
     const base = path.basename(original, ext).replace(/[^a-zA-Z0-9._-]/g, "_") || "file";
     const safeName = `${base}${ext}`;
@@ -51,7 +64,7 @@ uploadsRouter.post("/", (req, res, next) => {
 
     return res.status(201).json({
       file_url: fileUrl,
-      file_name: req.file.originalname,
+      file_name: decodeOriginalName(req.file.originalname),
       file_size: req.file.size,
       file_type: req.file.mimetype
     });

@@ -13,9 +13,9 @@ import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import { toast } from "sonner";
 import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import NotificationManager from "../components/notifications/NotificationManager";
 import MilestoneCard from "../components/tasks/MilestoneCard";
 import LifeTaskCard from "../components/tasks/LifeTaskCard";
+import { isTaskEffectivelyCompleted, isRecurringTask } from "@/lib/taskStatus";
 import { flattenSubtasks } from "@/components/checkins/subtaskTree";
 import { composeShanghaiISO } from "@/lib/timeCore";
 import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
@@ -255,8 +255,9 @@ export default function Tasks() {
       );
     }
 
-    const active = filteredTasks.filter((t) => t.status !== 'completed');
-    const completed = filteredTasks.filter((t) => t.status === 'completed');
+    // 完成口径含「打卡不杀系列」：重复/打卡约定今日已打卡（done_today）也归入已完成，明天自动回到待办
+    const active = filteredTasks.filter((t) => !isTaskEffectivelyCompleted(t));
+    const completed = filteredTasks.filter(isTaskEffectivelyCompleted);
 
     const roots = active.filter((t) => !t.parent_task_id);
 
@@ -527,24 +528,8 @@ export default function Tasks() {
     }
   };
 
-  // Get current date info
-  const today = new Date();
-  const dateStr = today.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
-  const weekday = today.toLocaleDateString('zh-CN', { weekday: 'long' });
-
-  // Greeting based on hour
-  const hour = today.getHours();
-  let greeting = "你好";
-  let greetingIcon = "☀️";
-  if (hour < 6) {greeting = "凌晨好";greetingIcon = "🌙";} else
-  if (hour < 11) {greeting = "早上好";greetingIcon = "🌅";} else
-  if (hour < 14) {greeting = "中午好";greetingIcon = "☀️";} else
-  if (hour < 18) {greeting = "下午好";greetingIcon = "🌤️";} else
-  {greeting = "晚上好";greetingIcon = "🌙";}
-
   return (
-    <div className="min-h-screen bg-[#f8f9fa] pb-24 font-sans text-slate-900">
-      <NotificationManager />
+    <div className="min-h-screen bg-[#FAF9F7] pb-24 font-sans text-slate-900">
 
       <main className="pt-8 px-6 max-w-7xl mx-auto">
         
@@ -857,8 +842,8 @@ export default function Tasks() {
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-green-600" />
+                  <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center">
+                    <Sparkles className="w-5 h-5 text-stone-500" />
                   </div>
                   <div>
                     <h3 className="font-serif text-lg font-semibold text-stone-800">生活提醒</h3>
@@ -906,7 +891,7 @@ export default function Tasks() {
               className="w-full flex items-center justify-between gap-3 p-4 rounded-2xl bg-white border border-slate-200 hover:border-[#c7d2fe] hover:bg-[#eef2ff]/40 transition-colors group"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-[#384877] flex items-center justify-center shadow-sm">
                   <ArchiveIcon className="w-5 h-5 text-white" />
                 </div>
                 <div className="text-left">
@@ -983,7 +968,7 @@ export default function Tasks() {
                       </p>
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {task.completed_at ? `完成于 ${new Date(task.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
+                      {isRecurringTask(task) ? '今日已打卡' : task.completed_at ? `完成于 ${new Date(task.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
                     </p>
                   </div>
                 </div>
@@ -1016,7 +1001,7 @@ export default function Tasks() {
                         )}
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        {parent.completed_at ? `完成于 ${new Date(parent.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
+                        {isRecurringTask(parent) ? '今日已打卡' : parent.completed_at ? `完成于 ${new Date(parent.completed_at).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}` : '已完成'}
                       </p>
                     </div>
                     {hasChildren && (
@@ -1194,7 +1179,7 @@ export default function Tasks() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 flex items-center gap-4 px-6"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white rounded-2xl shadow-md border border-slate-200 p-2 flex items-center gap-4 px-6"
           >
              <span className="text-sm font-medium text-slate-700">{selectedTaskIds.length} 个已选择</span>
              <div className="h-4 w-px bg-slate-200"></div>

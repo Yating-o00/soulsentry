@@ -1,4 +1,4 @@
-// 锁屏待办壁纸（小程序端）：把今日约定 + 勾选状态渲染成手机锁屏尺寸的壁纸图。
+// 锁屏约定壁纸（小程序端）：把全部进行中的约定（含子约定）+ 勾选状态渲染成手机锁屏尺寸的壁纸图。
 // 与 Web 端 src/lib/lockscreenWallpaper.js 同一套排版逻辑，仅导出方式不同：
 // 这里用 wx.createOffscreenCanvas 离屏渲染后导出 tempFilePath，供预览与保存相册。
 // 锁屏时钟占据顶部约 1/3，内容统一从 y≈780 开始排布，避免被时间遮挡。
@@ -74,8 +74,9 @@ export const isItemDone = (t) =>
 
 /**
  * 从全量约定（parent_task_id=all）挑出锁屏壁纸条目：
- * 顶层约定（未完成 + 今日已完成；重复约定始终保留）+ 各自的直接子约定，
+ * 顶层约定（未完成 + 今日已完成；重复约定始终保留）+ 各自的全部直接子约定，
  * 未完成按提醒时间升序在前，今日已完成的划线沉底。
+ * 清单不做数量截取（页面内可勾选任何一条）；壁纸绘制时由 buildRows 折叠超出的行。
  */
 export function buildLockscreenItems(allTasks = []) {
   const list = Array.isArray(allTasks) ? allTasks : [];
@@ -95,13 +96,12 @@ export function buildLockscreenItems(allTasks = []) {
     .filter(isItemDone)
     .sort((a, b) => new Date(b.completed_at || 0).getTime() - new Date(a.completed_at || 0).getTime());
 
-  return [...pending, ...done].slice(0, 8).map((t) => ({
+  return [...pending, ...done].map((t) => ({
     id: t.id,
     title: t.title,
     done: isItemDone(t),
     subtasks: list
       .filter((s) => s.parent_task_id === t.id && visible(s))
-      .slice(0, 3)
       .map((s) => ({ id: s.id, title: s.title, done: isItemDone(s) })),
   }));
 }
@@ -161,7 +161,7 @@ function drawCheckbox(ctx, x, y, size, done, style) {
 }
 
 /**
- * 在给定的 2d 上下文上绘制锁屏待办壁纸（浏览器 canvas 与小程序离屏 canvas 通用）。
+ * 在给定的 2d 上下文上绘制锁屏约定壁纸（浏览器 canvas 与小程序离屏 canvas 通用）。
  * @param {CanvasRenderingContext2D} ctx
  * @param {object} opts
  * @param {Array} opts.items buildLockscreenItems 的结果
@@ -281,7 +281,7 @@ export function renderWallpaper(ctx, { items = [], style, date = new Date() }) {
 }
 
 /**
- * 生成锁屏待办壁纸，返回 Promise<tempFilePath>（失败返回 ""）
+ * 生成锁屏约定壁纸，返回 Promise<tempFilePath>（失败返回 ""）
  * @param {Array} items buildLockscreenItems 的结果
  * @param {string} styleKey WALLPAPER_STYLES 的 key
  */

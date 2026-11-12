@@ -12,8 +12,8 @@ import {
   generateWallpaper,
 } from "@/lib/lockscreenWallpaper";
 
-// 锁屏待办：把今日约定渲染成锁屏壁纸（查看用），点按下方清单勾选后壁纸自动重绘，
-// 保存到相册并设为锁屏即可在锁屏上随时查看今天的约定。
+// 锁屏约定：把全部约定渲染成锁屏壁纸（查看用），点按下方清单勾选（含子约定）后壁纸自动重绘，
+// 勾选走后端接口，完成状态实时同步到小程序与 Web 端；保存壁纸到相册并设为锁屏即可随时查看。
 export default function Lockscreen() {
   const [tasks, setTasks] = useState([]);
   const [styleKey, setStyleKey] = useState("night");
@@ -145,10 +145,10 @@ export default function Lockscreen() {
       <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
         {/* 页眉 */}
         <View style={{ paddingBottom: "24rpx", borderBottom: `1rpx solid ${theme.border}` }}>
-          <Text style={{ fontSize: "40rpx", fontWeight: 900, color: theme.primary }}>锁屏待办</Text>
+          <Text style={{ fontSize: "40rpx", fontWeight: 900, color: theme.primary }}>锁屏约定</Text>
           <View style={{ marginTop: "12rpx" }}>
             <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, lineHeight: 1.7 }}>
-              保存壁纸设为锁屏，亮屏即见今日约定；在下方勾选后壁纸自动更新，重新保存替换即可。
+              保存壁纸设为锁屏，亮屏即见全部约定；在下方勾选（含子约定）即完成约定，完成状态实时同步到小程序与 Web 端，壁纸自动更新，重新保存替换即可。
             </Text>
           </View>
         </View>

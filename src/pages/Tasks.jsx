@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2 } from "lucide-react";
+import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2, Wallpaper } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -551,6 +551,15 @@ export default function Tasks() {
           >
             <Users2 className="w-4 h-4" />
             <span>协同约定</span>
+          </button>
+
+          <button
+            onClick={() => navigate(createPageUrl("LockScreenTodo"))}
+            title="生成锁屏壁纸，锁屏也能看约定、勾选约定"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium bg-white border border-[#c7d2fe] text-[#384877] hover:bg-[#eef2ff] transition-all shadow-sm"
+          >
+            <Wallpaper className="w-4 h-4" />
+            <span>锁屏约定</span>
           </button>
 
           <div className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex">

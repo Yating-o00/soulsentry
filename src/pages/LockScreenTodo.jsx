@@ -10,7 +10,8 @@ import {
   createWallpaperCanvas,
 } from "@/lib/lockscreenWallpaper";
 
-// 锁屏待办：把今日约定渲染成锁屏壁纸（查看用），勾选在此页完成后壁纸自动更新，重新下载即可。
+// 锁屏约定：把全部约定渲染成锁屏壁纸（查看用），勾选在此页完成后壁纸自动更新，重新下载即可。
+// 勾选走后端接口，Web 端与小程序端的完成状态实时同步。
 export default function LockScreenTodo() {
   const queryClient = useQueryClient();
   const [styleKey, setStyleKey] = useState("night");
@@ -65,7 +66,7 @@ export default function LockScreenTodo() {
     const now = new Date();
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
-    a.download = `心栈锁屏待办-${now.getMonth() + 1}月${now.getDate()}日.png`;
+    a.download = `心栈锁屏约定-${now.getMonth() + 1}月${now.getDate()}日.png`;
     a.click();
     toast.success("壁纸已下载，去设为锁屏壁纸吧");
   };
@@ -78,10 +79,10 @@ export default function LockScreenTodo() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 md:py-10">
-      <h1 className="text-2xl font-bold text-stone-900">锁屏待办</h1>
+      <h1 className="text-2xl font-bold text-stone-900">锁屏约定</h1>
       <p className="mt-2 text-sm text-stone-500 leading-relaxed">
-        把今天的约定装进口袋：下载壁纸设为锁屏，亮屏就能看到今天的约定。
-        完成约定后在下方勾选，壁纸会同步更新，重新下载替换即可。
+        把今天的约定装进口袋：下载壁纸设为锁屏，亮屏就能看到全部约定。
+        在下方勾选（含子约定）即完成约定，完成状态实时同步到 Web 端和小程序端，壁纸同步更新，重新下载替换即可。
       </p>
 
       <div className="mt-6 grid gap-8 md:grid-cols-[300px_1fr]">
@@ -89,7 +90,7 @@ export default function LockScreenTodo() {
         <div className="md:sticky md:top-6 self-start">
           <div className="mx-auto w-[240px] md:w-[300px] rounded-[28px] border border-stone-200 shadow-lg overflow-hidden bg-stone-100">
             {previewUrl ? (
-              <img src={previewUrl} alt="锁屏待办壁纸预览" className="w-full block" />
+              <img src={previewUrl} alt="锁屏约定壁纸预览" className="w-full block" />
             ) : (
               <div className="aspect-[1170/2532] flex items-center justify-center text-stone-400 text-sm">
                 生成中…

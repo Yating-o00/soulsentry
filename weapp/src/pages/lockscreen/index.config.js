@@ -1,3 +1,3 @@
 export default {
-  navigationBarTitleText: "锁屏待办",
+  navigationBarTitleText: "锁屏约定",
 };

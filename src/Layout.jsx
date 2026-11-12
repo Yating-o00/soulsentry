@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Heart, ChevronLeft, BarChart3, Wallpaper } from "lucide-react";
+import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Languages, Heart, ChevronLeft, BarChart3 } from "lucide-react";
 // 旧版右下角助手已移除：统一由 App.jsx 的 AssistantWidget（机器人形象）提供入口
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
@@ -49,11 +49,6 @@ const getNavigationItems = (t) => [
     title: t('tasks'),
     url: createPageUrl("Tasks"),
     icon: ListTodo,
-  },
-  {
-    title: "锁屏待办",
-    url: createPageUrl("LockScreenTodo"),
-    icon: Wallpaper,
   },
   {
     title: t('notes'),

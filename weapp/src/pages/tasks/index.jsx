@@ -623,7 +623,7 @@ export default function Tasks() {
                 border: `1rpx solid ${theme.border}`,
               }}
             >
-              <Text style={{ fontSize: "20rpx", color: theme.primary }}>锁屏待办</Text>
+              <Text style={{ fontSize: "20rpx", color: theme.primary }}>锁屏约定</Text>
             </View>
             <View style={{ display: "flex", alignItems: "center", gap: "8rpx" }}>
               <View style={{ width: "12rpx", height: "12rpx", borderRadius: "50%", background: theme.seal }} />

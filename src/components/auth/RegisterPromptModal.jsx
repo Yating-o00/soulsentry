@@ -8,7 +8,7 @@ export default function RegisterPromptModal({ open, onOpenChange, featureName = 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center mb-3 shadow-lg shadow-[#384877]/20">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-[#384877] flex items-center justify-center mb-3 shadow-sm">
             <Sparkles className="w-7 h-7 text-white" />
           </div>
           <DialogTitle className="text-center text-xl">{featureName} 体验次数已用完</DialogTitle>
@@ -18,7 +18,7 @@ export default function RegisterPromptModal({ open, onOpenChange, featureName = 
         </DialogHeader>
         <div className="space-y-3 pt-2">
           <Button
-            className="w-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:opacity-90"
+            className="w-full bg-[#384877] hover:opacity-90"
             onClick={() => { window.location.href = "/login?mode=register"; }}
           >
             免费注册

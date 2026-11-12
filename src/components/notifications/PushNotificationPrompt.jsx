@@ -60,7 +60,7 @@ export default function PushNotificationPrompt() {
                     onClick={handleEnable}
                     disabled={busy}
                     size="sm"
-                    className="bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+                    className="bg-[#384877]"
                   >
                     {busy ? "开启中..." : "开启通知"}
                   </Button>

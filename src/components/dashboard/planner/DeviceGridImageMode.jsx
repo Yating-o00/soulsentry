@@ -38,7 +38,7 @@ export default function DeviceGridImageMode() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md">
+          <div className="w-8 h-8 rounded-xl bg-[#384877] flex items-center justify-center shadow-md">
             <Zap className="w-4 h-4 text-white" />
           </div>
           <div>

@@ -13,11 +13,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import AITranslatedText from "@/components/AITranslatedText";
 import { useTranslation } from "@/components/TranslationContext";
 
 const COLORS = {
-  white: "bg-white hover:border-slate-300",
+  white: "bg-white hover:border-stone-300",
   red: "bg-red-50 hover:border-red-300",
   orange: "bg-orange-50 hover:border-orange-300",
   yellow: "bg-yellow-50 hover:border-yellow-300",
@@ -71,9 +70,9 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
       exit={{ opacity: 0, scale: 0.9 }}
       className="mb-4 break-inside-avoid"
     >
-      <Card className={`group relative border ${note.is_burn_after_read ? 'border-orange-300 shadow-orange-100' : 'border-transparent'} shadow-sm hover:shadow-md transition-all duration-200 ${colorClass}`}>
+      <Card className={`group relative border border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-all duration-200 ${note.is_burn_after_read ? 'border-orange-300' : ''} ${colorClass}`}>
         {note.is_burn_after_read && (
-          <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs px-3 py-1 flex items-center justify-between rounded-t-lg">
+          <div className="absolute top-0 left-0 right-0 bg-orange-500 text-white text-xs px-3 py-1 flex items-center justify-between rounded-t-lg">
             <div className="flex items-center gap-1">
               <Flame className="w-3 h-3" />
               <span>阅后即焚</span>
@@ -90,7 +89,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
           {/* Content Preview */}
           {isAIMode ? (
             <div className="prose prose-sm max-w-none mb-3 text-slate-700 line-clamp-[10]">
-              <AITranslatedText text={note.plain_text || note.content.replace(/<[^>]+>/g, '')} />
+              {note.plain_text || note.content.replace(/<[^>]+>/g, '')}
             </div>
           ) : (
             <div 
@@ -118,18 +117,18 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
           {note.ai_analysis && (
             <div className="mb-3 space-y-2">
                 {note.ai_analysis.summary && (
-                    <div className="p-2.5 bg-white/50 rounded-lg text-xs text-slate-600 border border-purple-100 shadow-sm">
-                        <div className="flex items-center gap-1 mb-1.5 font-medium text-purple-700">
+                    <div className="p-2.5 bg-white/50 rounded-lg text-xs text-slate-600 border border-stone-200 shadow-sm">
+                        <div className="flex items-center gap-1 mb-1.5 font-medium text-stone-600">
                             <Sparkles className="w-3 h-3" />
                             智能摘要
                         </div>
                         <p className="leading-relaxed">{note.ai_analysis.summary}</p>
                     </div>
                 )}
-                
+
                 {note.ai_analysis.key_points && note.ai_analysis.key_points.length > 0 && (
-                    <div className="p-2.5 bg-white/50 rounded-lg text-xs text-slate-600 border border-blue-100 shadow-sm">
-                         <div className="flex items-center gap-1 mb-1.5 font-medium text-blue-700">
+                    <div className="p-2.5 bg-white/50 rounded-lg text-xs text-slate-600 border border-stone-200 shadow-sm">
+                         <div className="flex items-center gap-1 mb-1.5 font-medium text-stone-600">
                             <ListTodo className="w-3 h-3" />
                             要点总结
                         </div>
@@ -145,14 +144,14 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                     <div className="flex flex-wrap gap-1 pt-1">
                         {note.ai_analysis.entities.map((entity, idx) => {
                             const styles = {
-                                person: "bg-blue-50 text-blue-700 border-blue-100",
-                                location: "bg-green-50 text-green-700 border-green-100",
-                                date: "bg-yellow-50 text-yellow-700 border-yellow-100",
-                                org: "bg-purple-50 text-purple-700 border-purple-100",
-                                url: "bg-orange-50 text-orange-700 border-orange-100"
+                                person: "bg-stone-100 text-stone-600 border-stone-200",
+                                location: "bg-stone-100 text-stone-600 border-stone-200",
+                                date: "bg-stone-100 text-stone-600 border-stone-200",
+                                org: "bg-stone-100 text-stone-600 border-stone-200",
+                                url: "bg-stone-100 text-stone-600 border-stone-200"
                             };
                             return (
-                                <span key={idx} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border ${styles[entity.type] || "bg-gray-50"}`}>
+                                <span key={idx} className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] border ${styles[entity.type] || "bg-stone-100 text-stone-600 border-stone-200"}`}>
                                     {entity.text}
                                 </span>
                             );
@@ -175,7 +174,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
                 </Badge>
               ))}
               {note.is_shared && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-300 text-blue-600">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-stone-300 text-stone-600">
                   <Users className="w-2.5 h-2.5 mr-0.5" />
                   已协作
                 </Badge>
@@ -193,7 +192,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
               <Button
                 variant="ghost"
                 size="icon"
-                className={`h-7 w-7 ${note.is_pinned ? 'text-blue-600 bg-blue-100' : 'hover:bg-black/5'}`}
+                className={`h-7 w-7 ${note.is_pinned ? 'text-[#384877] bg-[#EEF2FF]' : 'hover:bg-black/5'}`}
                 onClick={(e) => { e.stopPropagation(); onPin(note); }}
                 title={note.is_pinned ? "取消置顶" : "置顶"}
               >
@@ -251,7 +250,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
           
           {/* Mobile Pin Indicator (Always visible if pinned) */}
           {note.is_pinned && (
-            <div className="absolute top-2 right-2 text-blue-500 lg:hidden">
+            <div className="absolute top-2 right-2 text-[#384877] lg:hidden">
                 <Pin className="w-3.5 h-3.5 fill-current" />
             </div>
           )}

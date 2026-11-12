@@ -201,10 +201,12 @@ function buildTaskCreateData(userId, payload) {
   const extraFields = getTaskExtraFields(payload);
   // 兜底：原文含重复语义而前端未显式传 repeat_rule 时自动识别——
   // 否则 cron 首次提醒后不推进排期，重复约定退化为一次性提醒（如"每天晚上6-7点吃药"只响一天）
-  // 例外：智能规划的逐日子约定（plan_kind/plan_group）绝不推断重复——它们是带具体日期的实例，
-  // 误标 weekly/daily 会让序列化改按 recurrence_last_done 判定（status 被忽略），勾选次日就"回弹"
+  // 例外：子约定（含智能规划的逐日实例 plan_kind/plan_group）绝不推断重复——重复语义属于约定本体，
+  // 子约定只是清单项；误标 weekly/daily 会让序列化改按 recurrence_last_done 判定（status 被忽略），
+  // 勾选次日就"回弹"成未完成
   const isPlanInstance = Boolean(extraFields.plan_kind || extraFields.plan_group);
-  if (!extraFields.repeat_rule && !isPlanInstance) {
+  const isSubtask = Boolean(payload.parent_task_id);
+  if (!extraFields.repeat_rule && !isPlanInstance && !isSubtask) {
     const rec = parseRecurrenceFromText(payload.description) || parseRecurrenceFromText(payload.title);
     if (rec) {
       extraFields.repeat_rule = rec.repeat_rule;
@@ -216,7 +218,6 @@ function buildTaskCreateData(userId, payload) {
   // 子约定的时间若早于现在（通常是前端继承自父约定的旧排期），一律不带入：
   // 任务在提醒时刻之后才创建，旧提醒本就无法送达，否则创建当刻会被到点提醒 / 截止跟进 /
   // 逾期衰减三个发送器各响一次（它们的去重标记互不相同），形成连续多次打扰
-  const isSubtask = Boolean(payload.parent_task_id);
   const keepTime = (iso) => {
     if (!iso) return null;
     const t = new Date(iso).getTime();
@@ -666,10 +667,13 @@ tasksRouter.patch("/:id", async (req, res) => {
   const prevExtra = isPlainObject(existing.metadata?._extraFields) ? existing.metadata._extraFields : {};
   // 兜底：文本含重复语义但未设 repeat_rule 时自动识别（前端智能创建链路不总是显式传），
   // 存量的一次性任务被编辑保存后也能激活为重复约定
-  // 例外：智能规划的逐日子约定（plan_kind/plan_group）绝不推断/补加——它们是带日期的实例，
+  // 例外一：仅在真正编辑内容（改标题/描述）时推断——纯状态切换（勾选/顺延）不得顺手安装重复规则，
+  // 否则"每天XX"式约定在勾选当刻被标成 daily，完成态改按 recurrence_last_done 判定，下次拉取就"回弹"
+  // 例外二：子约定（含 plan_kind/plan_group 的逐日实例）绝不推断/补加——它们是清单项/带日期的实例，
   // 误标 repeat 后序列化改按 recurrence_last_done 判定（status 被忽略），勾选次日就"回弹"成未完成
   const isPlanInstance = Boolean(extraFields.plan_kind || extraFields.plan_group || prevExtra.plan_kind || prevExtra.plan_group);
-  if (extraFields.repeat_rule === undefined && !prevExtra.repeat_rule && !isPlanInstance) {
+  const isContentEdit = payload.data.title !== undefined || payload.data.description !== undefined;
+  if (extraFields.repeat_rule === undefined && !prevExtra.repeat_rule && !isPlanInstance && !existing.parentTaskId && isContentEdit) {
     const rec = parseRecurrenceFromText(payload.data.description ?? existing.description)
       || parseRecurrenceFromText(payload.data.title ?? existing.title);
     if (rec) {
@@ -770,7 +774,9 @@ tasksRouter.patch("/:id", async (req, res) => {
       return res.json({ task: serializeTask(existing) });
     }
 
-    if (requestedStatus === "DONE" && existing.status !== "DONE") {
+    // 不再要求 existing.status !== "DONE"：重复约定的完成态只认 recurrence_last_done，
+    // status 因误标重复前已完成而遗留为 DONE 的，勾选也必须能记录今天（上方幂等返回已防重复计数）
+    if (requestedStatus === "DONE") {
       snoozeNormalize.recurrence_last_done = chinaToday;
       snoozeNormalize.recurrence_done_count = Number(prevExtra.recurrence_done_count || 0) + 1;
       // 已打卡：本期核对唤回即刻停止

@@ -245,8 +245,8 @@ export default function CollabTaskCard({ task }) {
     <div
       onClick={openSpace}
       className={cn(
-        "group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md hover:border-[#384877]/30 transition-all cursor-pointer p-5 md:p-6",
-        task.pinned_at && "border-[#c9d5ef] shadow-md"
+        "group relative bg-white rounded-2xl border border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-stone-300 transition-all cursor-pointer p-5 md:p-6",
+        task.pinned_at && "border-[#c9d5ef]"
       )}
     >
       <div className="flex items-start justify-between gap-4">
@@ -266,7 +266,7 @@ export default function CollabTaskCard({ task }) {
                 className={cn(
                   "text-[11px] px-2 py-0.5 gap-1",
                   agentActive
-                    ? "border-indigo-200 text-indigo-700 bg-indigo-50"
+                    ? "border-stone-200 text-stone-600 bg-stone-100"
                     : "border-slate-200 text-slate-400 bg-slate-50"
                 )}
               >
@@ -325,7 +325,7 @@ export default function CollabTaskCard({ task }) {
         {/* 右端：讨论入口 */}
         <button
           onClick={(e) => { e.stopPropagation(); openSpace(); }}
-          className="flex-shrink-0 flex items-center gap-1.5 text-sm font-medium text-[#384877] border border-[#c7d2fe] rounded-full px-4 py-2 hover:bg-[#eef2ff] transition-colors"
+          className="flex-shrink-0 flex items-center gap-1.5 text-sm font-medium text-[#384877] border border-stone-200 rounded-full px-4 py-2 hover:bg-stone-50 transition-colors"
         >
           <MessageSquare className="w-4 h-4" />
           讨论
@@ -454,8 +454,8 @@ export default function CollabTaskCard({ task }) {
           className={cn(
             "p-1.5 rounded-full transition-all",
             task.pinned_at
-              ? "text-[#384877] bg-[#eef2ff]/80"
-              : "text-slate-300 hover:text-[#384877] hover:bg-[#eef2ff]/60"
+              ? "text-[#384877] bg-[#EEF2FF]"
+              : "text-slate-300 hover:text-[#2E3A60] hover:bg-stone-100"
           )}
         >
           <Pin className="w-4 h-4" fill={task.pinned_at ? "currentColor" : "none"} />
@@ -486,7 +486,7 @@ export default function CollabTaskCard({ task }) {
                 type="button"
                 disabled={isConverting}
                 title="把这条协同约定转回普通约定或打卡约定"
-                className="p-1.5 rounded-full text-slate-300 hover:text-[#384877] hover:bg-[#eef2ff]/60 transition-all disabled:opacity-50"
+                className="p-1.5 rounded-full text-slate-300 hover:text-[#2E3A60] hover:bg-stone-100 transition-all disabled:opacity-50"
               >
                 <Repeat className="w-4 h-4" />
               </button>

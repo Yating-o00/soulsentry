@@ -86,8 +86,8 @@ export default function EnrichPlanButton({
   if (labels.length === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-dashed border-[#384877]/25 bg-gradient-to-br from-[#384877]/[0.03] to-[#5b6dae]/[0.05] p-5 flex items-center gap-4">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#5b6dae] flex items-center justify-center shadow-md shadow-[#384877]/20 shrink-0">
+    <div className="rounded-2xl border border-dashed border-[#384877]/25 bg-[#384877]/5 p-5 flex items-center gap-4">
+      <div className="w-10 h-10 rounded-xl bg-[#384877] flex items-center justify-center shadow-sm shrink-0">
         <Sparkles className="w-5 h-5 text-white" />
       </div>
       <div className="flex-1 min-w-0">
@@ -100,7 +100,7 @@ export default function EnrichPlanButton({
         onClick={handleClick}
         disabled={loading}
         size="sm"
-        className="rounded-xl bg-[#384877] hover:bg-[#2d3a5f] text-white text-xs h-9 px-4 shadow-sm shadow-[#384877]/20 shrink-0"
+        className="rounded-xl bg-[#384877] hover:bg-[#2d3a5f] text-white text-xs h-9 px-4 shadow-sm shrink-0"
       >
         {loading ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />生成中</> : <><Sparkles className="w-3.5 h-3.5 mr-1.5" />一键补全</>}
       </Button>

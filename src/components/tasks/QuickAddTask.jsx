@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { OfflineStorage } from "../offline/OfflineManager";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, MessageSquare, BookTemplate } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, CircleDot, Contrast, TriangleAlert, Tag, Bell, Users, User, Briefcase, Heart, BookOpen, ShoppingCart, Wallet, Footprints, Pin, ListTodo, Trash2, MessageSquare, BookTemplate } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
@@ -35,25 +35,24 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
 import { composeShanghaiISO, formatShanghai, formatShanghaiDateTime, formatShanghaiTime, normalizeTimeRange, parseAsShanghai, toShanghaiTimeStr } from "@/lib/timeCore";
-import AIText from "@/components/AIText";
 
 const CATEGORIES = [
-  { value: "checkin", label: "打卡", icon: "👣", color: "bg-[#EEF2FF] text-[#384877] border-[#c9d5ef]" },
-  { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  { value: "personal", label: "个人", icon: "👤", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  { value: "health", label: "健康", icon: "❤️", color: "bg-green-50 text-green-700 border-green-200" },
-  { value: "study", label: "学习", icon: "📚", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦", color: "bg-pink-50 text-pink-700 border-pink-200" },
-  { value: "shopping", label: "购物", icon: "🛒", color: "bg-orange-50 text-orange-700 border-orange-200" },
-  { value: "finance", label: "财务", icon: "💰", color: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]" },
-  { value: "other", label: "其他", icon: "📌", color: "bg-gray-50 text-gray-700 border-gray-200" },
+  { value: "checkin", label: "打卡", icon: Footprints, color: "bg-[#EEF2FF] text-[#384877] border-[#c9d5ef]" },
+  { value: "work", label: "工作", icon: Briefcase, color: "bg-blue-50 text-blue-700 border-blue-200" },
+  { value: "personal", label: "个人", icon: User, color: "bg-purple-50 text-purple-700 border-purple-200" },
+  { value: "health", label: "健康", icon: Heart, color: "bg-green-50 text-green-700 border-green-200" },
+  { value: "study", label: "学习", icon: BookOpen, color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  { value: "family", label: "家庭", icon: Users, color: "bg-pink-50 text-pink-700 border-pink-200" },
+  { value: "shopping", label: "购物", icon: ShoppingCart, color: "bg-orange-50 text-orange-700 border-orange-200" },
+  { value: "finance", label: "财务", icon: Wallet, color: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]" },
+  { value: "other", label: "其他", icon: Pin, color: "bg-gray-50 text-gray-700 border-gray-200" },
 ];
 
 const PRIORITIES = [
-  { value: "low", label: "低", icon: "○", color: "text-slate-400" },
-  { value: "medium", label: "中", icon: "◐", color: "text-blue-600" },
-  { value: "high", label: "高", icon: "◉", color: "text-[#de6d7e]" },
-  { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
+  { value: "low", label: "低", icon: Circle, color: "text-slate-400" },
+  { value: "medium", label: "中", icon: Contrast, color: "text-blue-600" },
+  { value: "high", label: "高", icon: CircleDot, color: "text-[#de6d7e]" },
+  { value: "urgent", label: "紧急", icon: TriangleAlert, color: "text-[#d5495f]" },
 ];
 
 export default function QuickAddTask({ onAdd, initialData = null }) {
@@ -618,13 +617,13 @@ ${task.description ? `描述: "${task.description}"` : ''}
 
   return (
     <>
-      <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm">
+      <Card className="overflow-hidden bg-white border border-stone-200/60 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <div className="p-4 md:p-6">
           {!isExpanded ? (
             <Tabs defaultValue="quick" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4 md:mb-6 h-10 md:h-12 bg-slate-100/50 p-1 rounded-xl">
-                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>快速创建</AIText></TabsTrigger>
-                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>智能解析</AIText></TabsTrigger>
+                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">快速创建</TabsTrigger>
+                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">智能解析</TabsTrigger>
               </TabsList>
 
               <TabsContent value="quick" className="mt-0 space-y-3 md:space-y-4">
@@ -640,24 +639,24 @@ ${task.description ? `描述: "${task.description}"` : ''}
                 <div className="flex flex-col md:flex-row gap-3 md:gap-4">
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="flex-1 group relative rounded-2xl md:rounded-[20px] border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex items-center justify-center gap-3 px-4 py-5 md:py-6"
+                    className="flex-1 group relative rounded-2xl md:rounded-2xl border-2 border-dashed border-slate-200 hover:border-stone-300 bg-white hover:bg-slate-50 transition-all flex items-center justify-center gap-3 px-4 py-5 md:py-6"
                   >
                     <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
                       <Plus className="w-6 h-6 md:w-7 md:h-7 text-[#384877]" strokeWidth={2.5} />
                     </div>
                     <div className="text-left flex-1">
-                      <div className="font-bold text-slate-800 text-base md:text-lg whitespace-nowrap"><AIText>手动创建</AIText></div>
-                      <div className="text-xs md:text-sm text-slate-500 font-medium whitespace-nowrap"><AIText>点击输入详情</AIText></div>
+                      <div className="font-bold text-slate-800 text-base md:text-lg whitespace-nowrap">手动创建</div>
+                      <div className="text-xs md:text-sm text-slate-500 font-medium whitespace-nowrap">点击输入详情</div>
                     </div>
                   </button>
 
                   {browserSupported && (
                     <button
                       onClick={startVoiceInput}
-                      className="flex-1 group relative rounded-2xl md:rounded-[20px] bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-900/20 px-4 py-5 md:py-6"
+                      className="flex-1 group relative rounded-2xl md:rounded-2xl bg-[#384877] text-white hover:bg-[#2E3A60] transition-all flex items-center justify-center gap-3 shadow-sm px-4 py-5 md:py-6"
                     >
                       <div className="relative flex-shrink-0">
-                        <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm border border-white/10">
+                        <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform border border-white/20">
                           <Mic className="w-6 h-6 md:w-7 md:h-7 text-white" />
                         </div>
                         <motion.div
@@ -667,8 +666,8 @@ ${task.description ? `描述: "${task.description}"` : ''}
                         />
                       </div>
                       <div className="text-left flex-1">
-                        <div className="font-bold text-base md:text-lg whitespace-nowrap"><AIText>语音创建</AIText></div>
-                        <div className="text-xs md:text-sm text-blue-100/80 font-medium whitespace-nowrap"><AIText>AI 识别</AIText></div>
+                        <div className="font-bold text-base md:text-lg whitespace-nowrap">语音创建</div>
+                        <div className="text-xs md:text-sm text-blue-100/80 font-medium whitespace-nowrap">AI 识别</div>
                       </div>
                     </button>
                   )}
@@ -911,7 +910,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                   {/* 日期选择 (关注区间) */}
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button type="button" className="group flex items-center justify-between gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 transition-all text-left">
+                      <button type="button" className="group flex items-center justify-between gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-stone-300 transition-all text-left">
                          <div className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
                                 <CalendarIcon className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
@@ -962,7 +961,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
 
                   {/* 提醒时间设置 */}
                   {!task.is_all_day && (
-                    <div className="group flex items-center gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-300 transition-all">
+                    <div className="group flex items-center gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:border-stone-300 transition-all">
                          <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition-colors">
                             <Clock className="h-5 w-5 text-purple-500 group-hover:scale-110 transition-transform" />
                         </div>
@@ -1044,14 +1043,14 @@ ${task.description ? `描述: "${task.description}"` : ''}
                     value={task.category}
                     onValueChange={(value) => setTask({ ...task, category: value })}
                   >
-                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3 transition-all">
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-stone-300 rounded-xl h-auto py-3 transition-all">
                       <div className="flex flex-col items-start gap-1 w-full">
                         <div className="flex items-center gap-2 text-slate-500">
                           <Tag className="h-4 w-4" />
                           <span className="text-xs font-medium">类别</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-base">{selectedCategory?.icon}</span>
+                          {selectedCategory?.icon && <selectedCategory.icon className="w-4 h-4" />}
                           <span className="text-sm font-semibold text-slate-800">{selectedCategory?.label}</span>
                         </div>
                       </div>
@@ -1060,7 +1059,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                       {CATEGORIES.map((cat) => (
                         <SelectItem key={cat.value} value={cat.value}>
                           <div className="flex items-center gap-2">
-                            <span className="text-base">{cat.icon}</span>
+                            <cat.icon className="w-4 h-4" />
                             <span>{cat.label}</span>
                           </div>
                         </SelectItem>
@@ -1073,14 +1072,14 @@ ${task.description ? `描述: "${task.description}"` : ''}
                     value={task.priority}
                     onValueChange={(value) => setTask({ ...task, priority: value })}
                   >
-                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3 transition-all">
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-stone-300 rounded-xl h-auto py-3 transition-all">
                       <div className="flex flex-col items-start gap-1 w-full">
                         <div className="flex items-center gap-2 text-slate-500">
                           <Circle className="h-4 w-4" />
                           <span className="text-xs font-medium">优先级</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-base ${selectedPriority?.color}`}>{selectedPriority?.icon}</span>
+                          {selectedPriority?.icon && <selectedPriority.icon className={`w-4 h-4 ${selectedPriority?.color}`} />}
                           <span className={`text-sm font-semibold ${selectedPriority?.color}`}>{selectedPriority?.label}</span>
                         </div>
                       </div>
@@ -1089,7 +1088,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                       {PRIORITIES.map((pri) => (
                         <SelectItem key={pri.value} value={pri.value}>
                           <div className="flex items-center gap-2">
-                            <span className={`${pri.color}`}>{pri.icon}</span>
+                            <pri.icon className={`w-4 h-4 ${pri.color}`} />
                             <span>{pri.label}</span>
                           </div>
                         </SelectItem>
@@ -1159,7 +1158,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                       }
                     }}
                   >
-                    <SelectTrigger className="w-auto border-slate-200 bg-white hover:border-blue-300 rounded-lg">
+                    <SelectTrigger className="w-auto border-slate-200 bg-white hover:border-stone-300 rounded-lg">
                       <div className="flex items-center gap-2">
                         <Repeat className="h-4 w-4 text-slate-500" />
                         <SelectValue placeholder="重复" />
@@ -1266,7 +1265,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                 <div className="flex items-center gap-2 md:gap-3 pt-2">
                   <Button
                     type="submit"
-                    className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white rounded-xl h-11 md:h-12 text-sm md:text-base font-semibold shadow-lg shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="flex-1 bg-[#384877] hover:bg-[#2E3A60] text-white rounded-xl h-11 md:h-12 text-sm md:text-base font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                     disabled={!task.title.trim() || !task.reminder_time || isSubmitting}
                   >
                     {isSubmitting ? (
@@ -1382,7 +1381,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                 size="lg"
                 onClick={stopRecording}
                 disabled={isProcessing}
-                className="relative h-32 w-32 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 border-4 border-blue-200 hover:border-blue-300 transition-all duration-300 shadow-2xl shadow-blue-500/30"
+                className="relative h-32 w-32 rounded-full bg-[#384877] hover:bg-[#2E3A60] border-4 border-[#c9d5ef] hover:border-[#9fb3d9] transition-all duration-300 shadow-sm"
               >
                 <AnimatePresence mode="wait">
                   {isRecording && !isProcessing && (
@@ -1414,7 +1413,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                 {isRecording && !isProcessing && (
                   <>
                     <motion.div
-                      className="absolute inset-0 rounded-full bg-blue-400"
+                      className="absolute inset-0 rounded-full bg-[#384877]"
                       animate={{
                         scale: [1, 1.3, 1],
                         opacity: [0.5, 0, 0.5],
@@ -1426,7 +1425,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                       }}
                     />
                     <motion.div
-                      className="absolute inset-0 rounded-full bg-blue-300"
+                      className="absolute inset-0 rounded-full bg-[#384877]"
                       animate={{
                         scale: [1, 1.5, 1],
                         opacity: [0.3, 0, 0.3],
@@ -1453,7 +1452,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.2 }}
-                    className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200"
+                    className="bg-blue-50 rounded-xl p-4 border-2 border-blue-100"
                   >
                     <div className="flex items-center gap-2 mb-2">
                       <motion.div
@@ -1474,7 +1473,7 @@ ${task.description ? `描述: "${task.description}"` : ''}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
                     transition={{ duration: 0.2 }}
-                    className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4 border-2 border-dashed border-slate-200"
+                    className="bg-slate-50 rounded-xl p-4 border-2 border-dashed border-slate-200"
                   >
                     <div className="flex items-center justify-center h-full min-h-[100px]">
                       <div className="text-center">
@@ -1494,12 +1493,15 @@ ${task.description ? `描述: "${task.description}"` : ''}
             </div>
 
             {/* 使用提示 */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
               <div className="flex gap-3">
                 <Wand2 className="w-5 h-5 text-[#0891b2] flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-[15px] font-semibold text-[#222222] mb-2">💡 使用提示</p>
-                  <ul className="text-[13px] text-[#52525b] space-y-1.5 leading-relaxed">
+                  <p className="text-[15px] font-semibold text-stone-900 mb-2 flex items-center gap-1.5">
+                    <Lightbulb className="w-4 h-4" />
+                    使用提示
+                  </p>
+                  <ul className="text-[13px] text-stone-600 space-y-1.5 leading-relaxed">
                     <li className="flex items-start gap-2">
                       <span className="text-[#06b6d4] mt-0.5">•</span>
                       <span>直接说出约定内容，AI 自动识别</span>

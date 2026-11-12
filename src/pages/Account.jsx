@@ -86,7 +86,7 @@ export default function Account() {
       
       await loadUser();
       setEditing(false);
-      toast.success("✅ 个人信息更新成功");
+      toast.success("个人信息更新成功");
     } catch (error) {
       console.error("Update error:", error);
       toast.error("更新失败，请重试");
@@ -188,7 +188,7 @@ export default function Account() {
             <p className="text-slate-600 mb-6">请先登录以访问您的账户</p>
             <Button
               onClick={() => base44.auth.redirectToLogin()}
-              className="bg-gradient-to-r from-blue-600 to-blue-700"
+              className="bg-[#384877] hover:bg-[#2E3A60]"
             >
               前往登录
             </Button>
@@ -220,7 +220,7 @@ export default function Account() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-stone-900 mb-2">
           我的账户
         </h1>
         <p className="text-slate-600">管理您的个人信息和账户设置</p>
@@ -266,8 +266,8 @@ export default function Account() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="bg-gradient-to-r from-blue-50 to-purple-50">
+        <Card className="border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+          <CardHeader className="bg-stone-50">
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <User className="w-5 h-5 text-blue-600" />
@@ -300,7 +300,7 @@ export default function Account() {
                   <Button
                     size="sm"
                     onClick={handleSave}
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 text-white"
+                    className="bg-[#384877] hover:bg-[#2E3A60] text-white"
                   >
                     <Check className="w-4 h-4 mr-1" />
                     保存
@@ -314,7 +314,7 @@ export default function Account() {
               {/* 头像 */}
               <div className="flex flex-col items-center gap-3">
                 <div className="relative group">
-                  <Avatar className="h-24 w-24 bg-gradient-to-br from-blue-500 to-purple-600 text-white text-2xl font-bold border-4 border-white shadow-sm">
+                  <Avatar className="h-24 w-24 bg-[#384877] text-white text-2xl font-bold border-4 border-white shadow-sm">
                     {(editing ? formData.avatar_url : user.avatar_url) ? (
                       <img 
                         src={editing ? formData.avatar_url : user.avatar_url} 
@@ -445,8 +445,8 @@ export default function Account() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15 }}
       >
-        <Card className="border-0 shadow-lg overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50">
+        <Card className="border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+          <CardHeader className="bg-amber-50">
             <CardTitle className="flex items-center gap-2">
               <Coins className="w-5 h-5 text-amber-600" />
               AI 点数与订阅
@@ -476,7 +476,7 @@ export default function Account() {
             <Separator className="my-4" />
             <div className="flex flex-wrap gap-3">
               <Link to={createPageUrl("Pricing")}>
-                <Button size="sm" className="bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600">
+                <Button size="sm" className="bg-[#384877] hover:bg-[#2E3A60] text-white">
                   <Coins className="w-4 h-4 mr-1" />
                   购买点数
                 </Button>
@@ -531,8 +531,8 @@ export default function Account() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.19 }}
       >
-        <Card className="border-0 shadow-lg overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50">
+        <Card className="border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+          <CardHeader className="bg-stone-50">
             <CardTitle className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-indigo-600" />
               认知洞察
@@ -557,8 +557,8 @@ export default function Account() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.195 }}
       >
-        <Card className="border-0 shadow-lg overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-sky-50 to-blue-50">
+        <Card className="border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+          <CardHeader className="bg-stone-50">
             <CardTitle className="flex items-center gap-2">
               <Globe className="w-5 h-5 text-sky-600" />
               产品入口
@@ -607,7 +607,7 @@ export default function Account() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
       >
-        <Card className="border-0 shadow-lg">
+        <Card className="border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-slate-600" />

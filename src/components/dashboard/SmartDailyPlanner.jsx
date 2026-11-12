@@ -710,13 +710,13 @@ export default function SmartDailyPlanner() {
 
   return (
     <>
-    <div className="bg-white rounded-[28px] border border-slate-100/80 shadow-[0_8px_28px_rgba(140,147,201,0.12)] overflow-hidden">
+    <div className="bg-white rounded-3xl border border-slate-100/80 shadow-[0_8px_28px_rgba(140,147,201,0.12)] overflow-hidden">
       {/* Header */}
       <div className="px-5 md:px-6 pt-5 pb-4 border-b border-slate-100/60">
         {/* Top row: Title + Actions */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#384877] to-[#5b6dae] flex items-center justify-center shadow-lg shadow-[#384877]/25 shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-[#384877] flex items-center justify-center shadow-sm shrink-0">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div className="min-w-0">
@@ -773,7 +773,7 @@ export default function SmartDailyPlanner() {
             {!dayPlan && !showInput && (
               <Button
                 size="sm"
-                className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-3.5 text-xs shadow-sm shadow-[#384877]/20"
+                className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-3.5 text-xs shadow-sm"
                 onClick={() => setShowInput(true)}
               >
                 <Plus className="w-3.5 h-3.5 mr-1" /> 新建规划
@@ -905,7 +905,7 @@ export default function SmartDailyPlanner() {
                         className={cn(
                           "rounded-xl h-8 px-5 text-xs font-medium shadow-sm transition-all shrink-0",
                           userInput.trim()
-                            ? "bg-[#384877] hover:bg-[#2d3a5f] text-white shadow-[#384877]/20"
+                            ? "bg-[#384877] hover:bg-[#2d3a5f] text-white shadow-sm"
                             : "bg-slate-100 text-slate-400 shadow-none"
                         )}
                       >
@@ -932,7 +932,7 @@ export default function SmartDailyPlanner() {
                         <Button
                           onClick={handleAnalyze}
                           disabled={isProcessing || !userInput.trim()}
-                          className="mt-3 bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-5 text-xs shadow-sm shadow-[#384877]/20"
+                          className="mt-3 bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl h-8 px-5 text-xs shadow-sm"
                         >
                           {isProcessing ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />分析中</> : <><Sparkles className="w-3 h-3 mr-1" />发送分析</>}
                         </Button>

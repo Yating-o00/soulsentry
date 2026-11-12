@@ -228,7 +228,7 @@ export default function UnifiedTaskInput({ onAddTask, value: propValue, onChange
           </button>
           <button 
             onClick={handleSubmit} 
-            className="ml-2 px-5 py-2.5 bg-[#384877] text-white rounded-xl text-sm font-medium hover:bg-[#2c3a63] transition-colors shadow-lg shadow-blue-900/10"
+            className="ml-2 px-5 py-2.5 bg-[#384877] text-white rounded-xl text-sm font-medium hover:bg-[#2c3a63] transition-colors shadow-sm"
           >
             记住
           </button>

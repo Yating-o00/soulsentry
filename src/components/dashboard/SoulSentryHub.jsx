@@ -152,7 +152,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
   };
 
   const DEVICE_GRADIENTS = {
-    phone: 'bg-gradient-to-br from-[#384877] to-[#3b5aa2]',
+    phone: 'bg-[#384877]',
     watch: 'bg-gradient-to-br from-[#3b5aa2] to-[#6366f1]',
     glasses: 'bg-gradient-to-br from-[#6366f1] to-purple-600',
     car: 'bg-gradient-to-br from-emerald-600 to-teal-700',
@@ -217,7 +217,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                 </div>
 
                 <div className="w-full relative group rounded-2xl md:rounded-3xl transition-all duration-500">
-                    <div className="absolute -inset-1 bg-gradient-to-r from-[#384877]/10 to-[#3b5aa2]/10 rounded-2xl md:rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
+                    <div className="absolute -inset-1 bg-[#384877]/5 rounded-2xl md:rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
                     <div className="relative bg-white rounded-2xl md:rounded-3xl p-1.5 md:p-2 border border-slate-200 shadow-sm">
                         <div className="bg-slate-50/50 rounded-xl md:rounded-2xl flex flex-col">
                             <textarea
@@ -328,7 +328,7 @@ export default function SoulSentryHub({ initialData, initialShowResults = false 
                     <section className="animate-fade-up">
                         <div className="flex items-center justify-between mb-5">
                             <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md">
+                                <div className="w-8 h-8 rounded-xl bg-[#384877] flex items-center justify-center shadow-md">
                                     <Zap className="w-4 h-4 text-white" />
                                 </div>
                                 <div>

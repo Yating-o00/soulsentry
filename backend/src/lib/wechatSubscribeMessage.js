@@ -110,6 +110,63 @@ function buildFollowUpData(task, gentleNote) {
   };
 }
 
+// 通用通知（非提醒类：协同讨论/共享/Agent/访客互动等）复用「项目进度提醒」模板推送：
+// 项目名称=通知标题 / 项目类型=来源 / 结束时间=当前时间 / 当前状态=新通知 / 备注=内容摘要。
+// 选用跟进模板而非提醒模板，避免挤占每日高频提醒的订阅配额。
+function buildGenericData(title, source, body) {
+  const tmplId = env.WECHAT_SUBSCRIBE_FOLLOWUP_TMPL_ID;
+  if (!tmplId) return null;
+
+  const titleField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TITLE_FIELD || "thing1";
+  const typeField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TYPE_FIELD || "thing4";
+  const timeField = env.WECHAT_SUBSCRIBE_FOLLOWUP_TIME_FIELD || "time7";
+  const statusField = env.WECHAT_SUBSCRIBE_FOLLOWUP_STATUS_FIELD || "phrase3";
+  const noteField = env.WECHAT_SUBSCRIBE_FOLLOWUP_NOTE_FIELD || "thing10";
+
+  return {
+    template_id: tmplId,
+    page: "pages/account/index",
+    data: {
+      [titleField]: { value: String(title || "心栈通知").slice(0, 20) },
+      [typeField]: { value: String(source || "通知").slice(0, 20) },
+      [timeField]: { value: fmtWechatTime(new Date().toISOString()) },
+      [statusField]: { value: "新通知" },
+      [noteField]: { value: String(body || "").slice(0, 20) || "点击查看详情" }
+    },
+    miniprogram_state: env.NODE_ENV === "production" ? "formal" : "trial"
+  };
+}
+
+export async function sendGenericSubscribeMessage(openid, { title, source, body }) {
+  if (!isConfigured() || !openid) {
+    return { ok: false, reason: "wechat_not_configured_or_no_openid" };
+  }
+  const payloadBase = buildGenericData(title, source, body);
+  if (!payloadBase) {
+    return { ok: false, reason: "template_not_configured" };
+  }
+  const { token, error } = await getWechatAccessToken();
+  if (!token) {
+    return { ok: false, reason: error || "no_access_token" };
+  }
+  try {
+    const res = await fetch(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${token}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ touser: openid, ...payloadBase })
+    });
+    const data = await res.json();
+    if (data.errcode === 0) return { ok: true };
+    if (data.errcode === 43101) {
+      return { ok: false, reason: "user_rejected_or_no_quota", code: data.errcode };
+    }
+    return { ok: false, reason: data.errmsg || `wechat_send_err_${data.errcode}`, code: data.errcode };
+  } catch (err) {
+    console.error("[wechatSubscribeMessage] generic send failed:", err?.message || err);
+    return { ok: false, reason: err?.message || "wechat_send_failed" };
+  }
+}
+
 export async function sendWechatSubscribeMessage(openid, task, type = "reminder", gentleNote = null) {
   if (!isConfigured() || !openid) {
     return { ok: false, reason: "wechat_not_configured_or_no_openid" };

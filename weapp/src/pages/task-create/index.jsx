@@ -1,25 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Taro, { useShareAppMessage } from "@tarojs/taro";
-import { View, Text, Input, Textarea, Picker, Button, ScrollView, Canvas } from "@tarojs/components";
+import { View, Text, Input, Textarea, Picker, Button, ScrollView } from "@tarojs/components";
 import { get, post, patch, del } from "@/utils/api";
-import createQRCode from "@/lib/qrcode";
 import VoiceInput from "@/components/VoiceInput";
+import SharePoster from "@/components/SharePoster";
 import theme from "@/components/tasks/theme";
-
-function AiBadge({ text = "AI 生成" }) {
-  return (
-    <View
-      style={{
-        padding: "2rpx 10rpx",
-        borderRadius: "8rpx",
-        background: "rgba(91,130,160,0.10)",
-        border: "1rpx solid rgba(91,130,160,0.20)"
-      }}
-    >
-      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
-    </View>
-  );
-}
 
 const priorities = [
   { value: "urgent", label: "紧急" },
@@ -38,22 +23,6 @@ const categories = [
   { value: "finance", label: "财务" },
   { value: "other", label: "其他" }
 ];
-
-const DEVICE_ICONS = {
-  phone: "📱",
-  watch: "⌚",
-  glasses: "🕶️",
-  car: "🚗",
-  home: "🏠",
-  pc: "💻"
-};
-
-const STATUS_LABEL = {
-  active: "进行中",
-  ready: "已就绪",
-  monitoring: "监控中",
-  pending: "待触发"
-};
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -81,51 +50,6 @@ function toISODate(date, time) {
   const t = time || "00:00";
   // 后端 zod .datetime() 要求带 Z 的 ISO 8601，这里按 Asia/Shanghai 时区转成 UTC 返回
   return new Date(`${date}T${t}:00+08:00`).toISOString();
-}
-
-function formatDateTime(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function buildFallbackAutomations(timeline, devices) {
-  const list = [];
-  if (Array.isArray(timeline) && timeline.length > 0) {
-    const first = timeline[0];
-    list.push({
-      title: "关键节点提醒",
-      desc: `在 ${first.date || ""} ${first.time || ""} 提醒「${first.title}」`,
-      status: "ready",
-      device_id: "phone"
-    });
-  }
-  if (devices?.phone?.strategies?.length) {
-    list.push({
-      title: "手机协同推送",
-      desc: "通过手机推送保持约定进度同步",
-      status: "active",
-      device_id: "phone"
-    });
-  }
-  if (devices?.watch?.strategies?.length) {
-    list.push({
-      title: "手表轻提醒",
-      desc: "在手表上发送轻量提醒，避免打扰",
-      status: "ready",
-      device_id: "watch"
-    });
-  }
-  if (list.length === 0) {
-    list.push({
-      title: "到期前提醒",
-      desc: "在约定截止前自动发送提醒",
-      status: "ready",
-      device_id: "phone"
-    });
-  }
-  return list;
 }
 
 // 注意：必须定义在组件外部。若放在 TaskCreate 内部，每次输入 setState 都会生成新的
@@ -162,7 +86,6 @@ export default function TaskCreate() {
   const [reminderTime, setReminderTime] = useState("09:00");
   const [priorityIndex, setPriorityIndex] = useState(2);
   const [categoryIndex, setCategoryIndex] = useState(7);
-  const [analysis, setAnalysis] = useState(null);
   const [shareToken, setShareToken] = useState("");
   const [step, setStep] = useState("form");
   const [parsedHint, setParsedHint] = useState("");
@@ -177,18 +100,7 @@ export default function TaskCreate() {
   const [newParsedSubtaskText, setNewParsedSubtaskText] = useState("");
   const [loading, setLoading] = useState(false);
   const [createdTask, setCreatedTask] = useState(null);
-  const [posterUrl, setPosterUrl] = useState("");
-  const [posterSize, setPosterSize] = useState(() => {
-    try {
-      const sys = Taro.getSystemInfoSync();
-      const winWidth = sys.windowWidth || 375;
-      const width = Math.round(winWidth * 0.9);
-      const height = Math.round(width * 840 / 600);
-      return { width, height };
-    } catch {
-      return { width: 600, height: 840 };
-    }
-  });
+  const [showPoster, setShowPoster] = useState(false);
   const [editId, setEditId] = useState("");
   const [isEdit, setIsEdit] = useState(false);
 
@@ -566,72 +478,6 @@ export default function TaskCreate() {
     return failed;
   };
 
-  const buildLocalAnalysis = () => {
-    const input = [title, description].filter(Boolean).join("\n");
-    const steps = [
-      { text: "梳理约定目标与关键交付物" },
-      { text: "拆解可执行的步骤与检查点" },
-      { text: "设置提醒，确保按时推进" }
-    ];
-    const timeline = [
-      { time: "09:00", date: endDate || todayStr(), title: "开始处理", description: input.slice(0, 40) }
-    ];
-    if (endDate) {
-      timeline.push({ time: endTime || "23:59", date: endDate, title: "截止交付", description: "完成并检查约定" });
-    }
-    return {
-      resolved_date: endDate || todayStr(),
-      steps,
-      timeline,
-      devices: {
-        phone: { name: "手机", strategies: [{ time: "到期前", content: "发送提醒推送" }] }
-      },
-      automations: buildFallbackAutomations(timeline, { phone: { strategies: [] } }),
-      parsed: { times: endDate ? [endDate] : [], intents: [title], locations: [] }
-    };
-  };
-
-  const analyze = async (voiceText) => {
-    const inputText = voiceText || [title, description].filter(Boolean).join("\n");
-    if (!inputText.trim()) {
-      Taro.showToast({ title: "请先输入约定内容", icon: "none" });
-      return;
-    }
-
-    setLoading(true);
-    let timeoutId = null;
-    try {
-      const requestPromise = post("/functions/analyzeIntent", {
-        input: inputText,
-        date: endDate || new Date().toISOString().slice(0, 10)
-      });
-
-      const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("AI 分析超时")), 25000);
-      });
-
-      const data = await Promise.race([requestPromise, timeoutPromise]);
-      clearTimeout(timeoutId);
-
-      // 兜底：如果后端未返回 automations，根据时间线和设备生成默认建议
-      if (!Array.isArray(data.automations) || data.automations.length === 0) {
-        data.automations = buildFallbackAutomations(data.timeline, data.devices);
-      }
-
-      setAnalysis(data);
-      setStep("analysis");
-    } catch (err) {
-      clearTimeout(timeoutId);
-      console.error("analyze failed", err);
-      // 超时或失败时使用本地兜底分析
-      setAnalysis(buildLocalAnalysis());
-      setStep("analysis");
-      Taro.showToast({ title: "AI 分析响应较慢，已展示基础建议", icon: "none", duration: 2500 });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const requestReminderSubscribeSync = () => {
     if (process.env.TARO_ENV !== "weapp" || wechatTmplIds.length === 0) return;
     // 必须在用户点击按钮的同步调用栈内发起，否则微信会拒绝
@@ -780,151 +626,6 @@ export default function TaskCreate() {
     }
   };
 
-  const drawQRCode = (ctx, text, x, y, size) => {
-    try {
-      const qr = createQRCode(0, "M");
-      qr.addData(text);
-      qr.make();
-      const count = qr.getModuleCount();
-      const cell = size / count;
-      for (let row = 0; row < count; row++) {
-        for (let col = 0; col < count; col++) {
-          if (qr.isDark(row, col)) {
-            ctx.setFillStyle("#1f2937");
-            ctx.fillRect(x + col * cell, y + row * cell, cell, cell);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("QR draw failed", err);
-    }
-  };
-
-  const generatePoster = () => {
-    if (!shareToken) {
-      Taro.showToast({ title: "分享链接未生成", icon: "none" });
-      return;
-    }
-
-    try {
-      const { width, height } = posterSize;
-      const ctx = Taro.createCanvasContext("shareCanvas");
-      const scale = width / 600;
-
-      // 整体缩放，使 600x840 的内容适配到当前屏幕宽度的 90%
-      ctx.scale(scale, scale);
-
-      // 背景
-      const grd = ctx.createLinearGradient(0, 0, 0, 840);
-      grd.addColorStop(0, "#384877");
-      grd.addColorStop(1, "#4a5d8f");
-      ctx.setFillStyle(grd);
-      ctx.fillRect(0, 0, 600, 840);
-
-      // 顶部品牌
-      ctx.setFillStyle("#ffffff");
-      ctx.setFontSize(28);
-      ctx.fillText("SoulSentry", 40, 60);
-
-      // 标题
-      ctx.setFontSize(40);
-      const displayTitle = title.length > 14 ? title.slice(0, 14) + "…" : title;
-      ctx.fillText(displayTitle, 40, 140);
-
-      // 描述
-      ctx.setFontSize(26);
-      const desc = description || "与你一起守护这个约定";
-      const displayDesc = desc.length > 60 ? desc.slice(0, 60) + "…" : desc;
-      ctx.fillText(displayDesc, 40, 200);
-
-      // 时间
-      const endISO = toISODate(endDate, endTime);
-      if (endISO) {
-        ctx.setFontSize(24);
-        ctx.fillText(`截止时间：${formatDateTime(endISO)}`, 40, 270);
-      }
-
-      // 白色内容区
-      ctx.setFillStyle("#ffffff");
-      ctx.fillRect(40, 320, 520, 360);
-
-      // 内容区文字
-      ctx.setFillStyle("#384877");
-      ctx.setFontSize(28);
-      ctx.fillText("扫码参与约定", 70, 360);
-
-      ctx.setFillStyle("#666666");
-      ctx.setFontSize(22);
-      ctx.fillText("对方可匿名勾选进度、留言", 70, 650);
-
-      // 二维码
-      const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
-      const qrSize = 200;
-      const qrX = (600 - qrSize) / 2;
-      const qrY = 400;
-      ctx.setFillStyle("#ffffff");
-      ctx.fillRect(qrX - 8, qrY - 8, qrSize + 16, qrSize + 16);
-      drawQRCode(ctx, link, qrX, qrY, qrSize);
-
-      // 底部提示
-      ctx.setFillStyle("rgba(255,255,255,0.8)");
-      ctx.setFontSize(22);
-      ctx.fillText("长按识别 · 共同守护", 40, 780);
-
-      ctx.draw(false, () => {
-        Taro.canvasToTempFilePath({
-          canvasId: "shareCanvas",
-          x: 0,
-          y: 0,
-          width,
-          height,
-          destWidth: width * 2,
-          destHeight: height * 2,
-          success: (res) => {
-            setPosterUrl(res.tempFilePath);
-            Taro.showToast({ title: "卡片已生成", icon: "success" });
-          },
-          fail: (err) => {
-            console.error("canvasToTempFilePath failed", err);
-            Taro.showToast({ title: "卡片生成失败", icon: "none" });
-          }
-        });
-      });
-    } catch (err) {
-      console.error("generate poster failed", err);
-      Taro.showToast({ title: "卡片生成失败", icon: "none" });
-    }
-  };
-
-  const savePoster = () => {
-    if (!posterUrl) {
-      generatePoster();
-      return;
-    }
-    Taro.saveImageToPhotosAlbum({
-      filePath: posterUrl,
-      success: () => Taro.showToast({ title: "已保存到相册", icon: "success" }),
-      fail: (err) => {
-        if (err.errMsg?.includes("auth deny")) {
-          Taro.showModal({
-            title: "需要授权",
-            content: "请允许保存图片到相册",
-            showCancel: false
-          });
-        }
-      }
-    });
-  };
-
-  const copyShareLink = () => {
-    if (!shareToken) return;
-    const link = `https://www.xinzhan-soulsentry.cn/share/${shareToken}`;
-    Taro.setClipboardData({
-      data: link,
-      success: () => Taro.showToast({ title: "分享链接已复制", icon: "success" })
-    });
-  };
-
   const goBack = () => {
     Taro.navigateBack();
   };
@@ -936,14 +637,6 @@ export default function TaskCreate() {
       path: `/pages/share/index?token=${shareToken}`
     };
   });
-
-  useEffect(() => {
-    if (step === "created" && shareToken && !posterUrl) {
-      // 延迟生成，确保 canvas 已渲染
-      const timer = setTimeout(generatePoster, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [step, shareToken, posterUrl]);
 
   const renderSubtaskEditor = () => {
     if (!isEdit) return null;
@@ -1311,21 +1004,17 @@ export default function TaskCreate() {
             <Textarea
               className="ss-textarea"
               style={{ height: "360rpx" }}
-              placeholder="例如：周五前完成报告 / 明天下午3点在三楼会议室开会 / 记得每天睡前读书20分钟"
+              placeholder="如：周五前完成报告"
               value={title}
               maxlength={500}
               disableDefaultPadding
               showConfirmBar={false}
               onInput={(e) => setTitle(e.detail.value)}
             />
-            <Text style={{ fontSize: "20rpx", color: "#9ca0a8", marginTop: "10rpx" }}>
-              时间、地点、想分几步都可以写进去，点下方「分析约定」自动识别，识别后还能改
-            </Text>
           </View>
         )}
         {isEdit && (
           <View style={{ marginBottom: "20rpx" }}>
-            <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>约定标题</Text>
             <Input
               className="ss-input"
               placeholder="约定标题"
@@ -1340,7 +1029,7 @@ export default function TaskCreate() {
           <Textarea
             className="ss-textarea"
             style={{ height: "240rpx" }}
-            placeholder="补充说明（可选），也可在这里补充时间、地点"
+            placeholder="补充时间、地点等（可选）"
             value={description}
             maxlength={500}
             disableDefaultPadding
@@ -1466,7 +1155,6 @@ export default function TaskCreate() {
 
       <SectionCard title="基本信息">
         <View style={{ marginBottom: "20rpx" }}>
-          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>约定标题</Text>
           <Input
             className="ss-input"
             placeholder="约定标题"
@@ -1475,7 +1163,6 @@ export default function TaskCreate() {
           />
         </View>
         <View>
-          <Text style={{ fontSize: "22rpx", color: "#9ca0a8", marginBottom: "8rpx" }}>补充说明</Text>
           <Textarea
             className="ss-textarea"
             style={{ height: "240rpx" }}
@@ -1628,107 +1315,6 @@ export default function TaskCreate() {
     </View>
   );
 
-  const renderAnalysis = () => (
-    <View>
-      <View className="ss-card">
-        <View style={{ display: "flex", alignItems: "center", gap: "12rpx", marginBottom: "8rpx" }}>
-          <View className="ss-title">AI 分析结果</View>
-          <AiBadge />
-        </View>
-        <Text className="ss-subtitle">执行建议</Text>
-
-        {analysis?.resolved_date && (
-          <View style={{ marginTop: "16rpx" }}>
-            <Text className="ss-tag ss-tag-primary">预计完成日期：{analysis.resolved_date}</Text>
-          </View>
-        )}
-      </View>
-
-      {Array.isArray(analysis?.steps) && analysis.steps.length > 0 && (
-        <View className="ss-card">
-          <View className="ss-section-title">建议步骤</View>
-          {analysis.steps.map((step, idx) => (
-            <View key={idx} style={{ display: "flex", marginBottom: "16rpx", alignItems: "flex-start" }}>
-              <Text style={{ color: "#384877", fontWeight: 600, marginRight: "12rpx", fontSize: "30rpx" }}>{idx + 1}.</Text>
-              <Text style={{ fontSize: "30rpx", color: "#333", lineHeight: "48rpx", flex: 1 }}>{step.text || step}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {Array.isArray(analysis?.timeline) && analysis.timeline.length > 0 && (
-        <View className="ss-card">
-          <View className="ss-section-title">时间线</View>
-          {analysis.timeline.map((item, idx) => (
-            <View key={idx} style={{ marginBottom: "20rpx", paddingBottom: "20rpx", borderBottom: "1rpx solid #e5e6eb" }}>
-              <View style={{ display: "flex", justifyContent: "space-between", marginBottom: "8rpx" }}>
-                <Text style={{ fontSize: "30rpx", color: "#384877", fontWeight: 500 }}>{item.title}</Text>
-                <Text className="ss-muted">{item.time}</Text>
-              </View>
-              {item.description && <Text className="ss-muted">{item.description}</Text>}
-            </View>
-          ))}
-        </View>
-      )}
-
-      {analysis?.devices && Object.keys(analysis.devices).length > 0 && (
-        <View className="ss-card">
-          <View className="ss-section-title">多设备协同</View>
-          {Object.entries(analysis.devices).map(([key, device]) => {
-            if (!device?.strategies?.length) return null;
-            return (
-              <View key={key} style={{ marginBottom: "20rpx" }}>
-                <View style={{ display: "flex", alignItems: "center", marginBottom: "12rpx" }}>
-                  <Text style={{ fontSize: "32rpx", marginRight: "12rpx" }}>{DEVICE_ICONS[key] || "🔹"}</Text>
-                  <Text style={{ fontSize: "30rpx", fontWeight: 600, color: "#333" }}>{device.name || key}</Text>
-                </View>
-                {device.strategies.map((s, i) => (
-                  <View key={i} style={{ marginLeft: "44rpx", marginBottom: "8rpx" }}>
-                    <Text style={{ fontSize: "28rpx", color: "#666" }}>• {s.time ? `${s.time} · ` : ""}{s.content || s.method || JSON.stringify(s)}</Text>
-                  </View>
-                ))}
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      {Array.isArray(analysis?.automations) && analysis.automations.length > 0 && (
-        <View className="ss-card">
-          <View className="ss-section-title">自动化建议</View>
-          {analysis.automations.map((item, idx) => (
-            <View key={idx} style={{ marginBottom: "16rpx", padding: "16rpx", background: "#f8f9fb", borderRadius: "12rpx" }}>
-              <View style={{ display: "flex", justifyContent: "space-between", marginBottom: "8rpx" }}>
-                <Text style={{ fontSize: "30rpx", fontWeight: 600, color: "#333" }}>{item.title}</Text>
-                <Text className={`ss-tag ${item.status === "active" ? "ss-tag-success" : "ss-tag-warning"}`}>
-                  {STATUS_LABEL[item.status] || item.status}
-                </Text>
-              </View>
-              <Text className="ss-muted">{item.desc}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-
-      <View className="ss-card">
-        <Button
-          className="ss-btn"
-          loading={loading}
-          disabled={loading}
-          onClick={() => {
-            if (toISODate(reminderDate, reminderTime)) requestReminderSubscribeSync();
-            saveTask();
-          }}
-        >
-          创建约定
-        </Button>
-        <Button className="ss-btn ss-btn-plain" onClick={() => setStep("form")}>
-          返回修改
-        </Button>
-      </View>
-    </View>
-  );
-
   const renderCreated = () => (
     <View>
       <View className="ss-card" style={{ textAlign: "center", padding: "48rpx 24rpx" }}>
@@ -1742,19 +1328,8 @@ export default function TaskCreate() {
 
         {shareToken ? (
           <View>
-            <Canvas
-              canvasId="shareCanvas"
-              style={{
-                width: `${posterSize.width}px`,
-                height: `${posterSize.height}px`,
-                margin: "24rpx auto",
-                borderRadius: "16rpx",
-                boxShadow: "0 4rpx 20rpx rgba(0,0,0,0.1)"
-              }}
-            />
-            <Button className="ss-btn" onClick={savePoster}>保存分享卡片</Button>
+            <Button className="ss-btn" onClick={() => setShowPoster(true)}>查看分享卡片</Button>
             <Button className="ss-btn ss-btn-plain" openType="share">微信转发</Button>
-            <Button className="ss-btn ss-btn-plain" onClick={copyShareLink}>复制链接</Button>
           </View>
         ) : (
           <Text className="ss-muted" style={{ marginTop: "24rpx" }}>分享链接生成失败，可在约定详情页重试。</Text>
@@ -1770,42 +1345,20 @@ export default function TaskCreate() {
       <ScrollView scrollY style={{ height: "calc(100vh - 48rpx)" }}>
         {step === "form" && renderForm()}
         {step === "confirm" && renderConfirm()}
-        {step === "analysis" && renderAnalysis()}
         {step === "created" && renderCreated()}
-
-        <View
-          style={{
-            margin: "0 24rpx 24rpx",
-            padding: "18rpx 22rpx",
-            borderRadius: "14rpx",
-            background: "rgba(91,130,160,0.06)",
-            border: "1rpx solid rgba(91,130,160,0.12)",
-            display: "flex",
-            alignItems: "center"
-          }}
-        >
-          <View
-            style={{
-              width: "28rpx",
-              height: "28rpx",
-              borderRadius: "50%",
-              background: theme.water,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: "14rpx",
-              flexShrink: 0
-            }}
-          >
-            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
-          </View>
-          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
-            部分内容由 AI 生成，仅供参考。重要决策请结合自身判断。
-          </Text>
-        </View>
 
         <View style={{ height: "40rpx" }} />
       </ScrollView>
+
+      <SharePoster
+        visible={showPoster}
+        onClose={() => setShowPoster(false)}
+        type="task"
+        title={createdTask?.title || title}
+        description={createdTask?.description || description}
+        subtasks={parsedSubtasks}
+        shareToken={shareToken}
+      />
     </View>
   );
 }

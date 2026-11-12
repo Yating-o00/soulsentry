@@ -90,7 +90,7 @@ export default function VoiceInput({ onResult, disabled }) {
           "relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300",
           isListening
             ? "bg-red-500 text-white shadow-lg shadow-red-500/30 scale-105"
-            : "bg-[#384877] text-white shadow-lg shadow-[#384877]/30 hover:shadow-xl hover:scale-105",
+            : "bg-[#384877] text-white shadow-sm hover:shadow-xl hover:scale-105",
           disabled && "opacity-50 cursor-not-allowed"
         )}
       >

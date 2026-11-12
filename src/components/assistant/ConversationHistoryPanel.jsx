@@ -106,7 +106,7 @@ export default function ConversationHistoryPanel({
           className="absolute inset-0 z-20 bg-white flex flex-col"
         >
           {/* Header */}
-          <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] p-3 text-white flex items-center justify-between">
+          <div className="bg-[#384877] p-3 text-white flex items-center justify-between">
             <button
               onClick={onClose}
               className="flex items-center gap-1.5 text-white/90 hover:text-white"
@@ -180,7 +180,7 @@ export default function ConversationHistoryPanel({
                         <div
                           className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${
                             isCurrent
-                              ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white"
+                              ? "bg-[#384877] text-white"
                               : "bg-slate-100 text-slate-500"
                           }`}
                         >

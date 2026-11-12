@@ -19,7 +19,7 @@ export default function OnboardingModal({ onComplete }) {
           <X className="w-4 h-4" />
         </button>
 
-        <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center mb-4 shadow-lg shadow-[#384877]/20">
+        <div className="h-14 w-14 rounded-2xl bg-[#384877] flex items-center justify-center mb-4 shadow-sm">
           <Icon className="w-7 h-7 text-white" />
         </div>
 
@@ -63,7 +63,7 @@ export default function OnboardingModal({ onComplete }) {
             )}
             <Button
               size="sm"
-              className="text-xs bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:opacity-90"
+              className="text-xs bg-[#384877] hover:opacity-90"
               onClick={() => {
                 if (stepIndex === TOUR_STEPS.length - 1) {
                   onComplete();

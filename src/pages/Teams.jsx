@@ -146,42 +146,42 @@ export default function Teams() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-0 shadow-md bg-gradient-to-br from-[#E8F4F8] to-[#D4E9F2] rounded-[16px]">
+        <Card className="border-0 shadow-md bg-[#E8F4F8] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[15px] text-[#0A7EA4] font-semibold mb-1">分配给我</p>
                 <p className="text-3xl font-bold text-[#075A7A]">{myAssignedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#1BA1CD] to-[#0D8AB5] flex items-center justify-center shadow-lg">
+              <div className="h-12 w-12 rounded-full bg-[#1BA1CD] flex items-center justify-center shadow-lg">
                 <Users className="w-6 h-6 text-white" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-[#f1f5f9] to-[#e2e8f0] rounded-[16px]">
+        <Card className="border-0 shadow-md bg-[#f1f5f9] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[15px] text-[#5a647d] font-semibold mb-1">我创建的</p>
                 <p className="text-3xl font-bold text-[#334155]">{myCreatedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#5a647d] to-[#4a5670] flex items-center justify-center shadow-lg">
+              <div className="h-12 w-12 rounded-full bg-[#5a647d] flex items-center justify-center shadow-lg">
                 <Clock className="w-6 h-6 text-white" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-[#E8F5E9] to-[#C8E6C9] rounded-[16px]">
+        <Card className="border-0 shadow-md bg-[#E8F5E9] rounded-[16px]">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[15px] text-[#2E7D32] font-semibold mb-1">团队共享</p>
                 <p className="text-3xl font-bold text-[#1B5E20]">{sharedTasks.length}</p>
               </div>
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#43A047] to-[#388E3C] flex items-center justify-center shadow-lg">
+              <div className="h-12 w-12 rounded-full bg-[#43A047] flex items-center justify-center shadow-lg">
                 <CheckCircle2 className="w-6 h-6 text-white" />
               </div>
             </div>
@@ -206,7 +206,7 @@ export default function Teams() {
               key={user.id}
               className="flex items-center gap-2 px-3 py-2 bg-[#f9fafb] rounded-[12px] hover:bg-[#f1f5f9] transition-colors border border-[#e5e9ef]">
 
-                <Avatar className="h-8 w-8 bg-gradient-to-br from-[#5a647d] to-[#4a5670] text-white text-xs">
+                <Avatar className="h-8 w-8 bg-[#5a647d] text-white text-xs">
                   <AvatarFallback className="bg-transparent">
                     {getInitials(user.full_name)}
                   </AvatarFallback>
@@ -283,7 +283,7 @@ export default function Teams() {
                 return user ?
                 <Avatar
                   key={userId}
-                  className="h-8 w-8 border-2 border-white bg-gradient-to-br from-[#1BA1CD] to-[#0D8AB5] text-white text-xs shadow-md"
+                  className="h-8 w-8 border-2 border-white bg-[#1BA1CD] text-white text-xs shadow-md"
                   title={user.full_name}>
 
                         <AvatarFallback className="bg-transparent">

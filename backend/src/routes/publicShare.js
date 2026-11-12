@@ -7,6 +7,7 @@ import { rejectIfRisky } from "../services/contentSecurity.js";
 import { countedCheckinsWhere, VISITOR_CHECKIN_SOURCE } from "../lib/checkinStats.js";
 import { logBehavior } from "../lib/behavior.js";
 import { isDemoUser } from "../lib/ensureDemoUser.js";
+import { visitorLabelOf } from "../lib/visitorLabel.js";
 
 export const publicShareRouter = Router();
 
@@ -75,7 +76,7 @@ function serializeCheckin(checkin) {
 }
 
 function serializeComment(comment) {
-  const visitorName = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
+  const visitorName = visitorLabelOf(comment);
   return {
     id: comment.id,
     task_id: comment.taskId,

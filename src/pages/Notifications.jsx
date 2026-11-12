@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Settings, BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles, Map as MapIcon } from "lucide-react";
+import { BellRing, Bell, Zap, CheckCircle2, Check, Trash2, ExternalLink, MessageSquare, UserPlus, Info, Filter, Brain, Sparkles, Map as MapIcon, RefreshCw, Bot } from "lucide-react";
 import SoulSentryFeed from "@/components/smart/SoulSentryFeed";
 import GeofenceMapView from "@/components/location/GeofenceMapView";
 import { SOURCE_CONFIG } from "@/components/utils/trackExecution";
@@ -115,7 +115,7 @@ export default function NotificationsPage() {
       execution_steps: retrySteps,
     });
     queryClient.invalidateQueries({ queryKey: ['task-executions'] });
-    toast("正在重试执行...", { icon: "🔄" });
+    toast("正在重试执行...", { icon: <RefreshCw className="w-4 h-4" /> });
   };
 
   const handleConfirm = async (execution) => {
@@ -186,7 +186,7 @@ export default function NotificationsPage() {
 
   const filters = [
     { key: "all", label: "全部" },
-    { key: "automation", label: "🤖 自动执行" },
+    { key: "automation", label: "自动执行", icon: Bot },
     { key: "promise", label: "约定" },
     { key: "task", label: "任务" },
     { key: "note", label: "心签" },
@@ -200,22 +200,22 @@ export default function NotificationsPage() {
     <div className="min-h-screen bg-slate-50/30 p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-white to-slate-50/80 border border-slate-200/70 shadow-sm p-5 md:p-6">
+        <div className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/70 shadow-sm p-5 md:p-6">
           {/* 装饰性光晕 */}
-          <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-gradient-to-br from-[#384877]/8 to-emerald-400/8 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-20 -left-10 w-40 h-40 rounded-full bg-gradient-to-tr from-blue-400/5 to-transparent blur-3xl pointer-events-none" />
+          <div className="hidden pointer-events-none" />
+          <div className="hidden pointer-events-none" />
 
           <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2.5 flex-wrap mb-2">
-                <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md shadow-[#384877]/20 flex-shrink-0">
+                <div className="h-9 w-9 rounded-xl bg-[#384877] flex items-center justify-center shadow-sm flex-shrink-0">
                   <Zap className="w-4.5 h-4.5 text-white" strokeWidth={2.5} />
                 </div>
-                <h1 className="text-xl md:text-2xl font-bold bg-gradient-to-r from-slate-900 via-[#384877] to-[#3b5aa2] bg-clip-text text-transparent">
+                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-stone-900">
                   智能执行控制台
                 </h1>
                 {/* 引擎在线 - 精致徽标 */}
-                <div className="group relative flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-emerald-50 to-emerald-50/70 border border-emerald-200/80 shadow-sm">
+                <div className="group relative flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 shadow-sm">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -243,20 +243,10 @@ export default function NotificationsPage() {
                 variant="outline"
                 size="sm"
                 asChild
-                className="h-9 rounded-xl bg-white/80 backdrop-blur border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 hover:text-[#384877] transition-all"
-              >
-                <Link to={createPageUrl("ReminderSettings")}>
-                  <BellRing className="w-4 h-4 mr-1.5" />提醒设置
-                </Link>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="h-9 rounded-xl bg-white/80 backdrop-blur border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 hover:text-[#384877] transition-all"
+                className="h-9 rounded-xl bg-white border-slate-200 hover:border-[#384877]/40 hover:bg-[#384877]/5 hover:text-[#384877] transition-all"
               >
                 <Link to={createPageUrl("NotificationSettings")}>
-                  <Settings className="w-4 h-4 mr-1.5" />通知规则
+                  <BellRing className="w-4 h-4 mr-1.5" />提醒设置
                 </Link>
               </Button>
             </div>
@@ -325,7 +315,7 @@ export default function NotificationsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex gap-1.5 bg-slate-100 p-1 rounded-lg">
                     {filters.map(f => (
-                      <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.label}</button>
+                      <button key={f.key} onClick={() => setActiveFilter(f.key)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${activeFilter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>{f.icon && <f.icon className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />}{f.label}</button>
                     ))}
                   </div>
                   {activeSources.length > 1 && (

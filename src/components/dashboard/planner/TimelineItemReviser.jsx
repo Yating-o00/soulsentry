@@ -139,7 +139,7 @@ ${txt}
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden mt-2 w-full"
           >
-            <div className="rounded-xl border border-[#384877]/20 bg-gradient-to-br from-[#384877]/5 to-white p-2.5">
+            <div className="rounded-xl border border-[#384877]/20 bg-[#384877]/5 to-white p-2.5">
               {/* Mode tabs */}
               <div className="flex items-center gap-1 mb-2">
                 <button

@@ -519,7 +519,7 @@ export default function AutoExecutionPanel() {
                 type="button"
                 onClick={confirmPrePage}
                 disabled={!prePageInput.trim() || submitting}
-                className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+                className="flex-1 bg-[#384877]"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 确认执行

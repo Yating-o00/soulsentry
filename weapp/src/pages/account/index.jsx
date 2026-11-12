@@ -491,10 +491,13 @@ export default function Account() {
 
   const displayName = user.display_name || user.full_name || "我";
   const initials = displayName.charAt(0);
-  const days = 128;
+  // 与心栈相伴天数：仅当 /users/me 返回 created_date 时展示，无真实数据则隐藏
+  const createdAt = user.created_date ? new Date(user.created_date) : null;
+  const days = createdAt && !isNaN(createdAt.getTime()) ? Math.max(1, Math.floor((Date.now() - createdAt.getTime()) / 86400000)) : 0;
   const completionRate = tasks.length ? Math.round((tasks.filter((t) => ["completed", "done", "archived"].includes(t.status)).length / tasks.length) * 100) : 0;
-  const focusHours = Math.round((executions || []).length * 0.5) || 42;
-  const moodScore = series.length ? (series.reduce((s, d) => s + d.score, 0) / series.length).toFixed(1) : "7.2";
+  // 专注时长 / 平均心境：有真实数据才渲染对应格子，不再使用假兜底值
+  const focusHours = Math.round((executions || []).length * 0.5);
+  const moodScore = series.length ? (series.reduce((s, d) => s + d.score, 0) / series.length).toFixed(1) : null;
   const labels = lastNDays(period).filter((_, i) => i % Math.ceil(period / 5) === 0 || i === period - 1).map((d) => d.label);
 
   // 直接退出：该环境弹窗（自定义/原生）回调不可靠，退出账户不再二次确认
@@ -660,9 +663,11 @@ export default function Account() {
                   <Text style={{ fontSize: "18rpx", color: "#fff", fontWeight: 500 }}>PRO</Text>
                 </View>
               </View>
-              <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>
-                与心栈相伴的第 <Text style={{ color: theme.inkSecondary, fontWeight: 500 }}>{days}</Text> 天
-              </Text>
+              {days > 0 && (
+                <Text style={{ fontSize: "24rpx", color: theme.inkTertiary }}>
+                  与心栈相伴的第 <Text style={{ color: theme.inkSecondary, fontWeight: 500 }}>{days}</Text> 天
+                </Text>
+              )}
             </View>
           </View>
 
@@ -679,16 +684,16 @@ export default function Account() {
           >
             {[
               { value: completionRate, unit: "%", label: "日程完成率" },
-              { value: focusHours, unit: "h", label: "专注时长" },
-              { value: moodScore, unit: "/10", label: "平均心境" }
-            ].map((s, idx) => (
+              ...(focusHours > 0 ? [{ value: focusHours, unit: "h", label: "专注时长" }] : []),
+              ...(moodScore !== null ? [{ value: moodScore, unit: "/10", label: "平均心境" }] : [])
+            ].map((s, idx, arr) => (
               <View
                 key={s.label}
                 style={{
                   flex: 1,
                   padding: "32rpx 0",
                   textAlign: "center",
-                  borderRight: idx < 2 ? `1rpx solid ${theme.border}` : "none"
+                  borderRight: idx < arr.length - 1 ? `1rpx solid ${theme.border}` : "none"
                 }}
               >
                 <Text style={{ fontSize: "40rpx", fontWeight: 600, color: theme.ink }}>
@@ -982,37 +987,6 @@ export default function Account() {
                 <Text style={{ fontSize: "28rpx", color: theme.inkQuaternary }}>›</Text>
               </View>
             </View>
-          </View>
-
-          <View
-            style={{
-              margin: "0 0 24rpx",
-              padding: "18rpx 22rpx",
-              borderRadius: "14rpx",
-              background: "rgba(91,130,160,0.06)",
-              border: "1rpx solid rgba(91,130,160,0.12)",
-              display: "flex",
-              alignItems: "center"
-            }}
-          >
-            <View
-              style={{
-                width: "28rpx",
-                height: "28rpx",
-                borderRadius: "50%",
-                background: theme.water,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginRight: "14rpx",
-                flexShrink: 0
-              }}
-            >
-              <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
-            </View>
-            <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
-              内容由 AI 生成，仅供参考
-            </Text>
           </View>
 
           <View style={{ textAlign: "center", padding: "24rpx 0 20rpx" }}>

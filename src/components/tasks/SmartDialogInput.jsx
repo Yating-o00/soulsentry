@@ -4,7 +4,7 @@ import { invokeAI } from "@/components/utils/aiHelper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, CalendarIcon, Clock, Tag, Flag, ListTodo, MapPin, Brain } from "lucide-react";
+import { Sparkles, Send, Loader2, Check, RotateCcw, Bot, User, Briefcase, Users, Heart, BookOpen, ShoppingCart, Wallet, Footprints, Pin, CalendarIcon, Clock, Tag, Flag, ListTodo, MapPin, Brain } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import {
@@ -18,8 +18,12 @@ import { toast } from "sonner";
 import { getCurrentLocationContext } from "@/lib/locationContext";
 
 const CATEGORY_LABELS = {
-  work: "💼 工作", personal: "👤 个人", health: "❤️ 健康", study: "📚 学习",
-  family: "👨‍👩‍👧‍👦 家庭", shopping: "🛒 购物", finance: "💰 财务", checkin: "👣 打卡", other: "📌 其他"
+  work: "工作", personal: "个人", health: "健康", study: "学习",
+  family: "家庭", shopping: "购物", finance: "财务", checkin: "打卡", other: "其他"
+};
+const CATEGORY_ICONS = {
+  work: Briefcase, personal: User, health: Heart, study: BookOpen,
+  family: Users, shopping: ShoppingCart, finance: Wallet, checkin: Footprints, other: Pin
 };
 const PRIORITY_LABELS = {
   low: "低", medium: "中", high: "高", urgent: "紧急"
@@ -454,7 +458,7 @@ ${timeCtx.promptSnippet}
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-stone-200/60 bg-white overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       {/* 对话区 */}
       {messages.length > 0 && (
         <div ref={scrollRef} className="max-h-72 overflow-y-auto p-4 space-y-3 bg-slate-50/50 border-b border-slate-100">
@@ -508,7 +512,7 @@ ${timeCtx.promptSnippet}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="border-b border-slate-100 bg-gradient-to-br from-blue-50/50 to-indigo-50/30"
+            className="border-b border-slate-100 bg-stone-50"
           >
             <div className="p-4 space-y-3">
               <div className="flex items-center gap-2 text-xs font-semibold text-[#384877]">
@@ -523,10 +527,10 @@ ${timeCtx.promptSnippet}
               )}
 
               {draft.time_reasoning && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-100">
-                  <Brain className="w-3.5 h-3.5 text-purple-600 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-stone-50 border border-stone-200/60">
+                  <Brain className="w-3.5 h-3.5 text-[#384877] flex-shrink-0 mt-0.5" />
                   <span className="text-xs text-slate-700 leading-relaxed">
-                    <span className="font-semibold text-purple-700">AI 时机推断：</span>
+                    <span className="font-semibold text-[#384877]">AI 时机推断：</span>
                     {draft.time_reasoning}
                   </span>
                 </div>
@@ -551,9 +555,15 @@ ${timeCtx.promptSnippet}
                     {draft.location}
                   </Badge>
                 )}
-                {draft.category && (
-                  <Badge variant="outline" className="bg-white">{CATEGORY_LABELS[draft.category] || draft.category}</Badge>
-                )}
+                {draft.category && (() => {
+                  const CategoryIcon = CATEGORY_ICONS[draft.category];
+                  return (
+                    <Badge variant="outline" className="bg-white gap-1">
+                      {CategoryIcon && <CategoryIcon className="w-3 h-3" />}
+                      <span>{CATEGORY_LABELS[draft.category] || draft.category}</span>
+                    </Badge>
+                  );
+                })()}
                 {draft.priority && (
                   <Badge variant="outline" className="bg-white gap-1">
                     <Flag className="w-3 h-3" /> {PRIORITY_LABELS[draft.priority] || draft.priority}
@@ -588,7 +598,7 @@ ${timeCtx.promptSnippet}
               )}
 
               <div className="flex gap-2 pt-2">
-                <Button onClick={handleConfirm} className="flex-1 bg-[#384877] hover:bg-[#2c3b63] text-white">
+                <Button onClick={handleConfirm} className="flex-1 bg-[#384877] hover:bg-[#2E3A60] text-white">
                   <Check className="w-4 h-4 mr-1.5" /> 确认无误，生成约定
                 </Button>
                 <Button onClick={handleReset} variant="outline" size="icon" title="重新开始">
@@ -614,7 +624,7 @@ ${timeCtx.promptSnippet}
         <Button
           onClick={handleSend}
           disabled={!value?.trim() || isLoading}
-          className="bg-[#384877] hover:bg-[#2c3b63] text-white rounded-xl flex-shrink-0"
+          className="bg-[#384877] hover:bg-[#2E3A60] text-white rounded-xl flex-shrink-0"
         >
           {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </Button>

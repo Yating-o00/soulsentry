@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
+import { visitorLabelOf } from "../lib/visitorLabel.js";
 
 export const noteCommentsRouter = Router();
 
@@ -15,7 +16,7 @@ const noteCommentInputSchema = z.object({
 noteCommentsRouter.use(requireAuth);
 
 function serializeNoteComment(comment) {
-  const visitorLabel = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
+  const visitorLabel = visitorLabelOf(comment);
   return {
     id: comment.id,
     note_id: comment.noteId,

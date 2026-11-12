@@ -92,7 +92,7 @@ export default function DailyBriefing() {
             <div className="relative z-10">
                 <div className="flex justify-between items-start mb-5 md:mb-8">
                     <div className="flex items-center gap-3 md:gap-4 min-w-0">
-                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[#384877] flex items-center justify-center text-white shadow-lg shadow-[#384877]/25 shrink-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-[#384877] flex items-center justify-center text-white shadow-sm shrink-0">
                             <TimeIcon className="w-5 h-5 md:w-6 md:h-6" />
                         </div>
                         <div className="min-w-0">

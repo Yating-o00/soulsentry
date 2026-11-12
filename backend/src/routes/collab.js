@@ -342,6 +342,57 @@ collabRouter.post("/:taskId/members", async (req, res) => {
   });
 });
 
+// DELETE /api/collab/:taskId/members/:userId — 创建者移除协同成员（协同空间口径：记入空间动态）
+collabRouter.delete("/:taskId/members/:userId", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+
+  if (req.user.id !== task.userId) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "只有发起人可以移除协同成员" });
+  }
+  const targetUserId = String(req.params.userId || "");
+  if (!targetUserId || targetUserId === task.userId) {
+    return res.status(400).json({ error: "INVALID_TARGET", message: "不能移除发起人" });
+  }
+
+  const membership = await prisma.taskMember.findUnique({
+    where: { taskId_userId: { taskId: task.id, userId: targetUserId } },
+    include: { user: true }
+  });
+  if (!membership) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "该用户不是协同成员" });
+  }
+
+  await prisma.taskMember.delete({ where: { id: membership.id } });
+  const removedName = actorName(membership.user);
+
+  try {
+    await prisma.notification.create({
+      data: {
+        userId: targetUserId,
+        title: "你已被移出协同约定",
+        body: `发起人将你移出了协同约定「${task.title}」，该约定不再出现在你的列表中`,
+        channel: "in_app",
+        status: "SENT",
+        payload: { type: "collab_member_removed", taskId: task.id }
+      }
+    });
+  } catch (error) {
+    console.error("[collab] notify removed member failed:", error);
+  }
+  await notifyTaskParties(task, req.user, {
+    type: "collab_member_removed",
+    title: "协同约定成员变更",
+    body: `${actorName(req.user)} 将 ${removedName} 移出了协同约定「${task.title}」`
+  });
+  await logCollabChange(req.user.id, task, "collab_member_removed", [
+    { field: "member", field_label: "成员", old_value: removedName }
+  ]);
+
+  return res.json({ removed: true, user_id: targetUserId });
+});
+
 // ── 执行节点 ──
 const nodeInputSchema = z.object({
   title: z.string().min(1).max(120),

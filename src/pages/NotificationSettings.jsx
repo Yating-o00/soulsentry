@@ -165,7 +165,7 @@ export default function NotificationSettingsPage() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-[#384877] to-[#3b5aa2] bg-clip-text text-transparent mb-2">
+        <h1 className="text-3xl font-bold bg-[#384877] bg-clip-text text-transparent mb-2">
           通知设置
         </h1>
         <p className="text-slate-600">自定义您的约定提醒方式和通知规则</p>

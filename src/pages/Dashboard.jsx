@@ -30,7 +30,6 @@ import CalendarWeekView from "../components/calendar/CalendarWeekView";
 import SoulWeekPlanner from "../components/calendar/SoulWeekPlanner";
 import CalendarDayView from "../components/calendar/CalendarDayView";
 import TaskCard from "../components/tasks/TaskCard";
-import NotificationManager from "../components/notifications/NotificationManager";
 import TeamOnboardingProgress from "../components/dashboard/TeamOnboardingProgress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -289,10 +288,9 @@ export default function Dashboard() {
 
   return (
     <div className="p-3 md:p-8 space-y-4 md:space-y-6 max-w-7xl mx-auto min-h-screen">
-      <NotificationManager />
 
       {isDemoUser(user) && (
-        <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4 shadow-sm">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
@@ -314,7 +312,7 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={() => window.location.href = "/login?mode=register"}
-                className="px-4 py-2 text-xs font-medium rounded-xl bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white hover:shadow-md transition-shadow"
+                className="px-4 py-2 text-xs font-medium rounded-xl bg-[#384877] text-white hover:shadow-md transition-shadow"
               >
                 注册
               </button>
@@ -327,12 +325,12 @@ export default function Dashboard() {
         {/* Header Section：问候移入 Hero 天幕带，这里只留页签与同步入口 */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
           <div className="flex items-center gap-2 w-full md:w-auto md:ml-auto">
-          <TabsList className="bg-white shadow-md rounded-[12px] p-1 h-auto flex-1 md:flex-none">
-            <TabsTrigger value="overview" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white text-sm">
+          <TabsList className="bg-white shadow-sm rounded-[12px] p-1 h-auto flex-1 md:flex-none">
+            <TabsTrigger value="overview" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-[#384877] data-[state=active]:text-white text-sm">
               <ListTodo className="w-4 h-4 mr-1.5" />
               概览
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#384877] data-[state=active]:to-[#3b5aa2] data-[state=active]:text-white text-sm">
+            <TabsTrigger value="calendar" className="rounded-[10px] px-4 md:px-6 py-2 flex-1 md:flex-none data-[state=active]:bg-[#384877] data-[state=active]:text-white text-sm">
               <CalendarIcon className="w-4 h-4 mr-1.5" />
               日历
             </TabsTrigger>
@@ -362,7 +360,7 @@ export default function Dashboard() {
         transition={{ delay: 0.1 }}
         className="grid grid-cols-3 gap-2 md:gap-4"
       >
-        <Card className="bg-[#384877] border-none shadow-xl text-white relative overflow-hidden group">
+        <Card className="bg-[#384877] border-none shadow-sm text-white relative overflow-hidden group">
           <div className="absolute top-1 right-1 md:top-2 md:right-2 p-2 md:p-4 opacity-[0.1] group-hover:opacity-[0.15] transition-opacity">
             <ListTodo className="w-16 h-16 md:w-28 md:h-28 transform rotate-12 text-white" />
           </div>
@@ -523,7 +521,7 @@ export default function Dashboard() {
                     size="sm"
                     className={`rounded-lg h-8 md:h-9 px-2.5 md:px-3 text-xs md:text-sm ${
                       calendarViewMode === mode.value
-                        ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white"
+                        ? "bg-[#384877] text-white"
                         : "text-slate-600 hover:text-slate-900"
                     }`}
                   >
@@ -572,7 +570,7 @@ export default function Dashboard() {
           </Button>
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-lg overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <AnimatePresence>
             {calendarViewMode === "month" && (
               <SoulMonthPlanner

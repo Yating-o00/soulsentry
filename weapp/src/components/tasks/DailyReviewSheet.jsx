@@ -128,7 +128,7 @@ export default function DailyReviewSheet({ visible, onClose, tasks, onSaved }) {
         <ScrollView scrollY style={{ maxHeight: "52vh" }}>
           <ReviewRow label={`今日兑现 · ${stats.doneToday.length} 条`}>
             {stats.doneToday.length === 0 ? (
-              <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>今天还没有完成的约定，从最小的一步开始也行。</Text>
+              <Text style={{ fontSize: "26rpx", color: theme.inkTertiary }}>今天没有待办约定</Text>
             ) : (
               stats.doneToday.slice(0, 5).map((t) => (
                 <View key={t.id} style={{ display: "flex", alignItems: "center", marginBottom: "10rpx" }}>
@@ -175,7 +175,7 @@ export default function DailyReviewSheet({ visible, onClose, tasks, onSaved }) {
           <Textarea
             value={reflection}
             maxlength={500}
-            placeholder="今天最想说的一句话、一个感谢、一个明天想做到的小事…"
+            placeholder="一句话、一个感谢、一个小目标"
             placeholderStyle={{ color: theme.inkQuaternary }}
             onInput={(e) => setReflection(e.detail.value)}
             style={{

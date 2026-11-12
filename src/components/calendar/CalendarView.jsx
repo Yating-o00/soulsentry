@@ -492,7 +492,7 @@ export default function CalendarView() {
             transition={{ delay: 0.2 }}
             className="space-y-4"
           >
-          <Card className="p-6 border-0 shadow-xl bg-gradient-to-br from-[#5a647d] to-[#1e3a5f] text-white">
+          <Card className="p-6 border-0 shadow-xl bg-[#4a5670] text-white">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">
                 {format(selectedDate, "M月d日 EEEE", { locale: zhCN })}

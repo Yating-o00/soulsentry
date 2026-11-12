@@ -13,7 +13,7 @@ import { syncParentProgress } from "./tasks.js";
 import { loadSpaceSnapshot, buildSystem, postAgentMessage } from "../services/collabAgent.js";
 import { callKimiChat } from "../lib/kimi.js";
 import { assertAICredits, chargeAICredits } from "../services/aiCredits.js";
-import { AI_CALL_COSTS } from "./functions.js";
+import { AI_CALL_COSTS } from "../config/aiCosts.js";
 
 export const collabInviteRouter = Router();
 

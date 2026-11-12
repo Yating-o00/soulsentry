@@ -491,7 +491,7 @@ ${timeCtx.promptSnippet}
                 className={`h-24 w-24 rounded-full flex items-center justify-center text-white shadow-lg transition-all no-min-size ${
                   isRecording
                     ? "bg-red-500 animate-pulse shadow-red-500/30"
-                    : "bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-[#384877]/30"
+                    : "bg-[#384877] shadow-sm"
                 }`}
               >
                 {isProcessing || isTranscribing ? (

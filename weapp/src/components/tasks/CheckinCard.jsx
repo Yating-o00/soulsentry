@@ -191,7 +191,7 @@ export default function CheckinCard({
                 }}
               >
                 <Text style={{ fontSize: "20rpx", color: theme.sage, letterSpacing: "2rpx" }}>
-                  共有 · {task.owner_display_name || "对方"}
+                  协作 · {task.owner_display_name || "对方"}
                 </Text>
               </View>
             )}
@@ -428,7 +428,6 @@ export default function CheckinCard({
           padding: "16rpx 28rpx",
         }}
       >
-        <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, letterSpacing: "4rpx" }}>约定 · 打卡</Text>
         <View style={{ display: "flex", alignItems: "center", gap: "28rpx" }}>
           <ShareButton
             theme={theme}

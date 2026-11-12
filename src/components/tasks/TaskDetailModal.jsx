@@ -841,7 +841,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
               </div>
               <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-[#384877] to-[#6366f1] rounded-full transition-all duration-500"
+                  className="h-full bg-[#384877] rounded-full transition-all duration-500"
                   style={{ width: `${task.progress || 0}%` }}
                 />
               </div>

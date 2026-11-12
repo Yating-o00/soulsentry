@@ -468,7 +468,7 @@ ${subtask.description ? `当前描述：${subtask.description}` : ""}
             <Button
               onClick={handleParse}
               disabled={parsing || !text.trim()}
-              className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] shadow-md hover:shadow-lg transition-all duration-200 rounded-[12px]"
+              className="flex-1 bg-[#384877] hover:from-[#2c3b63] hover:to-[#2a4585] shadow-md hover:shadow-lg transition-all duration-200 rounded-[12px]"
             >
               {parsing ? (
                 <>

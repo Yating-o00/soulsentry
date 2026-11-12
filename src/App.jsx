@@ -16,6 +16,7 @@ import { AuthProvider, useAuth, isPublicSharePage } from '@/lib/AuthContext';
 import { isStandaloneMode } from '@/api/platformConfig';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import OnboardingHost from '@/components/onboarding/OnboardingHost';
+import AssistantWidget from '@/components/assistant/AssistantWidget';
 import { createPageUrl } from '@/utils';
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -95,6 +96,8 @@ const AuthenticatedApp = () => {
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       <OnboardingHost />
+      {/* 心栈小助手：右下角机器人入口（公开分享页不显示） */}
+      {isAuthenticated && !isPublicSharePage() && <AssistantWidget />}
     </LayoutWrapper>
   );
 };

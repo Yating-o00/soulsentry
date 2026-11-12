@@ -19,24 +19,10 @@ import { savePptHtml } from "../lib/renderPpt.js";
 import { normalizeToGcj02, judgeOnTheWay } from "../lib/geo.js";
 import { getHardOverdue } from "../lib/timeSemantics.js";
 import { chargeAICredits, assertAICredits, usageCost } from "../services/aiCredits.js";
+import { AI_CALL_COSTS } from "../config/aiCosts.js";
 import QRCode from "qrcode";
 
-// 各 AI 功能的固定扣费点数（与前端 creditConfig 的参考表一致；对话/通用调用按 token 用量动态结算）
-// collab_agent 供协同约定 Agent（services/collabAgent.js）引用，保持同一扣费口径
-export const AI_CALL_COSTS = {
-  kimi_web_browse: 2,
-  analyze_intent: 1,
-  analyze_image: 3,
-  task_parse: 2,
-  task_split: 2,
-  memory_insight: 1,
-  daily_briefing: 2,
-  mood_river: 1,
-  week_plan: 3,
-  month_plan: 4,
-  analyze_task: 1,
-  collab_agent: 2
-};
+// 各 AI 功能扣费点数见 config/aiCosts.js（AI_CALL_COSTS）
 
 // 预检点数：不足时直接回 402 并返回 false（调用方中断 AI 调用）
 async function guardCredits(req, res, cost, feature) {
@@ -1527,7 +1513,7 @@ functionsRouter.post("/:name", async (req, res) => {
       }
     }
 
-    if (name === "parseVoiceTask" || name === "parseTaskInput") {
+    if (name === "parseTaskInput") {
       if (!payload.input || !String(payload.input).trim()) {
         return res.status(400).json({ error: "INVALID_INPUT", message: "缺少输入内容" });
       }

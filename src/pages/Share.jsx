@@ -575,7 +575,7 @@ export default function Share() {
                 size="sm"
                 onClick={() => handleReply(comment.id)}
                 disabled={!replyText.trim() || submitting}
-                className="bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+                className="bg-[#384877]"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
                 发送回复
@@ -620,7 +620,7 @@ export default function Share() {
       <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
         {/* 拥有者信息 */}
         <div className="flex items-center gap-3">
-          <Avatar className="w-10 h-10 bg-gradient-to-br from-[#384877] to-[#3b5aa2]">
+          <Avatar className="w-10 h-10 bg-[#384877]">
             <AvatarFallback className="text-white text-sm">
               {(data?.owner_name || "S").slice(0, 1)}
             </AvatarFallback>
@@ -699,7 +699,7 @@ export default function Share() {
                           type="button"
                           onClick={() => ensureNameThen(() => handleToggleTask(true))}
                           disabled={submitting}
-                          className="rounded-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-5 hover:opacity-95"
+                          className="rounded-full bg-[#384877] px-5 hover:opacity-95"
                         >
                           {submitting ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -713,7 +713,7 @@ export default function Share() {
                           type="button"
                           onClick={() => ensureNameThen(() => handleCheer())}
                           disabled={submitting}
-                          className="rounded-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] px-5 hover:opacity-95"
+                          className="rounded-full bg-[#384877] px-5 hover:opacity-95"
                         >
                           {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Heart className="w-4 h-4 mr-1.5" />}
                           为 TA 加油
@@ -824,7 +824,7 @@ export default function Share() {
                   type="submit"
                   disabled={!commentText.trim() || submitting}
                   size="sm"
-                  className="bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+                  className="bg-[#384877]"
                 >
                   {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4 mr-1.5" />}
                   发送评论
@@ -980,7 +980,7 @@ export default function Share() {
                 variant={subscribed ? "outline" : "default"}
                 disabled={subscribed}
                 onClick={() => ensureNameThen(handleSubscribe)}
-                className={subscribed ? "" : "bg-gradient-to-r from-[#384877] to-[#3b5aa2]"}
+                className={subscribed ? "" : "bg-[#384877]"}
               >
                 {subscribed ? "已订阅" : "订阅"}
               </Button>
@@ -998,7 +998,7 @@ export default function Share() {
               </DialogDescription>
             </DialogHeader>
             <div className="flex gap-3 pt-2">
-              <Button onClick={handleLoginRedirect} className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]">
+              <Button onClick={handleLoginRedirect} className="flex-1 bg-[#384877]">
                 去登录
               </Button>
               <Button variant="outline" onClick={() => setImportDialogOpen(false)} className="flex-1">
@@ -1023,7 +1023,7 @@ export default function Share() {
               <Button
                 onClick={runImport}
                 disabled={importing}
-                className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+                className="flex-1 bg-[#384877]"
               >
                 {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : "确认加入"}
               </Button>
@@ -1058,7 +1058,7 @@ export default function Share() {
                 }}
               />
               <div className="flex gap-3">
-                <Button onClick={confirmVisitorName} className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]">
+                <Button onClick={confirmVisitorName} className="flex-1 bg-[#384877]">
                   确认
                 </Button>
                 <Button variant="outline" onClick={() => { setNamePromptOpen(false); pendingActionRef.current = null; }} className="flex-1">

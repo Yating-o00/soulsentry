@@ -53,7 +53,7 @@ export const success = (message, opts = {}) => {
   return toast.custom(
     (id) => (
       <div className="flex items-center gap-2.5 px-4 py-3 bg-white rounded-xl border border-[#384877]/20 shadow-[0_8px_24px_rgba(56,72,119,0.12)] min-w-[260px]">
-        <div className="w-5 h-5 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center flex-shrink-0 shadow-sm shadow-[#384877]/30">
+        <div className="w-5 h-5 rounded-full bg-[#384877] flex items-center justify-center flex-shrink-0 shadow-sm">
           <span className="text-white text-[11px] font-bold">✓</span>
         </div>
         <div className="flex-1 text-[13px] font-medium text-[#384877] leading-snug">{message}</div>

@@ -357,14 +357,14 @@ export default function AutoExecCards({ tasks = [], userText = "", onItemStatusC
 
   return (
     <>
-      <div className="relative rounded-3xl border border-slate-200/60 bg-gradient-to-br from-white via-slate-50/60 to-[#384877]/5 p-5 shadow-[0_4px_24px_-12px_rgba(56,72,119,0.15)] overflow-hidden">
+      <div className="relative rounded-3xl border border-stone-200/60 bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
         {/* 背景装饰光晕 - 主色调 */}
         <div className="absolute -top-16 -right-16 w-40 h-40 bg-[#384877]/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -left-10 w-32 h-32 bg-[#3b5aa2]/8 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/25">
+            <div className="w-9 h-9 rounded-xl bg-[#384877] flex items-center justify-center shadow-sm">
               <Zap className="w-4 h-4 text-white" />
             </div>
             <div>
@@ -637,7 +637,7 @@ function ExecCard({ item, onAuthorize, onOpen, onFillInput, onResolveGaps }) {
           <Button
             size="sm"
             onClick={onAuthorize}
-            className="h-6 px-2.5 text-[10.5px] font-medium bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white rounded-md shadow-sm shadow-[#384877]/25 hover:shadow-[#384877]/40 transition-all"
+            className="h-6 px-2.5 text-[10.5px] font-medium bg-[#384877] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white rounded-md shadow-sm hover:shadow-sm transition-all"
           >
             <Sparkles className="w-2.5 h-2.5 mr-0.5" />
             确认执行

@@ -1,10 +1,14 @@
 import React, { useState } from "react";
 import { format } from "date-fns";
 import { formatShanghaiTime } from "@/lib/timeCore";
-import { 
-  Clock, MapPin, Zap, Check, CheckCircle2, MoreHorizontal, 
+import {
+  Clock, MapPin, Zap, Check, CheckCircle2, MoreHorizontal,
   Sun, Repeat, Heart, AlertCircle, Package, Flag, Calendar,
-  Navigation, ShoppingBag, Briefcase, ChevronDown, CornerDownRight
+  Navigation, ShoppingBag, Briefcase, ChevronDown, CornerDownRight,
+  NotebookPen, Users, Sprout, BookOpen, ShoppingCart, Wallet,
+  Footprints, Library, Dumbbell, ChefHat, Brush, Handshake,
+  Plane, Clapperboard, Music, BedDouble, Coffee, Pill,
+  Phone, PencilLine, PawPrint, Flower2
 } from "lucide-react";
 import AttachToParentDialog from "./AttachToParentDialog";
 import { cn } from "@/lib/utils";
@@ -39,72 +43,72 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
       case "work":
         return {
           border: "border-l-[#384877]",
-          iconBg: "bg-[#384877]/10",
-          iconColor: "text-[#384877]",
-          lightBg: "bg-[#384877]/5",
-          icon: "📝",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
+          icon: <NotebookPen className="w-5 h-5 md:w-6 md:h-6" />,
           label: "工作"
         };
       case "family":
         return {
           border: "border-l-rose-400",
-          iconBg: "bg-rose-100",
-          iconColor: "text-rose-600",
-          lightBg: "bg-rose-50",
-          icon: "👨‍👩‍👧",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
+          icon: <Users className="w-5 h-5 md:w-6 md:h-6" />,
           label: "家庭"
         };
       case "health":
         return {
           border: "border-l-emerald-400",
-          iconBg: "bg-emerald-100",
-          iconColor: "text-emerald-600",
-          lightBg: "bg-emerald-50",
-          icon: "🌱",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
+          icon: <Sprout className="w-5 h-5 md:w-6 md:h-6" />,
           label: "健康"
         };
       case "study":
         return {
           border: "border-l-indigo-400",
-          iconBg: "bg-indigo-100",
-          iconColor: "text-indigo-600",
-          lightBg: "bg-indigo-50",
-          icon: "📖",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
+          icon: <BookOpen className="w-5 h-5 md:w-6 md:h-6" />,
           label: "学习"
         };
       case "shopping":
         return {
           border: "border-l-purple-400",
-          iconBg: "bg-purple-100",
-          iconColor: "text-purple-600",
-          lightBg: "bg-purple-50",
-          icon: "🛒",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
+          icon: <ShoppingCart className="w-5 h-5 md:w-6 md:h-6" />,
           label: "购物"
         };
       case "finance":
         return {
           border: "border-l-amber-400",
-          iconBg: "bg-amber-100",
-          iconColor: "text-amber-600",
-          lightBg: "bg-amber-50",
-          icon: "💰",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
+          icon: <Wallet className="w-5 h-5 md:w-6 md:h-6" />,
           label: "财务"
         };
       case "checkin":
         return {
           border: "border-l-[#384877]",
-          iconBg: "bg-[#384877]/10",
-          iconColor: "text-[#384877]",
-          lightBg: "bg-[#EEF2FF]",
-          icon: "👣",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
+          icon: <Footprints className="w-5 h-5 md:w-6 md:h-6" />,
           label: "打卡"
         };
       default: // personal/other
         return {
           border: "border-l-green-400",
-          iconBg: "bg-green-100",
-          iconColor: "text-green-600",
-          lightBg: "bg-green-50",
+          iconBg: "bg-stone-100",
+          iconColor: "text-stone-600",
+          lightBg: "bg-stone-50",
           icon: getSmartLifeIcon(task),
           label: "生活"
         };
@@ -114,24 +118,25 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
   // Smart icon selection for personal/life tasks based on title keywords
   function getSmartLifeIcon(t) {
     const title = (t?.title || '').toLowerCase();
-    if (/书|阅读|读|看书|图书/.test(title)) return '📚';
-    if (/跑步|运动|健身|锻炼|瑜伽/.test(title)) return '🏃';
-    if (/做饭|烹饪|煮|下厨|菜/.test(title)) return '🍳';
-    if (/购物|买|超市|商场/.test(title)) return '🛍️';
-    if (/打扫|清洁|卫生|洗|整理/.test(title)) return '🧹';
-    if (/会议|开会|约见|见面/.test(title)) return '🤝';
-    if (/旅行|出行|出发|机票|酒店/.test(title)) return '✈️';
-    if (/电影|看剧|追剧|视频/.test(title)) return '🎬';
-    if (/音乐|听歌|弹琴|唱/.test(title)) return '🎵';
-    if (/睡|休息|午休|早起/.test(title)) return '😴';
-    if (/喝水|水|咖啡|茶/.test(title)) return '☕';
-    if (/药|吃药|医|体检/.test(title)) return '💊';
-    if (/寄|快递|邮件|包裹|带/.test(title)) return '📦';
-    if (/电话|打电话|联系|沟通/.test(title)) return '📞';
-    if (/写|笔记|日记/.test(title)) return '✍️';
-    if (/遛狗|宠物|猫|狗/.test(title)) return '🐾';
-    if (/浇花|植物|花/.test(title)) return '🌸';
-    return '⚡';
+    const cls = "w-5 h-5 md:w-6 md:h-6";
+    if (/书|阅读|读|看书|图书/.test(title)) return <Library className={cls} />;
+    if (/跑步|运动|健身|锻炼|瑜伽/.test(title)) return <Dumbbell className={cls} />;
+    if (/做饭|烹饪|煮|下厨|菜/.test(title)) return <ChefHat className={cls} />;
+    if (/购物|买|超市|商场/.test(title)) return <ShoppingBag className={cls} />;
+    if (/打扫|清洁|卫生|洗|整理/.test(title)) return <Brush className={cls} />;
+    if (/会议|开会|约见|见面/.test(title)) return <Handshake className={cls} />;
+    if (/旅行|出行|出发|机票|酒店/.test(title)) return <Plane className={cls} />;
+    if (/电影|看剧|追剧|视频/.test(title)) return <Clapperboard className={cls} />;
+    if (/音乐|听歌|弹琴|唱/.test(title)) return <Music className={cls} />;
+    if (/睡|休息|午休|早起/.test(title)) return <BedDouble className={cls} />;
+    if (/喝水|水|咖啡|茶/.test(title)) return <Coffee className={cls} />;
+    if (/药|吃药|医|体检/.test(title)) return <Pill className={cls} />;
+    if (/寄|快递|邮件|包裹|带/.test(title)) return <Package className={cls} />;
+    if (/电话|打电话|联系|沟通/.test(title)) return <Phone className={cls} />;
+    if (/写|笔记|日记/.test(title)) return <PencilLine className={cls} />;
+    if (/遛狗|宠物|猫|狗/.test(title)) return <PawPrint className={cls} />;
+    if (/浇花|植物|花/.test(title)) return <Flower2 className={cls} />;
+    return <Zap className={cls} />;
   }
 
   const style = getCategoryStyle(task.category);
@@ -144,7 +149,7 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
   return (
     <div 
       className={cn(
-        "bg-white rounded-xl md:rounded-2xl p-3.5 md:p-5 shadow-sm border border-slate-100 relative overflow-hidden transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98]",
+        "bg-white rounded-xl md:rounded-2xl p-3.5 md:p-5 border border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] relative overflow-hidden transition-all duration-300 hover:border-stone-300 active:scale-[0.98]",
         "border-l-[3px]", 
         style.border,
         isCompleted && "opacity-0 scale-95"
@@ -153,19 +158,19 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
     >
       {/* Background decoration for location tasks */}
       {hasLocationContext && (
-        <div className="absolute top-0 right-0 w-32 h-32 bg-green-50 rounded-full blur-2xl -mr-16 -mt-16 opacity-50 pointer-events-none"></div>
+        <div className="absolute top-0 right-0 w-32 h-32 bg-stone-100 rounded-full blur-2xl -mr-16 -mt-16 opacity-50 pointer-events-none"></div>
       )}
 
       {/* Header Chips */}
       <div className="flex items-start justify-between mb-3 relative z-10">
         <div className="flex flex-wrap items-center gap-2">
           {hasLocationContext ? (
-            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded-lg font-medium flex items-center gap-1">
+            <span className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1">
               <Navigation className="w-3 h-3" />
               地点触发
             </span>
           ) : hasTimeContext ? (
-            <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs rounded-lg font-medium flex items-center gap-1">
+            <span className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1">
               <Clock className="w-3 h-3" />
               {task.time_context?.natural_language_phrase || "时间触发"}
             </span>
@@ -177,7 +182,7 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
           )}
           
           {task.repeat_rule && task.repeat_rule !== 'none' && (
-            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-lg font-medium flex items-center gap-1">
+            <span className="px-2 py-1 bg-stone-100 text-stone-600 text-xs rounded-lg font-medium flex items-center gap-1">
               <Repeat className="w-3 h-3" />
               {task.repeat_rule === 'daily' ? '每天' : '重复'}
             </span>
@@ -206,12 +211,8 @@ export default function TaskCard({ task, subtasks = [], onSubtaskToggle, hideSub
         {/* Icon Box */}
         <div className="flex-shrink-0">
           <div className={cn(
-            "w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center text-xl md:text-2xl bg-gradient-to-br",
-            task.category === 'work' ? "from-[#384877]/20 to-[#384877]/5" :
-            task.category === 'health' ? "from-emerald-100 to-emerald-50" :
-            task.category === 'love' ? "from-rose-100 to-rose-50" :
-            task.category === 'shopping' ? "from-purple-100 to-purple-50" :
-            "from-green-100 to-green-50"
+            "w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center",
+            task.category === 'checkin' ? "bg-[#E7EDFB] text-[#384877]" : "bg-stone-100 text-stone-500"
           )}>
             {style.icon}
           </div>

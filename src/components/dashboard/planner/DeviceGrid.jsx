@@ -26,7 +26,7 @@ export default function DeviceGrid({ originalInput }) {
       <h5 className="text-sm font-semibold text-slate-700 mt-3 mb-3">全设备智能协同</h5>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
         {devices.map((d, idx) => (
-          <div key={idx} className="device-card">
+          <div key={idx}>
             <div className="w-10 h-10 rounded-2xl bg-[#eef2ff] text-[#384877] flex items-center justify-center">
               <d.icon className="w-5 h-5" />
             </div>

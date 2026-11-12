@@ -21,7 +21,7 @@ import {
   toShanghaiTimeStr,
 } from "@/lib/timeCore";
 import { OfflineStorage } from "../offline/OfflineManager";
-import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, Tag, Bell, Users, ListTodo, Trash2, BookTemplate, CheckSquare, X, GitMerge, ImagePlus, FileText, ScanText } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, Plus, Settings, Repeat, Mic, MicOff, Loader2, Wand2, Sparkles, Circle, CircleDot, Contrast, TriangleAlert, Tag, Bell, Users, User, Briefcase, Heart, BookOpen, ShoppingCart, Wallet, Footprints, Pin, ListTodo, Trash2, BookTemplate, CheckSquare, X, GitMerge, ImagePlus, FileText, ScanText } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion, AnimatePresence } from "framer-motion";
 import NotificationSettings from "../notifications/NotificationSettings";
@@ -44,26 +44,25 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { logUserBehavior } from "@/components/utils/behaviorLogger";
-import AIText from "@/components/AIText";
 import { invokeAI } from "@/components/utils/aiHelper";
 
 const CATEGORIES = [
-  { value: "checkin", label: "打卡", icon: "👣", color: "bg-[#EEF2FF] text-[#384877] border-[#c9d5ef]" },
-  { value: "work", label: "工作", icon: "💼", color: "bg-blue-50 text-blue-700 border-blue-200" },
-  { value: "personal", label: "个人", icon: "👤", color: "bg-purple-50 text-purple-700 border-purple-200" },
-  { value: "health", label: "健康", icon: "❤️", color: "bg-green-50 text-green-700 border-green-200" },
-  { value: "study", label: "学习", icon: "📚", color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
-  { value: "family", label: "家庭", icon: "👨‍👩‍👧‍👦", color: "bg-pink-50 text-pink-700 border-pink-200" },
-  { value: "shopping", label: "购物", icon: "🛒", color: "bg-orange-50 text-orange-700 border-orange-200" },
-  { value: "finance", label: "财务", icon: "💰", color: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]" },
-  { value: "other", label: "其他", icon: "📌", color: "bg-gray-50 text-gray-700 border-gray-200" },
+  { value: "checkin", label: "打卡", icon: Footprints, color: "bg-[#EEF2FF] text-[#384877] border-[#c9d5ef]" },
+  { value: "work", label: "工作", icon: Briefcase, color: "bg-blue-50 text-blue-700 border-blue-200" },
+  { value: "personal", label: "个人", icon: User, color: "bg-purple-50 text-purple-700 border-purple-200" },
+  { value: "health", label: "健康", icon: Heart, color: "bg-green-50 text-green-700 border-green-200" },
+  { value: "study", label: "学习", icon: BookOpen, color: "bg-yellow-50 text-yellow-700 border-yellow-200" },
+  { value: "family", label: "家庭", icon: Users, color: "bg-pink-50 text-pink-700 border-pink-200" },
+  { value: "shopping", label: "购物", icon: ShoppingCart, color: "bg-orange-50 text-orange-700 border-orange-200" },
+  { value: "finance", label: "财务", icon: Wallet, color: "bg-[#fff1f2] text-[#d5495f] border-[#e0919e]" },
+  { value: "other", label: "其他", icon: Pin, color: "bg-gray-50 text-gray-700 border-gray-200" },
 ];
 
 const PRIORITIES = [
-  { value: "low", label: "低", icon: "○", color: "text-slate-400" },
-  { value: "medium", label: "中", icon: "◐", color: "text-blue-600" },
-  { value: "high", label: "高", icon: "◉", color: "text-[#de6d7e]" },
-  { value: "urgent", label: "紧急", icon: "⚠️", color: "text-[#d5495f]" },
+  { value: "low", label: "低", icon: Circle, color: "text-slate-400" },
+  { value: "medium", label: "中", icon: Contrast, color: "text-blue-600" },
+  { value: "high", label: "高", icon: CircleDot, color: "text-[#de6d7e]" },
+  { value: "urgent", label: "紧急", icon: TriangleAlert, color: "text-[#d5495f]" },
 ];
 
 export default function TaskCreationPanel({ onAddTask, initialData = null, onCancel }) {
@@ -540,13 +539,13 @@ Return JSON.`,
 
   return (
     <>
-      <Card className="overflow-hidden border-0 shadow-md bg-white/95 backdrop-blur-sm mb-8">
+      <Card className="overflow-hidden bg-white border border-stone-200/60 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8">
         <div className="p-4 md:p-6">
           {!isExpanded ? (
             <Tabs defaultValue="smart" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4 md:mb-6 h-10 md:h-12 bg-slate-100/50 p-1 rounded-xl">
-                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>新的约定</AIText></TabsTrigger>
-                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]"><AIText>快速创建</AIText></TabsTrigger>
+                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">新的约定</TabsTrigger>
+                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">快速创建</TabsTrigger>
               </TabsList>
 
               <TabsContent value="smart" className="mt-0">
@@ -604,9 +603,9 @@ Return JSON.`,
 
                 <div className="mt-6 flex flex-wrap gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
                   <span className="text-xs font-medium text-slate-400 py-1.5">试一试:</span>
-                  <button onClick={() => setSmartInputValue("周五前完成周报")} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-100">📅 周五前完成周报</button>
-                  <button onClick={() => setSmartInputValue("下班后去超市买牛奶")} className="px-3 py-1.5 bg-green-50 text-green-600 rounded-full text-xs font-medium hover:bg-green-100 transition-colors border border-green-100">🛒 下班后去超市买牛奶</button>
-                  <button onClick={() => setSmartInputValue("明天上午10点开会")} className="px-3 py-1.5 bg-amber-50 text-amber-600 rounded-full text-xs font-medium hover:bg-amber-100 transition-colors border border-amber-100">⏰ 明天上午10点开会</button>
+                  <button onClick={() => setSmartInputValue("周五前完成周报")} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-100">周五前完成周报</button>
+                  <button onClick={() => setSmartInputValue("下班后去超市买牛奶")} className="px-3 py-1.5 bg-green-50 text-green-600 rounded-full text-xs font-medium hover:bg-green-100 transition-colors border border-green-100">下班后去超市买牛奶</button>
+                  <button onClick={() => setSmartInputValue("明天上午10点开会")} className="px-3 py-1.5 bg-amber-50 text-amber-600 rounded-full text-xs font-medium hover:bg-amber-100 transition-colors border border-amber-100">明天上午10点开会</button>
                 </div>
               </TabsContent>
 
@@ -614,23 +613,23 @@ Return JSON.`,
                 <div className="flex flex-col md:flex-row gap-3 md:gap-4">
                   <button
                     onClick={() => setIsExpanded(true)}
-                    className="flex-1 group relative rounded-2xl md:rounded-[20px] border-2 border-dashed border-slate-200 hover:border-blue-300 bg-white hover:bg-slate-50 transition-all flex items-center justify-center gap-3 px-4 py-5 md:py-6"
+                    className="flex-1 group relative rounded-2xl md:rounded-2xl border-2 border-dashed border-slate-200 hover:border-stone-300 bg-white hover:bg-slate-50 transition-all flex items-center justify-center gap-3 px-4 py-5 md:py-6"
                   >
                     <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform flex-shrink-0">
                       <Plus className="w-6 h-6 md:w-7 md:h-7 text-[#384877]" strokeWidth={2.5} />
                     </div>
                     <div className="text-left flex-1">
-                      <div className="font-bold text-slate-800 text-base md:text-lg whitespace-nowrap"><AIText>手动创建</AIText></div>
-                      <div className="text-xs md:text-sm text-slate-500 font-medium whitespace-nowrap"><AIText>点击输入详情</AIText></div>
+                      <div className="font-bold text-slate-800 text-base md:text-lg whitespace-nowrap">手动创建</div>
+                      <div className="text-xs md:text-sm text-slate-500 font-medium whitespace-nowrap">点击输入详情</div>
                     </div>
                   </button>
 
                   <button
                     onClick={() => ocrInputRef.current?.click()}
-                    className="flex-1 group relative rounded-2xl md:rounded-[20px] bg-[#384877] text-white hover:bg-[#2c3b63] transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-900/20 px-4 py-5 md:py-6"
+                    className="flex-1 group relative rounded-2xl md:rounded-2xl bg-[#384877] text-white hover:bg-[#2E3A60] transition-all flex items-center justify-center gap-3 shadow-sm px-4 py-5 md:py-6"
                   >
                     <div className="relative flex-shrink-0">
-                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform backdrop-blur-sm border border-white/10">
+                      <div className="h-12 w-12 md:h-14 md:w-14 rounded-xl md:rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform border border-white/20">
                         <ScanText className="w-6 h-6 md:w-7 md:h-7 text-white" />
                       </div>
                     </div>
@@ -833,7 +832,7 @@ Return JSON.`,
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                   <Popover>
                     <PopoverTrigger asChild>
-                      <button type="button" className="group flex items-center justify-between gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-blue-300 transition-all text-left">
+                      <button type="button" className="group flex items-center justify-between gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-stone-300 transition-all text-left">
                          <div className="flex items-center gap-3">
                             <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-100 transition-colors">
                                 <CalendarIcon className="h-5 w-5 text-blue-500 group-hover:scale-110 transition-transform" />
@@ -859,7 +858,7 @@ Return JSON.`,
                   </Popover>
 
                   {!task.is_all_day && (
-                    <div className="group flex items-center gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-300 transition-all">
+                    <div className="group flex items-center gap-3 w-full p-3 rounded-xl border border-slate-200 bg-white hover:border-stone-300 transition-all">
                          <div className="h-10 w-10 rounded-lg bg-purple-50 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-100 transition-colors">
                             <Clock className="h-5 w-5 text-purple-500 group-hover:scale-110 transition-transform" />
                         </div>
@@ -880,11 +879,11 @@ Return JSON.`,
 
                 <div className="grid grid-cols-2 gap-3 md:gap-4">
                   <Select value={task.category} onValueChange={(val) => setTask({ ...task, category: val })}>
-                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3">
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-stone-300 rounded-xl h-auto py-3">
                       <div className="flex flex-col items-start gap-1 w-full">
                         <span className="text-xs font-medium text-slate-500">类别</span>
                         <div className="flex items-center gap-1.5">
-                          <span>{selectedCategory?.icon}</span>
+                          {selectedCategory?.icon && <selectedCategory.icon className="w-4 h-4" />}
                           <span className="text-sm font-semibold">{selectedCategory?.label}</span>
                         </div>
                       </div>
@@ -892,18 +891,21 @@ Return JSON.`,
                     <SelectContent>
                       {CATEGORIES.map((cat) => (
                         <SelectItem key={cat.value} value={cat.value}>
-                          {cat.icon} {cat.label}
+                          <div className="flex items-center gap-2">
+                            <cat.icon className="w-4 h-4" />
+                            <span>{cat.label}</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
 
                   <Select value={task.priority} onValueChange={(val) => setTask({ ...task, priority: val })}>
-                    <SelectTrigger className="border-slate-200 bg-white hover:border-blue-300 rounded-xl h-auto py-3">
+                    <SelectTrigger className="border-slate-200 bg-white hover:border-stone-300 rounded-xl h-auto py-3">
                       <div className="flex flex-col items-start gap-1 w-full">
                         <span className="text-xs font-medium text-slate-500">优先级</span>
                         <div className="flex items-center gap-1.5">
-                          <span className={selectedPriority?.color}>{selectedPriority?.icon}</span>
+                          {selectedPriority?.icon && <selectedPriority.icon className={`w-4 h-4 ${selectedPriority?.color}`} />}
                           <span className={`text-sm font-semibold ${selectedPriority?.color}`}>{selectedPriority?.label}</span>
                         </div>
                       </div>
@@ -911,7 +913,10 @@ Return JSON.`,
                     <SelectContent>
                       {PRIORITIES.map((pri) => (
                         <SelectItem key={pri.value} value={pri.value}>
-                          {pri.icon} {pri.label}
+                          <div className="flex items-center gap-2">
+                            <pri.icon className={`w-4 h-4 ${pri.color}`} />
+                            <span>{pri.label}</span>
+                          </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -931,7 +936,7 @@ Return JSON.`,
                       }
                     }}
                   >
-                    <SelectTrigger className="w-auto border-slate-200 bg-white hover:border-blue-300 rounded-lg">
+                    <SelectTrigger className="w-auto border-slate-200 bg-white hover:border-stone-300 rounded-lg">
                       <div className="flex items-center gap-2">
                         <Repeat className="h-4 w-4 text-slate-500" />
                         <SelectValue placeholder="重复" />
@@ -967,7 +972,7 @@ Return JSON.`,
                 </Collapsible>
 
                 <div className="flex items-center gap-3 pt-2">
-                  <Button type="submit" className="flex-1 bg-[#384877] hover:bg-[#2c3b63] text-white rounded-xl h-12" disabled={isSubmitting}>
+                  <Button type="submit" className="flex-1 bg-[#384877] hover:bg-[#2E3A60] text-white rounded-xl h-12" disabled={isSubmitting}>
                     {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Plus className="mr-2" />}
                     {initialData ? "保存修改" : "创建约定"}
                   </Button>
@@ -995,7 +1000,7 @@ Return JSON.`,
         <DialogContent className="max-w-md">
            <DialogHeader><DialogTitle>AI 语音助手</DialogTitle></DialogHeader>
            <div className="flex flex-col items-center py-6 gap-6">
-              <Button size="lg" onClick={stopRecording} disabled={isProcessing} className={`h-24 w-24 rounded-full ${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-[#384877] hover:bg-[#2c3b63]'}`}>
+              <Button size="lg" onClick={stopRecording} disabled={isProcessing} className={`h-24 w-24 rounded-full ${isRecording ? 'bg-red-500 hover:bg-red-600' : 'bg-[#384877] hover:bg-[#2E3A60]'}`}>
                  {isProcessing ? <Loader2 className="h-10 w-10 animate-spin" /> : isRecording ? <MicOff className="h-10 w-10" /> : <Mic className="h-10 w-10" />}
               </Button>
               <div className="w-full bg-slate-50 p-4 rounded-xl min-h-[100px] text-center text-slate-600">
@@ -1030,7 +1035,7 @@ Return JSON.`,
                 <ImagePlus className="w-4 h-4 mr-2" /> 重新选择
               </Button>
               <Button
-                className="flex-1 bg-[#384877] hover:bg-[#2c3b63]"
+                className="flex-1 bg-[#384877] hover:bg-[#2E3A60]"
                 onClick={handleOCRProcess}
                 disabled={isOCRProcessing || !ocrFile}
               >

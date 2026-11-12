@@ -1,4 +1,4 @@
-// 协同约定卡片（小程序端）：与 Web 端 CollabTaskCard 对齐的呈现
+// 协作约定卡片（小程序端）：与 Web 端 CollabTaskCard 对齐的呈现
 // 勾选完成→归入「已完成」折叠区；右下角置顶/删除（创建者）/退出（成员）/转发
 import { useState, useEffect, useMemo } from "react";
 import Taro from "@tarojs/taro";
@@ -68,7 +68,8 @@ export default function CollabCard({ task, onComplete, onChanged, onSharePrepare
   };
 
   const goDetail = () => {
-    Taro.navigateTo({ url: `/pages/task-detail/index?id=${task.id}` });
+    // 协同约定打开协同空间（执行概览 / 共同讨论 / 子约定），普通约定走通用详情
+    Taro.navigateTo({ url: `/pages/collab-detail/index?id=${task.id}` });
   };
 
   const handleComplete = (e) => {
@@ -121,7 +122,7 @@ export default function CollabCard({ task, onComplete, onChanged, onSharePrepare
     e.stopPropagation();
     if (busy || !isOwner) return;
     Taro.showModal({
-      title: "删除协同约定",
+      title: "删除协作约定",
       content: `删除后所有成员都将看不到「${task.title}」；之后可以在垃圾箱中恢复。`,
       confirmText: "删除",
       confirmColor: "#db3356",
@@ -145,7 +146,7 @@ export default function CollabCard({ task, onComplete, onChanged, onSharePrepare
     e.stopPropagation();
     if (busy || !amMember || isOwner) return;
     Taro.showModal({
-      title: "退出协同约定",
+      title: "退出协作约定",
       content: `退出后「${task.title}」将不再出现在你的列表中。`,
       confirmText: "退出",
       success: async (res) => {
@@ -180,7 +181,7 @@ export default function CollabCard({ task, onComplete, onChanged, onSharePrepare
       onClick={goDetail}
     >
       <View style={{ padding: "28rpx" }}>
-        {/* 徽标行：场景 + 共创中 */}
+        {/* 徽标行：场景 + 协作中 */}
         <View style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: "12rpx", marginBottom: "16rpx" }}>
           <View style={{ background: theme.primary, borderRadius: "6rpx", padding: "4rpx 14rpx" }}>
             <Text style={{ fontSize: "20rpx", color: "#fff" }}>
@@ -189,7 +190,7 @@ export default function CollabCard({ task, onComplete, onChanged, onSharePrepare
           </View>
           <View style={{ border: "1rpx solid #b7e4c7", background: "#e8f7ee", borderRadius: "6rpx", padding: "4rpx 14rpx", flexDirection: "row", alignItems: "center", gap: "8rpx", display: "flex" }}>
             <View style={{ width: "10rpx", height: "10rpx", borderRadius: "50%", background: "#1f9d55" }} />
-            <Text style={{ fontSize: "20rpx", color: "#1f9d55" }}>共创中</Text>
+            <Text style={{ fontSize: "20rpx", color: "#1f9d55" }}>协作中</Text>
           </View>
         </View>
 
@@ -258,7 +259,7 @@ export default function CollabCard({ task, onComplete, onChanged, onSharePrepare
             ))}
           </View>
           <Text style={{ fontSize: "22rpx", color: theme.inkTertiary }}>
-            {members.length || 1} 人共同构建
+            {members.length || 1} 人在协作
           </Text>
         </View>
 

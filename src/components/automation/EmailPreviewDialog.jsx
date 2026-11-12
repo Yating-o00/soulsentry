@@ -102,9 +102,9 @@ export default function EmailPreviewDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-5 pb-3 border-b border-slate-100 bg-gradient-to-r from-[#384877]/5 to-transparent">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b border-slate-100 bg-[#384877]/5 to-transparent">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
+            <div className="w-8 h-8 rounded-lg bg-[#384877] flex items-center justify-center shadow-sm">
               <Mail className="w-4 h-4 text-white" />
             </div>
             <div className="flex flex-col">
@@ -170,7 +170,7 @@ export default function EmailPreviewDialog({
           <Button
             onClick={handleSend}
             disabled={!canSend}
-            className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white shadow-sm"
+            className="bg-[#384877] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white shadow-sm"
           >
             {sending ? (
               <>

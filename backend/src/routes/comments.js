@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
 import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js";
+import { visitorLabelOf } from "../lib/visitorLabel.js";
 
 export const commentsRouter = Router();
 
@@ -37,7 +38,7 @@ function parseSort(sort = "-created_date") {
 }
 
 export function serializeComment(comment) {
-  const visitorLabel = comment.visitorName || (comment.visitorToken ? `访客 #${comment.visitorToken.slice(0, 6)}` : null);
+  const visitorLabel = visitorLabelOf(comment);
   return {
     id: comment.id,
     task_id: comment.taskId,

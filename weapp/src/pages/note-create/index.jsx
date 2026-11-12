@@ -343,7 +343,7 @@ export default function NoteCreate() {
             boxSizing: "border-box",
             border: `1rpx solid ${theme.border}`
           }}
-          placeholder={mode === "ledger" ? "例如：午餐 25，打车 18，稿费 500……我帮你整理成账本" : "此刻的心情、刷到的好文章、怕忘的号码、想分享的瞬间……"}
+          placeholder={mode === "ledger" ? "如：午餐 25，打车 18" : "此刻的心情…"}
           value={content}
           maxlength={2000}
           disableDefaultPadding
@@ -394,7 +394,6 @@ export default function NoteCreate() {
           <Text style={{ fontSize: "30rpx", color: theme.inkTertiary }}>🔗</Text>
         </View>
         <VoiceInput size={64} onResult={handleVoiceResult} onError={handleVoiceError} />
-        <Text style={{ marginLeft: "auto", fontSize: "22rpx", color: theme.inkQuaternary }}>语音 · 图片 · 链接 · 文字</Text>
       </View>
 
       {vaultMode && (

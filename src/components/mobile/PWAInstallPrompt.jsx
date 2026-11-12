@@ -77,7 +77,7 @@ export default function PWAInstallPrompt() {
         exit={{ y: 100, opacity: 0 }}
         className="fixed bottom-20 md:bottom-6 left-4 right-4 md:left-auto md:right-6 md:max-w-md z-50"
       >
-        <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] rounded-2xl shadow-2xl p-5 text-white">
+        <div className="bg-[#384877] rounded-2xl shadow-2xl p-5 text-white">
           <button
             onClick={handleDismiss}
             className="absolute top-3 right-3 p-1 rounded-lg hover:bg-white/20 transition-colors"

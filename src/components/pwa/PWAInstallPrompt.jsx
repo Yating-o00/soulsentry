@@ -67,7 +67,7 @@ export default function PWAInstallPrompt() {
                   <Button
                     onClick={handleInstall}
                     size="sm"
-                    className="bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+                    className="bg-[#384877]"
                   >
                     <Download className="w-4 h-4 mr-1.5" />
                     安装

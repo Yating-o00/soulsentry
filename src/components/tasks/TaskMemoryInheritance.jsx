@@ -204,7 +204,7 @@ export default function TaskMemoryInheritance({ task, onApply }) {
     <motion.div
       initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-[#384877]/15 bg-gradient-to-br from-[#384877]/5 to-purple-50/40 overflow-hidden"
+      className="rounded-2xl border border-[#384877]/15 bg-[#384877]/5 to-purple-50/40 overflow-hidden"
     >
       <button
         type="button"
@@ -212,7 +212,7 @@ export default function TaskMemoryInheritance({ task, onApply }) {
         className="w-full flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-white/40 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
+          <div className="w-7 h-7 rounded-lg bg-[#384877] flex items-center justify-center shadow-sm">
             <Brain className="w-4 h-4 text-white" />
           </div>
           <div className="text-left">

@@ -32,7 +32,7 @@ export default function RealtimeSuggestion({ scene, context, autoLoad = true }) 
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
-        className="bg-gradient-to-r from-[#384877]/5 to-purple-50/60 border border-[#384877]/15 rounded-xl p-3 space-y-2 relative"
+        className="bg-[#384877]/5 to-purple-50/60 border border-[#384877]/15 rounded-xl p-3 space-y-2 relative"
       >
         <button
           onClick={() => setDismissed(true)}

@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User, Lock, Dices, BookOpen, PenLine, Send } from "lucide-react";
-import AIText from "@/components/AIText";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
@@ -660,14 +659,14 @@ export default function Notes() {
         className="flex items-center gap-2.5 md:gap-3">
 
         <div className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+          <div className="h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#384877] flex items-center justify-center shadow-sm">
             <StickyNote className="w-4 h-4 md:w-6 md:h-6 text-white" />
           </div>
           <div className="hidden sm:block leading-tight">
             <h1 className="text-lg md:text-2xl font-bold text-slate-800">
-              <AIText>灵感心签</AIText>
+              灵感心签
             </h1>
-            <p className="text-[11px] md:text-xs text-slate-500"><AIText>说给另一个自己听</AIText></p>
+            <p className="text-[11px] md:text-xs text-slate-500">说给另一个自己听</p>
           </div>
         </div>
 
@@ -700,7 +699,7 @@ export default function Notes() {
               onClick={() => setActiveTab(t.key)}
               className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm transition-colors ${
                 activeTab === t.key
-                  ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white shadow-sm"
+                  ? "bg-[#384877] text-white shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -850,8 +849,8 @@ export default function Notes() {
                 <div className="w-16 h-16 bg-[#384877]/8 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl text-[#384877] font-serif">签</span>
                 </div>
-                <h3 className="text-slate-800 font-medium mb-2"><AIText>这里还空着</AIText></h3>
-                <p className="text-slate-500 text-sm"><AIText>此刻的心情、刷到的好文章、怕忘的号码……都可以丢进来</AIText></p>
+                <h3 className="text-slate-800 font-medium mb-2">这里还空着</h3>
+                <p className="text-slate-500 text-sm">此刻的心情、刷到的好文章、怕忘的号码……都可以丢进来</p>
               </div>
             ) : (
               filteredNotes.map((note) => (
@@ -1057,7 +1056,7 @@ export default function Notes() {
           animate={{ scale: 1 }}
           whileTap={{ scale: 0.9 }}
           onClick={() => setComposerOpen(true)}
-          className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white shadow-2xl shadow-[#384877]/40 flex items-center justify-center active:shadow-lg transition-shadow"
+          className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full bg-[#384877] text-white shadow-md flex items-center justify-center active:shadow-sm transition-shadow"
         >
           <Plus className="w-7 h-7" strokeWidth={2.5} />
         </motion.button>

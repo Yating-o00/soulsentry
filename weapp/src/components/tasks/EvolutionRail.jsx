@@ -190,9 +190,6 @@ export default function EvolutionRail({ evo, onReview }) {
           <IconSprout size={34} color={theme.primary} />
           <Text style={{ fontSize: "34rpx", fontWeight: 700, color: theme.primary }}>心栈越来越懂你</Text>
         </View>
-        <Text style={{ marginTop: "10rpx", fontSize: "22rpx", color: theme.inkTertiary, letterSpacing: "2rpx" }}>
-          基于 {evo.totalTasks} 条约定与生活记录 · 每日进化
-        </Text>
       </View>
 
       <View style={{ padding: "28rpx" }}>
@@ -231,7 +228,6 @@ export default function EvolutionRail({ evo, onReview }) {
               <View style={{ marginTop: "16rpx", height: "4rpx", width: "100%", background: theme.border }}>
                 <View style={{ width: `${Math.min(100, evo.buffer * 4)}%`, height: "100%", background: theme.water }} />
               </View>
-              <Text style={{ marginTop: "8rpx", fontSize: "20rpx", color: theme.inkTertiary }}>缓冲准确率随数据量持续提升</Text>
             </>
           )}
         </View>
@@ -267,7 +263,6 @@ export default function EvolutionRail({ evo, onReview }) {
               </View>
             ))}
           </View>
-          <Text style={{ marginTop: "8rpx", fontSize: "20rpx", color: theme.inkTertiary }}>重要约定将优先排进高产窗口</Text>
         </View>
 
         {/* snooze reasons */}

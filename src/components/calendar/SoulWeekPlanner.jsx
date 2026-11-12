@@ -746,7 +746,7 @@ export default function SoulWeekPlanner({
 
   return (
     <>
-    <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
+    <div className="min-h-screen bg-[#FAF9F7] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
       
       <div className="relative z-10 p-6 md:p-8 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">
         
@@ -820,7 +820,7 @@ export default function SoulWeekPlanner({
                          <Button 
                             onClick={handleProcess}
                             disabled={!userInput.trim() || isProcessing}
-                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl px-6 h-10 shadow-lg shadow-[#384877]/20 transition-all duration-300"
+                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl px-6 h-10 shadow-sm transition-all duration-300"
                          >
                             {isProcessing ? '规划中...' : '生成规划'} <ArrowRight className="w-4 h-4 ml-2" />
                          </Button>
@@ -979,7 +979,7 @@ export default function SoulWeekPlanner({
 
                 if (!isViewingPlan) {
                     return (
-                        <div className="bg-white rounded-[24px] p-8 border border-slate-100 shadow-sm text-center py-16">
+                        <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm text-center py-16">
                             <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
                                 <CalendarIcon className="w-8 h-8" />
                             </div>
@@ -1018,7 +1018,7 @@ export default function SoulWeekPlanner({
                         {/* Summary & Stats Cards */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             {/* Summary Card - Wide */}
-                            <div className="md:col-span-2 bg-[#384877] rounded-[24px] p-6 text-white relative overflow-hidden group">
+                            <div className="md:col-span-2 bg-[#384877] rounded-3xl p-6 text-white relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
                                     <Sparkles className="w-24 h-24" />
                                 </div>
@@ -1031,7 +1031,7 @@ export default function SoulWeekPlanner({
                             </div>
 
                             {/* Stat Cards */}
-                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
                                 <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 mb-2">
                                     <Zap className="w-5 h-5" />
                                 </div>
@@ -1039,7 +1039,7 @@ export default function SoulWeekPlanner({
                                 <div className="text-xs text-slate-400 font-medium">深度专注</div>
                             </div>
 
-                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
+                            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col justify-center items-center text-center">
                                 <div className="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 mb-2">
                                     <CalendarIcon className="w-5 h-5" />
                                 </div>
@@ -1070,7 +1070,7 @@ export default function SoulWeekPlanner({
                                     key={key}
                                     onClick={() => setSelectedDevice(key)}
                                     className={cn(
-                                        "bg-white rounded-[24px] p-5 flex flex-col items-center justify-center gap-3 border transition-all duration-300 cursor-pointer relative overflow-hidden",
+                                        "bg-white rounded-3xl p-5 flex flex-col items-center justify-center gap-3 border transition-all duration-300 cursor-pointer relative overflow-hidden",
                                         isSelected 
                                             ? "border-[#384877] ring-1 ring-[#384877]/10 shadow-[0_8px_30px_rgba(56,72,119,0.08)]" 
                                             : "border-slate-100 hover:border-slate-200 hover:shadow-md"

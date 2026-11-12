@@ -57,7 +57,7 @@ export default function Pricing() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
-          <Badge className="mb-4 bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white border-0 text-sm px-4 py-1.5">
+          <Badge className="mb-4 bg-[#384877] text-white border-0 text-sm px-4 py-1.5">
             🚀 智能增强 · AI驱动
           </Badge>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-3">选择适合你的计划</h1>
@@ -66,10 +66,10 @@ export default function Pricing() {
 
         {/* 当前余额卡片 */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <Card className="mb-8 border-0 shadow-lg bg-gradient-to-r from-[#384877]/5 via-[#3b5aa2]/8 to-[#384877]/5 overflow-hidden">
+          <Card className="mb-8 border-0 shadow-lg bg-[#384877]/5 via-[#3b5aa2]/8 to-[#384877]/5 overflow-hidden">
             <div className="p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+                <div className="w-14 h-14 rounded-2xl bg-[#384877] flex items-center justify-center shadow-sm">
                   <Coins className="w-7 h-7 text-white" />
                 </div>
                 <div>
@@ -114,7 +114,7 @@ export default function Pricing() {
                   } transition-all duration-300`}>
                     {meta.badge && (
                       <div className="absolute top-3 right-3">
-                        <Badge className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white border-0 text-xs shadow-sm">{meta.badge}</Badge>
+                        <Badge className="bg-[#384877] text-white border-0 text-xs shadow-sm">{meta.badge}</Badge>
                       </div>
                     )}
                     <div className="p-6">
@@ -225,7 +225,7 @@ export default function Pricing() {
                 按真实 token 用量动态计费 · 不同功能有不同复杂度倍率
               </p>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#384877]/8 to-[#3b5aa2]/8 border border-[#384877]/15">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#384877]/5 border border-[#384877]/15">
               <Cpu className="w-3.5 h-3.5 text-[#384877]" />
               <span className="text-xs text-[#384877] font-medium">1 点 ≈ 100 tokens</span>
             </div>
@@ -255,7 +255,7 @@ export default function Pricing() {
                   return (
                     <div
                       key={key}
-                      className="group relative rounded-2xl border border-[#384877]/10 bg-gradient-to-br from-white to-[#f5f7fb] p-4 hover:shadow-lg hover:shadow-[#384877]/5 hover:-translate-y-0.5 hover:border-[#384877]/20 transition-all duration-300 overflow-hidden"
+                      className="group relative rounded-2xl border border-[#384877]/10 bg-gradient-to-br from-white to-[#f5f7fb] p-4 hover:shadow-lg hover:shadow-sm hover:-translate-y-0.5 hover:border-[#384877]/20 transition-all duration-300 overflow-hidden"
                     >
                       {/* Decorative gradient orb in theme color */}
                       <div

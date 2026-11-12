@@ -76,7 +76,7 @@ export default function TimeHeatmap({ tasks, behaviors }) {
     <div className="space-y-4">
       {/* Peak insight */}
       {peakInfo && (
-        <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-[#384877]/5 to-transparent rounded-xl border border-[#384877]/10">
+        <div className="flex items-center gap-3 p-3 bg-[#384877]/5 to-transparent rounded-xl border border-[#384877]/10">
           <div className="w-10 h-10 rounded-xl bg-[#384877]/10 flex items-center justify-center">
             <PeakIcon className="w-5 h-5 text-[#384877]" />
           </div>

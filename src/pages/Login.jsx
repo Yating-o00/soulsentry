@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Heart } from "lucide-react";
 import { standaloneClient } from "../api/standaloneClient";
 
 function getPostLoginRedirect() {
@@ -155,63 +156,48 @@ export default function Login() {
     }
   }
 
-  const inputStyle = {
-    width: "100%",
-    padding: 12,
-    marginBottom: 12,
-    borderRadius: 10,
-    border: "1px solid #d0d5dd",
-    fontSize: 14,
-    outline: "none",
-    boxSizing: "border-box"
-  };
+  const inputClass =
+    "w-full px-3 py-3 mb-3 rounded-[10px] border border-stone-200 bg-white text-sm text-stone-900 outline-none box-border placeholder:text-stone-400 focus:border-[#384877] focus:ring-2 focus:ring-[#384877]/15";
 
-  const buttonStyle = {
-    width: "100%",
-    padding: 12,
-    borderRadius: 10,
-    border: "none",
-    background: "#3b5ccc",
-    color: "#fff",
-    fontSize: 15,
-    cursor: "pointer"
-  };
+  const primaryButtonClass =
+    "w-full py-3 rounded-[10px] border-0 bg-[#384877] text-white text-[15px] font-medium cursor-pointer hover:bg-[#2E3A60] disabled:opacity-70 disabled:cursor-not-allowed";
 
-  const secondaryButtonStyle = {
-    padding: "0 14px",
-    borderRadius: 10,
-    border: "1px solid #d0d5dd",
-    background: "#fff",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    fontSize: 14
-  };
+  const secondaryButtonClass =
+    "px-3.5 rounded-[10px] border border-stone-200 bg-white cursor-pointer whitespace-nowrap text-sm text-stone-700 hover:bg-stone-50 disabled:opacity-60 disabled:cursor-not-allowed";
 
-  const tabButtonStyle = (active) => ({
-    flex: 1,
-    padding: 10,
-    borderRadius: 10,
-    border: "1px solid #d0d5dd",
-    background: active ? "#eef2ff" : "#fff",
-    cursor: "pointer",
-    fontSize: 14
-  });
+  const tabButtonClass = (active) =>
+    `flex-1 py-2.5 rounded-[10px] border text-sm font-medium cursor-pointer transition-colors ${
+      active
+        ? "border-stone-200 bg-stone-100 text-stone-900"
+        : "border-stone-200 bg-white text-stone-500 hover:bg-stone-50"
+    }`;
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f7fb", padding: 16 }}>
-      <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, padding: 28, boxShadow: "0 10px 30px rgba(0,0,0,0.08)" }}>
-        <h1 style={{ margin: 0, fontSize: 28, color: "#101828" }}>
+    <div className="min-h-screen flex items-center justify-center bg-stone-50 px-4 py-8">
+      <div className="w-full max-w-[420px] bg-white border border-stone-200/60 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-7">
+        {/* 扁平品牌标识 */}
+        <div className="flex items-center gap-3 mb-7">
+          <div className="h-11 w-11 rounded-xl bg-[#384877] flex items-center justify-center flex-shrink-0">
+            <Heart className="h-6 w-6 text-white" strokeWidth={2.2} />
+          </div>
+          <div>
+            <p className="m-0 text-xl font-semibold tracking-tight text-stone-900">心栈 · SoulSentry</p>
+            <p className="m-0 mt-0.5 text-sm text-stone-500">安心记住每一个约定</p>
+          </div>
+        </div>
+
+        <h1 className="m-0 text-[28px] font-semibold tracking-tight text-stone-900">
           {isRegister ? "注册" : "登录"}
         </h1>
-        <p style={{ color: "#667085", marginTop: 8, marginBottom: 20 }}>
+        <p className="text-stone-500 mt-2 mb-5">
           {isRegister ? "创建 SoulSentry 账号" : "登录 SoulSentry"}
         </p>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-          <button onClick={() => setMode("phone")} style={tabButtonStyle(mode === "phone")}>
+        <div className="flex gap-2 mb-5">
+          <button type="button" onClick={() => setMode("phone")} className={tabButtonClass(mode === "phone")}>
             手机号
           </button>
-          <button onClick={() => setMode("email")} style={tabButtonStyle(mode === "email")}>
+          <button type="button" onClick={() => setMode("email")} className={tabButtonClass(mode === "email")}>
             邮箱
           </button>
         </div>
@@ -223,25 +209,21 @@ export default function Login() {
               onChange={(e) => setPhone(e.target.value)}
               placeholder="手机号"
               maxLength={11}
-              style={inputStyle}
+              className={inputClass}
             />
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <div className="flex gap-2 mb-3">
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 placeholder="验证码"
                 maxLength={6}
-                style={{ ...inputStyle, flex: 1, marginBottom: 0 }}
+                className={`${inputClass} flex-1 mb-0`}
               />
               <button
                 type="button"
                 onClick={() => sendCode(isRegister ? "register" : "login")}
                 disabled={sending || countdown > 0 || !isPhoneValid}
-                style={{
-                  ...secondaryButtonStyle,
-                  opacity: sending || countdown > 0 || !isPhoneValid ? 0.6 : 1,
-                  cursor: sending || countdown > 0 || !isPhoneValid ? "not-allowed" : "pointer"
-                }}
+                className={secondaryButtonClass}
               >
                 {countdown > 0 ? `${countdown}s` : sending ? "发送中" : "获取验证码"}
               </button>
@@ -252,17 +234,13 @@ export default function Login() {
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="昵称（可选）"
                 maxLength={50}
-                style={inputStyle}
+                className={inputClass}
               />
             )}
             <button
               type="submit"
               disabled={submitting || !isPhoneValid || !isCodeValid}
-              style={{
-                ...buttonStyle,
-                opacity: submitting || !isPhoneValid || !isCodeValid ? 0.7 : 1,
-                cursor: submitting || !isPhoneValid || !isCodeValid ? "not-allowed" : "pointer"
-              }}
+              className={primaryButtonClass}
             >
               {submitting ? (isRegister ? "注册中..." : "登录中...") : (isRegister ? "注册" : "登录")}
             </button>
@@ -274,14 +252,14 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="邮箱"
-              style={inputStyle}
+              className={inputClass}
             />
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="密码"
-              style={inputStyle}
+              className={inputClass}
             />
             {isRegister && (
               <>
@@ -290,25 +268,21 @@ export default function Login() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="确认密码"
-                  style={inputStyle}
+                  className={inputClass}
                 />
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="昵称（可选）"
                   maxLength={50}
-                  style={inputStyle}
+                  className={inputClass}
                 />
               </>
             )}
             <button
               type="submit"
               disabled={submitting || !isEmailValid || !isPasswordValid || (isRegister && password !== confirmPassword)}
-              style={{
-                ...buttonStyle,
-                opacity: submitting || !isEmailValid || !isPasswordValid || (isRegister && password !== confirmPassword) ? 0.7 : 1,
-                cursor: submitting || !isEmailValid || !isPasswordValid || (isRegister && password !== confirmPassword) ? "not-allowed" : "pointer"
-              }}
+              className={primaryButtonClass}
             >
               {submitting ? (isRegister ? "注册中..." : "登录中...") : (isRegister ? "注册" : "登录")}
             </button>
@@ -316,12 +290,12 @@ export default function Login() {
         )}
 
         {message ? (
-          <p style={{ marginTop: 12, color: message.includes("成功") || message.includes("已发送") ? "#027a48" : "#d92d20", fontSize: 14 }}>
+          <p className={`mt-3 text-sm ${message.includes("成功") || message.includes("已发送") ? "text-emerald-700" : "text-red-600"}`}>
             {message}
           </p>
         ) : null}
 
-        <div style={{ marginTop: 20, textAlign: "center", fontSize: 14, color: "#667085" }}>
+        <div className="mt-5 text-center text-sm text-stone-500">
           {isRegister ? "已有账号？" : "还没有账号？"}
           <button
             type="button"
@@ -331,7 +305,7 @@ export default function Login() {
               setPassword("");
               setConfirmPassword("");
             }}
-            style={{ marginLeft: 4, color: "#3b5ccc", background: "none", border: "none", cursor: "pointer", fontSize: 14, fontWeight: 500 }}
+            className="ml-1 text-[#384877] bg-transparent border-0 cursor-pointer text-sm font-medium p-0"
           >
             {isRegister ? "立即登录" : "立即注册"}
           </button>

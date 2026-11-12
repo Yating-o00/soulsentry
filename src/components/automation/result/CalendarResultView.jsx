@@ -54,7 +54,7 @@ export default function CalendarResultView({ data, preview }) {
             <Users className="w-3 h-3 text-slate-400" />
             <div className="flex gap-1">
               {participants.slice(0, 5).map((p, i) => (
-                <div key={i} className="w-6 h-6 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white text-[10px] font-semibold flex items-center justify-center">
+                <div key={i} className="w-6 h-6 rounded-full bg-[#384877] text-white text-[10px] font-semibold flex items-center justify-center">
                   {String(p).charAt(0)}
                 </div>
               ))}

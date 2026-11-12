@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mic, Loader2, ArrowUp, X, Plus, FileText } from "lucide-react";
+import { Mic, Loader2, ArrowUp, X, Plus, FileText, ListTodo, Heart, Link2, CalendarDays, Users, Clock, Timer, Footprints, MonitorSmartphone } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest, getAccessToken } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
@@ -22,7 +22,7 @@ const C = {
 };
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划", collab: "协同约定" };
-const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️", collab: "👥" };
+const TYPE_ICON = { task: ListTodo, heart: Heart, link: Link2, plan: CalendarDays, collab: Users };
 const HEART_TYPE_LABEL = { emotion: "情绪签", inspiration: "灵感签", material: "资料签", memo: "备忘录", share: "分享签", ledger: "账本签" };
 // 协同约定场景（与 CollabCreateDialog 同一套 confirmRule 口径）
 const COLLAB_SCENARIO_LIST = [
@@ -151,7 +151,7 @@ export default function SmartInputBar() {
   }, [messages, busy, pending]);
 
   useEffect(() => () => {
-    try { recognitionRef.current?.stop?.(); } catch {}
+    try { recognitionRef.current?.stop?.(); } catch { /* 卸载时停止识别，忽略异常 */ }
     stopAgentPoll();
   }, []);
 
@@ -507,11 +507,11 @@ export default function SmartInputBar() {
       const t = e.results?.[0]?.[0]?.transcript || "";
       if (t.trim()) send(t.trim());
     };
-    try { rec.start(); } catch {}
+    try { rec.start(); } catch { /* 浏览器拒绝启动时保持未录音状态 */ }
   };
 
   const stopVoice = () => {
-    try { recognitionRef.current?.stop?.(); } catch {}
+    try { recognitionRef.current?.stop?.(); } catch { /* 停止失败无后续影响 */ }
     setRecording(false);
   };
 
@@ -539,6 +539,7 @@ export default function SmartInputBar() {
   })();
 
   const firstUserText = messages.find((m) => m.role === "user")?.content || "";
+  const PendingTypeIcon = pending ? (TYPE_ICON[pending.type] || FileText) : null;
 
   return (
     <div className="mt-7 w-full">
@@ -620,10 +621,11 @@ export default function SmartInputBar() {
                     <button
                       type="button"
                       onClick={() => setLiveOpen(true)}
-                      className="rounded-full px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:opacity-90"
+                      className="flex items-center gap-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:opacity-90"
                       style={{ background: C.sentinel }}
                     >
-                      🖥️ 打开实时窗口，亲自操作网页
+                      <MonitorSmartphone className="h-3.5 w-3.5" />
+                      打开实时窗口，亲自操作网页
                     </button>
                   )}
                   {agentTakeover && (
@@ -665,7 +667,7 @@ export default function SmartInputBar() {
               {pending && !busy && !(pending.type === "plan" && !pending.plan) && (
                 <div className="mb-3 w-full rounded-xl border p-4" style={{ borderColor: C.hairline, background: "#fbfcfc" }}>
                   <div className="flex items-center gap-2">
-                    <span className="text-[15px]">{TYPE_ICON[pending.type] || "📝"}</span>
+                    {PendingTypeIcon && <PendingTypeIcon className="w-4 h-4" style={{ color: C.sentinel }} />}
                     <span className="text-[13px] font-medium" style={{ color: C.sentinel }}>
                       将要生成{(pending.type === "heart" && HEART_TYPE_LABEL[pending.heart_category]) || TYPE_LABEL[pending.type] || "记录"}
                     </span>
@@ -681,8 +683,9 @@ export default function SmartInputBar() {
                       )}
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
                         {pending.due_at && (
-                          <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.sentinel }}>
-                            🕐 {fmtDayTime(pending.due_at)}
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.sentinel }}>
+                            <Clock className="h-3 w-3" />
+                            {fmtDayTime(pending.due_at)}
                           </span>
                         )}
                         {pending.category && (
@@ -719,13 +722,15 @@ export default function SmartInputBar() {
                             </span>
                           )}
                           {pending.plan_request?.horizon_days > 0 && (
-                            <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
-                              🗓️ {pending.plan_request.horizon_days} 天
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
+                              <CalendarDays className="h-3 w-3" />
+                              {pending.plan_request.horizon_days} 天
                             </span>
                           )}
                           {pending.plan_request?.daily_minutes > 0 && (
-                            <span className="rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
-                              ⏱️ 每天约 {pending.plan_request.daily_minutes} 分钟
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px]" style={{ background: C.mist, color: C.ink3 }}>
+                              <Timer className="h-3 w-3" />
+                              每天约 {pending.plan_request.daily_minutes} 分钟
                             </span>
                           )}
                         </div>
@@ -765,8 +770,8 @@ export default function SmartInputBar() {
                                                 <span className="shrink-0 tabular-nums" style={{ color: C.ink4 }}>
                                                   {c.start_time}–{c.end_time}
                                                 </span>
-                                                <span className="shrink-0 text-[11px]" title={c.kind === "checkin" ? "打卡项：做完点一下留痕" : "定时项"}>
-                                                  {c.kind === "checkin" ? "👣" : "⏱️"}
+                                                <span className="flex shrink-0 items-center" title={c.kind === "checkin" ? "打卡项：做完点一下留痕" : "定时项"}>
+                                                  {c.kind === "checkin" ? <Footprints className="h-3 w-3" /> : <Timer className="h-3 w-3" />}
                                                 </span>
                                                 <span className="min-w-0 break-words" style={{ color: C.ink }}>{c.title}</span>
                                               </div>
@@ -964,7 +969,7 @@ export default function SmartInputBar() {
         </div>
       </div>
 
-      {/* 示例引路：⚡ 可直接交办，小助手出发去办；其余记为约定/心签 */}
+      {/* 示例引路：标有 exec 的可实际交办（浏览器小助手直接出发去办），其余记为约定/心签 */}
       <div className="mt-4 flex flex-wrap justify-center gap-2">
         {SAMPLES.map((s) => (
           <button
@@ -974,7 +979,7 @@ export default function SmartInputBar() {
               ? "sky-chip rounded-full border border-[var(--sentinel)]/35 bg-[var(--sentinel)]/[0.06] px-3.5 py-1.5 text-[12.5px] text-[var(--sentinel)] transition-all duration-300 hover:bg-[var(--sentinel)]/[0.12] hover:border-[var(--sentinel)]/60"
               : "sky-chip rounded-full border border-[var(--hairline)] bg-slate-50/80 px-3.5 py-1.5 text-[12.5px] text-[var(--ink-2)] transition-all duration-300 hover:border-[var(--sentinel)]/50 hover:text-[var(--sentinel)]"}
           >
-            {s.exec ? `⚡ ${s.text}` : s.text}
+            {s.exec ? s.text : s.text}
           </button>
         ))}
       </div>

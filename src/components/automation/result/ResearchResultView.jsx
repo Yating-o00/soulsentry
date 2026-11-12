@@ -383,7 +383,7 @@ export default function ResearchResultView({ data, preview, onChange, onSave, ed
   return (
     <div className="space-y-2.5">
       {/* 报告头 */}
-      <div className="rounded-xl bg-gradient-to-br from-[#384877]/8 to-[#3b5aa2]/5 border border-[#384877]/15 p-3">
+      <div className="rounded-xl bg-[#384877]/5 border border-[#384877]/15 p-3">
         <div className="flex items-center justify-between gap-2 mb-1">
           <div className="flex items-center gap-2">
             <Globe className="w-3.5 h-3.5 text-[#384877]" />

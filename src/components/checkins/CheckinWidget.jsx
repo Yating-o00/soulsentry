@@ -146,8 +146,8 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
             completed
               ? "border-stone-100 bg-stone-50 text-stone-300 cursor-not-allowed"
               : (justDone || todayDone)
-                ? "border-transparent bg-gradient-to-br from-[#3b5aa2] to-[#384877] text-white shadow-lg shadow-[#384877]/30"
-                : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF] hover:shadow-lg hover:shadow-[#384877]/15 hover:-translate-y-0.5"
+                ? "border-transparent bg-[#384877] text-white shadow-sm"
+                : "border-[#c9d5ef] bg-white text-[#384877] hover:border-[#384877] hover:bg-[#EEF2FF]"
           )}
         >
           <Footprints className={cn("w-5 h-5", (justDone || todayDone) && "hidden")} />
@@ -238,11 +238,11 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
       {/* 附言弹层：点完打卡后 optionally 留一句话/一张照片 */}
       {pending && (
         <div
-          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-[2px] p-4"
+          className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-slate-900/40 p-4"
           onClick={(e) => { e.stopPropagation(); finishPending(false); }}
         >
           <div
-            className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-2xl"
+            className="w-full max-w-sm rounded-3xl bg-white p-5 shadow-sm"
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-[13px] text-stone-500 mb-1">
@@ -308,7 +308,7 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
         <>
           <div className="fixed inset-0 bg-slate-900/30 z-40" onClick={(e) => { e.stopPropagation(); setTimelineOpen(false); }} />
           <aside
-            className="fixed top-0 right-0 bottom-0 w-[min(420px,92vw)] bg-[#F8F9FD] z-50 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300"
+            className="fixed top-0 right-0 bottom-0 w-[min(420px,92vw)] bg-[#F8F9FD] z-50 shadow-sm flex flex-col animate-in slide-in-from-right duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="relative px-6 pt-7 pb-4 border-b border-stone-100">
@@ -360,11 +360,11 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
       {/* 里程碑成就 */}
       {milestone && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-900/45 backdrop-blur-sm p-5"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-900/45 p-5"
           onClick={(e) => { e.stopPropagation(); setMilestone(null); }}
         >
           <div
-            className="relative w-full max-w-[400px] rounded-[28px] px-8 pt-12 pb-8 text-center overflow-hidden shadow-2xl"
+            className="relative w-full max-w-[400px] rounded-3xl px-8 pt-12 pb-8 text-center overflow-hidden shadow-sm"
             style={{ background: "linear-gradient(160deg,#F5F7FD,#EEF2FF)" }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -388,7 +388,7 @@ export default function CheckinWidget({ task, completed = false, subtaskTree = [
             <div className="flex items-center justify-center gap-3 mt-7">
               <button
                 onClick={() => { setShareOpen(true); }}
-                className="rounded-full px-6 py-3 text-sm text-white bg-gradient-to-r from-[#3b5aa2] to-[#384877] shadow-lg shadow-[#384877]/40 hover:-translate-y-0.5 transition-transform"
+                className="rounded-full px-6 py-3 text-sm text-white bg-[#384877] shadow-sm"
               >
                 生成分享卡
               </button>

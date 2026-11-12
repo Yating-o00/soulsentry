@@ -302,7 +302,7 @@ export default function NoteShareDialog({ note, open, onOpenChange }) {
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">
-            <Button onClick={handleSave} className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]">
+            <Button onClick={handleSave} className="flex-1 bg-[#384877]">
               <Share2 className="w-4 h-4 mr-2" />
               保存分享设置
             </Button>

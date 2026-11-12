@@ -115,7 +115,7 @@ export default function CognitionInsights({ tasks, memories, behaviors }) {
       </div>
 
       {/* Pattern summary */}
-      <div className="bg-gradient-to-r from-[#384877]/5 via-white to-purple-50/30 rounded-2xl p-4 border border-slate-100">
+      <div className="bg-[#384877]/5 via-white to-purple-50/30 rounded-2xl p-4 border border-slate-100">
         <div className="flex items-center gap-2 mb-2">
           <BarChart3 className="w-4 h-4 text-[#384877]" />
           <h4 className="text-sm font-semibold text-slate-800">认知模型摘要</h4>

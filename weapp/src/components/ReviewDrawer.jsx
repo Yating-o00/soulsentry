@@ -172,9 +172,6 @@ export default function ReviewDrawer({ visible, onClose, notes, onGoToNote, them
                   <Text style={{ fontSize: "30rpx", color: theme.inkSecondary, lineHeight: "50rpx" }}>
                     {getNoteText(drawNote)}
                   </Text>
-                  <Text style={{ fontSize: "22rpx", color: theme.primary, marginTop: "16rpx" }}>
-                    —— 来自那天的你 ——
-                  </Text>
                 </View>
               ) : (
                 <View style={{ textAlign: "center", padding: "60rpx 20rpx" }}>
@@ -208,18 +205,12 @@ export default function ReviewDrawer({ visible, onClose, notes, onGoToNote, them
                     fontSize: "28rpx",
                     color: theme.ink
                   }}
-                  placeholder="输入一个词，比如「跑步」「妈妈」「辞职」…"
+                  placeholder="如:跑步、妈妈"
                   value={keyword}
                   onInput={(e) => setKeyword(e.detail.value)}
                   onConfirm={() => {}}
                 />
               </View>
-
-              {!keyword.trim() && (
-                <View style={{ textAlign: "center", padding: "40rpx 20rpx" }}>
-                  <Text style={{ fontSize: "26rpx", color: theme.inkQuaternary }}>输入关键词，与过去的自己重逢</Text>
-                </View>
-              )}
 
               {keyword.trim() && !results.length && (
                 <View style={{ textAlign: "center", padding: "40rpx 20rpx" }}>

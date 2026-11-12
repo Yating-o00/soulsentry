@@ -139,7 +139,7 @@ export default function NoteComments({ noteId }) {
                 className="flex gap-3 p-3 bg-white rounded-lg border border-slate-200 hover:border-slate-300 transition-colors"
               >
                 <Avatar className="h-8 w-8 flex-shrink-0">
-                  <AvatarFallback className="bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white text-xs">
+                  <AvatarFallback className="bg-[#384877] text-white text-xs">
                     {getInitials(displayName)}
                   </AvatarFallback>
                 </Avatar>
@@ -190,7 +190,7 @@ export default function NoteComments({ noteId }) {
         <Button
           type="submit"
           disabled={!newComment.trim() || createCommentMutation.isPending}
-          className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] h-20"
+          className="bg-[#384877] hover:from-[#2c3b63] hover:to-[#2d4680] h-20"
         >
           <Send className="w-4 h-4" />
         </Button>

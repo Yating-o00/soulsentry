@@ -1,0 +1,158 @@
+// 小助手陪伴对话路由：历史持久化在 CompanionMessage，重进/换端可续聊
+// POST /messages 发送：用户消息落库 → 复用心流对话引擎（意图理解/提案）→ 助手回复落库
+// 巡检产生的主动消息（kind=proactive）也在这条时间线上，未读数驱动小程序入口角标
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../lib/prisma.js";
+import { requireAuth } from "../middleware/auth.js";
+import { runFlowChat } from "../services/flowChat.js";
+import { extractActions, executeActions } from "../services/assistantActions.js";
+
+export const companionRouter = Router();
+
+companionRouter.use(requireAuth);
+
+const serialize = (m) => ({
+  id: m.id,
+  role: m.role,
+  content: m.content,
+  kind: m.kind,
+  meta: m.meta || null,
+  read_at: m.readAt,
+  created_date: m.createdAt
+});
+
+// GET /api/companion/messages?limit=100 — 全量时间线（时间正序，客户端分页从后往前取）
+companionRouter.get("/messages", async (req, res) => {
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 100));
+  const rows = await prisma.companionMessage.findMany({
+    where: { userId: req.user.id },
+    orderBy: { createdAt: "desc" },
+    take: limit
+  });
+  return res.json(rows.reverse().map(serialize));
+});
+
+// GET /api/companion/unread — 助手消息未读数（入口角标）
+companionRouter.get("/unread", async (req, res) => {
+  const count = await prisma.companionMessage.count({
+    where: { userId: req.user.id, role: "assistant", readAt: null }
+  });
+  return res.json({ count });
+});
+
+// POST /api/companion/read — 进入聊天页即全部已读
+companionRouter.post("/read", async (req, res) => {
+  await prisma.companionMessage.updateMany({
+    where: { userId: req.user.id, role: "assistant", readAt: null },
+    data: { readAt: new Date() }
+  });
+  return res.json({ ok: true });
+});
+
+const sendSchema = z.object({
+  content: z.string().min(1).max(3000).optional(),
+  last_extracted: z.any().optional().nullable(),
+  // 提案确认后的回执：客户端已完成落库，追加一条助手话术到时间线（不触发 AI）
+  assistant_echo: z.string().min(1).max(1000).optional()
+}).refine((d) => d.content || d.assistant_echo, { message: "content 或 assistant_echo 至少提供一个" });
+
+companionRouter.post("/messages", async (req, res) => {
+  const payload = sendSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+
+  // 回执消息：提案「确认生成」后客户端追加的助手话术
+  if (payload.data.assistant_echo && !payload.data.content) {
+    const echo = await prisma.companionMessage.create({
+      data: { userId: req.user.id, role: "assistant", content: payload.data.assistant_echo, kind: "chat" }
+    });
+    return res.status(201).json({ message: serialize(echo) });
+  }
+
+  const content = payload.data.content.trim();
+  const userMsg = await prisma.companionMessage.create({
+    data: { userId: req.user.id, role: "user", content, kind: "chat" }
+  });
+
+  // 从持久化时间线取最近上下文，保证跨端/重进后语境连续
+  const history = await prisma.companionMessage.findMany({
+    where: { userId: req.user.id },
+    orderBy: { createdAt: "desc" },
+    take: 25
+  });
+  const messages = history
+    .reverse()
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
+
+  try {
+    // 动作意图优先：「勾掉/改/删现有约定心签」的指令先走动作提取，
+    // 避免被对话引擎误当成心签/新约定（用户确认后才真正落库）
+    try {
+      const actionResult = await extractActions({ messages, userId: req.user.id });
+      if (actionResult?.actions?.length > 0) {
+        const reply = actionResult.reply || "好的，我整理了一下要做的修改，确认后我就动手～";
+        const assistantMsg = await prisma.companionMessage.create({
+          data: { userId: req.user.id, role: "assistant", content: reply, kind: "chat" }
+        });
+        return res.json({
+          message: serialize(userMsg),
+          reply: serialize(assistantMsg),
+          extracted: null,
+          agent: null,
+          actions: actionResult.actions
+        });
+      }
+    } catch (err) {
+      console.warn("[companion] 动作提取失败（继续走对话引擎）:", err?.message || err);
+    }
+
+    const result = await Promise.race([
+      runFlowChat({
+        messages,
+        lastExtracted: payload.data.last_extracted || null,
+        userId: req.user.id,
+        prisma
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("CHAT_HANDLER_TIMEOUT")), 90000))
+    ]);
+    const reply = String(result?.reply || "").trim() || "我在听，你继续说～";
+    const assistantMsg = await prisma.companionMessage.create({
+      data: { userId: req.user.id, role: "assistant", content: reply, kind: "chat" }
+    });
+    return res.json({
+      message: serialize(userMsg),
+      reply: serialize(assistantMsg),
+      extracted: result?.extracted || null,
+      agent: result?.agent || null,
+      actions: null
+    });
+  } catch (err) {
+    console.error("[companion] 对话处理失败:", err?.message || err);
+    const fallback = await prisma.companionMessage.create({
+      data: { userId: req.user.id, role: "assistant", content: "刚才走神了一下…你再说一遍好吗？", kind: "chat" }
+    });
+    return res.json({ message: serialize(userMsg), reply: serialize(fallback), extracted: null, agent: null });
+  }
+});
+
+// POST /api/companion/actions — 用户确认动作提案后执行（服务端校验权限并落库）
+const actionsSchema = z.object({
+  actions: z.array(z.object({
+    id: z.string().max(64).optional(),
+    type: z.enum(["complete_task", "reopen_task", "update_task", "update_note"]),
+    target_id: z.string().min(1).max(64),
+    label: z.string().max(120).optional(),
+    changes: z.record(z.any()).optional()
+  })).min(1).max(5)
+});
+
+companionRouter.post("/actions", async (req, res) => {
+  const payload = actionsSchema.safeParse(req.body);
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
+  }
+  const results = await executeActions({ actions: payload.data.actions, userId: req.user.id });
+  return res.json({ results });
+});

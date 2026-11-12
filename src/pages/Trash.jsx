@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Search, Trash2, ArrowLeft, RotateCcw, AlertTriangle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import TaskCard from "../components/tasks/TaskCard";
-import NotificationManager from "../components/notifications/NotificationManager";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -53,8 +52,7 @@ export default function Trash() {
 
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
-      <NotificationManager />
-      
+
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}

@@ -148,7 +148,7 @@ export default function AutomationCandidateGrid({
               size="sm"
               onClick={handleSubmitCustom}
               disabled={!customTitle.trim()}
-              className="w-full h-7 text-[11px] bg-gradient-to-r from-[#384877] to-[#3b5aa2]"
+              className="w-full h-7 text-[11px] bg-[#384877]"
             >
               添加并授权
             </Button>

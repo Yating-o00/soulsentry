@@ -42,7 +42,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
                       isDone
                         ? "bg-[#384877]/6 border-[#384877]/35 shadow-sm"
                         : isAuto
-                        ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] border-[#384877] text-white shadow-md shadow-[#384877]/20"
+                        ? "bg-[#384877] border-[#384877] text-white shadow-sm"
                         : "bg-white border-[#384877]/15 hover:border-[#384877]/40 hover:shadow-sm"
                     }`}
                   >
@@ -140,7 +140,7 @@ export default function ExecutionStepFlow({ steps = [], onStepToggle }) {
               title={clickable ? (step.status === "completed" ? "点击标记为未完成" : "点击标记完成") : (step.detail || step.step_name)}
               onClick={(e) => handleToggle(e, i)}
             >
-              <div className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${cfg.color} ${step.status === "running" ? "shadow-md shadow-[#384877]/20" : ""}`}>
+              <div className={`w-9 h-9 rounded-xl border-2 flex items-center justify-center transition-all ${cfg.color} ${step.status === "running" ? "shadow-sm" : ""}`}>
                 <Icon className={`w-4 h-4 ${cfg.spin ? "animate-spin" : ""}`} />
               </div>
               <span className={`text-[10px] text-center leading-tight max-w-[64px] truncate ${step.status === "completed" ? "text-[#384877] line-through" : "text-slate-500"}`}>

@@ -441,7 +441,7 @@ import React, { useState, useEffect, useRef } from "react";
        >
          <Card className="shadow-2xl border border-[#222222] bg-white overflow-hidden relative">
            {/* 头部 - 精简版 */}
-           <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] p-3 text-white">
+           <div className="bg-[#384877] p-3 text-white">
              <div className="flex items-center justify-between">
                <div className="flex items-center gap-2">
                  <div className="h-7 w-7 rounded-full bg-white flex items-center justify-center">
@@ -513,7 +513,7 @@ import React, { useState, useEffect, useRef } from "react";
                  animate={{ opacity: 1, y: 0 }}
                  className="flex flex-col items-center justify-center h-full text-center"
                >
-                 <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#e5e9ef] to-[#dce3eb] flex items-center justify-center mb-3 relative">
+                 <div className="w-12 h-12 rounded-full bg-[#e5e9ef] flex items-center justify-center mb-3 relative">
                    <Sparkles className="w-6 h-6 text-[#5a647d]" />
                    <motion.div
                      className="absolute inset-0 rounded-full border-2 border-[#5a647d]"
@@ -636,7 +636,7 @@ import React, { useState, useEffect, useRef } from "react";
                  type="submit"
                  size="icon"
                  disabled={!inputText.trim() || isLoading}
-                 className="h-9 w-9 bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] hover:shadow-[#3b5aa2]/40 hover:scale-105 transition-all duration-300 rounded-xl shadow-lg shadow-[#3b5aa2]/25"
+                 className="h-9 w-9 bg-gradient-to-br from-[#3b5aa2] to-[#2c4480] hover:shadow-sm hover:scale-105 transition-all duration-300 rounded-xl shadow-sm"
                >
                  {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                </Button>
@@ -677,7 +677,7 @@ import React, { useState, useEffect, useRef } from "react";
          className={`flex gap-2 ${isUser ? "justify-end" : "justify-start"}`}
        >
          {!isUser && (
-           <div className="h-6 w-6 rounded-full bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex-shrink-0 flex items-center justify-center">
+           <div className="h-6 w-6 rounded-full bg-[#384877] flex-shrink-0 flex items-center justify-center">
              <Bot className="w-3.5 h-3.5 text-white" />
            </div>
          )}
@@ -686,7 +686,7 @@ import React, { useState, useEffect, useRef } from "react";
            <div
             className={`rounded-xl px-3 py-2 ${
               isUser
-                ? "bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white"
+                ? "bg-[#384877] text-white"
                 : "bg-white border border-[#e5e9ef] text-[#222222]"
             }`}
            >
@@ -871,7 +871,7 @@ import React, { useState, useEffect, useRef } from "react";
      const completionRate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
 
      return (
-       <div className="bg-gradient-to-br from-[#f8fafc] to-[#f1f5f9] border border-slate-200/60 rounded-xl p-2.5 space-y-2">
+       <div className="bg-[#f8fafc] border border-slate-200/60 rounded-xl p-2.5 space-y-2">
          <div className="flex items-center justify-between">
            <div className="flex items-center gap-1.5">
              <BarChart3 className="w-3.5 h-3.5 text-[#384877]" />
@@ -959,7 +959,7 @@ import React, { useState, useEffect, useRef } from "react";
        >
          <div className="flex items-center justify-between mb-2">
            <div className="flex items-center gap-2">
-             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
+             <div className="w-8 h-8 rounded-lg bg-[#384877] flex items-center justify-center shadow-sm">
                <BarChart3 className="w-4 h-4 text-white" />
              </div>
              <div>

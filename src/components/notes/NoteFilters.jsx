@@ -44,7 +44,7 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [], no
         variant={activePinned ? "default" : "outline"}
         size="sm"
         onClick={onTogglePinned}
-        className={`h-8 gap-1.5 ${activePinned ? 'bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white' : ''}`}
+        className={`h-8 gap-1.5 ${activePinned ? 'bg-[#384877] text-white' : ''}`}
       >
         <Pin className="w-3.5 h-3.5" />
         已置顶

@@ -28,7 +28,7 @@ export default function SentinelSummaryCard({ task, compact = false }) {
   };
 
   return (
-    <div className="p-3 rounded-xl bg-gradient-to-br from-[#384877]/[0.04] to-[#3b5aa2]/[0.04] border border-[#384877]/10 space-y-2.5">
+    <div className="p-3 rounded-xl bg-[#384877]/5 border border-[#384877]/10 space-y-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <Shield className="w-3.5 h-3.5 text-[#384877]" />

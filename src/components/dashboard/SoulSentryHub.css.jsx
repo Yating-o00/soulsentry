@@ -151,14 +151,14 @@ export default function SoulSentryHub() {
         <div 
             onClick={() => onClick(id)}
             className={`
-                device-card glass-refined rounded-2xl p-4 text-center cursor-pointer transition-all duration-300 border-2 
-                ${active ? 'device-active' : 'border-transparent hover:border-[#e8d5b7]/30'}
-                hover-lift
+                rounded-2xl p-4 text-center cursor-pointer transition-all duration-300 border-2 
+                ${active ? '' : 'border-transparent hover:border-[#e8d5b7]/30'}
+               
             `}
         >
             <div className={`
                 w-10 h-10 mx-auto mb-3 rounded-2xl flex items-center justify-center text-[#f5f5f0] shadow-lg
-                ${id === 'phone' ? 'bg-gradient-to-br from-[#0a0a0f] to-[#1e293b]' : ''}
+                ${id === 'phone' ? 'bg-slate-900' : ''}
                 ${id === 'watch' ? 'bg-gradient-to-br from-[#1e293b] to-[#0a0a0f]' : ''}
                 ${id === 'glasses' ? 'bg-gradient-to-br from-[#6366f1] to-purple-600' : ''}
                 ${id === 'car' ? 'bg-gradient-to-br from-emerald-600 to-teal-700' : ''}
@@ -192,16 +192,16 @@ export default function SoulSentryHub() {
                 <div className="text-center mb-10 space-y-4">
                     <h1 className="text-4xl md:text-5xl font-serif font-light text-[#0a0a0f] tracking-tight">
                         告诉我，<br />
-                        <span className="gradient-text-subtle italic">任何事情</span>
+                        <span className="italic">任何事情</span>
                     </h1>
                     <p className="text-[#0a0a0f]/50 font-light">
                         像与朋友倾诉般自然。我会倾听、理解，<br />在所有设备上为你悄然安排妥当。
                     </p>
                 </div>
 
-                <div className="w-full relative group input-glow rounded-3xl transition-all duration-500">
+                <div className="w-full relative group rounded-3xl transition-all duration-500">
                     <div className="absolute -inset-1 bg-gradient-to-r from-[#e8d5b7]/30 to-[#6366f1]/20 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000" />
-                    <div className="relative glass-refined rounded-3xl p-2">
+                    <div className="relative rounded-3xl p-2">
                         <div className="bg-white/40 rounded-2xl flex flex-col">
                             <textarea
                                 value={input}
@@ -238,7 +238,7 @@ export default function SoulSentryHub() {
                         <button 
                             key={text}
                             onClick={() => handleQuickFill(text)}
-                            className="px-4 py-2 glass-refined rounded-full text-sm text-[#0a0a0f]/60 hover:text-[#0a0a0f] border border-transparent hover:border-[#e8d5b7]/50 transition-all"
+                            className="px-4 py-2 rounded-full text-sm text-[#0a0a0f]/60 hover:text-[#0a0a0f] border border-transparent hover:border-[#e8d5b7]/50 transition-all"
                         >
                             {text}
                         </button>
@@ -255,7 +255,7 @@ export default function SoulSentryHub() {
                         exit={{ opacity: 0, y: -20 }}
                         className="w-full max-w-xl mt-8"
                     >
-                        <div className="glass-refined rounded-2xl p-6 border-l-4 border-[#e8d5b7]">
+                        <div className="rounded-2xl p-6 border-l-4 border-[#e8d5b7]">
                             <div className="flex items-center gap-3 mb-6 text-[#0a0a0f]/70">
                                 <div className="flex gap-1.5">
                                     <div className="w-2 h-2 bg-[#e8d5b7] rounded-full thinking-dot" />
@@ -308,7 +308,7 @@ export default function SoulSentryHub() {
                     <section className="animate-fade-up">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-xl font-serif text-[#0a0a0f]">全设备智能协同</h3>
-                            <span className="px-3 py-1 glass-refined rounded-full text-xs text-[#0a0a0f]/60 border border-[#e8d5b7]/20">
+                            <span className="px-3 py-1 rounded-full text-xs text-[#0a0a0f]/60 border border-[#e8d5b7]/20">
                                 <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full inline-block mr-1.5 animate-pulse" />
                                 云端同步正常
                             </span>
@@ -333,7 +333,7 @@ export default function SoulSentryHub() {
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 exit={{ opacity: 0, y: -10 }}
-                                className="glass-refined rounded-2xl p-6"
+                                className="rounded-2xl p-6"
                             >
                                 <div className="flex justify-between items-start mb-6">
                                     <div>
@@ -373,7 +373,7 @@ export default function SoulSentryHub() {
                     {/* Timeline */}
                     <section className="animate-fade-up" style={{ animationDelay: '0.2s' }}>
                         <h3 className="text-xl font-serif text-[#0a0a0f] mb-6">情境感知时间线</h3>
-                        <div className="glass-refined rounded-3xl p-8 relative">
+                        <div className="rounded-3xl p-8 relative">
                             {data.timeline.map((event, idx) => (
                                 <div key={idx} className="timeline-item relative pl-12 pb-8 last:pb-0 group cursor-pointer">
                                     <div className="timeline-line"></div>
@@ -403,7 +403,7 @@ export default function SoulSentryHub() {
                         </div>
                         <div className="grid md:grid-cols-2 gap-4">
                             {data.automations.map((task, idx) => (
-                                <div key={idx} className="glass-refined rounded-2xl p-5 border border-white/60 hover-lift group">
+                                <div key={idx} className="rounded-2xl p-5 border border-white/60 group">
                                     <div className="flex items-start justify-between mb-3">
                                         <div className="flex items-center gap-3">
                                             <span className="text-2xl">{task.icon}</span>

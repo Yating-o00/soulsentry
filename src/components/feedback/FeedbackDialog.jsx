@@ -85,11 +85,11 @@ ${content}
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] p-0 overflow-hidden border-0 shadow-2xl bg-white/95 backdrop-blur-sm">
-        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]" />
+        <div className="absolute top-0 left-0 w-full h-1 bg-[#384877]" />
         
         <DialogHeader className="p-6 pb-2">
           <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-lg shadow-[#384877]/20">
+            <div className="h-10 w-10 rounded-xl bg-[#384877] flex items-center justify-center shadow-sm">
               <MessageSquarePlus className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -176,7 +176,7 @@ ${content}
           <Button 
             onClick={submitFeedback} 
             disabled={isSubmitting} 
-            className="rounded-xl bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2a4585] text-white shadow-lg shadow-[#384877]/20 px-6 transition-all"
+            className="rounded-xl bg-[#384877] hover:from-[#2c3b63] hover:to-[#2a4585] text-white shadow-sm px-6 transition-all"
           >
             {isSubmitting ? (
               <>

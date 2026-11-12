@@ -321,7 +321,7 @@ export default function SoulMonthPlanner({
 
   return (
     <>
-    <div className="min-h-screen bg-[#f8f9fa] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
+    <div className="min-h-screen bg-[#FAF9F7] text-slate-900 font-sans rounded-3xl overflow-hidden relative">
       <div className="relative z-10 p-6 md:p-8 max-w-7xl mx-auto flex flex-col min-h-[calc(100vh-100px)]">
         
         <AnimatePresence mode="wait">
@@ -375,7 +375,7 @@ export default function SoulMonthPlanner({
                          <Button 
                             onClick={handleProcess}
                             disabled={!userInput.trim() || isProcessing}
-                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl px-6 h-10 shadow-lg shadow-[#384877]/20 transition-all duration-300"
+                            className="bg-[#384877] hover:bg-[#2d3a5f] text-white rounded-xl px-6 h-10 shadow-sm transition-all duration-300"
                          >
                             {isProcessing ? '规划中...' : '生成蓝图'} <ArrowRight className="w-4 h-4 ml-2" />
                          </Button>

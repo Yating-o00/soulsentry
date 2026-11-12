@@ -341,7 +341,7 @@ export default function CalendarDayView({
   const isCurrentDay = isToday(safeCurrentDate);
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-200px)] bg-slate-50/60 rounded-[28px] border border-slate-100 shadow-sm overflow-visible">
+    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-200px)] bg-slate-50/60 rounded-3xl border border-slate-100 shadow-sm overflow-visible">
       {/* Main Timeline */}
       <div className="flex-1 flex flex-col bg-white relative overflow-auto">
         <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-b from-white to-transparent z-10" />
@@ -648,7 +648,7 @@ export default function CalendarDayView({
             <div className="p-4 space-y-5">
                 {/* Weekly Context Card */}
                 {weeklyContext ? (
-                    <div className="bg-[#384877] rounded-2xl p-4 text-white relative overflow-hidden shadow-md shadow-[#384877]/15">
+                    <div className="bg-[#384877] rounded-2xl p-4 text-white relative overflow-hidden shadow-sm">
                         <div className="absolute top-0 right-0 p-2 opacity-10">
                             <Target className="w-14 h-14" />
                         </div>

@@ -462,7 +462,7 @@ export default function NoteEditor({ onSave, onClose, initialData = null }) {
                     handleAnalyze();
                 }}
                 disabled={isAnalyzing}
-                className="h-8 px-3 text-xs font-medium text-white bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2c3b63] hover:to-[#2d4680] rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                className="h-8 px-3 text-xs font-medium text-white bg-[#384877] hover:from-[#2c3b63] hover:to-[#2d4680] rounded-lg gap-1.5 shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
                 {isAnalyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Sparkles className="w-3.5 h-3.5 mr-1" />}
                 AI 智能分析

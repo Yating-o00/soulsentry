@@ -7,9 +7,7 @@ import theme from "./theme";
 
 const suggestions = [
   "明天下午3点和林总过方案",
-  "每周五晚上给爸妈打电话",
   "下班顺路去加油站加油",
-  "周五前给张总发跟进邮件",
 ];
 
 export default function Composer({ isGuest = false }) {

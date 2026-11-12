@@ -159,10 +159,10 @@ export default function ExecutionItem({ execution, onRetry, onConfirm, onDismiss
               const isRealityChain = (execution.execution_steps || []).every(s => s.status === "todo" || !!s.when_hint);
               const autoCount = (execution.execution_steps || []).filter(s => s.is_automation).length;
               return (
-                <div className="mt-3 p-3 rounded-xl bg-gradient-to-br from-[#384877]/[0.03] to-[#3b5aa2]/[0.03] border border-[#384877]/10">
+                <div className="mt-3 p-3 rounded-xl bg-[#384877]/5 border border-[#384877]/10">
                   <div className="flex items-center justify-between mb-2.5">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-5 h-5 rounded-md bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm shadow-[#384877]/20">
+                      <div className="w-5 h-5 rounded-md bg-[#384877] flex items-center justify-center shadow-sm">
                         <Zap className="w-3 h-3 text-white" />
                       </div>
                       <span className="text-xs font-semibold text-[#384877]">

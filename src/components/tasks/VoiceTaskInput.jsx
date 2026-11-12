@@ -235,7 +235,7 @@ ${transcript}
 
   if (!browserSupported) {
     return (
-      <Card className="border-0 shadow-xl bg-gradient-to-br from-slate-100 to-slate-200">
+      <Card className="bg-white border border-stone-200/60 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
         <CardContent className="p-6">
           <div className="flex items-center gap-3 text-slate-600">
             <AlertCircle className="w-5 h-5" />
@@ -250,10 +250,10 @@ ${transcript}
   }
 
   return (
-    <Card className="border-0 shadow-xl bg-gradient-to-br from-purple-50 to-pink-50 overflow-hidden">
+    <Card className="bg-white border border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
-          <Volume2 className="w-5 h-5 text-purple-600" />
+          <Volume2 className="w-5 h-5 text-[#384877]" />
           语音创建任务
         </CardTitle>
         <p className="text-sm text-slate-600 mt-1">
@@ -267,10 +267,10 @@ ${transcript}
             size="lg"
             onClick={isRecording ? stopRecording : startRecording}
             disabled={isProcessing}
-            className={`relative h-24 w-24 rounded-full transition-all duration-300 ${
+            className={`relative h-24 w-24 rounded-full transition-all duration-300 shadow-sm ${
               isRecording
-                ? 'bg-gradient-to-r from-red-500 to-pink-600 hover:shadow-2xl hover:shadow-red-500/50 scale-110'
-                : 'bg-gradient-to-r from-purple-500 to-pink-600 hover:shadow-xl hover:shadow-purple-500/30'
+                ? 'bg-red-500 hover:bg-red-600 scale-110'
+                : 'bg-[#384877] hover:bg-[#2E3A60]'
             }`}
           >
             <AnimatePresence mode="wait">
@@ -352,7 +352,7 @@ ${transcript}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
             >
-              <Badge className="bg-purple-500 text-white">
+              <Badge className="bg-[#384877] text-white">
                 <Loader2 className="w-3 h-3 mr-2 animate-spin" />
                 AI 解析中...
               </Badge>
@@ -373,11 +373,11 @@ ${transcript}
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="bg-white/80 backdrop-blur-sm rounded-xl p-4 border-2 border-purple-200"
+              className="bg-white rounded-xl p-4 border border-stone-200/60"
             >
               <div className="flex items-start gap-2 mb-2">
-                <Sparkles className="w-4 h-4 text-purple-600 flex-shrink-0 mt-1" />
-                <p className="text-sm font-semibold text-purple-800">识别内容</p>
+                <Sparkles className="w-4 h-4 text-[#384877] flex-shrink-0 mt-1" />
+                <p className="text-sm font-semibold text-stone-700">识别内容</p>
               </div>
               <p className="text-sm text-slate-700 leading-relaxed">
                 {transcript}
@@ -411,7 +411,7 @@ ${transcript}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="bg-white rounded-lg p-3 border border-purple-200"
+                    className="bg-white rounded-xl p-3 border border-stone-200/60"
                   >
                     <p className="font-semibold text-slate-800 text-sm mb-1">
                       {task.title}
@@ -427,7 +427,7 @@ ${transcript}
                         {task.priority}
                       </Badge>
                       {task.subtasks && task.subtasks.length > 0 && (
-                        <Badge className="bg-purple-500 text-white text-xs">
+                        <Badge className="bg-[#384877] text-white text-xs">
                           {task.subtasks.length} 个子任务
                         </Badge>
                       )}
@@ -439,7 +439,7 @@ ${transcript}
               <div className="flex gap-2 pt-2">
                 <Button
                   onClick={handleCreateTasks}
-                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:shadow-lg rounded-xl"
+                  className="flex-1 bg-[#384877] hover:bg-[#2E3A60] text-white rounded-xl"
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
                   创建全部任务
@@ -474,12 +474,12 @@ ${transcript}
         </AnimatePresence>
 
         {/* 使用提示 */}
-        <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-3">
+        <div className="bg-stone-50 border border-stone-200/60 rounded-xl p-3">
           <div className="flex gap-3">
-            <Wand2 className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
+            <Wand2 className="w-4 h-4 text-[#384877] flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-xs font-semibold text-purple-800 mb-1">使用提示</p>
-              <ul className="text-xs text-purple-700 space-y-0.5">
+              <p className="text-xs font-semibold text-stone-700 mb-1">使用提示</p>
+              <ul className="text-xs text-stone-600 space-y-0.5">
                 <li>• 点击麦克风开始录音，说出任务内容</li>
                 <li>• 支持自然语言，如"明天下午3点开会"</li>
                 <li>• AI 会自动拆解复杂任务为多个子任务</li>

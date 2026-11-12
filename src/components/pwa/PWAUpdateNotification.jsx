@@ -47,7 +47,7 @@ export default function PWAUpdateNotification() {
           exit={{ y: -100, opacity: 0 }}
           className="fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50"
         >
-          <div className="bg-gradient-to-r from-[#384877] to-[#3b5aa2] text-white rounded-2xl shadow-2xl p-4">
+          <div className="bg-[#384877] text-white rounded-2xl shadow-2xl p-4">
             <div className="flex items-center gap-3">
               <RefreshCw className="w-5 h-5 flex-shrink-0" />
               <div className="flex-1">

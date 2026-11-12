@@ -3,7 +3,7 @@
 // 节点 48h 内到期且 ≥12h 无成员发言。Agent 以讨论消息 + 站内通知推动相关成员，幂等防刷屏。
 import { prisma } from "../lib/prisma.js";
 import { assertAICredits, chargeAICredits } from "./aiCredits.js";
-import { AI_CALL_COSTS } from "../routes/functions.js";
+import { AI_CALL_COSTS } from "../config/aiCosts.js";
 import { collectSubtasks, logCollabChange } from "./collabSpace.js";
 import { buildSystem, formatSpaceData, loadSpaceSnapshot, postAgentMessage } from "./collabAgent.js";
 import { callKimiChat } from "../lib/kimi.js";

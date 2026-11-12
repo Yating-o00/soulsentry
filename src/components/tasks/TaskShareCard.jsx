@@ -1128,7 +1128,7 @@ ${format(new Date(), "yyyy年M月d日 HH:mm", { locale: zhCN })}
             </Button>
           </div>
 
-          <div className="bg-gradient-to-r from-[#384877]/10 to-[#3b5aa2]/10 rounded-xl p-4 border border-[#384877]/20">
+          <div className="bg-[#384877]/5 rounded-xl p-4 border border-[#384877]/20">
             <div className="flex gap-3">
               <Sparkles className="w-5 h-5 text-blue-700 flex-shrink-0 mt-0.5" />
               <div>

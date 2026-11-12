@@ -236,7 +236,7 @@ export default function ExecutionResultDialog({
                     onOpenChange(false);
                     onRetryWithEdit(v);
                   }}
-                  className="flex-1 h-9 rounded-xl text-[12px] bg-gradient-to-r from-[#384877] to-[#3b5aa2] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white"
+                  className="flex-1 h-9 rounded-xl text-[12px] bg-[#384877] hover:from-[#2d3a5f] hover:to-[#324a8a] text-white"
                 >
                   使用新描述重试
                 </Button>

@@ -56,7 +56,7 @@ export default function ReplanComposer({ onSubmit, disabled }) {
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-[#384877]/15 bg-gradient-to-b from-white to-[#384877]/[0.02] overflow-hidden shadow-sm"
+      className="rounded-2xl border border-[#384877]/15 bg-white overflow-hidden shadow-sm"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-100">
@@ -108,7 +108,7 @@ export default function ReplanComposer({ onSubmit, disabled }) {
             className={cn(
               "rounded-xl h-8 px-5 text-xs font-medium shadow-sm transition-all shrink-0",
               text.trim()
-                ? "bg-[#384877] hover:bg-[#2d3a5f] text-white shadow-[#384877]/20"
+                ? "bg-[#384877] hover:bg-[#2d3a5f] text-white shadow-sm"
                 : "bg-slate-100 text-slate-400 shadow-none"
             )}
           >

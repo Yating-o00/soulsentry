@@ -35,7 +35,7 @@ export default function DeviceStrategyBoard({ devices }) {
       >
         <div className={cn(
           "w-11 h-11 mx-auto mb-2.5 rounded-xl flex items-center justify-center shadow-md transition-all duration-300",
-          isSelected ? "bg-gradient-to-br from-[#384877] to-[#3b5aa2] text-white" : "bg-slate-100 text-slate-400"
+          isSelected ? "bg-[#384877] text-white" : "bg-slate-100 text-slate-400"
         )}>
           <Icon className="w-5 h-5" />
         </div>
@@ -57,7 +57,7 @@ export default function DeviceStrategyBoard({ devices }) {
     <section className="animate-fade-up" style={{ animationDelay: "0.05s" }}>
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-md"><Zap className="w-4 h-4 text-white" /></div>
+          <div className="w-8 h-8 rounded-xl bg-[#384877] flex items-center justify-center shadow-md"><Zap className="w-4 h-4 text-white" /></div>
           <div>
             <h3 className="text-lg font-bold text-slate-800">全设备智能协同</h3>
             <p className="text-xs text-slate-400">基于情境的分发策略</p>

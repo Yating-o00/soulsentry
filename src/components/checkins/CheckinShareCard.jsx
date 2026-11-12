@@ -160,7 +160,7 @@ function ShareCardOverlay({ task, subtaskTree = [], total, firstAt, bestNote, be
         <div
           ref={cardRef}
           onClick={(e) => e.stopPropagation()}
-          className="w-[320px] overflow-hidden rounded-[24px] bg-white text-left shadow-2xl"
+          className="w-[320px] overflow-hidden rounded-3xl bg-white text-left shadow-2xl"
           style={{ fontFamily: "inherit" }}
         >
         {/* 头部：品牌深蓝渐变 + 大数字成就陈述 */}

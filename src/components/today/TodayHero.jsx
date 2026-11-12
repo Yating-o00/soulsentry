@@ -8,7 +8,7 @@ import { PHASE_GREETING } from '@/lib/todayPhase';
  */
 export default function TodayHero({ phase, dateLabel, whisper, memory, userName, children }) {
   return (
-    <section className="sky-band reveal rounded-[28px] px-5 pb-8 pt-7 sm:px-10 sm:pt-9" style={{ '--i': 0 }}>
+    <section className="sky-band reveal rounded-3xl px-5 pb-8 pt-7 sm:px-10 sm:pt-9" style={{ '--i': 0 }}>
       <div className="relative z-10 mx-auto max-w-[720px]">
         {/* 顶行:日期 + 时段状态 */}
         <div className="flex items-center justify-between gap-3">

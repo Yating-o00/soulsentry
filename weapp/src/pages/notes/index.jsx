@@ -10,22 +10,10 @@ import { useShare } from "@/hooks/useShare";
 import VaultSheet from "@/components/VaultSheet";
 import ReviewDrawer from "@/components/ReviewDrawer";
 import RichText from "@/components/RichText";
+import AiBadge from "@/components/AiBadge";
+import GreetingHeader from "@/components/GreetingHeader";
+import VisitorBanner from "@/components/VisitorBanner";
 import theme from "@/components/tasks/theme";
-
-function AiBadge({ text = "AI 生成" }) {
-  return (
-    <View
-      style={{
-        padding: "2rpx 10rpx",
-        borderRadius: "8rpx",
-        background: "rgba(91,130,160,0.10)",
-        border: "1rpx solid rgba(91,130,160,0.20)"
-      }}
-    >
-      <Text style={{ fontSize: "18rpx", color: theme.water, fontWeight: 500 }}>{text}</Text>
-    </View>
-  );
-}
 
 const DENSITY_KEY = "heart_response_density";
 
@@ -65,16 +53,6 @@ function getNoteImage(note) {
   if (rel.startsWith("http")) return rel;
   const rawApi = process.env.TARO_APP_API || "https://www.xinzhan-soulsentry.cn/api";
   return rawApi.replace(/\/api\/?$/, "") + rel;
-}
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 5) return "凌晨好";
-  if (h < 9) return "早上好";
-  if (h < 12) return "上午好";
-  if (h < 14) return "中午好";
-  if (h < 18) return "下午好";
-  return "晚上好";
 }
 
 function dateLine() {
@@ -240,6 +218,8 @@ export default function Notes() {
   const [reviewVisible, setReviewVisible] = useState(false);
   const [density, setDensity] = useState(() => Taro.getStorageSync(DENSITY_KEY) || "light");
   const [isGuest, setIsGuest] = useState(false);
+  // 「更多」操作弹层当前作用的签
+  const [moreNote, setMoreNote] = useState(null);
   const scrollRef = useRef(null);
   // 一键转发：预取心签的公开分享 token（生成接口幂等），转发时朋友无需登录即可查看
   const shareTokensRef = useRef({});
@@ -487,6 +467,30 @@ export default function Notes() {
     }
   };
 
+  // 微信一键转发：点击瞬间把这条签的完整分享载荷写入注册表，
+  // useShare 的 buildShare 随即读取（onClick 先于分享面板回调触发）
+  const prepareWxShare = (note, e) => {
+    e?.stopPropagation?.();
+    const token = shareTokensRef.current[note.id];
+    // 封面：配图 > 服务端签卡封面（share_enabled 是签数据自带字段，不依赖 token 预取时序）> 默认签卡
+    const serverCover = note.share_enabled ? absoluteUrl(`/api/public/share/cover/note/${note.id}.png?v=3`) : "";
+    // 从未分享过的签：顺手幂等生成 token，下一次转发即有签卡封面
+    if (!note.share_enabled && !sharePendingRef.current.has(note.id)) {
+      sharePendingRef.current.add(note.id);
+      post(`/public/share/generate/note/${note.id}`)
+        .then((s) => { shareTokensRef.current[note.id] = (s && s.token) || ""; })
+        .catch(() => {})
+        .finally(() => sharePendingRef.current.delete(note.id));
+    }
+    pendingShareRef.current = {
+      title: `心签 · ${shareTitleText(note)}`,
+      imageUrl: getNoteImage(note) || serverCover || FALLBACK_COVER,
+      path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${note.id}`
+    };
+  };
+
+  const closeMore = () => setMoreNote(null);
+
   const closePoster = () => {
     setPosterNote(null);
     setPosterToken("");
@@ -541,21 +545,8 @@ export default function Notes() {
   const renderGuestBanner = () => {
     if (!isGuest) return null;
     return (
-      <View
-        onClick={() => Taro.navigateTo({ url: "/pages/login/index" })}
-        style={{
-          margin: "0 24rpx 16rpx",
-          padding: "18rpx 24rpx",
-          borderRadius: "12rpx",
-          background: "#fff8e6",
-          border: "1rpx solid #f5d78e",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between"
-        }}
-      >
-        <Text style={{ fontSize: "26rpx", color: "#8a6d3b" }}>游客模式 · 登录后记录你的心签</Text>
-        <Text style={{ fontSize: "24rpx", color: theme.primary, fontWeight: 500 }}>去登录 →</Text>
+      <View style={{ margin: "0 24rpx 16rpx" }}>
+        <VisitorBanner text="游客模式 · 登录后记录你的心签" />
       </View>
     );
   };
@@ -565,8 +556,6 @@ export default function Notes() {
       <View style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <View>
           <Text style={{ fontSize: "22rpx", color: theme.inkQuaternary, letterSpacing: "3rpx" }}>{dateLine()}</Text>
-          {/* 版本标记：用于确认手机端运行的是最新体验版，确认后可移除 */}
-          <Text style={{ fontSize: "20rpx", color: theme.inkQuaternary, marginTop: "6rpx" }}>v2.1.12</Text>
         </View>
         <View style={{ display: "flex", alignItems: "center", gap: "12rpx" }}>
           <View
@@ -597,23 +586,7 @@ export default function Notes() {
           </View>
         </View>
       </View>
-      <View style={{ marginTop: "16rpx" }}>
-        <Text style={{ fontSize: "52rpx", fontWeight: 700, color: theme.primary, lineHeight: "72rpx" }}>
-          {greeting()}。
-        </Text>
-      </View>
-      <View style={{ marginTop: "16rpx" }}>
-        <Text style={{ fontSize: "34rpx", fontWeight: 500, color: theme.inkSecondary, lineHeight: "52rpx" }}>
-          说给
-          <Text style={{ color: theme.primary }}>另一个自己</Text>
-          听。
-        </Text>
-      </View>
-      <View style={{ marginTop: "12rpx" }}>
-        <Text style={{ fontSize: "26rpx", color: theme.inkTertiary, lineHeight: "42rpx" }}>
-          此刻的心情、刷到的好文章、怕忘的号码……丢进来就好。
-        </Text>
-      </View>
+      <GreetingHeader sub="说给另一个自己听。" showDate={false} />
       <View style={{ marginTop: "20rpx", display: "flex", gap: "10rpx", flexWrap: "wrap" }}>
         {DENSITY_OPTIONS.map((d) => {
           const active = density === d.key;
@@ -882,35 +855,8 @@ export default function Notes() {
 
         <View style={{ display: "flex", flexWrap: "wrap", gap: "8rpx", marginTop: "20rpx" }}>
           <ActionBtn onClick={(e) => togglePin(note, e)} active={pinned} text={pinned ? "已置顶" : "置顶"} loading={actionLoading[`pin-${note.id}`]} />
-          <ActionBtn onClick={(e) => correctType(note, e)} text="分错了" loading={actionLoading[`correct-${note.id}`]} />
           {!converted && <ActionBtn onClick={(e) => convertTask(note, e)} text="转约定" loading={actionLoading[`task-${note.id}`]} />}
-          {!inKb && <ActionBtn onClick={(e) => addToKnowledge(note, e)} text="沉淀" loading={actionLoading[`kb-${note.id}`]} />}
-          <ActionBtn onClick={(e) => shareNote(note, e)} text="签卡" loading={actionLoading[`share-${note.id}`]} />
-          <ShareButton
-            theme={theme}
-            onClick={(e) => {
-              e?.stopPropagation?.();
-              // 点击瞬间把这条签的完整分享载荷写入注册表，
-              // useShare 的 buildShare 随即读取（onClick 先于分享面板回调触发）
-              const token = shareTokensRef.current[note.id];
-              // 封面：配图 > 服务端签卡封面（share_enabled 是签数据自带字段，不依赖 token 预取时序）> 默认签卡
-              const serverCover = note.share_enabled ? absoluteUrl(`/api/public/share/cover/note/${note.id}.png?v=3`) : "";
-              // 从未分享过的签：顺手幂等生成 token，下一次转发即有签卡封面
-              if (!note.share_enabled && !sharePendingRef.current.has(note.id)) {
-                sharePendingRef.current.add(note.id);
-                post(`/public/share/generate/note/${note.id}`)
-                  .then((s) => { shareTokensRef.current[note.id] = (s && s.token) || ""; })
-                  .catch(() => {})
-                  .finally(() => sharePendingRef.current.delete(note.id));
-              }
-              pendingShareRef.current = {
-                title: `心签 · ${shareTitleText(note)}`,
-                imageUrl: getNoteImage(note) || serverCover || FALLBACK_COVER,
-                path: token ? `pages/share/index?token=${token}` : `pages/note-detail/index?id=${note.id}`
-              };
-            }}
-          />
-          <ActionBtn onClick={(e) => deleteNote(note, e)} text="删除" danger />
+          <ActionBtn onClick={() => setMoreNote(note)} text="更多 ···" />
         </View>
       </View>
     );
@@ -940,37 +886,6 @@ export default function Notes() {
         ) : null}
         {!loading && filteredNotes.length === 0 ? renderEmpty() : filteredNotes.map((n) => <View key={n.id} id={`note-${n.id}`}>{renderCard(n)}</View>)}
 
-        <View
-          style={{
-            margin: "0 24rpx 24rpx",
-            padding: "18rpx 22rpx",
-            borderRadius: "14rpx",
-            background: "rgba(91,130,160,0.06)",
-            border: "1rpx solid rgba(91,130,160,0.12)",
-            display: "flex",
-            alignItems: "center"
-          }}
-        >
-          <View
-            style={{
-              width: "28rpx",
-              height: "28rpx",
-              borderRadius: "50%",
-              background: theme.water,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              marginRight: "14rpx",
-              flexShrink: 0
-            }}
-          >
-            <Text style={{ fontSize: "16rpx", color: "#fff", fontWeight: 600 }}>AI</Text>
-          </View>
-          <Text style={{ fontSize: "22rpx", color: theme.inkTertiary, lineHeight: "38rpx" }}>
-            内容由 AI 生成，仅供参考
-          </Text>
-        </View>
-
         <View style={{ height: "120rpx" }} />
       </ScrollView>
 
@@ -993,6 +908,84 @@ export default function Notes() {
         <Text style={{ fontSize: "56rpx", color: "#fff" }}>+</Text>
       </View>
 
+      {/* 更多操作弹层：收编原操作行的次级操作。微信转发依赖 open-type="share" 实体按钮，
+          放不进原生 ActionSheet，故用弹层承载 */}
+      {moreNote && (
+        <View
+          onClick={closeMore}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 300,
+            background: "rgba(0,0,0,0.4)"
+          }}
+        >
+          <View
+            onClick={(e) => e?.stopPropagation?.()}
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "#fff",
+              borderRadius: "24rpx 24rpx 0 0",
+              padding: "16rpx 24rpx 48rpx"
+            }}
+          >
+            <View
+              onClick={(e) => { closeMore(); correctType(moreNote, e); }}
+              style={SHEET_ROW_STYLE}
+            >
+              <Text style={{ fontSize: "30rpx", color: theme.ink }}>分错了（改为下一种签）</Text>
+            </View>
+            {!moreNote.metadata?.in_knowledge_base && (
+              <View
+                onClick={(e) => { closeMore(); addToKnowledge(moreNote, e); }}
+                style={SHEET_ROW_STYLE}
+              >
+                <Text style={{ fontSize: "30rpx", color: theme.ink }}>沉淀到知识库</Text>
+              </View>
+            )}
+            <View
+              onClick={(e) => { closeMore(); shareNote(moreNote, e); }}
+              style={SHEET_ROW_STYLE}
+            >
+              <Text style={{ fontSize: "30rpx", color: theme.ink }}>生成签卡海报</Text>
+            </View>
+            <View style={SHEET_ROW_STYLE}>
+              <ShareButton
+                text="转发给好友"
+                theme={theme}
+                onClick={(e) => prepareWxShare(moreNote, e)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  padding: 0,
+                  border: "none",
+                  background: "#fff",
+                  fontSize: "30rpx",
+                  color: theme.ink,
+                  lineHeight: "2.4",
+                  textAlign: "center"
+                }}
+              />
+            </View>
+            <View
+              onClick={(e) => { closeMore(); deleteNote(moreNote, e); }}
+              style={SHEET_ROW_STYLE}
+            >
+              <Text style={{ fontSize: "30rpx", color: "#db3356" }}>删除</Text>
+            </View>
+            <View onClick={closeMore} style={{ ...SHEET_ROW_STYLE, borderBottom: "none" }}>
+              <Text style={{ fontSize: "30rpx", color: theme.inkTertiary }}>取消</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
       {posterNote && (
         <SharePoster
           visible
@@ -1012,6 +1005,14 @@ export default function Notes() {
     </View>
   );
 }
+
+const SHEET_ROW_STYLE = {
+  padding: "26rpx 12rpx",
+  borderBottom: "1rpx solid #f1f5f9",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center"
+};
 
 function ActionBtn({ onClick, text, active, danger, loading }) {
   return (

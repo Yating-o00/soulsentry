@@ -251,7 +251,7 @@ export default function MultiTaskShareCard({ tasks, open, onClose }) {
                            <div className="absolute inset-0 bg-black/20" />
                         </div>
                     ) : (
-                        <div className="h-40 w-full bg-gradient-to-br from-[#384877] to-[#3b5aa2]" />
+                        <div className="h-40 w-full bg-[#384877]" />
                     )}
                     
                     <div className="px-8 -mt-12 relative z-10">

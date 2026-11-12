@@ -260,10 +260,10 @@ export default function Share() {
     }
   };
 
-  // 加入共有约定：双方实时共享同一条约定（区别于导入副本）
+  // 加入协作约定：双方实时共享同一条约定（区别于导入副本）
   const handleJoin = async () => {
     if (!isLoggedIn() || isDemoMode()) {
-      // 体验账号是所有人共用的占位会话，不能用来加入共有约定
+      // 体验账号是所有人共用的占位会话，不能用来加入协作约定
       const redirect = encodeURIComponent(`/pages/share/index?token=${token}`);
       Taro.navigateTo({ url: `/pages/login/index?redirect=${redirect}` });
       return;
@@ -273,7 +273,7 @@ export default function Share() {
     try {
       await post(`/public/share/${token}/join`);
       setJoinState("joined");
-      Taro.showToast({ title: "已加入共有约定", icon: "success" });
+      Taro.showToast({ title: "已加入协作约定", icon: "success" });
     } catch (err) {
       setJoinState("idle");
       // 错误已全局提示（如「这是你自己的约定」）
@@ -547,7 +547,7 @@ export default function Share() {
           <View className="ss-section-title">参与操作</View>
           {isTask && isLoggedIn() && !isDemoMode() && joinState !== "joined" && (
             <Button className="ss-btn" onClick={handleJoin} loading={joinState === "loading"}>
-              加入共有约定
+              加入协作约定
             </Button>
           )}
           {isTask && isLoggedIn() && !isDemoMode() && joinState === "joined" && (

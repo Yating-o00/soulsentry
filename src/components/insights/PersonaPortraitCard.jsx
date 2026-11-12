@@ -34,11 +34,11 @@ export default function PersonaPortraitCard({ compact = false }) {
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-slate-100 bg-gradient-to-br from-[#384877]/5 via-white to-purple-50/40 p-5 shadow-sm"
+      className="rounded-2xl border border-slate-100 bg-[#384877]/5 via-white to-purple-50/40 p-5 shadow-sm"
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] flex items-center justify-center shadow-sm">
+          <div className="w-9 h-9 rounded-xl bg-[#384877] flex items-center justify-center shadow-sm">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
           <div>

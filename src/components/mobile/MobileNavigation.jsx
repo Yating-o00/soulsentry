@@ -56,7 +56,7 @@ export default function MobileNavigation() {
       icon: Mic, 
       label: '语音生成约定', 
       desc: '说一句话，AI 帮你生成约定',
-      iconBg: 'bg-blue-500',
+      iconBg: 'bg-stone-600',
       action: () => {
         setShowQuickActions(false);
         setShowVoiceCreate(true);
@@ -80,7 +80,7 @@ export default function MobileNavigation() {
       icon: StickyNote, 
       label: '新建心签', 
       desc: '随手记录想法与灵感',
-      iconBg: 'bg-purple-500',
+      iconBg: 'bg-stone-600',
       action: () => {
         setShowQuickActions(false);
         navigate(createPageUrl('Notes') + '?new=1');
@@ -109,7 +109,7 @@ export default function MobileNavigation() {
                 >
                   <motion.div
                     whileTap={{ scale: 0.85 }}
-                    className="h-14 w-14 rounded-2xl bg-gradient-to-br from-[#384877] to-[#3b5aa2] shadow-lg shadow-[#384877]/30 flex items-center justify-center active:shadow-xl transition-all"
+                    className="h-14 w-14 rounded-2xl bg-[#384877] shadow-sm flex items-center justify-center active:shadow-xl transition-all"
                   >
                     <Plus className="w-6 h-6 text-white" strokeWidth={2.5} />
                   </motion.div>

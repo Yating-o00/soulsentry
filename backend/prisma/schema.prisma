@@ -54,6 +54,25 @@ model User {
   vaultItems        VaultItem[]
   collabDocs        CollabDoc[]
   collabInvites     CollabInvite[]
+  companionMessages CompanionMessage[]
+}
+
+// 小助手陪伴对话：用户消息与助手回复都落库（巡检主动消息 kind=proactive），跨端/重进可读
+model CompanionMessage {
+  id        String    @id @default(cuid())
+  userId    String
+  role      String // user | assistant
+  content   String
+  kind      String    @default("chat") // chat | proactive（巡检主动沟通）
+  dedupeKey String? // 巡检消息幂等键（如 overdue:<taskId>:<date>），同键只发一次
+  meta      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([userId, dedupeKey])
 }
 
 model UserPreference {

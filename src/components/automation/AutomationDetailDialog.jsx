@@ -818,7 +818,7 @@ export default function AutomationDetailDialog({ execution: executionProp, open,
                 <Button variant="outline" className="flex-1" onClick={handleCancel}>
                   <X className="w-4 h-4 mr-1.5" />取消
                 </Button>
-                <Button className="flex-1 bg-gradient-to-r from-[#384877] to-[#3b5aa2]" onClick={handleApprove} disabled={executing}>
+                <Button className="flex-1 bg-[#384877]" onClick={handleApprove} disabled={executing}>
                   {executing ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <ArrowRight className="w-4 h-4 mr-1.5" />}
                   确认并执行
                 </Button>

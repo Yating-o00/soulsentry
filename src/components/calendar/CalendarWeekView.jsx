@@ -145,15 +145,15 @@ export default function CalendarWeekView({
         <div className="flex gap-2">
           <button 
             onClick={() => setShowInput(!showInput)}
-            className="px-4 py-2 glass-refined rounded-full text-sm text-[#0a0a0f]/60 hover:text-[#0a0a0f] transition-all flex items-center gap-2 mr-2"
+            className="px-4 py-2 rounded-full text-sm text-[#0a0a0f]/60 hover:text-[#0a0a0f] transition-all flex items-center gap-2 mr-2"
           >
             <Sparkles className="w-4 h-4" />
             {showInput ? "隐藏规划器" : "智能规划"}
           </button>
-          <button onClick={handlePrevWeek} className="w-10 h-10 rounded-full glass-refined flex items-center justify-center hover:bg-white/60 transition-colors">
+          <button onClick={handlePrevWeek} className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/60 transition-colors">
             <ChevronLeft className="w-5 h-5 text-[#0a0a0f]/60" />
           </button>
-          <button onClick={handleNextWeek} className="w-10 h-10 rounded-full glass-refined flex items-center justify-center hover:bg-white/60 transition-colors">
+          <button onClick={handleNextWeek} className="w-10 h-10 rounded-full flex items-center justify-center hover:bg-white/60 transition-colors">
             <ChevronRight className="w-5 h-5 text-[#0a0a0f]/60" />
           </button>
         </div>
@@ -168,9 +168,9 @@ export default function CalendarWeekView({
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="w-full max-w-3xl mx-auto relative group input-glow rounded-3xl transition-all duration-500 mb-8">
+            <div className="w-full max-w-3xl mx-auto relative group rounded-3xl transition-all duration-500 mb-8">
                 <div className="absolute -inset-1 bg-gradient-to-r from-[#e8d5b7]/30 to-[#6366f1]/20 rounded-3xl blur opacity-30 group-hover:opacity-50 transition duration-1000"></div>
-                <div className="relative glass-refined rounded-3xl p-2">
+                <div className="relative rounded-3xl p-2">
                     <div className="bg-white/40 rounded-2xl flex flex-col">
                         {isProcessing ? (
                             <div className="p-8 text-center text-[#0a0a0f]/70">
@@ -202,7 +202,7 @@ export default function CalendarWeekView({
                                     </div>
                                     <button 
                                         onClick={processIntent} 
-                                        className="bg-gradient-to-br from-[#0a0a0f] to-[#1e293b] text-[#f5f5f0] px-6 py-2.5 rounded-full text-sm font-medium flex items-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
+                                        className="bg-slate-900 text-[#f5f5f0] px-6 py-2.5 rounded-full text-sm font-medium flex items-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all"
                                     >
                                         <span>规划本周</span>
                                         <Sparkles className="w-4 h-4" />
@@ -227,7 +227,7 @@ export default function CalendarWeekView({
                 onDateClick && onDateClick(day.date);
             }}
             className={`
-                glass-refined rounded-2xl p-4 cursor-pointer border-2 border-transparent transition-all duration-300
+                rounded-2xl p-4 cursor-pointer border-2 border-transparent transition-all duration-300
                 hover:-translate-y-1 hover:shadow-md
                 ${day.isToday ? 'bg-[#e8d5b7]/30 border-[#e8d5b7] shadow-sm' : 'hover:border-[#e8d5b7]/30'}
                 ${selectedDayIndex === idx ? 'ring-2 ring-[#e8d5b7]' : ''}
@@ -262,7 +262,7 @@ export default function CalendarWeekView({
             { label: '差旅日', value: tasks.filter(t => t.title.includes('差旅') || t.title.includes('出差')).length, color: 'text-[#6366f1]' },
             { label: '自动任务', value: automations.length, color: 'text-[#10b981]' }
         ].map((stat, i) => (
-            <div key={i} className="glass-refined rounded-2xl p-4 text-center hover-lift">
+            <div key={i} className="rounded-2xl p-4 text-center">
                 <div className={`text-3xl font-serif mb-1 ${stat.color}`}>{stat.value}</div>
                 <div className="text-xs text-[#0a0a0f]/50 uppercase tracking-wider">{stat.label}</div>
             </div>
@@ -276,7 +276,7 @@ export default function CalendarWeekView({
                 <h3 className="text-2xl font-serif font-light text-[#0a0a0f] mb-1">全设备协同策略</h3>
                 <p className="text-sm text-[#0a0a0f]/50">基于周情境的设备分工与接力</p>
             </div>
-            <span className="px-3 py-1 glass-refined rounded-full text-xs text-[#0a0a0f]/60 border border-[#e8d5b7]/20 flex items-center">
+            <span className="px-3 py-1 rounded-full text-xs text-[#0a0a0f]/60 border border-[#e8d5b7]/20 flex items-center">
                 <span className="w-1.5 h-1.5 bg-[#10b981] rounded-full inline-block mr-1.5 animate-pulse"></span>
                 跨设备同步正常
             </span>
@@ -291,7 +291,7 @@ export default function CalendarWeekView({
                         key={key}
                         onClick={() => setSelectedDevice(key)}
                         className={`
-                            glass-refined rounded-2xl p-5 text-center cursor-pointer transition-all duration-500 border-2
+                            rounded-2xl p-5 text-center cursor-pointer transition-all duration-500 border-2
                             hover:-translate-y-1 hover:shadow-lg
                             ${isActive 
                                 ? 'border-[#e8d5b7] bg-[#e8d5b7]/15 shadow-md' 
@@ -299,7 +299,7 @@ export default function CalendarWeekView({
                             }
                         `}
                     >
-                        <div className="w-12 h-12 mx-auto mb-3 bg-gradient-to-br from-[#0a0a0f] to-[#1e293b] rounded-2xl flex items-center justify-center text-[#f5f5f0] shadow-lg">
+                        <div className="w-12 h-12 mx-auto mb-3 bg-slate-900 rounded-2xl flex items-center justify-center text-[#f5f5f0] shadow-lg">
                             <Icon className="w-6 h-6" />
                         </div>
                         <h4 className="font-medium text-[#0a0a0f] text-sm mb-1">{config.name}</h4>
@@ -322,7 +322,7 @@ export default function CalendarWeekView({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="glass-refined rounded-2xl p-6"
+                className="rounded-2xl p-6"
             >
                 <div className="flex justify-between items-start mb-6">
                     <div>
@@ -370,7 +370,7 @@ export default function CalendarWeekView({
 
         <div className="space-y-4">
             {days.map((day, idx) => (
-                <div key={idx} className="glass-refined rounded-2xl overflow-hidden border border-white/60">
+                <div key={idx} className="rounded-2xl overflow-hidden border border-white/60">
                     <div className="p-4 bg-white/20 flex items-center justify-between cursor-pointer hover:bg-white/40 transition-colors">
                         <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-full ${day.tasks.length > 0 ? 'bg-[#e8d5b7]/30' : 'bg-[#0a0a0f]/5'} flex items-center justify-center text-[#0a0a0f] font-serif`}>
@@ -434,7 +434,7 @@ export default function CalendarWeekView({
             {automations.map((auto, idx) => {
                 const Icon = auto.icon;
                 return (
-                    <div key={idx} className="glass-refined rounded-2xl p-5 border border-white/60 hover-lift group">
+                    <div key={idx} className="rounded-2xl p-5 border border-white/60 group">
                         <div className="flex items-start justify-between mb-3">
                             <div className="flex items-center gap-3">
                                 <span className="p-2 bg-[#0a0a0f]/5 rounded-lg">
@@ -467,13 +467,13 @@ export default function CalendarWeekView({
       </div>
 
       {/* Commitments Overview */}
-      <div className="glass-refined rounded-3xl p-8 border border-[#e8d5b7]/20 relative overflow-hidden">
+      <div className="rounded-3xl p-8 border border-[#e8d5b7]/20 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-[#e8d5b7]/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
         
         <h3 className="text-2xl font-serif font-light text-[#0a0a0f] mb-6 relative z-10">本周核心约定</h3>
         
         <div className="grid md:grid-cols-3 gap-6 relative z-10">
-            <div className="glass-refined rounded-2xl p-6 border-t-4 border-[#6366f1] hover-lift">
+            <div className="rounded-2xl p-6 border-t-4 border-[#6366f1]">
                 <h4 className="font-serif text-lg text-[#0a0a0f] mb-2">商务核心</h4>
                 <p className="text-sm text-[#0a0a0f]/60 mb-4 leading-relaxed">深圳客户拜访 · 北京行业峰会</p>
                 <div className="flex items-center justify-between">
@@ -483,7 +483,7 @@ export default function CalendarWeekView({
                     </div>
                 </div>
             </div>
-            <div className="glass-refined rounded-2xl p-6 border-t-4 border-[#e8d5b7] hover-lift">
+            <div className="rounded-2xl p-6 border-t-4 border-[#e8d5b7]">
                 <h4 className="font-serif text-lg text-[#0a0a0f] mb-2">深度工作</h4>
                 <p className="text-sm text-[#0a0a0f]/60 mb-4 leading-relaxed">周一至周五上午 · 专注研发</p>
                 <div className="flex items-center justify-between">
@@ -493,7 +493,7 @@ export default function CalendarWeekView({
                     </div>
                 </div>
             </div>
-            <div className="glass-refined rounded-2xl p-6 border-t-4 border-[#10b981] hover-lift">
+            <div className="rounded-2xl p-6 border-t-4 border-[#10b981]">
                 <h4 className="font-serif text-lg text-[#0a0a0f] mb-2">身心平衡</h4>
                 <p className="text-sm text-[#0a0a0f]/60 mb-4 leading-relaxed">周末家庭时光 · 数字排毒</p>
                 <div className="flex items-center justify-between">

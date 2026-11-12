@@ -79,7 +79,7 @@ export default function HorizonProgressBadge({ task, subtasks = [] }) {
       </div>
       <div className="h-1.5 w-full bg-stone-100 rounded-full overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-[#384877] to-[#3b5aa2] transition-all duration-500"
+          className="h-full bg-[#384877] transition-all duration-500"
           style={{ width: `${progress}%` }}
         />
       </div>

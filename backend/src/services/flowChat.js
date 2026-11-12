@@ -3,6 +3,7 @@ import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
+import { readAttachmentText } from "./readAttachment.js";
 import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, resolvePlanAdjustments, rebuildPatternsFromChildren, buildFallbackPlan } from "./planCommitment.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
@@ -716,7 +717,13 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           parts.push(`图片「${name}」（内容未能识别）`);
         }
       } else {
-        parts.push(`文件「${name}」（${type || "未知类型"}）`);
+        // 文件附件：提取文本内容注入对话（pdf/docx/xlsx/txt/csv 等），让 Agent 能真正读到
+        try {
+          const text = await readAttachmentText(a);
+          parts.push(text ? text.slice(0, 1500) : `文件「${name}」（${type || "未知类型"}，内容暂未能读取）`);
+        } catch {
+          parts.push(`文件「${name}」（内容未能读取）`);
+        }
       }
     }
     if (parts.length) attachmentCtx = `\n\n用户随本条消息附上了：\n- ${parts.join("\n- ")}`;

@@ -5,9 +5,7 @@ import { renderPptHtml, savePptHtml } from "../lib/renderPpt.js";
 import { detectReportCategory, renderReportHtml, researchSystemPrompt } from "../lib/reportRender.js";
 import { runBrowserAgent } from "./browserAgent.js";
 import { env } from "../config/env.js";
-import pdfParse from "pdf-parse";
-import mammoth from "mammoth";
-import * as XLSX from "xlsx";
+import { extractFileText } from "./readAttachment.js";
 
 export const AUTOMATION_EXECUTE_COSTS = {
   plan: 5,
@@ -34,57 +32,6 @@ const SUPPORTED_TYPES = [
   "ppt_doc",
   "browser_task",
 ];
-
-const MAX_ATTACHMENT_CHARS = 8000;
-
-async function extractFileText(fileUrl, fileName) {
-  try {
-    const relativePath = fileUrl?.startsWith("/") ? fileUrl.slice(1) : fileUrl;
-    if (!relativePath) return null;
-    const filePath = path.resolve(process.cwd(), relativePath);
-    if (!fs.existsSync(filePath)) return null;
-
-    const ext = path.extname(fileName || filePath).toLowerCase();
-    const stat = fs.statSync(filePath);
-    if (stat.size > 20 * 1024 * 1024) {
-      return `【${fileName}】文件过大，仅作为背景参考`;
-    }
-
-    let text = "";
-    if ([".txt", ".md", ".csv", ".json", ".js", ".jsx", ".ts", ".tsx", ".log"].includes(ext)) {
-      text = fs.readFileSync(filePath, "utf8");
-    } else if ([".html", ".htm"].includes(ext)) {
-      text = fs.readFileSync(filePath, "utf8").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    } else if (ext === ".pdf") {
-      const buffer = fs.readFileSync(filePath);
-      const parsed = await pdfParse(buffer);
-      text = parsed.text || "";
-    } else if (ext === ".docx") {
-      const buffer = fs.readFileSync(filePath);
-      const result = await mammoth.extractRawText({ buffer });
-      text = result.value || "";
-    } else if ([".xlsx", ".xls"].includes(ext)) {
-      const buffer = fs.readFileSync(filePath);
-      const workbook = XLSX.read(buffer, { type: "buffer" });
-      text = workbook.SheetNames.map((name) => {
-        const sheet = workbook.Sheets[name];
-        return `【工作表：${name}】\n${XLSX.utils.sheet_to_csv(sheet)}`;
-      }).join("\n\n");
-    } else {
-      return `【${fileName}】不支持的文件类型，仅作为背景参考`;
-    }
-
-    text = text.replace(/\s+/g, " ").trim();
-    if (text.length > MAX_ATTACHMENT_CHARS) {
-      text = text.slice(0, MAX_ATTACHMENT_CHARS) + `\n...（已截断，原文件共 ${stat.size} 字节）`;
-    }
-    if (!text) return `【${fileName}】文件内容为空，仅作为背景参考`;
-    return `【${fileName}】\n${text}`;
-  } catch (err) {
-    console.error("extractFileText error:", err?.message || err);
-    return `【${fileName}】文件内容提取失败，仅作为背景参考`;
-  }
-}
 
 async function buildAttachmentContext(execution) {
   const attached = execution.aiParsedResult?.attached_files;

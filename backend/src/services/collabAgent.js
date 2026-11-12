@@ -3,8 +3,9 @@
 // 中性呈现观点、不评判对错、不替人承诺；输出草案必须人工确认后才生效。
 import { prisma } from "../lib/prisma.js";
 import { callKimiChat, invokeKimiWebSearch, parseModelJson } from "../lib/kimi.js";
+import { readAttachmentText } from "./readAttachment.js";
 import { assertAICredits, chargeAICredits } from "./aiCredits.js";
-import { AI_CALL_COSTS } from "../routes/functions.js";
+import { AI_CALL_COSTS } from "../config/aiCosts.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "./collabSpace.js";
 import { syncParentProgress } from "../routes/tasks.js";
 import { notifyTaskParties } from "./taskSharing.js";
@@ -267,6 +268,13 @@ export function formatSpaceData(task, snapshot) {
         ? ` [附件:${comment.attachments.map((a) => a?.name || a?.type || "文件").join("、")}]`
         : "";
       lines.push(`- ${who}：${String(comment.content).slice(0, 200)}${mark}${atts}`);
+      // 附件：已提取的内容注入上下文（图片 OCR/描述、文档文本），Agent 据此真正读到附件
+      for (const att of (comment.attachments || [])) {
+        if (att?.type === "option_card") continue;
+        if (att?.extracted_text) {
+          lines.push(`  [附件「${att.name || "文件"}」内容] ${String(att.extracted_text).slice(0, 1200)}`);
+        }
+      }
       // 选项卡：把候选与成员的采纳/放弃选择注入上下文，Agent 据此推进「选定→提醒自行预订」
       for (const att of (comment.attachments || [])) {
         if (att?.type !== "option_card") continue;
@@ -293,6 +301,43 @@ export function formatSpaceData(task, snapshot) {
 }
 
 // ── 空间数据快照 ──
+// 讨论附件内容提取：把读取结果（图片 OCR/描述、文档文本）写回 comment.attachments 持久缓存，
+// 之后每次组装上下文直接使用，不重复调视觉/解析。每次最多处理 8 个附件，控制单次运行耗时。
+const ATTACH_HYDRATE_LIMIT = 8;
+const ATTACH_TEXT_MAX = 2000;
+
+async function hydrateAttachmentTexts(comments) {
+  let budget = ATTACH_HYDRATE_LIMIT;
+  const recent = Array.isArray(comments) ? comments.slice(-60) : [];
+  for (const comment of recent) {
+    if (budget <= 0) break;
+    const atts = Array.isArray(comment.attachments) ? comment.attachments : null;
+    if (!atts || atts.length === 0) continue;
+    let changed = false;
+    const nextAtts = [];
+    for (const att of atts) {
+      if (budget <= 0 || !att || att.type === "option_card" || att.extracted_text) {
+        nextAtts.push(att);
+        continue;
+      }
+      const text = await readAttachmentText(att);
+      budget -= 1;
+      if (text) {
+        nextAtts.push({ ...att, extracted_text: text.slice(0, ATTACH_TEXT_MAX) });
+        changed = true;
+      } else {
+        // 读取失败不持久化（下次运行重试，受 budget 限制不会失控）
+        nextAtts.push(att);
+      }
+    }
+    if (changed) {
+      comment.attachments = nextAtts;
+      prisma.comment.update({ where: { id: comment.id }, data: { attachments: nextAtts } })
+        .catch((e) => console.warn("[collabAgent] 附件内容写回失败:", e?.message || e));
+    }
+  }
+}
+
 export async function loadSpaceSnapshot(task) {
   const [subtasks, comments, nodes, docs] = await Promise.all([
     collectSubtasks(task.id),
@@ -310,6 +355,7 @@ export async function loadSpaceSnapshot(task) {
       orderBy: { updatedAt: "desc" }
     })
   ]);
+  await hydrateAttachmentTexts(comments);
   return { subtasks, comments, nodes, docs };
 }
 

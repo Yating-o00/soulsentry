@@ -55,6 +55,16 @@ server {
 - 如果后续给裸域名单独申请证书，证书路径应改成裸域名自己的 `live` 目录。
 - 如果当前浏览器里裸域名已经能正常打开，而你也接受裸域名直接服务，那可以暂时不改；但长期推荐统一跳转到 `www`。
 
+> ⚠️ `client_max_body_size 50M` 必须同时加在 **`www.xinzhan-soulsentry.cn` 的 443 server 块**（实际服务 `/api`、`/uploads` 的块）里，不能只加在裸域名跳转块。缺了它，nginx 默认 1MB 上限会在请求到达 Node 之前直接返回 `413 Request Entity Too Large` HTML 错误页，表现为"附件上传失败：服务端返回非 JSON 响应（413）"。修复：
+>
+> ```bash
+> sudo grep -n 'client_max_body_size' /etc/nginx/sites-enabled/default  # 确认 www 块里有没有
+> # 在 www 的 443 server{} 内补一行：client_max_body_size 50M;
+> sudo nginx -t && sudo systemctl reload nginx
+> ```
+>
+> 验证：不带 token 上传一个 2MB 文件到 `/api/uploads`，应返回 401 JSON（到达后端）而不是 413 HTML。后端 multer 上限同为 50MB（`backend/src/routes/uploads.js`），两边保持一致。
+
 ## 3. 国内配置与持久化
 
 ### 3.1 持久化目录

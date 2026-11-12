@@ -89,6 +89,10 @@ export default function CollabDetail() {
   // 成员管理（仅发起人）
   const [memberBusy, setMemberBusy] = useState("");
 
+  // 邀请伙伴：创建邀请后生成小程序内转发卡片（受邀者在小程序内同账号接受，避免绑到体验账号）
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteShare, setInviteShare] = useState(null); // { code, name }
+
   const meRequestedRef = useRef(false);
 
   const fetchSummary = async ({ silent = true } = {}) => {
@@ -422,6 +426,34 @@ export default function CollabDetail() {
     });
   };
 
+  // ── 邀请伙伴：创建邀请 → 转发小程序卡片（受邀者在小程序落地页登录本人账号后接受）──
+  const inviteMember = () => {
+    if (inviteBusy) return;
+    Taro.showModal({
+      title: "邀请伙伴",
+      editable: true,
+      placeholderText: "对方的称呼，如：小李",
+      success: async (r) => {
+        const name = (r.content || "").trim();
+        if (!r.confirm || !name) return;
+        setInviteBusy(true);
+        try {
+          const res = await post(`/collab/${taskId}/invites`, { invitee_name: name, subtask_ids: [] });
+          const code = res?.invite?.code;
+          if (code) {
+            setInviteShare({ code, name });
+          } else {
+            Taro.showToast({ title: "邀请创建失败，请重试", icon: "none" });
+          }
+        } catch (_err) {
+          // handled globally
+        } finally {
+          setInviteBusy(false);
+        }
+      },
+    });
+  };
+
   // ── 子约定管理（仅发起人：修改标题 / 删除）──
   const manageSubtask = (sub) => {
     if (!isOwner || busyId) return;
@@ -679,11 +711,40 @@ export default function CollabDetail() {
                 </View>
               </View>
 
-              {/* 成员：发起人可移除成员 */}
+              {/* 成员：发起人可移除成员；任何成员可邀请伙伴 */}
               <View className="ss-card">
-                <View className="ss-section-title" style={{ marginTop: 0 }}>
-                  成员 · {members.length || 1}{isOwner ? "（你是发起人，可管理成员与子约定）" : ""}
+                <View style={{ display: "flex", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <View className="ss-section-title" style={{ marginTop: 0 }}>
+                    成员 · {members.length || 1}{isOwner ? "（你是发起人，可管理成员与子约定）" : ""}
+                  </View>
+                  <Text
+                    onClick={inviteMember}
+                    style={{ fontSize: "22rpx", color: "#384877", padding: "4rpx 8rpx", opacity: inviteBusy ? 0.5 : 1 }}
+                  >
+                    ＋ 邀请伙伴
+                  </Text>
                 </View>
+                {inviteShare && (
+                  <View style={{ background: "#eef2fb", border: "1rpx solid #c9d5ef", borderRadius: "12rpx", padding: "16rpx 20rpx", marginBottom: "12rpx" }}>
+                    <Text style={{ display: "block", fontSize: "24rpx", color: "#384877", lineHeight: "36rpx" }}>
+                      给「{inviteShare.name}」的邀请已创建。转发小程序卡片给 TA，TA 在小程序里登录本人账号后接受，约定就会出现在 TA 的列表里。
+                    </Text>
+                    <View style={{ display: "flex", flexDirection: "row", gap: "16rpx", marginTop: "12rpx" }}>
+                      <Button
+                        className="ss-btn ss-btn-sm"
+                        openType="share"
+                        data-share-title={`邀请你加入协同约定「${String(task.title || "").slice(0, 16)}」`}
+                        data-share-path={`pages/invite/index?code=${inviteShare.code}`}
+                        style={{ flex: 1 }}
+                      >
+                        转发邀请卡片
+                      </Button>
+                      <Button className="ss-btn ss-btn-sm ss-btn-plain" style={{ flex: 1 }} onClick={() => setInviteShare(null)}>
+                        完成
+                      </Button>
+                    </View>
+                  </View>
+                )}
                 {members.map((m) => {
                   const isSelf = Boolean(me?.id && m.user_id === me.id);
                   const removable = isOwner && m.role !== "owner" && !isSelf;

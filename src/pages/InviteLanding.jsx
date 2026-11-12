@@ -25,6 +25,7 @@ export default function InviteLanding() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loggedIn, setLoggedIn] = useState(false);
+  const [accountLabel, setAccountLabel] = useState("");
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [suggestText, setSuggestText] = useState("");
   const [responding, setResponding] = useState(false);
@@ -54,7 +55,14 @@ export default function InviteLanding() {
     load();
     // 登录态探测（裸 fetch，避免 httpClient 对匿名 401 弹错误提示）
     fetch("/api/auth/me", { headers: { Authorization: `Bearer ${localStorage.getItem("soulsentry_access_token") || ""}` } })
-      .then((r) => setLoggedIn(r.ok))
+      .then(async (r) => {
+        setLoggedIn(r.ok);
+        if (r.ok) {
+          const u = await r.json().catch(() => null);
+          const user = u?.user || u;
+          setAccountLabel(user?.display_name || user?.email || user?.phone || "");
+        }
+      })
       .catch(() => setLoggedIn(false));
   }, [code]);
 
@@ -218,9 +226,15 @@ export default function InviteLanding() {
         {/* 回应区 */}
         <section className="rounded-2xl border p-5" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
           {viewer?.is_member && invite.status === "accepted" ? (
-            <p className="text-center text-[13px] py-1" style={{ color: "#315c43" }}>
-              <CheckCircle2 className="inline h-4 w-4 mr-1 -mt-0.5" /> 你已是协同成员，待办已认领。去约定里继续推进吧～
-            </p>
+            <div className="text-center text-[13px] py-1" style={{ color: "#315c43" }}>
+              <p>
+                <CheckCircle2 className="inline h-4 w-4 mr-1 -mt-0.5" /> 你已是协同成员，待办已认领。去约定里继续推进吧～
+              </p>
+              <p className="mt-2 text-[11px] leading-5" style={{ color: "#8a867e" }}>
+                本次接受使用的账号是{accountLabel ? `「${accountLabel}」` : "当前登录账号"}。
+                打开心栈小程序时请登录同一账号，约定列表里才能看到这条协同约定。
+              </p>
+            </div>
           ) : (
             <>
               <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>你的回应</h2>

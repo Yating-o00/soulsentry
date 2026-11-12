@@ -8,6 +8,7 @@ export default {
     "pages/lockscreen/index",
     "pages/task-create/index",
     "pages/collab-detail/index",
+    "pages/invite/index",
     "pages/assistant/index",
     "pages/notes/index",
     "pages/note-detail/index",

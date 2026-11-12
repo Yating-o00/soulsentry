@@ -402,12 +402,27 @@ tasksRouter.get("/", async (req, res) => {
     }
   }
 
-  const tasks = await prisma.task.findMany({
-    where,
-    orderBy,
-    take: Number.isFinite(limit) ? limit : 100,
-    include: needSharedInclude ? { user: true, members: true } : undefined
-  });
+  // 共享约定不参与条数截断：本人约定按 limit 截取，我作为成员的约定单独查全量再合并。
+  // 否则约定多的成员（>300 条）会在列表里看不到较早加入的协同/共有约定（接受邀请后"消失了"）
+  let tasks;
+  if (sharedIds.length > 0) {
+    const includeShared = { user: true, members: true };
+    const ownWhere = { ...where, OR: [{ userId: req.user.id }] };
+    const sharedWhere = { ...where, OR: [{ id: { in: sharedIds } }, { parentTaskId: { in: sharedIds } }] };
+    const [ownTasks, sharedTasks] = await Promise.all([
+      prisma.task.findMany({ where: ownWhere, orderBy, take: Number.isFinite(limit) ? limit : 100, include: includeShared }),
+      prisma.task.findMany({ where: sharedWhere, orderBy, take: 300, include: includeShared })
+    ]);
+    const ownIds = new Set(ownTasks.map((t) => t.id));
+    tasks = [...ownTasks, ...sharedTasks.filter((t) => !ownIds.has(t.id))];
+  } else {
+    tasks = await prisma.task.findMany({
+      where,
+      orderBy,
+      take: Number.isFinite(limit) ? limit : 100,
+      include: needSharedInclude ? { user: true, members: true } : undefined
+    });
+  }
 
   return res.json(tasks.map((task) => {
     const role = task.userId === req.user.id ? "owner" : (taskAccess(task, req.user.id) || "member");

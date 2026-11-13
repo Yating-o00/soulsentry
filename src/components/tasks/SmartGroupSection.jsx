@@ -2,6 +2,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 import LifeTaskCard from "./LifeTaskCard";
 import CollabTaskCard from "./CollabTaskCard";
+import CollapsibleTaskCard from "./CollapsibleTaskCard";
 import { flattenSubtasks } from "@/components/checkins/subtaskTree";
 
 /**
@@ -68,31 +69,47 @@ export default function SmartGroupSection({
       </div>
 
       <div className="flex flex-col gap-4">
-        {tasks.map((task) => task.metadata?.collab ? (
-          <CollabTaskCard key={task.id} task={task} />
-        ) : (
-          <LifeTaskCard
-            key={task.id}
-            task={task}
-            subtasks={getSubtasks(task.id)}
-            subtaskTree={flattenSubtasks(getSubtasks, task.id)}
-            commentCount={commentCountMap[task.id] || 0}
-            isSelectionMode={isSelectionMode}
-            isSelected={selectedTaskIds.includes(task.id)}
-            selectedTaskIds={selectedTaskIds}
-            onToggleSelection={(id) => onToggleSelection(id ?? task.id)}
-            onToggleSubtask={onToggleSubtask}
-            onComplete={onComplete}
-            onEdit={() => onEdit(task)}
-            onShare={() => onShare(task)}
-            onViewTab={(tab) => onViewTab(task, tab)}
-            onUpdateTask={onUpdateTask}
-            onSettleKnowledge={onSettleKnowledge}
-            onEnableCollab={onEnableCollab ? () => onEnableCollab(task) : undefined}
-            onDelete={() => onDelete && onDelete(task)}
-            autoExec={getAutoExec ? getAutoExec(task) : undefined}
-          />
-        ))}
+        {tasks.map((task) => {
+          if (task.metadata?.collab) {
+            return <CollabTaskCard key={task.id} task={task} />;
+          }
+          const fullCard = (
+            <LifeTaskCard
+              task={task}
+              subtasks={getSubtasks(task.id)}
+              subtaskTree={flattenSubtasks(getSubtasks, task.id)}
+              commentCount={commentCountMap[task.id] || 0}
+              isSelectionMode={isSelectionMode}
+              isSelected={selectedTaskIds.includes(task.id)}
+              selectedTaskIds={selectedTaskIds}
+              onToggleSelection={(id) => onToggleSelection(id ?? task.id)}
+              onToggleSubtask={onToggleSubtask}
+              onComplete={onComplete}
+              onEdit={() => onEdit(task)}
+              onShare={() => onShare(task)}
+              onViewTab={(tab) => onViewTab(task, tab)}
+              onUpdateTask={onUpdateTask}
+              onSettleKnowledge={onSettleKnowledge}
+              onEnableCollab={onEnableCollab ? () => onEnableCollab(task) : undefined}
+              onDelete={() => onDelete && onDelete(task)}
+              autoExec={getAutoExec ? getAutoExec(task) : undefined}
+            />
+          );
+          // 多选模式不做折叠（保持卡片完整可见以便勾选）；其余默认极简折叠
+          if (isSelectionMode) {
+            return <React.Fragment key={task.id}>{fullCard}</React.Fragment>;
+          }
+          return (
+            <CollapsibleTaskCard
+              key={task.id}
+              task={task}
+              onToggleDone={(t, next) => onComplete(t, next)}
+              onOpenDetail={() => onViewTab(task, null)}
+            >
+              {fullCard}
+            </CollapsibleTaskCard>
+          );
+        })}
       </div>
     </div>
   );

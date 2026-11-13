@@ -27,6 +27,7 @@ import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
 import CombineParentDialog from "../components/tasks/CombineParentDialog";
 import CollabTaskCard from "../components/tasks/CollabTaskCard";
+import CollapsibleTaskCard from "../components/tasks/CollapsibleTaskCard";
 import CollabCreateDialog from "../components/tasks/CollabCreateDialog";
 
 const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
@@ -819,9 +820,9 @@ export default function Tasks() {
           {/* Milestone Section */}
           {viewMode === 'milestone' && milestoneTasks.length > 0 &&
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {milestoneTasks.map((task) =>
-            <MilestoneCard
-              key={task.id}
+              {milestoneTasks.map((task) => {
+            const fullCard = (
+              <MilestoneCard
               task={task}
               subtasks={getSubtasks(task.id)}
               commentCount={commentCountMap[task.id] || 0}
@@ -842,7 +843,22 @@ export default function Tasks() {
               onView={() => { setSelectedTask(task); setSelectedTab(null); }}
               onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
               onReparent={handleReparent} />
-            )}
+            );
+            // 多选模式不做折叠（保持卡片完整可见以便勾选）；其余默认极简折叠
+            if (isSelectionMode) {
+              return <React.Fragment key={task.id}>{fullCard}</React.Fragment>;
+            }
+            return (
+              <CollapsibleTaskCard
+                key={task.id}
+                task={task}
+                onToggleDone={(t, next) => handleUpdateStatus(t, next ? 'completed' : 'in_progress')}
+                onOpenDetail={() => { setSelectedTask(task); setSelectedTab(null); }}
+              >
+                {fullCard}
+              </CollapsibleTaskCard>
+            );
+            })}
             </div>
           }
 
@@ -865,30 +881,45 @@ export default function Tasks() {
               <div className="flex flex-col gap-4">
                 {lifeTasks.map((task) => task.metadata?.collab ? (
                   <CollabTaskCard key={task.id} task={task} />
-                ) : (
-                  <LifeTaskCard
-                    key={task.id}
-                    task={task}
-                    subtasks={getSubtasks(task.id)}
-                    subtaskTree={flattenSubtasks(getSubtasks, task.id)}
-                    commentCount={commentCountMap[task.id] || 0}
-                    isSelectionMode={isSelectionMode}
-                    isSelected={selectedTaskIds.includes(task.id)}
-                    selectedTaskIds={selectedTaskIds}
-                    onToggleSelection={(id) => toggleSelection(id ?? task.id)}
-                    onToggleSubtask={handleToggleSubtask}
-                    onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                    onEdit={() => setEditingTask(task)}
-                    onShare={() => setSharingTask(task)}
-                    onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-                    onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
-                    onSettleKnowledge={handleSettleKnowledge}
-                    onEnableCollab={() => openEnableCollab(task)}
-                    onDelete={(t) => deleteTask(t.id)}
-                    onReparent={handleReparent}
-                    autoExec={autoExecMap[task.id]?.autoExec}
-                  />
-                ))}
+                ) : (() => {
+                  const fullCard = (
+                    <LifeTaskCard
+                      task={task}
+                      subtasks={getSubtasks(task.id)}
+                      subtaskTree={flattenSubtasks(getSubtasks, task.id)}
+                      commentCount={commentCountMap[task.id] || 0}
+                      isSelectionMode={isSelectionMode}
+                      isSelected={selectedTaskIds.includes(task.id)}
+                      selectedTaskIds={selectedTaskIds}
+                      onToggleSelection={(id) => toggleSelection(id ?? task.id)}
+                      onToggleSubtask={handleToggleSubtask}
+                      onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                      onEdit={() => setEditingTask(task)}
+                      onShare={() => setSharingTask(task)}
+                      onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                      onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                      onSettleKnowledge={handleSettleKnowledge}
+                      onEnableCollab={() => openEnableCollab(task)}
+                      onDelete={(t) => deleteTask(t.id)}
+                      onReparent={handleReparent}
+                      autoExec={autoExecMap[task.id]?.autoExec}
+                    />
+                  );
+                  // 多选模式不做折叠（保持卡片完整可见以便勾选）；其余默认极简折叠
+                  if (isSelectionMode) {
+                    return <React.Fragment key={task.id}>{fullCard}</React.Fragment>;
+                  }
+                  return (
+                    <CollapsibleTaskCard
+                      key={task.id}
+                      task={task}
+                      onToggleDone={(t, next) => handleComplete(t, allTasks, next ? 'completed' : 'pending')}
+                      onOpenDetail={() => { setSelectedTask(task); setSelectedTab(null); }}
+                    >
+                      {fullCard}
+                    </CollapsibleTaskCard>
+                  );
+                })())}
               </div>
             </div>
           }

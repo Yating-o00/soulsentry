@@ -46,6 +46,7 @@ import AutoExecutionPanel from "../components/automation/AutoExecutionPanel";
 import DeviceCollaborationModule from "../components/dashboard/DeviceCollaborationModule";
 import SpatioTemporalGuardModule from "../components/dashboard/SpatioTemporalGuardModule";
 import { isDemoUser } from "@/hooks/useTrialGate";
+import { isTaskEffectivelyCompleted, isRecurringTask } from "@/lib/taskStatus";
 import "./today-theme.css";
 import { useRevealRoot } from "../components/dashboard/useReveal";
 import { phaseOf } from "@/lib/todayPhase";
@@ -157,7 +158,7 @@ export default function Dashboard() {
   // 2. The END time of the task has passed (or start if no end)
   // 3. We are NOT currently within the valid date range (because if we are in range, it's a "Today" task, not overdue)
   const overdueTasks = React.useMemo(() => rootTasks.filter(t => {
-    if (t.status !== 'pending') return false;
+    if (isTaskEffectivelyCompleted(t)) return false;
     if (!t.reminder_time) return false;
 
     const now = new Date();
@@ -173,18 +174,18 @@ export default function Dashboard() {
     return isPast(end) && !isToday(end);
   }), [rootTasks]);
 
-  const pendingTasks = React.useMemo(() => rootTasks.filter(t => t.status === 'pending'), [rootTasks]);
-  
-  const completedToday = React.useMemo(() => rootTasks.filter(t => 
-    t.status === 'completed' && 
-    t.completed_at && 
-    isToday(parseISO(t.completed_at))
+  const pendingTasks = React.useMemo(() => rootTasks.filter(t => !isTaskEffectivelyCompleted(t)), [rootTasks]);
+
+  // 今日已完成：普通约定按 completed_at；重复/打卡约定勾选后 status 保持活跃、只记 done_today（打卡不杀系列）
+  const completedToday = React.useMemo(() => rootTasks.filter(t =>
+    (t.status === 'completed' && t.completed_at && isToday(parseISO(t.completed_at))) ||
+    (isRecurringTask(t) && t.done_today)
   ), [rootTasks]);
 
   // Stats - 进度条 = 今天实际完成数 / (今天待办 + 今天已完成)
   // 与"今日已完成"卡片口径保持一致，避免被 processedTasks 强制 pending 污染
   const completionRate = React.useMemo(() => {
-    const pendingToday = todayTasks.filter(t => t.status === 'pending').length;
+    const pendingToday = todayTasks.filter(t => !isTaskEffectivelyCompleted(t)).length;
     const doneToday = completedToday.length;
     const total = pendingToday + doneToday;
     return total > 0 ? Math.round((doneToday / total) * 100) : 0;
@@ -202,14 +203,14 @@ export default function Dashboard() {
       notesList.filter(n => n.created_date && isToday(parseISO(n.created_date))).length;
     return {
       kept: keptToday,
-      watching: todayTasks.filter(t => t.status === 'pending').length,
+      watching: todayTasks.filter(t => !isTaskEffectivelyCompleted(t)).length,
       notes: notesList.length,
     };
   }, [activeTasks, notesList, todayTasks]);
 
   const whisper = React.useMemo(() => {
     const upcoming = todayTasks
-      .filter(t => t.status === 'pending' && t.reminder_time)
+      .filter(t => !isTaskEffectivelyCompleted(t) && t.reminder_time)
       .sort((a, b) => new Date(a.reminder_time) - new Date(b.reminder_time));
     if (upcoming.length > 0) {
       return `今天记得：「${upcoming[0].title}」。除此之外，其余的都已被妥善记住，你只管从容去过。`;
@@ -373,10 +374,10 @@ export default function Dashboard() {
               onClick={() => setTaskListDialog({
                 open: true,
                 title: "今日待办",
-                tasks: todayTasks.filter(t => t.status === 'pending')
+                tasks: todayTasks.filter(t => !isTaskEffectivelyCompleted(t))
               })}
             >
-              {todayTasks.filter(t => t.status === 'pending').length}
+              {todayTasks.filter(t => !isTaskEffectivelyCompleted(t)).length}
             </div>
             <div className="flex items-center gap-2 md:gap-3 text-blue-100 text-xs md:text-sm">
               <Progress 

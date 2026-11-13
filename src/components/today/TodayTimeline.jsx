@@ -2,6 +2,7 @@ import React from 'react';
 import { format, parseISO, subDays, startOfDay, endOfDay, isWithinInterval, isSameDay } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { isTaskEffectivelyCompleted } from '@/lib/taskStatus';
 
 const MAX_OFFSET = 7; // 最多回溯 7 天
 
@@ -50,7 +51,7 @@ export default function TodayTimeline({ tasks, notes, nowLabel, onToggle, getSub
           time: timeLabel,
           title: t.title,
           tag: t.category ? `约定 · ${t.category}` : '约定',
-          done: doneOnDay || t.status === 'completed',
+          done: doneOnDay || isTaskEffectivelyCompleted(t),
         });
       }
       for (const n of allNotes) {

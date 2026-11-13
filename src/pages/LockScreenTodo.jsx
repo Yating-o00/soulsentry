@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
+import { httpRequest } from "@/api/httpClient";
 import { toast } from "sonner";
 import { Download, Check } from "lucide-react";
 import {
   WALLPAPER_STYLES,
   buildLockscreenItems,
   isItemDone,
+  isCheckinItem,
   createWallpaperCanvas,
 } from "@/lib/lockscreenWallpaper";
 
@@ -33,6 +35,34 @@ export default function LockScreenTodo() {
   const toggleItem = async (task) => {
     const recurring = task.repeat_rule && task.repeat_rule !== "none";
     const done = isItemDone(task);
+
+    // 打卡约定：勾选 = 一次赴约打卡（累计次数 + 当日已打卡），不是把约定标成完成；
+    // 打卡一天一次、不可撤销，已打卡时再点只提示
+    if (isCheckinItem(task)) {
+      if (done) {
+        toast("今日已赴约，明天再打卡～");
+        return;
+      }
+      queryClient.setQueriesData({ queryKey: ["tasks"] }, (old) =>
+        Array.isArray(old)
+          ? old.map((t) => (t.id === task.id ? { ...t, done_today: true } : t))
+          : old
+      );
+      try {
+        await httpRequest(`/api/tasks/${task.id}/checkins`, { method: "POST", body: {} });
+        toast.success("✓ 今日已赴约，壁纸已更新");
+      } catch (e) {
+        if (e?.status === 409) {
+          // 今日已打卡（其他端打的）：状态本就一致，无需回滚
+          toast("今日已赴约，明天再打卡～");
+        } else {
+          toast.error(e?.message || "打卡失败，请再试一次");
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        }
+      }
+      return;
+    }
+
     const nextStatus = done ? "pending" : "completed";
     const completedAt = done ? null : new Date().toISOString();
 

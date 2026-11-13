@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import Taro, { useDidShow } from "@tarojs/taro";
 import { View, Text, Image, ScrollView } from "@tarojs/components";
-import { get, patch } from "@/utils/api";
+import { get, patch, post } from "@/utils/api";
 import { getToken } from "@/utils/auth";
 import { ensureDemoSession } from "@/utils/demo";
 import theme from "@/components/tasks/theme";
@@ -9,6 +9,7 @@ import {
   WALLPAPER_STYLES,
   buildLockscreenItems,
   isItemDone,
+  isCheckinItem,
   generateWallpaper,
 } from "@/lib/lockscreenWallpaper";
 
@@ -59,10 +60,33 @@ export default function Lockscreen() {
     });
   }, [items, styleKey, loading, isGuest]);
 
-  // 勾选 / 取消勾选：重复约定切换 done_today（打卡不杀系列），普通约定切换 status
+  // 勾选 / 取消勾选：打卡约定勾选 = 一次赴约打卡（一天一次、不可撤销）；
+  // 重复约定切换 done_today（打卡不杀系列），普通约定切换 status
   const toggle = (task) => {
     const recurring = task.repeat_rule && task.repeat_rule !== "none";
     const done = isItemDone(task);
+
+    if (isCheckinItem(task)) {
+      if (done) {
+        Taro.showToast({ title: "今日已赴约，明天再打卡～", icon: "none" });
+        return;
+      }
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? { ...t, done_today: true } : t))
+      );
+      // silent：打卡失败/重复的提示在这里自己弹，避免全局拦截重复弹
+      post(`/tasks/${task.id}/checkins`, {}, { silent: true }).catch((err) => {
+        if (/今日已赴约|ALREADY_CHECKED_TODAY/.test(err?.message || "")) {
+          // 今日已在其他端打过卡：状态一致，无需回滚
+          Taro.showToast({ title: "今日已赴约，明天再打卡～", icon: "none" });
+        } else {
+          setTasks((prev) => prev.map((t) => (t.id === task.id ? task : t)));
+          Taro.showToast({ title: err?.message || "打卡失败，请再试一次", icon: "none" });
+        }
+      });
+      return;
+    }
+
     const nextStatus = done ? "pending" : "completed";
     const completedAt = done ? null : new Date().toISOString();
     setTasks((prev) =>

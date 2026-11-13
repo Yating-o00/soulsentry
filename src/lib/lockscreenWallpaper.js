@@ -67,9 +67,17 @@ export const beijingDay = (t) =>
 
 const isRecurring = (t) => !!t?.repeat_rule && t.repeat_rule !== "none";
 
-// 重复约定「打卡不杀系列」：完成只看当天 done_today；普通约定看 status
-export const isItemDone = (t) =>
-  isRecurring(t) ? !!t.done_today : t?.status === "completed" || t?.status === "done";
+// 打卡约定（category=checkin）：勾选 = 一次赴约打卡，完成看当日 done_today（服务端由
+// recurrence_last_done 算出；固定窗口挑战打卡不写该字段，则回退看 status）
+export const isCheckinItem = (t) => t?.category === "checkin";
+
+// 重复约定「打卡不杀系列」：完成只看当天 done_today；打卡约定同口径；普通约定看 status
+export const isItemDone = (t) => {
+  if (isRecurring(t) || isCheckinItem(t)) {
+    return !!t?.done_today || t?.status === "completed" || t?.status === "done";
+  }
+  return t?.status === "completed" || t?.status === "done";
+};
 
 /**
  * 从全量约定（parent_task_id=all）挑出锁屏壁纸条目：

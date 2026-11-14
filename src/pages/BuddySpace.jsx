@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Check, Footprints, GraduationCap, Loader2 } from "lucide-react";
+import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
@@ -10,10 +10,12 @@ import { cn } from "@/lib/utils";
 import Orb from "@/components/buddy/Orb";
 import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy } from "@/lib/buddies";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
+import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
 
 /**
- * 搭子空间（一期 · 简版）：搭子头（人格化问候）+ 项目约定卡（认领即立的项目，真实数据可打卡/勾选）
- * + 领域档案摘要 + 板块预告（完整板块随二期上线）+ 毕业仪式。
+ * 搭子空间（二期）：配置驱动的空间脚手架——每颗搭子一套板块（buddy.sections），
+ * 同一套底座渲染：首页板块（计划 + 项目约定，真实数据）/ 协同（接入协同约定）/
+ * 画像（领域档案 + 陪伴统计）/ 领域特色板块（清单、习惯链）/ 其余板块预告。
  * 领域档案隔离：这里只读取并展示本搭子的档案，不看其他搭子的记忆。
  */
 export default function BuddySpace() {
@@ -31,7 +33,6 @@ export default function BuddySpace() {
   const persona = mine?.persona || DEFAULT_PERSONA;
   const profile = mine?.buddies?.[buddyId];
 
-  // 项目约定（认领时服务端创建）：从约定列表里取真实数据
   const { data: allTasks = [] } = useQuery({
     queryKey: ["tasks", "with-subs"],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-reminder_time", 300),
@@ -42,8 +43,10 @@ export default function BuddySpace() {
     [allTasks, profile]
   );
 
+  const [tab, setTab] = useState(null); // null → 取 sections[0]
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [graduating, setGraduating] = useState(false);
+  const [collabOpen, setCollabOpen] = useState(false);
 
   if (!buddy) {
     return (
@@ -76,6 +79,9 @@ export default function BuddySpace() {
     );
   }
 
+  const sections = buddy.sections;
+  const activeTab = tab && sections.includes(tab) ? tab : sections[0];
+
   const graduate = async () => {
     if (graduating) return;
     setGraduating(true);
@@ -91,11 +97,11 @@ export default function BuddySpace() {
   };
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-6 md:py-10">
+    <div className="max-w-xl mx-auto px-4 pt-6 md:pt-10 pb-10">
       {/* 页眉：搭子头 + 人格化问候 */}
       <header className="flex items-center gap-3">
         <button
-          onClick={() => navigate(createPageUrl("BuddyStore"))}
+          onClick={() => navigate(createPageUrl("Dashboard"))}
           aria-label="返回"
           className="flex h-9 w-9 items-center justify-center rounded-full text-stone-500 transition-colors hover:bg-stone-100"
         >
@@ -108,69 +114,67 @@ export default function BuddySpace() {
             {buddy.greeting[persona] || buddy.greeting.gentle}
           </p>
         </div>
+        <button
+          onClick={() => setGraduateOpen(true)}
+          title="项目走完了，举行毕业仪式"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
+        >
+          <GraduationCap className="w-5 h-5" />
+        </button>
       </header>
 
-      {/* 计划卡 */}
-      {profile?.plan_title && (
-        <section className="mt-6 rounded-2xl bg-stone-900 p-5 text-[#f2efe9]">
-          <div className="text-xs tracking-widest" style={{ color: tint[1] }}>
-            进行中的陪伴 · {buddy.duration}
-          </div>
-          <div className="mt-1.5 text-lg font-semibold">{profile.plan_title}</div>
-          {Array.isArray(profile.plan_lines) && profile.plan_lines.length > 0 && (
-            <ul className="mt-3 space-y-2">
-              {profile.plan_lines.map((l) => (
-                <li key={l} className="flex items-start gap-2 text-sm">
-                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint[1] }} />
-                  {l}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+      {/* 板块标签（配置驱动） */}
+      <nav className="mt-5 flex gap-2 overflow-x-auto scrollbar-hide border-b border-stone-200">
+        {sections.map((s) => {
+          const active = s === activeTab;
+          return (
+            <button
+              key={s}
+              onClick={() => setTab(s)}
+              className={cn(
+                "shrink-0 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors",
+                active ? "font-semibold text-stone-900" : "border-transparent text-stone-400 hover:text-stone-600"
+              )}
+              style={active ? { borderColor: tint[2] } : undefined}
+            >
+              {s}
+            </button>
+          );
+        })}
+      </nav>
 
-      {/* 项目约定卡：认领即立的项目，真实数据 */}
-      {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
+      {/* 板块内容 */}
+      <div className="mt-5">
+        {activeTab === sections[0] && (
+          <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+        )}
+        {activeTab === "协同" && (
+          <CollabSection buddy={buddy} tint={tint} projectTask={projectTask} onOpenCollab={() => setCollabOpen(true)} />
+        )}
+        {activeTab === "画像" && (
+          <ProfileSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+        )}
+        {activeTab === "清单" && buddy.extras?.checklist && (
+          <ChecklistSection items={buddy.extras.checklist} tint={tint} />
+        )}
+        {activeTab === "习惯" && buddy.extras?.habitChain && (
+          <HabitChainSection chain={buddy.extras.habitChain} tint={tint} />
+        )}
+        {!["协同", "画像", "清单", "习惯"].includes(activeTab) && activeTab !== sections[0] && (
+          <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />
+        )}
+      </div>
 
-      {/* 领域档案：这颗搭子记住的你 */}
-      {profile?.answers && Object.keys(profile.answers).length > 0 && (
-        <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-5">
-          <div className="text-[11px] tracking-widest text-stone-400">它会记住（领域档案 · 仅本搭子可见）</div>
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {Object.entries(profile.answers).map(([k, v]) => (
-              <span key={k} className="rounded-full bg-[#f2efe9] px-3 py-1.5 text-[13px] text-stone-600">
-                {v}
-              </span>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-stone-400">{buddy.memory}</p>
-        </section>
-      )}
-
-      {/* 板块预告 */}
-      <section className="mt-4 rounded-2xl border border-dashed border-stone-300 p-5">
-        <div className="text-[11px] tracking-widest text-stone-400">空间板块</div>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {buddy.sections.map((s) => (
-            <span key={s} className="rounded-full border border-stone-200 px-3 py-1.5 text-[13px] text-stone-400">
-              {s} · 在路上
-            </span>
-          ))}
-        </div>
-        <p className="mt-3 text-xs leading-relaxed text-stone-400">
-          {buddy.name}的完整空间（{buddy.sections.join(" / ")}）正在搭建，先把每天的约定陪你打好。
-        </p>
-      </section>
-
-      {/* 毕业 */}
-      <button
-        onClick={() => setGraduateOpen(true)}
-        className="mt-6 w-full flex items-center justify-center gap-2 rounded-full border border-stone-300 py-3 text-sm text-stone-500 transition-colors hover:border-stone-900 hover:text-stone-900"
-      >
-        <GraduationCap className="w-4 h-4" />
-        项目走完了，举行毕业仪式
-      </button>
+      {/* 协同约定创建（为项目约定开启协同） */}
+      <CollabCreateDialog
+        open={collabOpen}
+        existingTask={projectTask}
+        onClose={() => setCollabOpen(false)}
+        onCreated={(taskId) => {
+          setCollabOpen(false);
+          if (taskId) navigate(`/collabspace?taskId=${taskId}`);
+        }}
+      />
 
       {/* 毕业仪式确认 */}
       {graduateOpen && (
@@ -212,7 +216,198 @@ export default function BuddySpace() {
   );
 }
 
-// 项目约定卡：打卡约定显示累计与今日状态（可打卡）；普通约定可勾选完成
+/* ---------- 首页板块（今日/行程/在读/打卡）：计划卡 + 项目约定 ---------- */
+function HomeSection({ buddy, profile, tint, projectTask }) {
+  return (
+    <div className="space-y-4">
+      {profile?.plan_title && (
+        <section className="rounded-2xl bg-stone-900 p-5 text-[#f2efe9]">
+          <div className="text-xs tracking-widest" style={{ color: tint[1] }}>
+            进行中的陪伴 · {buddy.duration}
+          </div>
+          <div className="mt-1.5 text-lg font-semibold">{profile.plan_title}</div>
+          {Array.isArray(profile.plan_lines) && profile.plan_lines.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {profile.plan_lines.map((l) => (
+                <li key={l} className="flex items-start gap-2 text-sm">
+                  <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint[1] }} />
+                  {l}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+      {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
+    </div>
+  );
+}
+
+/* ---------- 协同：把项目约定变成多人共创 ---------- */
+function CollabSection({ buddy, tint, projectTask, onOpenCollab }) {
+  return (
+    <section className="rounded-2xl border border-stone-200 bg-white p-5 text-center">
+      <Users2 className="w-8 h-8 mx-auto" style={{ color: tint[2] }} />
+      <p className="mt-3 text-[15px] font-medium text-stone-800">拉个伙伴，一起推进</p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-stone-500">
+        把「{projectTask?.title || buddy.name}的项目约定」变成协同约定：邀请真实的伙伴加入，
+        与 {buddy.name}多方讨论，讨论沉淀为子约定，进展同步勾划。
+      </p>
+      <button
+        onClick={onOpenCollab}
+        disabled={!projectTask}
+        className="mt-4 min-h-[44px] w-full rounded-full text-sm font-medium text-white disabled:opacity-50"
+        style={{ background: tint[2] }}
+      >
+        开启协同约定
+      </button>
+      {projectTask?.metadata?.collab && (
+        <p className="mt-2 text-xs text-stone-400">这条约定已开启协同，去约定页的协同区查看。</p>
+      )}
+    </section>
+  );
+}
+
+/* ---------- 画像：领域档案（隔离）+ 陪伴统计 ---------- */
+function ProfileSection({ buddy, profile, tint, projectTask }) {
+  const isCheckin = projectTask?.category === "checkin";
+  const { data: checkinData } = useCheckins(projectTask?.id || "", { enabled: isCheckin && !!projectTask });
+
+  return (
+    <div className="space-y-4">
+      {/* 陪伴统计（真实数据） */}
+      <section className="rounded-2xl border border-stone-200 bg-white p-5">
+        <div className="text-[11px] tracking-widest text-stone-400">陪伴统计</div>
+        <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+          <div>
+            <div className="text-xl font-bold" style={{ color: tint[2] }}>
+              {isCheckin ? checkinData?.total ?? 0 : projectTask?.status === "completed" ? 1 : 0}
+            </div>
+            <div className="mt-0.5 text-[11px] text-stone-400">{isCheckin ? "累计打卡" : "项目进度"}</div>
+          </div>
+          <div>
+            <div className="text-xl font-bold" style={{ color: tint[2] }}>
+              {isCheckin ? (checkinData?.done_today ? "已赴约" : "待赴约") : projectTask?.status === "completed" ? "已完成" : "进行中"}
+            </div>
+            <div className="mt-0.5 text-[11px] text-stone-400">今日状态</div>
+          </div>
+          <div>
+            <div className="text-xl font-bold" style={{ color: tint[2] }}>
+              {profile?.claimed_at ? `${Math.max(1, Math.ceil((Date.now() - new Date(profile.claimed_at).getTime()) / 86400000))} 天` : "—"}
+            </div>
+            <div className="mt-0.5 text-[11px] text-stone-400">相伴时长</div>
+          </div>
+        </div>
+      </section>
+
+      {/* 领域档案：这颗搭子记住的你（仅本搭子可见） */}
+      <section className="rounded-2xl border border-stone-200 bg-white p-5">
+        <div className="text-[11px] tracking-widest text-stone-400">领域档案 · 仅{buddy.name}可见</div>
+        {profile?.answers && Object.keys(profile.answers).length > 0 ? (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {Object.entries(profile.answers).map(([k, v]) => (
+              <span key={k} className="rounded-full bg-[#f2efe9] px-3 py-1.5 text-[13px] text-stone-600">
+                {v}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 text-[13px] text-stone-400">还没有留下档案，认领时聊几句就有了。</p>
+        )}
+        <p className="mt-3 text-xs text-stone-400">{buddy.memory}</p>
+      </section>
+    </div>
+  );
+}
+
+/* ---------- 领域特色：旅行清单 / 早起习惯链 ---------- */
+function ChecklistSection({ items, tint }) {
+  const [checked, setChecked] = useState(() => new Set());
+  const toggle = (i) =>
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  return (
+    <section className="rounded-2xl border border-stone-200 bg-white p-5">
+      <div className="flex items-baseline justify-between">
+        <div className="text-[11px] tracking-widest text-stone-400">行前清单</div>
+        <span className="text-xs text-stone-400">{`${checked.size}/${items.length}`}</span>
+      </div>
+      <ul className="mt-3 space-y-2.5">
+        {items.map((item, i) => {
+          const done = checked.has(i);
+          return (
+            <li key={item}>
+              <button onClick={() => toggle(i)} className="flex w-full items-center gap-3 text-left">
+                <span
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-md border-2 flex-shrink-0 transition-colors",
+                    done ? "text-white" : "border-stone-300"
+                  )}
+                  style={done ? { background: tint[2], borderColor: tint[2] } : undefined}
+                >
+                  {done && <Check className="w-3 h-3" strokeWidth={3} />}
+                </span>
+                <span className={cn("text-sm", done ? "text-stone-400 line-through" : "text-stone-700")}>{item}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-3 text-xs text-stone-400">勾选只在这台设备上帮你数个数，正式核对以项目约定为准。</p>
+    </section>
+  );
+}
+
+function HabitChainSection({ chain, tint }) {
+  return (
+    <section className="rounded-2xl border border-stone-200 bg-white p-5">
+      <div className="text-[11px] tracking-widest text-stone-400">起床微习惯链</div>
+      <div className="mt-4 flex items-center gap-2">
+        {chain.map((c, i) => (
+          <React.Fragment key={c}>
+            {i > 0 && <span className="text-stone-300">→</span>}
+            <span
+              className="flex-1 rounded-xl px-3 py-2.5 text-center text-[13px]"
+              style={{ background: `${tint[0]}`, color: "#5a564e" }}
+            >
+              {c}
+            </span>
+          </React.Fragment>
+        ))}
+      </div>
+      <p className="mt-4 text-xs leading-relaxed text-stone-400">
+        起床后按顺序做完这三件小事，然后在「打卡」板块点一下——就算赢回了一个早晨。
+      </p>
+    </section>
+  );
+}
+
+/* ---------- 预告板块 ---------- */
+const UPCOMING_DESC = {
+  解题: "拍照解题：分层提示，直到你自己做出来——引导式，绝不直接给答案。",
+  周报: "每周一张学习小报：掌握度曲线、错因分布、下周建议。",
+  灵感: "目的地灵感库：体验、美食、景点，按你的风格筛选。",
+  书架: "在读 / 想读 / 读完，每一本的进度和弃书率都在这。",
+  笔记: "摘抄和讲书自动成笔记，月底生成你的读书小报。",
+};
+
+function UpcomingSection({ buddy, tab, tint }) {
+  return (
+    <section className="rounded-2xl border border-dashed border-stone-300 bg-white/60 p-6 text-center">
+      <Sparkles className="w-7 h-7 mx-auto" style={{ color: tint[2] }} />
+      <p className="mt-3 text-[15px] font-medium text-stone-800">「{tab}」板块在路上</p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-stone-500">
+        {UPCOMING_DESC[tab] || `${buddy.name}的「${tab}」板块正在搭建。`}
+      </p>
+    </section>
+  );
+}
+
+/* ---------- 项目约定卡：打卡约定显示累计与今日状态；普通约定可勾选完成 ---------- */
 function ProjectTaskCard({ task, tint }) {
   const queryClient = useQueryClient();
   const isCheckin = task.category === "checkin";
@@ -256,7 +451,7 @@ function ProjectTaskCard({ task, tint }) {
   };
 
   return (
-    <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-5">
+    <section className="rounded-2xl border border-stone-200 bg-white p-5">
       <div className="text-[11px] tracking-widest text-stone-400">项目约定 · 同步在约定页</div>
       <div className="mt-3 flex items-center gap-3">
         <button
@@ -266,9 +461,7 @@ function ProjectTaskCard({ task, tint }) {
           title={isCheckin ? (todayDone ? "今日已赴约" : "打卡：记录这次赴约") : taskDone ? "恢复为未完成" : "完成约定"}
           className={cn(
             "w-11 h-11 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors",
-            taskDone
-              ? "border-transparent text-white"
-              : "border-stone-300 text-stone-500 hover:border-stone-500"
+            taskDone ? "border-transparent text-white" : "border-stone-300 text-stone-500 hover:border-stone-500"
           )}
           style={taskDone ? { background: tint[2] } : undefined}
         >

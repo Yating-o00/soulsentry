@@ -34,9 +34,10 @@ function detectLedgerLike(t) {
   return false;
 }
 
-export default function AssistantWidget() {
+export default function AssistantWidget({ inline = false }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
+  // inline 模式：内嵌在首页（通用 Agent 对话层），无浮动按钮、面板常开
+  const [open, setOpen] = useState(inline);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -342,6 +343,174 @@ export default function AssistantWidget() {
     );
   };
 
+  // 面板主体（浮动与内嵌两种形态共用）
+  const panelBody = (
+    <>
+      {/* 头部 */}
+      <div className="flex items-center gap-2.5 px-4 py-3 shrink-0" style={{ background: "#fff", borderBottom: "1px solid #e8ecef" }}>
+        <img src={assistantAvatar} alt="" className={`assistant-avatar w-9 h-9 rounded-full object-cover ${busy ? "assistant-avatar--active" : ""}`} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>心栈小助手</div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: busy ? "#f0c36d" : "#1f9d55" }} />
+            <span className="text-[11px]" style={{ color: "#63666e" }}>
+              {busy ? "正在思考…" : "24 小时陪伴中 · 说事、记事、办事都可以找我"}
+            </span>
+          </div>
+        </div>
+        {!inline && (
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="text-lg px-2"
+            style={{ color: "#9ca0a8", background: "none", border: "none", cursor: "pointer" }}
+            aria-label="收起"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {/* 消息流 */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto py-4" style={{ minHeight: 0 }}>
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center px-6 pb-2">
+            <img src={assistantAvatar} alt="" className="assistant-avatar w-20 h-20 rounded-full object-cover mb-3" />
+            <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#3a3a3c" }}>
+              你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。
+            </div>
+          </div>
+        )}
+        {messages.map(renderMessage)}
+        {busy && (
+          <div className="flex items-center gap-2 px-4 mb-4">
+            <img src={assistantAvatar} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
+            <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#9ca0a8" }}>
+              正在输入…
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 动作提案卡片 */}
+      {actions && actions.length > 0 && (
+        <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
+          <div className="text-[12px] font-semibold mb-2" style={{ color: "#384877" }}>✋ 确认后我将执行这些修改</div>
+          {actions.map((a) => (
+            <div key={a.id} className="text-[13px] py-1" style={{ color: "#1c1c1e" }}>· {a.label}</div>
+          ))}
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={() => setActions(null)}
+              className="flex-1 rounded-full py-2 text-[12.5px]"
+              style={{ border: "1px solid #e8ecef", color: "#63666e", background: "#fff", cursor: "pointer" }}
+            >
+              先不了
+            </button>
+            <button
+              type="button"
+              onClick={confirmActions}
+              disabled={acting}
+              className="rounded-full py-2 text-[12.5px] font-semibold text-white"
+              style={{ flex: 1.4, background: "#384877", border: "none", cursor: "pointer", opacity: acting ? 0.6 : 1 }}
+            >
+              {acting ? "执行中…" : "确认执行"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 创建提案卡片 */}
+      {pending && (
+        <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
+          <div className="text-[12px] font-semibold mb-2" style={{ color: "#384877" }}>
+            {TYPE_ICON[pending.type] || "✨"} 帮你整理好了 · {TYPE_LABEL[pending.type] || "提案"}
+          </div>
+          {pending.type === "plan" ? (
+            <div className="text-[13px]" style={{ color: "#1c1c1e" }}>
+              <div className="font-semibold">{pending.plan?.parent?.title || "智能规划"}</div>
+              <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>
+                共 {(pending.plan?.children || []).length} 条子约定，按天排好具体时刻
+              </div>
+            </div>
+          ) : (
+            <div className="text-[13px]" style={{ color: "#1c1c1e" }}>
+              <div className="font-semibold">{pending.title || pending.content || pending.text}</div>
+              {pending.description && (
+                <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>{pending.description}</div>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2 mt-3">
+            <button
+              type="button"
+              onClick={rejectPending}
+              className="flex-1 rounded-full py-2 text-[12.5px]"
+              style={{ border: "1px solid #e8ecef", color: "#63666e", background: "#fff", cursor: "pointer" }}
+            >
+              不对，再聊聊
+            </button>
+            <button
+              type="button"
+              onClick={confirmCreate}
+              disabled={acting}
+              className="rounded-full py-2 text-[12.5px] font-semibold text-white"
+              style={{ flex: 1.4, background: "#384877", border: "none", cursor: "pointer", opacity: acting ? 0.6 : 1 }}
+            >
+              {acting ? "生成中…" : "确认生成"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 输入区 */}
+      <div className="shrink-0 px-3 py-2.5" style={{ background: "#fff", borderTop: "1px solid #e8ecef" }}>
+        <div className="flex items-end gap-2">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            rows={1}
+            placeholder="和小助手说点什么…"
+            className="flex-1 resize-none rounded-2xl px-3.5 py-2.5 text-[13.5px] outline-none"
+            style={{ background: "#eef0f5", border: "none", maxHeight: 120, color: "#1c1c1e" }}
+          />
+          <button
+            type="button"
+            onClick={send}
+            disabled={busy || !input.trim()}
+            className="rounded-full text-white text-[13px] font-semibold shrink-0"
+            style={{
+              width: 40, height: 40, background: input.trim() ? "#384877" : "#c6c9cf",
+              border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1
+            }}
+            aria-label="发送"
+          >
+            ➤
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  // 内嵌形态（首页通用 Agent 对话层）：无浮动按钮，面板常开
+  if (inline) {
+    return (
+      <div
+        className="flex flex-col overflow-hidden rounded-3xl"
+        style={{ background: "#f5f6fa", border: "1px solid #e8ecef", height: 520 }}
+      >
+        {panelBody}
+      </div>
+    );
+  }
+
   return (
     <>
       {/* 右下角机器人入口 */}
@@ -382,154 +551,7 @@ export default function AssistantWidget() {
             border: "1px solid #e8ecef"
           }}
         >
-          {/* 头部 */}
-          <div className="flex items-center gap-2.5 px-4 py-3 shrink-0" style={{ background: "#fff", borderBottom: "1px solid #e8ecef" }}>
-            <img src={assistantAvatar} alt="" className={`assistant-avatar w-9 h-9 rounded-full object-cover ${busy ? "assistant-avatar--active" : ""}`} />
-            <div className="flex-1 min-w-0">
-              <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>心栈小助手</div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: busy ? "#f0c36d" : "#1f9d55" }} />
-                <span className="text-[11px]" style={{ color: "#63666e" }}>
-                  {busy ? "正在思考…" : "24 小时陪伴中 · 可以让我改约定、勾子约定"}
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="text-lg px-2"
-              style={{ color: "#9ca0a8", background: "none", border: "none", cursor: "pointer" }}
-              aria-label="收起"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* 消息流 */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto py-4" style={{ minHeight: 0 }}>
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center px-6 pb-2">
-                <img src={assistantAvatar} alt="" className="assistant-avatar w-20 h-20 rounded-full object-cover mb-3" />
-                <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#3a3a3c" }}>
-                  你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。
-                </div>
-              </div>
-            )}
-            {messages.map(renderMessage)}
-            {busy && (
-              <div className="flex items-center gap-2 px-4 mb-4">
-                <img src={assistantAvatar} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
-                <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#9ca0a8" }}>
-                  正在输入…
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* 动作提案卡片 */}
-          {actions && actions.length > 0 && (
-            <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
-              <div className="text-[12px] font-semibold mb-2" style={{ color: "#384877" }}>✋ 确认后我将执行这些修改</div>
-              {actions.map((a) => (
-                <div key={a.id} className="text-[13px] py-1" style={{ color: "#1c1c1e" }}>· {a.label}</div>
-              ))}
-              <div className="flex gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={() => setActions(null)}
-                  className="flex-1 rounded-full py-2 text-[12.5px]"
-                  style={{ border: "1px solid #e8ecef", color: "#63666e", background: "#fff", cursor: "pointer" }}
-                >
-                  先不了
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmActions}
-                  disabled={acting}
-                  className="rounded-full py-2 text-[12.5px] font-semibold text-white"
-                  style={{ flex: 1.4, background: "#384877", border: "none", cursor: "pointer", opacity: acting ? 0.6 : 1 }}
-                >
-                  {acting ? "执行中…" : "确认执行"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* 创建提案卡片 */}
-          {pending && (
-            <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
-              <div className="text-[12px] font-semibold mb-2" style={{ color: "#384877" }}>
-                {TYPE_ICON[pending.type] || "✨"} 帮你整理好了 · {TYPE_LABEL[pending.type] || "提案"}
-              </div>
-              {pending.type === "plan" ? (
-                <div className="text-[13px]" style={{ color: "#1c1c1e" }}>
-                  <div className="font-semibold">{pending.plan?.parent?.title || "智能规划"}</div>
-                  <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>
-                    共 {(pending.plan?.children || []).length} 条子约定，按天排好具体时刻
-                  </div>
-                </div>
-              ) : (
-                <div className="text-[13px]" style={{ color: "#1c1c1e" }}>
-                  <div className="font-semibold">{pending.title || pending.content || pending.text}</div>
-                  {pending.description && (
-                    <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>{pending.description}</div>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={rejectPending}
-                  className="flex-1 rounded-full py-2 text-[12.5px]"
-                  style={{ border: "1px solid #e8ecef", color: "#63666e", background: "#fff", cursor: "pointer" }}
-                >
-                  不对，再聊聊
-                </button>
-                <button
-                  type="button"
-                  onClick={confirmCreate}
-                  disabled={acting}
-                  className="rounded-full py-2 text-[12.5px] font-semibold text-white"
-                  style={{ flex: 1.4, background: "#384877", border: "none", cursor: "pointer", opacity: acting ? 0.6 : 1 }}
-                >
-                  {acting ? "生成中…" : "确认生成"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* 输入区 */}
-          <div className="shrink-0 px-3 py-2.5" style={{ background: "#fff", borderTop: "1px solid #e8ecef" }}>
-            <div className="flex items-end gap-2">
-              <textarea
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                rows={1}
-                placeholder="和小助手说点什么…"
-                className="flex-1 resize-none rounded-2xl px-3.5 py-2.5 text-[13.5px] outline-none"
-                style={{ background: "#eef0f5", border: "none", maxHeight: 120, color: "#1c1c1e" }}
-              />
-              <button
-                type="button"
-                onClick={send}
-                disabled={busy || !input.trim()}
-                className="rounded-full text-white text-[13px] font-semibold shrink-0"
-                style={{
-                  width: 40, height: 40, background: input.trim() ? "#384877" : "#c6c9cf",
-                  border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1
-                }}
-                aria-label="发送"
-              >
-                ➤
-              </button>
-            </div>
-          </div>
+          {panelBody}
         </div>
       )}
     </>

@@ -620,7 +620,25 @@ function buildMessagesBlock(messages) {
     .join("\n");
 }
 
-async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "" }) {
+// 人格引擎：用户在「我的」页切换的语气人格，全域对话立即生效（默认温柔陪伴型）
+const PERSONA_TONES = {
+  gentle: "温柔陪伴型——轻声细语，永远先接住情绪，不催促、不评判；可以说「没关系，我们慢慢来」。",
+  strict: "严格督学型——目标导向，语气温和但直接，盯进度也盯质量；用户未完成时帮他找原因而不是一味安慰。",
+  buddy: "战友互卷型——像并肩作战的朋友，轻松幽默，可以互相卷也互相扛，多用「我们」「一起」。"
+};
+
+async function loadPersonaTone({ userId, prisma }) {
+  if (!userId || !prisma) return PERSONA_TONES.gentle;
+  try {
+    const pref = await prisma.userPreference.findUnique({ where: { userId }, select: { metadata: true } });
+    const persona = pref?.metadata?._extraFields?.persona;
+    return PERSONA_TONES[persona] || PERSONA_TONES.gentle;
+  } catch (_e) {
+    return PERSONA_TONES.gentle;
+  }
+}
+
+async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "", personaTone = PERSONA_TONES.gentle }) {
   const now = chinaNow();
   const extractedCtx = lastExtracted
     ? `（你上一轮提出的待确认提案如下，用户可能正在对它做修改：${JSON.stringify(lastExtracted)}）`
@@ -657,7 +675,9 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
 4. 用户否定当前提案（比如说"不对""我想改一下"）时：extracted 输出 null，先温柔地问清楚 TA 想改哪一部分（时间、内容，还是这其实不是约定/心签），不要立刻重复同一个提案。
 5. 永远温柔从容：不评判、不催促、不制造焦虑；用户想闲聊就好好陪聊。
 6. reply ≤80字，自然口语，像微信聊天，不要用列表和 markdown。
-7. 严格返回 JSON，不要输出其他内容。`,
+7. 严格返回 JSON，不要输出其他内容。
+
+人格引擎（语气最高优先级，覆盖第 5 条的默认温柔）：用户当前人格为「${personaTone}」按这个人格的方式说话，但心栈的克制、真诚、不制造焦虑始终保留。`,
     responseJsonSchema: RESPONSE_SCHEMA,
     temperature: 0.7,
     maxTokens: 4000,
@@ -794,8 +814,9 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           }
         }
       : lastExtracted;
+    const personaTone = await loadPersonaTone({ userId, prisma });
     const out = await Promise.race([
-      chatWithKimi({ messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx }),
+      chatWithKimi({ messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx, personaTone }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 30000))
     ]);
 

@@ -49,6 +49,9 @@
  */
 import Account from './pages/Account';
 import AdminStats from './pages/AdminStats.jsx';
+import BuddyClaim from './pages/BuddyClaim.jsx';
+import BuddySpace from './pages/BuddySpace.jsx';
+import BuddyStore from './pages/BuddyStore.jsx';
 import CollabSpace from './pages/CollabSpace.jsx';
 import Dashboard from './pages/Dashboard';
 import HeartSign from './pages/HeartSign.jsx';
@@ -68,6 +71,9 @@ import __Layout from './Layout.jsx';
 export const PAGES = {
     "Account": Account,
     "AdminStats": AdminStats,
+    "BuddyClaim": BuddyClaim,
+    "BuddySpace": BuddySpace,
+    "BuddyStore": BuddyStore,
     "CollabSpace": CollabSpace,
     "Dashboard": Dashboard,
     "HeartSign": HeartSign,

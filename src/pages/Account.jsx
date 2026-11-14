@@ -7,14 +7,17 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight, Brain, AlertCircle, Globe } from "lucide-react";
+import { User, Mail, Shield, LogOut, Edit2, Check, X, Bot, Upload, Camera, Coins, History, ChevronRight, Brain, AlertCircle, Globe, Sparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { SUBSCRIPTION_PLANS } from "@/components/credits/creditConfig";
 import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { httpRequest } from "@/api/httpClient";
+import Orb from "@/components/buddy/Orb";
+import { PERSONAS, DEFAULT_PERSONA, BUDDIES, BUDDY_TINTS } from "@/lib/buddies";
 import ProductInsights from "@/components/memory/ProductInsights";
 import PersonalProfileCard from "@/components/insights/PersonalProfileCard";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
@@ -439,6 +442,9 @@ export default function Account() {
         </Card>
       </motion.div>
 
+      {/* 人格引擎 · 记忆分层（L1 搭子底座） */}
+      <PersonaMemorySection />
+
       {/* AI 点数与订阅 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -636,5 +642,127 @@ export default function Account() {
         </Card>
       </motion.div>
     </div>
+  );
+}
+
+// 人格引擎 · 记忆分层（L1 搭子底座）：
+// 人格决定「心栈与所有搭子怎么说话」，切换后全域立即生效；
+// 主档案全局共享，领域档案相互隔离——学习搭子不需要知道你几点赖床。
+function PersonaMemorySection() {
+  const queryClient = useQueryClient();
+  const [switching, setSwitching] = useState(null);
+
+  const { data: mine } = useQuery({
+    queryKey: ["buddies", "mine"],
+    queryFn: () => httpRequest("/api/buddies/mine"),
+  });
+  const persona = mine?.persona || DEFAULT_PERSONA;
+  const profiles = mine?.buddies || {};
+  const claimedBuddies = BUDDIES.filter((b) => profiles[b.id]?.status === "active");
+
+  const switchPersona = async (key) => {
+    if (switching || key === persona) return;
+    setSwitching(key);
+    try {
+      await httpRequest("/api/buddies/persona", { method: "POST", body: { persona: key } });
+      queryClient.invalidateQueries({ queryKey: ["buddies"] });
+      toast.success("已切换，心栈和所有搭子现在用新方式陪你");
+    } catch (e) {
+      toast.error(e?.message || "切换失败，请再试一次");
+    } finally {
+      setSwitching(null);
+    }
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+      <Card className="border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+        <CardHeader className="bg-stone-50">
+          <CardTitle className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-[#384877]" />
+            人格 · 记忆分层
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-6">
+          {/* 人格切换 */}
+          <div>
+            <p className="text-sm text-slate-500 mb-3">
+              心栈怎么说话——切换后，心栈与所有搭子立即用新方式陪你。
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {PERSONAS.map((p) => {
+                const active = persona === p.key;
+                return (
+                  <button
+                    key={p.key}
+                    type="button"
+                    onClick={() => switchPersona(p.key)}
+                    disabled={switching !== null}
+                    className={`text-left rounded-2xl border p-4 transition-all ${
+                      active
+                        ? "border-[#384877] bg-[#eef2ff] ring-1 ring-[#384877]"
+                        : "border-stone-200 bg-white hover:border-stone-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-stone-800">{p.name}</span>
+                      {active && <Check className="w-4 h-4 text-[#384877]" />}
+                    </div>
+                    <p className="mt-1 text-xs text-stone-500">{p.desc}</p>
+                    <p className="mt-2 text-[13px] leading-relaxed text-stone-600 italic">「{p.sample}」</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* 记忆分层 */}
+          <div>
+            <p className="text-sm text-slate-500 mb-3">
+              记忆分层——主档案心栈与所有搭子共享；领域档案相互隔离，只属于对应搭子。
+            </p>
+            <div className="space-y-3">
+              <div className="rounded-2xl bg-[#f2efe9] p-4">
+                <div className="text-[11px] tracking-widest text-stone-400">主档案（共享）</div>
+                <p className="mt-1 text-[13px] text-stone-600">
+                  人格偏好：{PERSONAS.find((p) => p.key === persona)?.name || "温柔陪伴型"}
+                  {mine?.id_profile ? ` · ${mine.id_profile.age || ""} · ${(mine.id_profile.likes || []).join("、")}` : " · 身份识别画像将在注册引导中完善"}
+                </p>
+              </div>
+              {claimedBuddies.length === 0 ? (
+                <p className="text-[13px] text-stone-400 px-1">
+                  还没有在岗搭子。去
+                  <Link to={createPageUrl("BuddyStore")} className="text-[#384877] hover:underline mx-1">
+                    搭子Store
+                  </Link>
+                  认领一颗，它的领域档案会出现在这里。
+                </p>
+              ) : (
+                claimedBuddies.map((b) => {
+                  const tint = BUDDY_TINTS[b.id];
+                  return (
+                    <div key={b.id} className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-4">
+                      <Orb size={36} tint={tint} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] tracking-widest text-stone-400">领域档案（隔离） · {b.name}</div>
+                        <p className="mt-0.5 text-[13px] text-stone-600 truncate">{b.memory}</p>
+                      </div>
+                      <Link
+                        to={`${createPageUrl("BuddySpace")}?buddy=${b.id}`}
+                        className="text-xs text-[#384877] hover:underline flex-shrink-0"
+                      >
+                        进入空间
+                      </Link>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   );
 }

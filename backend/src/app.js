@@ -41,6 +41,7 @@ import { chatRouter } from "./routes/chat.js";
 import { companionRouter } from "./routes/companion.js";
 import { collabRouter } from "./routes/collab.js";
 import { collabInviteRouter } from "./routes/collabInvite.js";
+import { buddiesRouter } from "./routes/buddies.js";
 import { adminStatsRouter } from "./routes/adminStats.js";
 import { handleWechatNotify } from "./routes/wechatNotify.js";
 
@@ -107,6 +108,7 @@ app.use("/api/weather", weatherRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/companion", companionRouter);
 app.use("/api/collab", collabRouter);
+app.use("/api/buddies", buddiesRouter);
 app.use("/api", collabInviteRouter);
 app.use("/api/admin/stats", adminStatsRouter);
 

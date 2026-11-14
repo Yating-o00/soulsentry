@@ -78,7 +78,7 @@ export default function TodayTimeline({ tasks, notes, nowLabel, onToggle, getSub
         (t.reminder_time && isSameDay(parseISO(t.reminder_time), new Date())) ||
         (t.completed_at && isSameDay(parseISO(t.completed_at), new Date()));
       if (!inToday) continue;
-      const isDone = t.status === 'completed';
+      const isDone = isTaskEffectivelyCompleted(t);
       (isDone ? done : pending).push(t);
     }
     pending.sort((a, b) => new Date(a.reminder_time || 0) - new Date(b.reminder_time || 0));
@@ -86,7 +86,7 @@ export default function TodayTimeline({ tasks, notes, nowLabel, onToggle, getSub
     return [...pending, ...done];
   }, [allTasks]);
 
-  const nextIdx = todayItems.findIndex((a) => a.status !== 'completed');
+  const nextIdx = todayItems.findIndex((a) => !isTaskEffectivelyCompleted(a));
   const isToday = offset === 0;
   const dayItems = isToday ? [] : itemsForDay(offset);
   const dayDate = subDays(new Date(), offset);
@@ -195,23 +195,23 @@ export default function TodayTimeline({ tasks, notes, nowLabel, onToggle, getSub
 
                   <button
                     onClick={() => onToggle(a)}
-                    aria-label={a.status === 'completed' ? '恢复这条约定' : '标记已赴约'}
+                    aria-label={isTaskEffectivelyCompleted(a) ? '恢复这条约定' : '标记已赴约'}
                     className={`relative z-10 mt-1 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] transition-all duration-300 ${
-                      a.status === 'completed'
+                      isTaskEffectivelyCompleted(a)
                         ? 'check-pop border-[var(--jade)] bg-[var(--jade)] text-white'
                         : isNext
                           ? 'pulse-dot border-[var(--signal)] bg-[var(--signal)]'
                           : 'border-[var(--ink-4)] bg-white hover:border-[var(--ink-2)]'
                     }`}
                   >
-                    {a.status === 'completed' && <span className="text-[10px]">✓</span>}
+                    {isTaskEffectivelyCompleted(a) && <span className="text-[10px]">✓</span>}
                   </button>
 
                   <div className="min-w-0 flex-1 pt-0.5">
                     <div className="flex flex-wrap items-baseline gap-x-3">
                       <span
                         className={`text-[15px] ${
-                          a.status === 'completed' ? 'text-[var(--ink-4)]' : 'font-medium text-[var(--ink)]'
+                          isTaskEffectivelyCompleted(a) ? 'text-[var(--ink-4)]' : 'font-medium text-[var(--ink)]'
                         }`}
                       >
                         {a.title}
@@ -226,7 +226,7 @@ export default function TodayTimeline({ tasks, notes, nowLabel, onToggle, getSub
                       )}
                     </div>
                     <p className="mt-1 text-[12px] text-[var(--ink-3)]">
-                      {a.status === 'completed'
+                      {isTaskEffectivelyCompleted(a)
                         ? '已赴约 · 这一刻已被收进你的记忆'
                         : isNext
                           ? `心栈记得 · ${timeLabel}，我会在`
@@ -235,10 +235,10 @@ export default function TodayTimeline({ tasks, notes, nowLabel, onToggle, getSub
                     {getSubtasks && (() => {
                       const subs = getSubtasks(a.id) || [];
                       if (subs.length === 0) return null;
-                      const done = subs.filter((s) => s.status === 'completed').length;
+                      const done = subs.filter((s) => isTaskEffectivelyCompleted(s)).length;
                       const preview = subs
                         .slice(0, 3)
-                        .map((s) => (s.status === 'completed' ? `✓${s.title}` : s.title))
+                        .map((s) => (isTaskEffectivelyCompleted(s) ? `✓${s.title}` : s.title))
                         .join(' · ');
                       return (
                         <p className="mt-1 text-[11.5px] text-[var(--ink-3)]">

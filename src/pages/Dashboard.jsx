@@ -52,6 +52,7 @@ import { useRevealRoot } from "../components/dashboard/useReveal";
 import { phaseOf } from "@/lib/todayPhase";
 import TodayHero from "../components/today/TodayHero";
 import TodaySection from "../components/today/TodaySection";
+import BuddyCompanions from "../components/buddy/BuddyCompanions";
 import TodayTimeline from "../components/today/TodayTimeline";
 import DeferredMount from "../components/today/DeferredMount";
 import MoodMirror from "../components/today/MoodMirror";
@@ -444,15 +445,22 @@ export default function Dashboard() {
               />
             </TodaySection>
 
-            {/* 02 心境（心签 + 约定的数据分析） */}
-            <TodaySection no="02" title="心境" sub="心栈眼中的你" index={2}>
+            {/* 02 进行中的陪伴（搭子） */}
+            <TodaySection no="02" title="进行中的陪伴" sub="场景之内有搭子，场景之外有我" index={2}>
+              <DeferredMount minHeight={200}>
+                <BuddyCompanions />
+              </DeferredMount>
+            </TodaySection>
+
+            {/* 03 心境（心签 + 约定的数据分析） */}
+            <TodaySection no="03" title="心境" sub="心栈眼中的你" index={3}>
               <DeferredMount minHeight={360}>
                 <MoodMirror notes={notesList} tasks={activeTasks} />
               </DeferredMount>
             </TodaySection>
 
-            {/* 03 守护动态（时空感知守护） */}
-            <TodaySection no="03" title="守护动态" sub="记忆会在对的时候，回来找你" index={3}>
+            {/* 04 守护动态（时空感知守护） */}
+            <TodaySection no="04" title="守护动态" sub="记忆会在对的时候，回来找你" index={4}>
               <DeferredMount minHeight={320}>
                 <div className="module-shell">
                   <SpatioTemporalGuardModule />
@@ -460,8 +468,8 @@ export default function Dashboard() {
               </DeferredMount>
             </TodaySection>
 
-            {/* 04 心栈为你编织（自动执行） */}
-            <TodaySection no="04" title="心栈为你编织" sub="把零散的记录，织成理解" index={4}>
+            {/* 05 心栈为你编织（自动执行） */}
+            <TodaySection no="05" title="心栈为你编织" sub="把零散的记录，织成理解" index={5}>
               <DeferredMount minHeight={380}>
                 <div className="module-shell">
                   <AutoExecutionPanel />
@@ -469,8 +477,8 @@ export default function Dashboard() {
               </DeferredMount>
             </TodaySection>
 
-            {/* 05 全设备协同 */}
-            <TodaySection no="05" title="全设备协同" sub="你在哪里，记忆就在哪里" index={5}>
+            {/* 06 全设备协同 */}
+            <TodaySection no="06" title="全设备协同" sub="你在哪里，记忆就在哪里" index={6}>
               <DeferredMount minHeight={420}>
                 <div className="module-shell">
                   <DeviceCollaborationModule />
@@ -478,8 +486,8 @@ export default function Dashboard() {
               </DeferredMount>
             </TodaySection>
 
-            {/* 06 AI 简报 + 回望与远见 */}
-            <TodaySection no="06" title="回望与远见" sub="数据是你的年轮，简报是我的心意" index={6}>
+            {/* 07 AI 简报 + 回望与远见 */}
+            <TodaySection no="07" title="回望与远见" sub="数据是你的年轮，简报是我的心意" index={7}>
               <DeferredMount minHeight={520}>
                 <div className="space-y-4">
                   <DailyBriefing />

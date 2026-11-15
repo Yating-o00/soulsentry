@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
 import { createPageUrl } from "@/utils";
-import Orb from "@/components/buddy/Orb";
+import xinzhanOrb from "@/assets/xinzhan-orb.jpg";
 import AssistantWidget from "@/components/assistant/AssistantWidget";
 import BuddyCompanions from "@/components/buddy/BuddyCompanions";
 import BuddyStoreStrip from "@/components/buddy/BuddyStoreStrip";
@@ -86,18 +86,23 @@ export default function Dashboard() {
             <div className="text-lg font-semibold tracking-wide">SoulSentry</div>
             <div className="text-xs text-[#a8a29e]">{personaName}模式 · 我一直都在</div>
           </div>
-          <Orb size={44} />
+          <img src={xinzhanOrb} alt="心栈" className="w-11 h-11 rounded-full object-cover" />
         </header>
 
-        {/* 通用 Agent 对话层：内容输入的第一板块——说事、记事、办事，确认后落库 */}
+        {/* 通用 Agent 对话层：内容输入的第一板块——说事、记事、办事，确认后落库。
+            新用户给引导输入，老用户先给今日总结再给模版 */}
         <section className="mt-4 px-1">
-          <AssistantWidget inline />
+          <AssistantWidget
+            inline
+            newUser={imprint.guarding === 0 && imprint.notes === 0 && claimedCount === 0}
+            summary={`欢迎回来${name ? `，${name}` : ""}。今日印记：${imprint.todayPending} 条约定今日待赴约，${imprint.guarding} 条守护中，${imprint.notes} 条心签已沉淀。想从哪件开始，还是先说点别的？`}
+          />
         </section>
 
         {/* 心栈的问候 + 今日印记（真实数据的一行播报） */}
         <div className="mx-1 mt-4 flex items-start gap-3 rounded-2xl bg-[#FFFFFF] p-4 shadow-[0_1px_2px_rgba(36,36,36,0.06)] border border-stone-200/60">
           <div className="mt-0.5 shrink-0">
-            <Orb size={36} />
+            <img src={xinzhanOrb} alt="心栈" className="w-9 h-9 rounded-full object-cover" />
           </div>
           <div>
             <p className="text-[15px] leading-relaxed">

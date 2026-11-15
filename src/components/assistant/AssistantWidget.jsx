@@ -6,7 +6,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { httpRequest } from "@/api/httpClient";
-import assistantAvatar from "@/assets/assistant-avatar.jpg";
+import assistantAvatar from "@/assets/xinzhan-orb.jpg";
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划" };
 const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️" };
@@ -34,7 +34,7 @@ function detectLedgerLike(t) {
   return false;
 }
 
-export default function AssistantWidget({ inline = false }) {
+export default function AssistantWidget({ inline = false, newUser = false, summary = "" }) {
   const queryClient = useQueryClient();
   // inline 模式：内嵌在首页（通用 Agent 对话层），无浮动按钮、面板常开
   const [open, setOpen] = useState(inline);
@@ -346,11 +346,12 @@ export default function AssistantWidget({ inline = false }) {
   // 面板主体（浮动与内嵌两种形态共用）
   const panelBody = (
     <>
-      {/* 头部 */}
+      {/* 头部（浮动形态；内嵌形态用问候区代替） */}
+      {!inline && (
       <div className="flex items-center gap-2.5 px-4 py-3 shrink-0" style={{ background: "#fff", borderBottom: "1px solid #e8ecef" }}>
         <img src={assistantAvatar} alt="" className={`assistant-avatar w-9 h-9 rounded-full object-cover ${busy ? "assistant-avatar--active" : ""}`} />
         <div className="flex-1 min-w-0">
-          <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>{inline ? "心栈" : "心栈小助手"}</div>
+          <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>心栈小助手</div>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: busy ? "#f0c36d" : "#1f9d55" }} />
             <span className="text-[11px]" style={{ color: "#63666e" }}>
@@ -358,51 +359,74 @@ export default function AssistantWidget({ inline = false }) {
             </span>
           </div>
         </div>
-        {!inline && (
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="text-lg px-2"
-            style={{ color: "#9ca0a8", background: "none", border: "none", cursor: "pointer" }}
-            aria-label="收起"
-          >
-            ×
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-lg px-2"
+          style={{ color: "#9ca0a8", background: "none", border: "none", cursor: "pointer" }}
+          aria-label="收起"
+        >
+          ×
+        </button>
       </div>
+      )}
 
       {/* 消息流 */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-4" style={{ minHeight: 0 }}>
-        {messages.length === 0 && (
+        {messages.length === 0 && !inline && (
           <div className="flex flex-col items-center px-6 pb-2">
             <img src={assistantAvatar} alt="" className="assistant-avatar w-20 h-20 rounded-full object-cover mb-3" />
             <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#3a3a3c" }}>
-              {inline
-                ? "你好呀，我是心栈。说事（立约定、做计划、拉协同）、记事（心签）、办事（网页上的小助手）都可以直接说给我听，确认后我就替你落库。"
-                : "你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。"}
+              你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。
             </div>
-            {inline && (
-              <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                {[
-                  "记下：今天的一个心得",
-                  "帮我规划这周的学习",
-                  "立个约定：每天跑步 20 分钟",
-                  "勾掉子约定「订酒店」",
-                  "心里有点乱，陪我聊聊",
-                ].map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => sendText(s, null)}
-                    disabled={busy}
-                    className="min-h-[32px] rounded-full px-3 text-xs transition-colors active:scale-95"
-                    style={{ border: "1px solid #e8ecef", color: "#63666e", background: "#fff", cursor: "pointer" }}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
+          </div>
+        )}
+        {messages.length === 0 && inline && (
+          <div className="px-4 pt-4 pb-2">
+            {/* 问候：新用户给引导，老用户给今日总结 */}
+            <div className="flex items-start gap-3">
+              <img src={assistantAvatar} alt="心栈" className="assistant-avatar w-10 h-10 rounded-full object-cover shrink-0 mt-0.5" />
+              <p className="text-[15px] leading-relaxed" style={{ color: "#1c1c1e" }}>
+                {newUser
+                  ? "今天想做点什么？日程、情绪、随便聊聊都可以找我；你的搭子们也在各自的岗位上待命。"
+                  : summary || "欢迎回来。想从哪件开始，还是先说点别的？"}
+              </p>
+            </div>
+            <div className="mt-4 flex items-baseline justify-between">
+              <span className="text-[11px] tracking-widest" style={{ color: "#9ca0a8" }}>和心栈说事</span>
+              <span className="text-[10px]" style={{ color: "#c4c6cc" }}>不用认领搭子，直接说</span>
+            </div>
+            <div className="mt-2 flex flex-col gap-2">
+              {(newUser
+                ? [
+                    "提醒我每周日给妈妈打电话",
+                    "把「先做最重要的一件事」记成心签",
+                    "帮我做一个 7 天晨读计划",
+                    "拉个协同约定，和朋友一起背单词",
+                    "帮我订一张明天去上海的高铁票",
+                    "心里有点乱，陪我聊聊",
+                  ]
+                : [
+                    "帮我安排今天的计划",
+                    "把现在脑子里的事记成心签",
+                    "这周我做得怎么样？",
+                    "拉个协同约定，和朋友一起推进",
+                    "帮我订一张明天去上海的高铁票",
+                    "心里有点乱，陪我聊聊",
+                  ]
+              ).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => sendText(s, null)}
+                  disabled={busy}
+                  className="w-full text-left rounded-full px-4 py-2.5 text-[13px] transition-all active:scale-[0.99]"
+                  style={{ border: "1px solid #e8ecef", color: "#3a3a3c", background: "#fff", cursor: "pointer" }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {messages.map(renderMessage)}
@@ -489,7 +513,7 @@ export default function AssistantWidget({ inline = false }) {
       )}
 
       {/* 输入区 */}
-      <div className="shrink-0 px-3 py-2.5" style={{ background: "#fff", borderTop: "1px solid #e8ecef" }}>
+      <div className="shrink-0 px-3 py-2.5" style={inline ? { background: "transparent" } : { background: "#fff", borderTop: "1px solid #e8ecef" }}>
         <div className="flex items-end gap-2">
           <textarea
             value={input}
@@ -501,22 +525,27 @@ export default function AssistantWidget({ inline = false }) {
               }
             }}
             rows={1}
-            placeholder="和小助手说点什么…"
-            className="flex-1 resize-none rounded-2xl px-3.5 py-2.5 text-[13.5px] outline-none"
-            style={{ background: "#eef0f5", border: "none", maxHeight: 120, color: "#1c1c1e" }}
+            placeholder={inline ? "立约定、写心签、订票购物…都可以说" : "和小助手说点什么…"}
+            className="flex-1 resize-none px-3.5 py-2.5 text-[13.5px] outline-none"
+            style={
+              inline
+                ? { background: "#fff", border: "1px solid #e8ecef", borderRadius: 9999, maxHeight: 120, color: "#1c1c1e" }
+                : { background: "#eef0f5", border: "none", borderRadius: 16, maxHeight: 120, color: "#1c1c1e" }
+            }
           />
           <button
             type="button"
             onClick={send}
             disabled={busy || !input.trim()}
             className="rounded-full text-white text-[13px] font-semibold shrink-0"
-            style={{
-              width: 40, height: 40, background: input.trim() ? "#384877" : "#c6c9cf",
-              border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1
-            }}
+            style={
+              inline
+                ? { minWidth: 56, height: 40, padding: "0 14px", background: input.trim() ? "#1c1c1e" : "#c6c9cf", border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1 }
+                : { width: 40, height: 40, background: input.trim() ? "#384877" : "#c6c9cf", border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1 }
+            }
             aria-label="发送"
           >
-            ➤
+            {inline ? "发送" : "➤"}
           </button>
         </div>
       </div>
@@ -528,7 +557,7 @@ export default function AssistantWidget({ inline = false }) {
     return (
       <div
         className="flex flex-col overflow-hidden rounded-3xl"
-        style={{ background: "#f5f6fa", border: "1px solid #e8ecef", height: 520 }}
+        style={{ background: "#FAF9F7", border: "1px solid #e7e5e4", height: 560 }}
       >
         {panelBody}
       </div>

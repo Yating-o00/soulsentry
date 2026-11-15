@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -175,7 +175,7 @@ export default function BuddySpace() {
         {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
         {activeTab === "笔记" && <ReadingNotesPanel tint={tint} />}
         {activeTab === "协同" && (
-          <CollabSection buddy={buddy} tint={tint} projectTask={projectTask} onOpenCollab={() => setCollabOpen(true)} />
+          <CollabSection buddy={buddy} tint={tint} projectTask={projectTask} allTasks={allTasks} onOpenCollab={() => setCollabOpen(true)} />
         )}
         {activeTab === "画像" && (
           <ProfileSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
@@ -268,28 +268,72 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
   );
 }
 
-/* ---------- 协同：把项目约定变成多人共创 ---------- */
-function CollabSection({ buddy, tint, projectTask, onOpenCollab }) {
+/* ---------- 协同：朋友 + 搭子 Agent 的多方共创 ----------
+   Agent 是协调者：拉齐共识、化解分歧、推进讨论、总结沉淀、找外部信息支援；
+   讨论产出自动落成子约定与心签，由 Agent 持续维护。 */
+function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }) {
+  const collabs = allTasks.filter((t) => t?.metadata?.collab && !t.deleted_at && !t.parent_task_id);
+
   return (
-    <section className="rounded-2xl border border-stone-200 bg-white p-5 text-center">
-      <Users2 className="w-8 h-8 mx-auto" style={{ color: tint[2] }} />
-      <p className="mt-3 text-[15px] font-medium text-stone-800">拉个伙伴，一起推进</p>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-stone-500">
-        把「{projectTask?.title || buddy.name}的项目约定」变成协同约定：邀请真实的伙伴加入，
-        与 {buddy.name}多方讨论，讨论沉淀为子约定，进展同步勾划。
-      </p>
-      <button
-        onClick={onOpenCollab}
-        disabled={!projectTask}
-        className="mt-4 min-h-[44px] w-full rounded-full text-sm font-medium text-white disabled:opacity-50"
-        style={{ background: tint[2] }}
-      >
-        开启协同约定
-      </button>
-      {projectTask?.metadata?.collab && (
-        <p className="mt-2 text-xs text-stone-400">这条约定已开启协同，去约定页的协同区查看。</p>
+    <div className="space-y-4">
+      {/* Agent 角色说明 */}
+      <section className="rounded-2xl bg-[#384877] p-5 text-[#FAF9F7]">
+        <div className="flex items-center gap-2 text-xs tracking-widest opacity-70">
+          <Users2 className="w-4 h-4" /> 协同约定里的{buddy.name}
+        </div>
+        <ul className="mt-3 space-y-2 text-sm leading-relaxed">
+          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />协调沟通：讨论跑偏时拉回来，有分歧时给出折中方案</li>
+          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />推动进展：把聊出来的共识变成子约定，进展自动勾划</li>
+          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />专业外援：需要外部信息（攻略、资料、行情）时 ta 去查</li>
+          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />总结沉淀：阶段性结论自动沉淀为心签，随时翻得回来</li>
+        </ul>
+      </section>
+
+      {/* 进行中的协同约定 */}
+      {collabs.length > 0 && (
+        <section className="rounded-2xl border border-stone-200 bg-white p-5">
+          <div className="text-[11px] tracking-widest text-stone-400">进行中的协同约定</div>
+          <ul className="mt-3 space-y-2">
+            {collabs.map((t) => (
+              <li key={t.id}>
+                <Link
+                  to={`/collabspace?taskId=${t.id}`}
+                  className="flex items-center gap-3 rounded-xl bg-[#FAF9F7] px-4 py-3 transition-colors hover:bg-stone-100"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>
+                    协
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-medium text-stone-800">{t.title}</span>
+                    <span className="text-xs text-stone-400">
+                      {t.id === projectTask?.id ? "本搭子的项目约定 · " : ""}多人共创中
+                    </span>
+                  </span>
+                  <span className="text-stone-400">→</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
-    </section>
+
+      {/* 新建协同 */}
+      <section className="rounded-2xl border border-stone-200 bg-white p-5 text-center">
+        <p className="text-[15px] font-medium text-stone-800">拉个伙伴，一起推进</p>
+        <p className="mt-1.5 text-[13px] leading-relaxed text-stone-500">
+          把「{projectTask?.title || buddy.name + "的项目约定"}」变成协同约定：发邀请链接给朋友，
+          大家和 {buddy.name} 在一个讨论区里聊，子约定和沉淀由 ta 维护。
+        </p>
+        <button
+          onClick={onOpenCollab}
+          disabled={!projectTask}
+          className="mt-4 min-h-[44px] w-full rounded-full text-sm font-medium text-white disabled:opacity-50"
+          style={{ background: tint[2] }}
+        >
+          {projectTask?.metadata?.collab ? "管理项目约定的协同" : "开启协同约定"}
+        </button>
+      </section>
+    </div>
   );
 }
 

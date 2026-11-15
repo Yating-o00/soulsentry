@@ -23,7 +23,7 @@ export default function BuddyCompanions() {
         <h2 className="text-base font-semibold text-[#1c1917]">进行中的陪伴</h2>
         <span className="text-xs text-[#a8a29e]">{active.length} 颗搭子在岗</span>
       </div>
-      <div className="mt-3 space-y-3 px-1">
+      <div className="mt-3 space-y-3 px-1 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
         {active.length === 0 && (
           <Link
             to={createPageUrl("BuddyStore")}

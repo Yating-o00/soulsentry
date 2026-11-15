@@ -16,14 +16,14 @@ export default function BuddyStore() {
   const profiles = mine?.buddies || {};
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 md:py-10">
+    <div className="max-w-3xl lg:max-w-5xl mx-auto px-4 py-6 md:py-10">
       <h1 className="text-2xl font-bold text-stone-900">搭子Store</h1>
       <p className="mt-2 text-sm text-stone-500 leading-relaxed">
         每颗搭子都是一段长期关系：有自己的专业、自己的记忆、自己的陪伴时长。
         认领后，它会出现在你的首页，直到这个项目走完。
       </p>
 
-      <div className="mt-6 space-y-5">
+      <div className="mt-6 space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0 lg:items-start">
         {BUDDIES.map((buddy) => {
           const tint = BUDDY_TINTS[buddy.id];
           const profile = profiles[buddy.id];

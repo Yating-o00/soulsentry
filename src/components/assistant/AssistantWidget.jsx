@@ -556,8 +556,8 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   if (inline) {
     return (
       <div
-        className="flex flex-col overflow-hidden rounded-3xl"
-        style={{ background: "#FAF9F7", border: "1px solid #e7e5e4", height: 560 }}
+        className="flex flex-col overflow-hidden rounded-3xl h-[560px] lg:h-[680px]"
+        style={{ background: "#FAF9F7", border: "1px solid #e7e5e4" }}
       >
         {panelBody}
       </div>

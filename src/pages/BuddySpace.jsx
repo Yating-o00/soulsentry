@@ -103,7 +103,7 @@ export default function BuddySpace() {
   };
 
   return (
-    <div className="max-w-xl mx-auto px-4 pt-6 md:pt-10 pb-10">
+    <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 pt-6 md:pt-10 pb-10">
       {/* 页眉：搭子头 + 人格化问候 */}
       <header className="flex items-center gap-3">
         <button

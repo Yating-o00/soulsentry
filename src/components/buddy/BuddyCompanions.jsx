@@ -20,14 +20,14 @@ export default function BuddyCompanions() {
   return (
     <section className="mt-8">
       <div className="flex items-baseline justify-between px-1">
-        <h2 className="text-base font-semibold text-[#242424]">进行中的陪伴</h2>
-        <span className="text-xs text-[#8a867e]">{active.length} 颗搭子在岗</span>
+        <h2 className="text-base font-semibold text-[#1c1917]">进行中的陪伴</h2>
+        <span className="text-xs text-[#a8a29e]">{active.length} 颗搭子在岗</span>
       </div>
       <div className="mt-3 space-y-3 px-1">
         {active.length === 0 && (
           <Link
             to={createPageUrl("BuddyStore")}
-            className="block rounded-2xl border border-dashed border-[#ccc0a8] p-5 text-center text-sm text-[#8a867e] transition-colors hover:border-[#9a6b3c] hover:text-[#9a6b3c]"
+            className="block rounded-2xl border border-dashed border-[#e7e5e4] p-5 text-center text-sm text-[#a8a29e] transition-colors hover:border-[#384877] hover:text-[#384877]"
           >
             还没有认领搭子 —— 去搭子Store挑一颗
           </Link>
@@ -39,19 +39,19 @@ export default function BuddyCompanions() {
             <Link
               key={b.id}
               to={`${createPageUrl("BuddySpace")}?buddy=${b.id}`}
-              className="flex items-center gap-3.5 rounded-2xl bg-[#faf8f3] p-4 shadow-[0_1px_2px_rgba(36,36,36,0.06)] transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
+              className="flex items-center gap-3.5 rounded-2xl bg-[#FFFFFF] p-4 shadow-[0_1px_2px_rgba(36,36,36,0.06)] transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
             >
               <Orb size={48} tint={tint} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <span className="font-medium text-[#242424]">{b.name}</span>
-                  <span className="text-[11px] text-[#8a867e]">{b.duration}</span>
+                  <span className="font-medium text-[#1c1917]">{b.name}</span>
+                  <span className="text-[11px] text-[#a8a29e]">{b.duration}</span>
                 </div>
-                <div className="mt-0.5 truncate text-sm text-[#5a564e]">
+                <div className="mt-0.5 truncate text-sm text-[#57534e]">
                   {profile?.plan_title || b.greeting[persona] || b.greeting.gentle}
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 shrink-0 text-[#8a867e]" />
+              <ChevronRight className="w-4 h-4 shrink-0 text-[#a8a29e]" />
             </Link>
           );
         })}

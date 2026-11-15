@@ -71,7 +71,7 @@ export default function BuddySpace() {
         </p>
         <button
           onClick={() => navigate(createPageUrl("BuddyStore"))}
-          className="mt-4 rounded-full bg-stone-900 px-6 py-2.5 text-sm text-[#f2efe9]"
+          className="mt-4 rounded-full bg-[#384877] px-6 py-2.5 text-sm text-[#FAF9F7]"
         >
           去搭子Store
         </button>
@@ -179,7 +179,7 @@ export default function BuddySpace() {
       {/* 毕业仪式确认 */}
       {graduateOpen && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-stone-900/45 p-5"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-[#384877]/45 p-5"
           onClick={() => setGraduateOpen(false)}
         >
           <div
@@ -198,7 +198,7 @@ export default function BuddySpace() {
               <button
                 onClick={graduate}
                 disabled={graduating}
-                className="rounded-full px-6 py-3 text-sm text-white bg-stone-900 disabled:opacity-50"
+                className="rounded-full px-6 py-3 text-sm text-white bg-[#384877] disabled:opacity-50"
               >
                 {graduating ? "珍重…" : "毕业快乐"}
               </button>
@@ -221,7 +221,7 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
   return (
     <div className="space-y-4">
       {profile?.plan_title && (
-        <section className="rounded-2xl bg-stone-900 p-5 text-[#f2efe9]">
+        <section className="rounded-2xl bg-[#384877] p-5 text-[#FAF9F7]">
           <div className="text-xs tracking-widest" style={{ color: tint[1] }}>
             进行中的陪伴 · {buddy.duration}
           </div>
@@ -306,7 +306,7 @@ function ProfileSection({ buddy, profile, tint, projectTask }) {
         {profile?.answers && Object.keys(profile.answers).length > 0 ? (
           <div className="mt-2.5 flex flex-wrap gap-2">
             {Object.entries(profile.answers).map(([k, v]) => (
-              <span key={k} className="rounded-full bg-[#f2efe9] px-3 py-1.5 text-[13px] text-stone-600">
+              <span key={k} className="rounded-full bg-[#FAF9F7] px-3 py-1.5 text-[13px] text-stone-600">
                 {v}
               </span>
             ))}
@@ -372,7 +372,7 @@ function HabitChainSection({ chain, tint }) {
             {i > 0 && <span className="text-stone-300">→</span>}
             <span
               className="flex-1 rounded-xl px-3 py-2.5 text-center text-[13px]"
-              style={{ background: `${tint[0]}`, color: "#5a564e" }}
+              style={{ background: `${tint[0]}`, color: "#57534e" }}
             >
               {c}
             </span>

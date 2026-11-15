@@ -9,7 +9,7 @@ import { queryClientInstance } from '@/lib/query-client'
 import VisualEditAgent from '@/lib/VisualEditAgent'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 import { setupIframeMessaging } from './lib/iframe-messaging';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth, isPublicSharePage } from '@/lib/AuthContext';
@@ -33,6 +33,9 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+  const location = useLocation();
+  // 首页（Dashboard）已内嵌通用 Agent 对话框，右下角机器人不再重复出现
+  const isHomePage = location.pathname === createPageUrl("Dashboard") || location.pathname === "/";
 
   // 行为埋点：每个浏览器会话上报一次应用打开（驱动 admin 看板的活跃口径）
   useEffect(() => {
@@ -96,8 +99,8 @@ const AuthenticatedApp = () => {
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       <OnboardingHost />
-      {/* 心栈小助手：右下角机器人入口（公开分享页不显示） */}
-      {isAuthenticated && !isPublicSharePage() && <AssistantWidget />}
+      {/* 心栈小助手：右下角机器人入口（公开分享页不显示；首页已内嵌对话框，不重复出现） */}
+      {isAuthenticated && !isPublicSharePage() && !isHomePage && <AssistantWidget />}
     </LayoutWrapper>
   );
 };

@@ -73,12 +73,12 @@ export default function BuddyStore() {
                     ))}
                   </ul>
                 </div>
-                <div className="grid grid-cols-1 gap-3 rounded-2xl bg-[#f2efe9] p-3.5">
+                <div className="grid grid-cols-1 gap-3 rounded-2xl bg-[#FAF9F7] p-3.5">
                   <div>
                     <div className="text-[11px] tracking-widest text-stone-400">它会记住</div>
                     <p className="mt-0.5 text-[13px] leading-relaxed text-stone-600">{buddy.memory}</p>
                   </div>
-                  <div className="flex items-center justify-between border-t border-[#ccc0a8] pt-2.5">
+                  <div className="flex items-center justify-between border-t border-[#e7e5e4] pt-2.5">
                     <span className="text-[11px] tracking-widest text-stone-400">关系时长</span>
                     <span className="text-[13px] font-medium text-stone-600">{buddy.duration}</span>
                   </div>
@@ -95,14 +95,14 @@ export default function BuddyStore() {
                 {claimed ? (
                   <button
                     onClick={() => navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}`)}
-                    className="min-h-[46px] w-full rounded-full bg-stone-900 text-sm font-medium text-[#f2efe9] transition-transform active:scale-[0.98]"
+                    className="min-h-[46px] w-full rounded-full bg-[#384877] text-sm font-medium text-[#FAF9F7] transition-transform active:scale-[0.98]"
                   >
                     进入{buddy.name}的空间
                   </button>
                 ) : (
                   <button
                     onClick={() => navigate(`${createPageUrl("BuddyClaim")}?buddy=${buddy.id}`)}
-                    className="min-h-[46px] w-full rounded-full border border-stone-900 text-sm font-medium text-stone-900 transition-colors hover:bg-stone-900 hover:text-[#f2efe9] active:scale-[0.98]"
+                    className="min-h-[46px] w-full rounded-full border border-stone-900 text-sm font-medium text-stone-900 transition-colors hover:bg-[#384877] hover:text-[#FAF9F7] active:scale-[0.98]"
                   >
                     {profile?.status === "graduated" ? "再认领一次" : "认领这颗搭子"}
                   </button>

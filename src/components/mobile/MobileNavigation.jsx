@@ -18,7 +18,7 @@ export default function MobileNavigation() {
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-stretch justify-around border-t border-[#e5e0d4] bg-[#faf8f3] pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-stretch justify-around border-t border-[#e7e5e4] bg-[#FFFFFF] pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
       aria-label="主导航"
     >
       {TABS.map((t) => {
@@ -32,7 +32,7 @@ export default function MobileNavigation() {
             to={t.path}
             aria-current={active ? "page" : undefined}
             className={`flex min-h-[48px] min-w-[56px] flex-col items-center justify-center gap-0.5 rounded-xl px-3 transition-colors duration-200 ${
-              active ? "text-[#9a6b3c]" : "text-[#8a867e] hover:text-[#5a564e]"
+              active ? "text-[#384877]" : "text-[#a8a29e] hover:text-[#57534e]"
             }`}
           >
             <Icon className="w-[22px] h-[22px]" strokeWidth={active ? 2.2 : 1.6} />

@@ -71,25 +71,25 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f2efe9] flex flex-col items-center px-5 pt-[max(3rem,env(safe-area-inset-top))] pb-10">
+    <div className="min-h-screen bg-[#FAF9F7] flex flex-col items-center px-5 pt-[max(3rem,env(safe-area-inset-top))] pb-10">
       <div className="w-full max-w-md">
         <div className="flex justify-center"><Orb size={72} /></div>
-        <h1 className="mt-4 text-center text-lg font-semibold text-[#242424]">让心栈认识你</h1>
-        <p className="mt-1 text-center text-xs text-[#8a867e]">四个小问题，答案会直接生效，不是问卷</p>
+        <h1 className="mt-4 text-center text-lg font-semibold text-[#1c1917]">让心栈认识你</h1>
+        <p className="mt-1 text-center text-xs text-[#a8a29e]">四个小问题，答案会直接生效，不是问卷</p>
 
         {/* 进度点 */}
         <div className="mt-4 flex justify-center gap-1.5">
           {STEPS.map((s, i) => (
             <span
               key={s.key}
-              className={cn("h-1.5 rounded-full transition-all", i === step ? "w-6 bg-[#242424]" : "w-1.5 bg-[#ccc0a8]")}
+              className={cn("h-1.5 rounded-full transition-all", i === step ? "w-6 bg-[#384877]" : "w-1.5 bg-[#e7e5e4]")}
             />
           ))}
         </div>
 
-        <div className="mt-6 rounded-3xl bg-[#faf8f3] border border-[#e5e0d4] p-6 shadow-[0_1px_3px_rgba(36,36,36,0.05)]">
-          <h2 className="text-[16px] font-semibold text-[#242424]">{current.title}</h2>
-          <p className="mt-1 text-xs text-[#8a867e]">{current.desc}</p>
+        <div className="mt-6 rounded-3xl bg-[#FFFFFF] border border-[#e7e5e4] p-6 shadow-[0_1px_3px_rgba(36,36,36,0.05)]">
+          <h2 className="text-[16px] font-semibold text-[#1c1917]">{current.title}</h2>
+          <p className="mt-1 text-xs text-[#a8a29e]">{current.desc}</p>
 
           <div className="mt-4 space-y-2.5">
             {current.key === "age" && (
@@ -117,8 +117,8 @@ export default function Onboarding() {
                     className={cn(
                       "rounded-2xl border px-4 py-2.5 text-left text-[14px] transition-all",
                       wants.includes(w)
-                        ? "border-[#242424] bg-[#242424] text-[#f2efe9]"
-                        : "border-[#ccc0a8] bg-white text-[#5a564e] hover:border-[#242424]"
+                        ? "border-[#1c1917] bg-[#384877] text-[#FAF9F7]"
+                        : "border-[#e7e5e4] bg-white text-[#57534e] hover:border-[#1c1917]"
                     )}
                   >
                     {w}
@@ -136,13 +136,13 @@ export default function Onboarding() {
                     className={cn(
                       "rounded-2xl border p-4 text-left transition-all",
                       persona === p.key
-                        ? "border-[#242424] bg-white ring-1 ring-[#242424]"
-                        : "border-[#ccc0a8] bg-white hover:border-[#242424]"
+                        ? "border-[#1c1917] bg-white ring-1 ring-[#1c1917]"
+                        : "border-[#e7e5e4] bg-white hover:border-[#1c1917]"
                     )}
                   >
-                    <div className="font-medium text-[#242424]">{p.name}</div>
-                    <div className="mt-0.5 text-sm text-[#8a867e]">{p.desc}</div>
-                    <div className="mt-2 border-l-2 border-[#ccc0a8] pl-3 text-sm text-[#5a564e] italic">
+                    <div className="font-medium text-[#1c1917]">{p.name}</div>
+                    <div className="mt-0.5 text-sm text-[#a8a29e]">{p.desc}</div>
+                    <div className="mt-2 border-l-2 border-[#e7e5e4] pl-3 text-sm text-[#57534e] italic">
                       “{p.sample}”
                     </div>
                   </button>
@@ -154,14 +154,14 @@ export default function Onboarding() {
           <button
             onClick={next}
             disabled={!canContinue || saving}
-            className="mt-6 min-h-[48px] w-full rounded-full bg-[#242424] text-[15px] font-medium text-[#f2efe9] transition-transform active:scale-[0.98] disabled:opacity-40"
+            className="mt-6 min-h-[48px] w-full rounded-full bg-[#384877] text-[15px] font-medium text-[#FAF9F7] transition-transform active:scale-[0.98] disabled:opacity-40"
           >
             {saving ? "写入主档案…" : step < STEPS.length - 1 ? "下一步" : "认识完毕，见一见你的心栈"}
           </button>
           {step > 0 && (
             <button
               onClick={() => setStep(step - 1)}
-              className="mt-2 w-full text-center text-xs text-[#8a867e] hover:text-[#5a564e] py-2"
+              className="mt-2 w-full text-center text-xs text-[#a8a29e] hover:text-[#57534e] py-2"
             >
               返回上一步
             </button>
@@ -170,7 +170,7 @@ export default function Onboarding() {
 
         <button
           onClick={() => navigate(createPageUrl("Dashboard"))}
-          className="mt-4 w-full text-center text-xs text-[#8a867e] hover:text-[#5a564e]"
+          className="mt-4 w-full text-center text-xs text-[#a8a29e] hover:text-[#57534e]"
         >
           先跳过，稍后再说
         </button>
@@ -186,8 +186,8 @@ function OptionChip({ active, onClick, children }) {
       className={cn(
         "rounded-full border px-4 py-2 text-[14px] transition-all active:scale-95",
         active
-          ? "border-[#242424] bg-[#242424] text-[#f2efe9]"
-          : "border-[#ccc0a8] bg-white text-[#5a564e] hover:border-[#242424]"
+          ? "border-[#1c1917] bg-[#384877] text-[#FAF9F7]"
+          : "border-[#e7e5e4] bg-white text-[#57534e] hover:border-[#1c1917]"
       )}
     >
       {children}

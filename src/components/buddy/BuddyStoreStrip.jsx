@@ -20,8 +20,8 @@ export default function BuddyStoreStrip() {
   return (
     <section className="mt-8">
       <div className="flex items-baseline justify-between px-1">
-        <h2 className="text-base font-semibold text-[#242424]">搭子Store</h2>
-        <Link to={createPageUrl("BuddyStore")} className="text-xs text-[#9a6b3c] hover:underline">
+        <h2 className="text-base font-semibold text-[#1c1917]">搭子Store</h2>
+        <Link to={createPageUrl("BuddyStore")} className="text-xs text-[#384877] hover:underline">
           逛一逛 →
         </Link>
       </div>
@@ -32,29 +32,29 @@ export default function BuddyStoreStrip() {
             <Link
               key={b.id}
               to={`${createPageUrl("BuddyClaim")}?buddy=${b.id}`}
-              className="w-[150px] shrink-0 rounded-2xl border border-[#e5e0d4] bg-[#faf8f3] p-4 transition-transform duration-200 hover:scale-[1.02] active:scale-95"
+              className="w-[150px] shrink-0 rounded-2xl border border-[#e7e5e4] bg-[#FFFFFF] p-4 transition-transform duration-200 hover:scale-[1.02] active:scale-95"
             >
               <Orb size={40} tint={BUDDY_TINTS[b.id]} />
-              <div className="mt-2.5 font-medium text-[#242424]">{b.name}</div>
-              <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#8a867e]">{b.slogan}</div>
+              <div className="mt-2.5 font-medium text-[#1c1917]">{b.name}</div>
+              <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#a8a29e]">{b.slogan}</div>
             </Link>
           ))}
         </div>
       ) : (
         <Link
           to={createPageUrl("BuddyStore")}
-          className="mx-1 mt-3 flex items-center gap-3 rounded-2xl border border-dashed border-[#ccc0a8] bg-[#faf8f3] p-4 transition-colors hover:border-[#9a6b3c]"
+          className="mx-1 mt-3 flex items-center gap-3 rounded-2xl border border-dashed border-[#e7e5e4] bg-[#FFFFFF] p-4 transition-colors hover:border-[#384877]"
         >
           <div className="flex -space-x-2">
             {claimed.slice(0, 4).map((b) => (
               <Orb key={b.id} size={30} tint={BUDDY_TINTS[b.id]} />
             ))}
           </div>
-          <div className="flex-1 text-sm text-[#5a564e]">
+          <div className="flex-1 text-sm text-[#57534e]">
             {claimed.length} 颗搭子都在岗，干得漂亮
-            <span className="block text-xs text-[#8a867e]">去 Store 看看还有哪些新搭子</span>
+            <span className="block text-xs text-[#a8a29e]">去 Store 看看还有哪些新搭子</span>
           </div>
-          <ChevronRight className="w-4 h-4 text-[#8a867e] shrink-0" />
+          <ChevronRight className="w-4 h-4 text-[#a8a29e] shrink-0" />
         </Link>
       )}
     </section>

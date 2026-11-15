@@ -350,7 +350,7 @@ export default function AssistantWidget({ inline = false }) {
       <div className="flex items-center gap-2.5 px-4 py-3 shrink-0" style={{ background: "#fff", borderBottom: "1px solid #e8ecef" }}>
         <img src={assistantAvatar} alt="" className={`assistant-avatar w-9 h-9 rounded-full object-cover ${busy ? "assistant-avatar--active" : ""}`} />
         <div className="flex-1 min-w-0">
-          <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>心栈小助手</div>
+          <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>{inline ? "心栈" : "心栈小助手"}</div>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: busy ? "#f0c36d" : "#1f9d55" }} />
             <span className="text-[11px]" style={{ color: "#63666e" }}>
@@ -377,7 +377,9 @@ export default function AssistantWidget({ inline = false }) {
           <div className="flex flex-col items-center px-6 pb-2">
             <img src={assistantAvatar} alt="" className="assistant-avatar w-20 h-20 rounded-full object-cover mb-3" />
             <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#3a3a3c" }}>
-              你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。
+              {inline
+                ? "你好呀，我是心栈。说事（立约定、做计划、拉协同）、记事（心签）、办事（网页上的小助手）都可以直接说给我听，确认后我就替你落库。"
+                : "你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。"}
             </div>
           </div>
         )}

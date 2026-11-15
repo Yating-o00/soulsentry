@@ -25,19 +25,19 @@ export default function AgentIntro() {
     PERSONAS.find((p) => p.key === (mine?.persona || DEFAULT_PERSONA))?.name || "温柔陪伴型";
 
   return (
-    <div className="min-h-screen bg-[#f2efe9] flex flex-col items-center px-7 pt-[max(3rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="min-h-screen bg-[#FAF9F7] flex flex-col items-center px-7 pt-[max(3rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
       <div className="flex flex-1 flex-col items-center w-full max-w-md text-center">
         <Orb size={88} />
-        <h1 className="mt-5 text-xl font-semibold text-[#242424]">我是心栈，你的通用 Agent</h1>
+        <h1 className="mt-5 text-xl font-semibold text-[#1c1917]">我是心栈，你的通用 Agent</h1>
         {profile && (
-          <p className="mt-2.5 text-[13px] leading-relaxed text-[#5a564e]">
+          <p className="mt-2.5 text-[13px] leading-relaxed text-[#57534e]">
             {profile.age} · 喜欢{(profile.likes || []).slice(0, 3).join("、") || "很多事"} ·
             想要「{(profile.wants || [])[0] ?? "陪伴"}」——
             <br />
             我会用{personaName}的方式陪你。
           </p>
         )}
-        <p className="mt-2 text-[13px] leading-relaxed text-[#8a867e]">
+        <p className="mt-2 text-[13px] leading-relaxed text-[#a8a29e]">
           不用先认领搭子，直接跟我说事就行。
         </p>
 
@@ -45,14 +45,14 @@ export default function AgentIntro() {
           {CAPS.map((c) => (
             <div
               key={c.title}
-              className="flex items-center gap-3 rounded-2xl bg-[#faf8f3] p-3.5 text-left shadow-[0_1px_2px_rgba(36,36,36,0.06)]"
+              className="flex items-center gap-3 rounded-2xl bg-[#FFFFFF] p-3.5 text-left shadow-[0_1px_2px_rgba(36,36,36,0.06)]"
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#242424] text-sm text-[#f2efe9]">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#384877] text-sm text-[#FAF9F7]">
                 {c.icon}
               </span>
               <div>
-                <span className="text-[14px] font-medium text-[#242424]">{c.title}</span>
-                <span className="ml-2 text-[12px] text-[#8a867e]">{c.desc}</span>
+                <span className="text-[14px] font-medium text-[#1c1917]">{c.title}</span>
+                <span className="ml-2 text-[12px] text-[#a8a29e]">{c.desc}</span>
               </div>
             </div>
           ))}
@@ -62,13 +62,13 @@ export default function AgentIntro() {
       <div className="w-full max-w-md space-y-2.5">
         <button
           onClick={() => navigate(createPageUrl("Dashboard"))}
-          className="min-h-[50px] w-full rounded-full bg-[#242424] text-[15px] font-medium text-[#f2efe9] transition-transform active:scale-[0.98]"
+          className="min-h-[50px] w-full rounded-full bg-[#384877] text-[15px] font-medium text-[#FAF9F7] transition-transform active:scale-[0.98]"
         >
           直接和心栈聊聊
         </button>
         <button
           onClick={() => navigate(createPageUrl("BuddyStore"))}
-          className="min-h-[50px] w-full rounded-full border border-[#ccc0a8] text-[15px] font-medium text-[#5a564e] transition-colors hover:border-[#9a6b3c] hover:text-[#9a6b3c] active:scale-[0.98]"
+          className="min-h-[50px] w-full rounded-full border border-[#e7e5e4] text-[15px] font-medium text-[#57534e] transition-colors hover:border-[#384877] hover:text-[#384877] active:scale-[0.98]"
         >
           去搭子Store挑一颗
         </button>

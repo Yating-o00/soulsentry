@@ -152,7 +152,7 @@ export default function BuddyClaim() {
             </div>
           ) : (
             <div key={i} className="flex justify-end">
-              <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-stone-900 px-4 py-3 text-[14px] leading-relaxed text-[#f2efe9]">
+              <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#384877] px-4 py-3 text-[14px] leading-relaxed text-[#FAF9F7]">
                 {m.text}
               </div>
             </div>
@@ -174,7 +174,7 @@ export default function BuddyClaim() {
               <button
                 key={c}
                 onClick={() => answer(c)}
-                className="rounded-full border border-stone-300 bg-white px-4 py-2 text-[13px] text-stone-700 transition-colors hover:border-stone-900 hover:bg-stone-900 hover:text-[#f2efe9]"
+                className="rounded-full border border-stone-300 bg-white px-4 py-2 text-[13px] text-stone-700 transition-colors hover:border-stone-900 hover:bg-[#384877] hover:text-[#FAF9F7]"
               >
                 {c}
               </button>
@@ -202,7 +202,7 @@ export default function BuddyClaim() {
             />
             <button
               type="submit"
-              className="min-h-[44px] rounded-full bg-stone-900 px-4 text-sm text-[#f2efe9] transition-transform active:scale-95"
+              className="min-h-[44px] rounded-full bg-[#384877] px-4 text-sm text-[#FAF9F7] transition-transform active:scale-95"
             >
               发送
             </button>
@@ -211,7 +211,7 @@ export default function BuddyClaim() {
 
         {/* 生成的计划卡 */}
         {showPlan && (
-          <div className="ml-11 rounded-2xl bg-stone-900 p-5 text-[#f2efe9]">
+          <div className="ml-11 rounded-2xl bg-[#384877] p-5 text-[#FAF9F7]">
             <div className="text-xs tracking-widest" style={{ color: tint[1] }}>
               弹性计划 · 留白 20%
             </div>
@@ -227,7 +227,7 @@ export default function BuddyClaim() {
             <button
               onClick={claim}
               disabled={claiming}
-              className="mt-5 min-h-[48px] w-full rounded-full bg-[#f2efe9] px-4 font-medium text-stone-900 transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+              className="mt-5 min-h-[48px] w-full rounded-full bg-[#FAF9F7] px-4 font-medium text-stone-900 transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
             >
               {claiming ? "正在开启…" : "开启这段陪伴"}
             </button>

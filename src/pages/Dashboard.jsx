@@ -56,6 +56,23 @@ export default function Dashboard() {
     return { todayPending, guarding, notes: notesList.length };
   }, [allTasks, notesList]);
 
+  // 今日印记播报：每天首次进入首页时，由心栈把当天安排作为对话的第一句话（真实数据，非模板文案）
+  useEffect(() => {
+    const today = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const key = `ss_imprint_echo_${today}`;
+    if (localStorage.getItem(key)) return;
+    if (imprint.guarding === 0 && imprint.notes === 0) return; // 新用户没有数据，不打扰
+    localStorage.setItem(key, "1");
+    const week = ["日", "一", "二", "三", "四", "五", "六"][new Date().getDay()];
+    const now = new Date();
+    const text =
+      `${dayGreeting}${name ? `，${name}` : ""}。今天是 ${now.getMonth() + 1} 月 ${now.getDate()} 日，星期${week}。\n` +
+      `今日印记：${imprint.todayPending} 条约定今日待赴约，${imprint.guarding} 条约定守护中，${imprint.notes} 条心签已沉淀。\n` +
+      `说事、记事、办事，随时找我。`;
+    httpRequest("/api/companion/messages", { method: "POST", body: { assistant_echo: text } }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imprint.guarding, imprint.todayPending, imprint.notes]);
+
   const hour = new Date().getHours();
   const dayGreeting = hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
   const name = user?.full_name || user?.display_name || "";

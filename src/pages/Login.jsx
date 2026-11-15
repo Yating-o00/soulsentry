@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Heart } from "lucide-react";
 import { standaloneClient } from "../api/standaloneClient";
+import { createPageUrl } from "@/utils";
 
 function getPostLoginRedirect() {
   if (typeof window === "undefined") return "/";
@@ -103,7 +104,8 @@ export default function Login() {
         const data = await result.json();
         if (!result.ok) throw new Error(data?.message || "注册失败");
         localStorage.setItem("soulsentry_access_token", data.token);
-        window.location.href = getPostLoginRedirect();
+        // 新注册 → 四步身份识别（答案直接写入主档案），再进通用 Agent 介绍页
+        window.location.href = createPageUrl("Onboarding");
       } else {
         const result = await fetch("/api/auth/login", {
           method: "POST",
@@ -145,9 +147,11 @@ export default function Login() {
           password,
           displayName: displayName.trim() || undefined
         });
-      } else {
-        await standaloneClient.auth.login(email, password);
+        // 新注册 → 四步身份识别（答案直接写入主档案），再进通用 Agent 介绍页
+        window.location.href = createPageUrl("Onboarding");
+        return;
       }
+      await standaloneClient.auth.login(email, password);
       window.location.href = getPostLoginRedirect();
     } catch (error) {
       setMessage(error.message || (isRegister ? "注册失败" : "登录失败"));

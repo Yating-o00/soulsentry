@@ -162,8 +162,17 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
           )}
 
           {/* Tags & Status */}
-          {((note.tags && note.tags.length > 0) || note.is_shared) && (
+          {((note.tags && note.tags.length > 0) || note.is_shared || note.metadata?._extraFields?.sediment_source) && (
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              {note.metadata?._extraFields?.sediment_source && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 border-[#c9d5ef] text-[#384877] bg-[#eef2ff]/60"
+                  title="协同空间确认收下的知识卡，自动沉淀为心签"
+                >
+                  {note.metadata._extraFields.sediment_source}
+                </Badge>
+              )}
               {note.tags?.map(tag => (
                 <Badge 
                   key={tag} 

@@ -133,6 +133,14 @@ function ChildRow({
               </button>
             )}
           </div>
+          {subCollab?.updated_by_discussion && subCollab?.prev_title && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-medium" style={{ color: "#384877" }}>已按讨论更新</span>
+              <span className="text-xs line-through" style={{ color: "#aaa69e" }} title="讨论前的原文">
+                {subCollab.prev_title}
+              </span>
+            </div>
+          )}
           <h3 className={cn("mt-2 text-sm font-semibold leading-6", (done || rejected) ? "text-[#7d7972] line-through" : "")} style={(done || rejected) ? undefined : { color: "#35312f" }}>
             {sub.title}
           </h3>

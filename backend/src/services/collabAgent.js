@@ -725,13 +725,24 @@ async function applySubtaskUpdates({ task, user, pool, labelMap, updates }) {
     const nextStandard = isNonEmptyString(item.standard) ? String(item.standard).trim().slice(0, 500) : null;
     if (!nextTitle && !nextStandard) continue;
     const meta = target.metadata?.collab || {};
+    const titleChanged = nextTitle && nextTitle !== target.title;
+    // 变更留痕：原文（被改写前的约定文字）记入 prev_title + title_history，前端划痕展示
+    const prevHistory = Array.isArray(meta.title_history) ? meta.title_history : [];
+    const titleHistory = titleChanged
+      ? [...prevHistory, { old: target.title, at: new Date().toISOString() }].slice(-10)
+      : prevHistory;
     await prisma.task.update({
       where: { id: target.id },
       data: {
         title: nextTitle || target.title,
         metadata: {
           ...(target.metadata || {}),
-          collab: { ...meta, standard: nextStandard || meta.standard || "" }
+          collab: {
+            ...meta,
+            standard: nextStandard || meta.standard || "",
+            title_history: titleHistory,
+            ...(titleChanged ? { prev_title: target.title, updated_by_discussion: true } : {})
+          }
         }
       }
     });

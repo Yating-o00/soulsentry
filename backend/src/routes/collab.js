@@ -605,6 +605,37 @@ collabRouter.post("/:taskId/docs/:docId/confirm", async (req, res) => {
     { field: "status", field_label: "文档状态", old_value: doc.status, new_value: "confirmed" },
     { field: "version", field_label: "版本", old_value: doc.version, new_value: updated.version }
   ]);
+
+  // 知识沉淀闭环：确认收下 → 自动写入心签页成为「沉淀签」，带来源徽标（协同 → 心签）。
+  // 同一成员对同一文档只沉淀一条，重复确认更新内容与版本号
+  try {
+    const existing = await prisma.note.findFirst({
+      where: { userId: req.user.id, sourceType: "collab_sediment", title: doc.title, deletedAt: null }
+    });
+    const noteData = {
+      title: doc.title,
+      content: doc.content || doc.title,
+      plainText: doc.content || doc.title,
+      sourceType: "collab_sediment",
+      tags: ["沉淀", "心签"],
+      metadata: {
+        _extraFields: {
+          sediment_source: `协同空间 · ${task.title}`,
+          collab_task_id: task.id,
+          collab_doc_id: doc.id,
+          doc_version: updated.version
+        }
+      }
+    };
+    if (existing) {
+      await prisma.note.update({ where: { id: existing.id }, data: noteData });
+    } else {
+      await prisma.note.create({ data: { userId: req.user.id, ...noteData } });
+    }
+  } catch (e) {
+    console.warn("[collab] 沉淀签写入失败:", e?.message || e);
+  }
+
   return res.json(serializeDoc(updated));
 });
 

@@ -103,6 +103,34 @@ buddiesRouter.post("/persona", async (req, res) => {
   return res.json({ persona });
 });
 
+// POST /api/buddies/profile —— 注册身份识别写入主档案（人格 + 四步答卷），全局共享
+buddiesRouter.post("/profile", async (req, res) => {
+  const body = req.body || {};
+  const patch = {};
+  if (body.persona !== undefined) {
+    const persona = String(body.persona || "");
+    if (!["gentle", "strict", "buddy"].includes(persona)) {
+      return res.status(400).json({ error: "INVALID_INPUT", message: "未知的人格类型" });
+    }
+    patch.persona = persona;
+  }
+  if (body.id_profile !== undefined) {
+    const p = body.id_profile && typeof body.id_profile === "object" ? body.id_profile : {};
+    patch.id_profile = {
+      age: String(p.age || "").slice(0, 10) || null,
+      likes: Array.isArray(p.likes) ? p.likes.map((s) => String(s).slice(0, 20)).slice(0, 10) : [],
+      wants: Array.isArray(p.wants) ? p.wants.map((s) => String(s).slice(0, 40)).slice(0, 6) : [],
+      answered_at: new Date().toISOString(),
+    };
+  }
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "没有需要写入的档案字段" });
+  }
+  const { pref } = await readExtraFields(req.user.id);
+  await writeExtraFields(req.user.id, pref, patch);
+  return res.json({ ok: true, ...patch });
+});
+
 // POST /api/buddies/:id/claim —— 认领：写领域档案 + 创建项目约定（项目制绑定）
 buddiesRouter.post("/:id/claim", async (req, res) => {
   const buddyId = req.params.id;

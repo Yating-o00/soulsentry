@@ -90,7 +90,7 @@ export default function DocsPanel({ docs, taskId, onJumpToSource }) {
       await httpRequest(`/api/collab/${taskId}/docs/${selected.id}/confirm`, { method: "POST" });
       setEditing(false);
       invalidateAll();
-      toast.success(`「${selected.title}」已确认（v${selected.version + 1}）`);
+      toast.success(`「${selected.title}」已确认（v${selected.version + 1}），已沉淀为心签`);
     } catch (error) {
       toast.error(error?.message || "确认失败");
     } finally {

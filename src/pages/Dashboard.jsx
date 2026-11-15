@@ -56,22 +56,38 @@ export default function Dashboard() {
     return { todayPending, guarding, notes: notesList.length };
   }, [allTasks, notesList]);
 
-  // 今日印记播报：每天首次进入首页时，由心栈把当天安排作为对话的第一句话（真实数据，非模板文案）
+  // 今日印记播报：每天首次进入首页时，由心栈把当天安排作为对话的第一句话。
+  // 带上具体的约定名字（每天内容确实不同）；若与上一次播报完全雷同则跳过，防止聊天记录重复
   useEffect(() => {
-    const today = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-    const key = `ss_imprint_echo_${today}`;
+    const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const key = `ss_imprint_echo_${todayStr}`;
     if (localStorage.getItem(key)) return;
     if (imprint.guarding === 0 && imprint.notes === 0) return; // 新用户没有数据，不打扰
-    localStorage.setItem(key, "1");
+    const pendingTitles = allTasks
+      .filter((t) => !t.deleted_at && !t.parent_task_id && !isTaskEffectivelyCompleted(t))
+      .filter((t) => {
+        if (!t.reminder_time) return false;
+        return new Date(new Date(t.reminder_time).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10) <= todayStr;
+      })
+      .slice(0, 3)
+      .map((t) => `「${t.title}」`);
     const week = ["日", "一", "二", "三", "四", "五", "六"][new Date().getDay()];
     const now = new Date();
     const text =
       `${dayGreeting}${name ? `，${name}` : ""}。今天是 ${now.getMonth() + 1} 月 ${now.getDate()} 日，星期${week}。\n` +
-      `今日印记：${imprint.todayPending} 条约定今日待赴约，${imprint.guarding} 条约定守护中，${imprint.notes} 条心签已沉淀。\n` +
-      `说事、记事、办事，随时找我。`;
+      (pendingTitles.length > 0
+        ? `今天待赴约：${pendingTitles.join("、")}${imprint.todayPending > 3 ? ` 等 ${imprint.todayPending} 件` : ""}。`
+        : `今日印记：${imprint.todayPending} 条约定今日待赴约，${imprint.guarding} 条约定守护中。`) +
+      `心签已沉淀 ${imprint.notes} 条。说事、记事、办事，随时找我。`;
+    if (localStorage.getItem("ss_imprint_echo_last") === text) {
+      localStorage.setItem(key, "1"); // 内容没有变化，今天不再重复播报
+      return;
+    }
+    localStorage.setItem(key, "1");
+    localStorage.setItem("ss_imprint_echo_last", text);
     httpRequest("/api/companion/messages", { method: "POST", body: { assistant_echo: text } }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imprint.guarding, imprint.todayPending, imprint.notes]);
+  }, [imprint.guarding, imprint.todayPending, imprint.notes, allTasks]);
 
   const hour = new Date().getHours();
   const dayGreeting = hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好";

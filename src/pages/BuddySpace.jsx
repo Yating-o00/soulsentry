@@ -17,6 +17,7 @@ import WeekPanel from "@/components/buddy/panels/WeekPanel";
 import { ItineraryPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
 import { ReadingNowPanel, ShelfPanel, ReadingNotesPanel } from "@/components/buddy/panels/ReadingPanels";
 import { MorningCheckPanel, HabitChainPanel } from "@/components/buddy/panels/MorningPanels";
+import BuddyChatPanel from "@/components/buddy/panels/BuddyChatPanel";
 import { useBuddyState } from "@/components/buddy/panels/shared";
 
 /**
@@ -153,22 +154,30 @@ export default function BuddySpace() {
       {/* 板块内容 */}
       <div className="mt-5">
         {activeTab === sections[0] && buddyId === "study" && (
-          <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+          <div className="space-y-4">
+            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+            <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+          </div>
         )}
         {activeTab === sections[0] && buddyId === "travel" && (
           <div className="space-y-4">
+            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <ItineraryPanel buddy={buddy} profile={profile} tint={tint} persona={persona} />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "reading" && (
           <div className="space-y-4">
+            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <ReadingNowPanel profile={profile} tint={tint} persona={persona} />
             {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
           </div>
         )}
         {activeTab === sections[0] && buddyId === "morning" && (
-          <MorningCheckPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
+          <div className="space-y-4">
+            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+            <MorningCheckPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
+          </div>
         )}
         {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} />}
         {activeTab === "周报" && <WeekPanel tint={tint} projectTask={projectTask} />}

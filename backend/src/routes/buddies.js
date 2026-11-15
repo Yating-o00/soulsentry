@@ -256,9 +256,21 @@ const PERSONA_TONES = {
 };
 
 const agentSchema = z.object({
-  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "weekly", "talk"]),
+  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "weekly", "talk", "chat", "greeting"]),
   payload: z.record(z.any()).optional().default({}),
 });
+
+// 每颗搭子的领域专业知识（注入 system prompt：同一底座，不同专业方向）
+const BUDDY_EXPERTISE = {
+  study:
+    "你是学习科学与备考专家：擅长拆目标、间隔重复、费曼学习法、错题归因、考前节奏管理。给建议必须具体到「下一步做什么」，不讲空泛道理。",
+  travel:
+    "你是资深旅行策划师：擅长弹性行程、目的地攻略、避坑提示、预算与体力管理。给具体可执行的建议（时间、地点、怎么订、注意什么），不说正确的废话。",
+  reading:
+    "你是阅读方法专家，也是共读者：擅长选书建议、阅读节奏、讲书式提问、笔记沉淀。聊书时有自己的观点，能和用户真正讨论内容。",
+  morning:
+    "你是睡眠与作息科学专家：擅长渐进式早起、睡眠卫生、习惯链设计、破功后的温柔修复。懂生理节律，给的建议科学且可执行。",
+};
 
 function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
   const buddyName = BUDDY_NAMES[buddyId] || "搭子";
@@ -315,6 +327,26 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
       return {
         systemPrompt: `${base}你们正在共读《${book}》。用户刚「讲书」——用自己的话讲了理解。讲出来才算读懂。`,
         prompt: `用户说：「${text}」\n\n只输出 JSON：{"reply":"对他这段讲述的回应：先具体肯定一个点，再轻轻推进一步（60字内）","question":"下一个值得想想的问题（30字内）"}`,
+      };
+    }
+    case "greeting": {
+      const context = String(payload.context || "").slice(0, 600);
+      return {
+        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}`,
+        prompt: `用户此刻的真实状态：${context}\n\n以${buddyName}的身份写一句今日开场白（60字内）：结合ta当下的真实状态，给一句具体、有专业含量的提醒或鼓励。不许用「今天也要加油」之类的套话，每次都要不一样。只输出 JSON：{"text":"..."}`,
+      };
+    }
+    case "chat": {
+      const context = String(payload.context || "").slice(0, 800);
+      const history = Array.isArray(payload.messages)
+        ? payload.messages
+            .slice(-10)
+            .map((m) => `${m.role === "user" ? "用户" : buddyName}：${String(m.content || "").slice(0, 500)}`)
+            .join("\n")
+        : "";
+      return {
+        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的上下文：${context || "（暂无）"}`,
+        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n\n以${buddyName}的身份回复最后一条用户消息（120字内）：像朋友一样说话，给最实在的专业指导；涉及行动就给具体下一步，涉及情绪先接住再引导。只输出 JSON：{"reply":"..."}`,
       };
     }
     default:

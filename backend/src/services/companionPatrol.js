@@ -8,6 +8,7 @@
 // 幂等：dedupeKey 唯一约束去重；全局 4 小时冷却防止刷屏；23:00–07:00 静默。
 import { prisma } from "../lib/prisma.js";
 import { collectSubtasks } from "./collabSpace.js";
+import { invokeKimiText } from "../lib/kimi.js";
 
 const SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 const GLOBAL_COOLDOWN_MS = 4 * 3600 * 1000;
@@ -60,6 +61,42 @@ async function sendProactive(user, { dedupeKey, trigger, content }) {
 
 function displayName(user) {
   return user.displayName || "你";
+}
+
+const PERSONA_TONES = {
+  gentle: "温柔陪伴型——轻声细语，永远先接住情绪，不催促、不评判。",
+  strict: "严格督学型——目标导向，语气温和但直接；用户未完成时帮他找原因而不是一味安慰。",
+  buddy: "战友互卷型——像并肩作战的朋友，轻松幽默，多用「我们」「一起」。",
+};
+
+async function loadPersonaTone(userId) {
+  try {
+    const pref = await prisma.userPreference.findUnique({ where: { userId }, select: { metadata: true } });
+    return PERSONA_TONES[pref?.metadata?._extraFields?.persona] || PERSONA_TONES.gentle;
+  } catch (_e) {
+    return PERSONA_TONES.gentle;
+  }
+}
+
+// 模板只提供事实草稿——最终话术由 AI 按人格重写，并避开最近发过的内容，防止聊天记录里每天雷同
+async function polishContent(userId, { trigger, draft, recentTexts }) {
+  try {
+    const personaTone = await loadPersonaTone(userId);
+    const avoid = (recentTexts || []).slice(0, 6).map((t) => t.slice(0, 60));
+    const data = await invokeKimiText({
+      systemPrompt: `你是心栈 SoulSentry 的小助手，人格：${personaTone}你正在主动给用户发一条关怀消息。要求：口语、真诚、80 字以内、不喊口号、不带列表；避开最近发过的角度和措辞（换说法、换切入点），但事实信息必须保留。只输出 JSON：{"text":"..."}`,
+      prompt: `场景：${trigger}。\n草稿（事实以此为准）：${draft}\n\n最近发过的消息（不要雷同）：${avoid.length ? avoid.join(" ｜ ") : "无"}`,
+      responseJsonSchema: true,
+      maxTokens: 300,
+      fetchTimeout: 15000,
+    });
+    const text = String(data?.text || "").trim();
+    // 与近三条完全相同的宁可不发重写版，回退草稿（dedupeKey 仍保证同事件不重复）
+    if (text && text.length <= 140 && !avoid.includes(text)) return text;
+  } catch (err) {
+    console.warn(`[companionPatrol] polish failed, fallback to draft:`, err?.message || err);
+  }
+  return draft;
 }
 
 // 1. 逾期约定：过了约定时间 1 小时以上还没完成
@@ -175,17 +212,19 @@ async function patrolUser(user, now) {
     where: { userId: user.id, kind: "proactive" },
     orderBy: { createdAt: "desc" },
     take: 10,
-    select: { createdAt: true, meta: true }
+    select: { createdAt: true, meta: true, content: true }
   });
   // 全局冷却：上一条主动消息 4 小时内不再打扰
   if (recentProactive[0] && now - recentProactive[0].createdAt.getTime() < GLOBAL_COOLDOWN_MS) return;
 
+  const recentTexts = recentProactive.map((m) => m.content).filter(Boolean);
   const triggers = [triggerOverdue, triggerCollabPending, triggerEvening, triggerSilence];
   for (const fn of triggers) {
     try {
       const hit = await fn(user, now, recentProactive);
       if (hit) {
-        await sendProactive(user, hit);
+        const content = await polishContent(user.id, { trigger: hit.trigger, draft: hit.content, recentTexts });
+        await sendProactive(user, { ...hit, content });
         return; // 每轮至多一条，最重要的先说
       }
     } catch (err) {

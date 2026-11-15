@@ -16,7 +16,11 @@ export const buddiesRouter = Router();
 const BUDDY_IDS = new Set(["study", "travel", "reading", "morning"]);
 
 const claimSchema = z.object({
-  answers: z.record(z.string().max(200)).max(10).optional().default({}),
+  answers: z
+    .record(z.string().max(200))
+    .refine((obj) => Object.keys(obj).length <= 10, { message: "answers too many" })
+    .optional()
+    .default({}),
   plan_title: z.string().trim().max(60).optional(),
   plan_lines: z.array(z.string().trim().max(120)).max(8).optional(),
 });

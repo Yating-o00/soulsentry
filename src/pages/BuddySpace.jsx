@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles } from "lucide-react";
@@ -11,6 +11,12 @@ import Orb from "@/components/buddy/Orb";
 import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy } from "@/lib/buddies";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
 import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
+import SolvePanel from "@/components/buddy/panels/SolvePanel";
+import WeekPanel from "@/components/buddy/panels/WeekPanel";
+import { ItineraryPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
+import { ReadingNowPanel, ShelfPanel, ReadingNotesPanel } from "@/components/buddy/panels/ReadingPanels";
+import { MorningCheckPanel, HabitChainPanel } from "@/components/buddy/panels/MorningPanels";
+import { useBuddyState } from "@/components/buddy/panels/shared";
 
 /**
  * 搭子空间（二期）：配置驱动的空间脚手架——每颗搭子一套板块（buddy.sections），
@@ -145,9 +151,29 @@ export default function BuddySpace() {
 
       {/* 板块内容 */}
       <div className="mt-5">
-        {activeTab === sections[0] && (
+        {activeTab === sections[0] && buddyId === "study" && (
           <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
         )}
+        {activeTab === sections[0] && buddyId === "travel" && (
+          <div className="space-y-4">
+            <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+            <ItineraryPanel buddy={buddy} profile={profile} tint={tint} persona={persona} />
+          </div>
+        )}
+        {activeTab === sections[0] && buddyId === "reading" && (
+          <div className="space-y-4">
+            <ReadingNowPanel profile={profile} tint={tint} persona={persona} />
+            {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
+          </div>
+        )}
+        {activeTab === sections[0] && buddyId === "morning" && (
+          <MorningCheckPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
+        )}
+        {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} />}
+        {activeTab === "周报" && <WeekPanel tint={tint} projectTask={projectTask} />}
+        {activeTab === "灵感" && <InspirationPanel buddy={buddy} tint={tint} />}
+        {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
+        {activeTab === "笔记" && <ReadingNotesPanel tint={tint} />}
         {activeTab === "协同" && (
           <CollabSection buddy={buddy} tint={tint} projectTask={projectTask} onOpenCollab={() => setCollabOpen(true)} />
         )}
@@ -158,11 +184,10 @@ export default function BuddySpace() {
           <ChecklistSection items={buddy.extras.checklist} tint={tint} />
         )}
         {activeTab === "习惯" && buddy.extras?.habitChain && (
-          <HabitChainSection chain={buddy.extras.habitChain} tint={tint} />
+          <HabitChainPanel chain={buddy.extras.habitChain} tint={tint} />
         )}
-        {!["协同", "画像", "清单", "习惯"].includes(activeTab) && activeTab !== sections[0] && (
-          <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />
-        )}
+        {!["协同", "画像", "清单", "习惯", "解题", "周报", "灵感", "书架", "笔记"].includes(activeTab) &&
+          activeTab !== sections[0] && <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />}
       </div>
 
       {/* 协同约定创建（为项目约定开启协同） */}
@@ -320,28 +345,36 @@ function ProfileSection({ buddy, profile, tint, projectTask }) {
   );
 }
 
-/* ---------- 领域特色：旅行清单 / 早起习惯链 ---------- */
+/* ---------- 领域特色：旅行清单（勾选持久化到搭子板块状态，灵感库加进来的也在此核对） ---------- */
 function ChecklistSection({ items, tint }) {
-  const [checked, setChecked] = useState(() => new Set());
-  const toggle = (i) =>
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(i)) next.delete(i);
-      else next.add(i);
-      return next;
-    });
+  const { state, patch } = useBuddyState("travel");
+  const checked = state.checklist_checked || [];
+  const extra = state.checklist_extra || [];
+  const all = [...items, ...extra];
+
+  const toggle = (item) => {
+    const next = checked.includes(item) ? checked.filter((x) => x !== item) : [...checked, item];
+    patch({ checklist_checked: next });
+  };
+
   return (
     <section className="rounded-2xl border border-stone-200 bg-white p-5">
       <div className="flex items-baseline justify-between">
         <div className="text-[11px] tracking-widest text-stone-400">行前清单</div>
-        <span className="text-xs text-stone-400">{`${checked.size}/${items.length}`}</span>
+        <span className="text-xs text-stone-400">{`${checked.length}/${all.length}`}</span>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100">
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${all.length ? (checked.length / all.length) * 100 : 0}%`, background: tint[2] }}
+        />
       </div>
       <ul className="mt-3 space-y-2.5">
-        {items.map((item, i) => {
-          const done = checked.has(i);
+        {all.map((item) => {
+          const done = checked.includes(item);
           return (
             <li key={item}>
-              <button onClick={() => toggle(i)} className="flex w-full items-center gap-3 text-left">
+              <button onClick={() => toggle(item)} className="flex w-full items-center gap-3 text-left">
                 <span
                   className={cn(
                     "flex h-5 w-5 items-center justify-center rounded-md border-2 flex-shrink-0 transition-colors",
@@ -357,31 +390,7 @@ function ChecklistSection({ items, tint }) {
           );
         })}
       </ul>
-      <p className="mt-3 text-xs text-stone-400">勾选只在这台设备上帮你数个数，正式核对以项目约定为准。</p>
-    </section>
-  );
-}
-
-function HabitChainSection({ chain, tint }) {
-  return (
-    <section className="rounded-2xl border border-stone-200 bg-white p-5">
-      <div className="text-[11px] tracking-widest text-stone-400">起床微习惯链</div>
-      <div className="mt-4 flex items-center gap-2">
-        {chain.map((c, i) => (
-          <React.Fragment key={c}>
-            {i > 0 && <span className="text-stone-300">→</span>}
-            <span
-              className="flex-1 rounded-xl px-3 py-2.5 text-center text-[13px]"
-              style={{ background: `${tint[0]}`, color: "#57534e" }}
-            >
-              {c}
-            </span>
-          </React.Fragment>
-        ))}
-      </div>
-      <p className="mt-4 text-xs leading-relaxed text-stone-400">
-        起床后按顺序做完这三件小事，然后在「打卡」板块点一下——就算赢回了一个早晨。
-      </p>
+      <p className="mt-3 text-xs text-stone-400">出发前一晚 21:00，我会逐项跟你核对——勾选云端同步，换设备也不丢。</p>
     </section>
   );
 }

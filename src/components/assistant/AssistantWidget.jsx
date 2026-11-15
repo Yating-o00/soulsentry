@@ -381,6 +381,28 @@ export default function AssistantWidget({ inline = false }) {
                 ? "你好呀，我是心栈。说事（立约定、做计划、拉协同）、记事（心签）、办事（网页上的小助手）都可以直接说给我听，确认后我就替你落库。"
                 : "你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。"}
             </div>
+            {inline && (
+              <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                {[
+                  "记下：今天的一个心得",
+                  "帮我规划这周的学习",
+                  "立个约定：每天跑步 20 分钟",
+                  "勾掉子约定「订酒店」",
+                  "心里有点乱，陪我聊聊",
+                ].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => sendText(s, null)}
+                    disabled={busy}
+                    className="min-h-[32px] rounded-full px-3 text-xs transition-colors active:scale-95"
+                    style={{ border: "1px solid #e8ecef", color: "#63666e", background: "#fff", cursor: "pointer" }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {messages.map(renderMessage)}

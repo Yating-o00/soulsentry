@@ -24,9 +24,9 @@ import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
 
 const smooth = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 
-export default function CollabSpace() {
+export default function CollabSpace({ taskId: taskIdProp, embedded = false }) {
   const [searchParams] = useSearchParams();
-  const taskId = searchParams.get("taskId");
+  const taskId = taskIdProp || searchParams.get("taskId");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -202,8 +202,12 @@ export default function CollabSpace() {
 
   return (
     <div
-      className="min-h-dvh pb-[64px] min-[900px]:grid min-[900px]:h-screen min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden min-[900px]:pb-0"
-      style={{ backgroundColor: "#f1f0ec", color: "#231f20" }}
+      className={
+        embedded
+          ? "rounded-2xl border overflow-hidden min-[900px]:grid min-[900px]:h-[720px] min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)]"
+          : "min-h-dvh pb-[64px] min-[900px]:grid min-[900px]:h-screen min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden min-[900px]:pb-0"
+      }
+      style={{ backgroundColor: "#f1f0ec", color: "#231f20", ...(embedded ? { borderColor: "#d5d3cc" } : {}) }}
     >
       <style>{`
         .collab-msg-flash { animation: collabFlash 2s ease-out; }
@@ -226,12 +230,12 @@ export default function CollabSpace() {
       `}</style>
 
       {/* 左栏：内容区 */}
-      <main id="content-pane" className="min-w-0 min-[900px]:h-screen min-[900px]:min-h-0 min-[900px]:overflow-y-auto">
+      <main id="content-pane" className="min-w-0 min-[900px]:h-full min-[900px]:min-h-0 min-[900px]:overflow-y-auto">
         <AgreementHead
           task={task}
           summary={summary}
           isLoading={isLoading}
-          onBack={() => navigate("/tasks")}
+          onBack={embedded ? null : () => navigate("/tasks")}
           onOpenInvite={() => setInviteOpen(true)}
         />
 
@@ -316,11 +320,13 @@ export default function CollabSpace() {
         />
       </aside>
 
-      <MobileNav
-        active={mobileNavActive}
-        onNavigate={(id) => (id === "content" ? showContent() : showConversation(id))}
-        onOpenAgent={openAgent}
-      />
+      {!embedded && (
+        <MobileNav
+          active={mobileNavActive}
+          onNavigate={(id) => (id === "content" ? showContent() : showConversation(id))}
+          onOpenAgent={openAgent}
+        />
+      )}
 
       <AgentDrawer
         open={agentDrawerOpen}

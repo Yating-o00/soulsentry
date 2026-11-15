@@ -29,15 +29,17 @@ export default function AgreementHead({ task, summary, isLoading, onBack, onOpen
     <section className="border-b px-4 py-5 sm:px-6 sm:py-6" style={{ borderColor: "#d5d3cc", backgroundColor: C.head }}>
       {/* 第一行：返回 + 徽标 */}
       <div className="flex items-center gap-2 flex-wrap">
-        <button
-          onClick={onBack}
-          className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:text-[#384877] hover:border-[#c7d2fe] focus-visible:outline-none"
-          style={{ borderColor: "#d8d6cf", color: "#625e58" }}
-          title="返回约定列表"
-          aria-label="返回约定列表"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="flex h-9 w-9 items-center justify-center rounded-full border transition-colors hover:text-[#384877] hover:border-[#c7d2fe] focus-visible:outline-none"
+            style={{ borderColor: "#d8d6cf", color: "#625e58" }}
+            title="返回约定列表"
+            aria-label="返回约定列表"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+        )}
         {collab && (
           <span className="rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ backgroundColor: "#e9e8e2", color: "#5d5953" }}>
             {SCENARIO_LABELS[collab.scenario] || SCENARIO_LABELS.custom}

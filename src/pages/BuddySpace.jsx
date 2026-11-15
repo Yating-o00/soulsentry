@@ -11,6 +11,7 @@ import Orb from "@/components/buddy/Orb";
 import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy } from "@/lib/buddies";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
 import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
+import CollabSpace from "@/pages/CollabSpace";
 import SolvePanel from "@/components/buddy/panels/SolvePanel";
 import WeekPanel from "@/components/buddy/panels/WeekPanel";
 import { ItineraryPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
@@ -190,14 +191,14 @@ export default function BuddySpace() {
           activeTab !== sections[0] && <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />}
       </div>
 
-      {/* 协同约定创建（为项目约定开启协同） */}
+      {/* 协同约定创建（为项目约定开启协同）：开启后留在本板块，协同空间内嵌呈现 */}
       <CollabCreateDialog
         open={collabOpen}
         existingTask={projectTask}
         onClose={() => setCollabOpen(false)}
-        onCreated={(taskId) => {
+        onCreated={() => {
           setCollabOpen(false);
-          if (taskId) navigate(`/collabspace?taskId=${taskId}`);
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
         }}
       />
 
@@ -269,10 +270,40 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
 }
 
 /* ---------- 协同：朋友 + 搭子 Agent 的多方共创 ----------
-   Agent 是协调者：拉齐共识、化解分歧、推进讨论、总结沉淀、找外部信息支援；
-   讨论产出自动落成子约定与心签，由 Agent 持续维护。 */
+   以专业 Agent 为协调者（拉齐共识、化解分歧、推进讨论、总结沉淀、外部信息支援）；
+   讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
+   其他搭子的协同约定不出现在这里。 */
 function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }) {
-  const collabs = allTasks.filter((t) => t?.metadata?.collab && !t.deleted_at && !t.parent_task_id);
+  const isMine = (t) =>
+    t?.metadata?.collab &&
+    !t.deleted_at &&
+    !t.parent_task_id &&
+    (t.id === projectTask?.id || t.metadata?._extraFields?.buddy_id === buddy.id);
+  const collabs = allTasks.filter(isMine).filter((t) => t.id !== projectTask?.id);
+  const projectCollab = projectTask?.metadata?.collab ? projectTask : null;
+
+  // 项目约定已开启协同：直接内嵌完整协同空间（讨论 / 子约定 / 沉淀，与朋友和 Agent 共创）
+  if (projectCollab) {
+    return (
+      <div className="space-y-3">
+        <CollabSpace taskId={projectCollab.id} embedded />
+        {collabs.map((t) => (
+          <Link
+            key={t.id}
+            to={`/collabspace?taskId=${t.id}`}
+            className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 transition-colors hover:bg-stone-50"
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>协</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[14px] font-medium text-stone-800">{t.title}</span>
+              <span className="text-xs text-stone-400">本搭子的另一场协同 · 多人共创中</span>
+            </span>
+            <span className="text-stone-400">→</span>
+          </Link>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -289,10 +320,10 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
         </ul>
       </section>
 
-      {/* 进行中的协同约定 */}
+      {/* 本搭子的其他协同约定 */}
       {collabs.length > 0 && (
         <section className="rounded-2xl border border-stone-200 bg-white p-5">
-          <div className="text-[11px] tracking-widest text-stone-400">进行中的协同约定</div>
+          <div className="text-[11px] tracking-widest text-stone-400">本搭子的协同约定</div>
           <ul className="mt-3 space-y-2">
             {collabs.map((t) => (
               <li key={t.id}>
@@ -300,14 +331,10 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
                   to={`/collabspace?taskId=${t.id}`}
                   className="flex items-center gap-3 rounded-xl bg-[#FAF9F7] px-4 py-3 transition-colors hover:bg-stone-100"
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>
-                    协
-                  </span>
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>协</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-medium text-stone-800">{t.title}</span>
-                    <span className="text-xs text-stone-400">
-                      {t.id === projectTask?.id ? "本搭子的项目约定 · " : ""}多人共创中
-                    </span>
+                    <span className="text-xs text-stone-400">多人共创中</span>
                   </span>
                   <span className="text-stone-400">→</span>
                 </Link>
@@ -330,7 +357,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
           className="mt-4 min-h-[44px] w-full rounded-full text-sm font-medium text-white disabled:opacity-50"
           style={{ background: tint[2] }}
         >
-          {projectTask?.metadata?.collab ? "管理项目约定的协同" : "开启协同约定"}
+          开启协同约定
         </button>
       </section>
     </div>

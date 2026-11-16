@@ -1385,7 +1385,7 @@ async function generateMoodRiverWithAI(userId, period) {
         prompt: insightPrompt,
         systemPrompt: "你是 SoulSentry 心栈的 AI 伙伴，从用户数据中提炼一句温暖的觉察。只用 JSON 返回。",
         responseJsonSchema: insightSchema,
-        model: "kimi-k2.6",
+        model: "kimi-k2.7",
         temperature: 0.7,
         fetchTimeout: 35000
       }),
@@ -3843,7 +3843,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
       return res.json({
         configured: results.length > 0,
         results,
-        models: ["kimi-k2.6", "kimi-k2.7-code", "kimi-k3"]
+        models: ["kimi-k2.7", "kimi-k2.6", "kimi-k3"]
       });
     }
 

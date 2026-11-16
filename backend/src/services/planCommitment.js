@@ -820,7 +820,7 @@ ${bits.join("\n")}
           prompt,
           systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,
-          model: "kimi-k2.7-code-highspeed",
+          model: "kimi-k2.7",
           maxTokens: 8000,
           fetchTimeout: 60000,
           withUsage: true

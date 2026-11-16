@@ -87,7 +87,7 @@ ${activeItems}
     ];
     let text = "";
     // 推理型模型可能把内容放在 reasoning_content 而 content 为空：换一个候选模型再试一次
-    for (const candidate of [null, "kimi-k2.6"]) {
+    for (const candidate of [null, "kimi-k2.7"]) {
       const result = await callKimiChat({
         messages: buildMessages(),
         ...(candidate ? { model: candidate } : {}),

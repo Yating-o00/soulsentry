@@ -325,14 +325,14 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         )}
         <div className={`max-w-[78%] flex flex-col ${mine ? "items-end" : "items-start"}`}>
           {m.kind === "proactive" && (
-            <span className="text-[10px] mb-1" style={{ color: "#c97b8a" }}>小助手主动来聊</span>
+            <span className="text-[10px] mb-1" style={{ color: "#384877" }}>小助手主动来聊</span>
           )}
           <div
             className="rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap break-all"
             style={
               mine
                 ? { background: "#384877", color: "#fff", borderTopRightRadius: 6 }
-                : { background: "#fff", color: "#1c1c1e", border: "1px solid #e8ecef", borderTopLeftRadius: 6 }
+                : { background: "#eef1f9", color: "#1c1c1e", border: "1px solid #dbe3f2", borderTopLeftRadius: 6 }
             }
           >
             {m.content}
@@ -376,7 +376,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         {messages.length === 0 && !inline && (
           <div className="flex flex-col items-center px-6 pb-2">
             <img src={assistantAvatar} alt="" className="assistant-avatar w-20 h-20 rounded-full object-cover mb-3" />
-            <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#3a3a3c" }}>
+            <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#eef1f9", border: "1px solid #dbe3f2", color: "#384877" }}>
               你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。
             </div>
           </div>
@@ -385,7 +385,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           /* 问候（常驻页首）：新用户给引导，老用户给今日总结；之后的提醒与沟通都在本窗口继续 */
           <div className="px-4 pb-3">
             <div className="flex items-start gap-3">
-              <img src={assistantAvatar} alt="心栈" className="assistant-avatar w-10 h-10 rounded-full object-cover shrink-0 mt-0.5" />
+              <img src={assistantAvatar} alt="心栈" className="assistant-avatar w-10 h-10 rounded-full object-cover shrink-0 mt-0.5" style={{ border: "2px solid #d8e0f0" }} />
               <p className="text-[15px] leading-relaxed" style={{ color: "#1c1c1e" }}>
                 {newUser
                   ? "今天想做点什么？日程、情绪、随便聊聊都可以找我；你的搭子们也在各自的岗位上待命。"
@@ -398,52 +398,53 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         {busy && (
           <div className="flex items-center gap-2 px-4 mb-4">
             <img src={assistantAvatar} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
-            <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#9ca0a8" }}>
+            <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#eef1f9", border: "1px solid #dbe3f2", color: "#384877" }}>
               正在输入…
             </div>
           </div>
         )}
-        {inline && (
-          /* 案例模版（常驻页尾）：作为聊天窗口的固定一部分，不随消息有无而消失 */
-          <div className="px-4 pb-2">
-            <div className="mt-2 flex items-baseline justify-between">
-              <span className="text-[11px] tracking-widest" style={{ color: "#9ca0a8" }}>和心栈说事</span>
-              <span className="text-[10px]" style={{ color: "#c4c6cc" }}>不用认领搭子，直接说</span>
-            </div>
-            <div className="mt-2 flex flex-col gap-2">
-              {(newUser
-                ? [
-                    "提醒我每周日给妈妈打电话",
-                    "把「先做最重要的一件事」记成心签",
-                    "帮我做一个 7 天晨读计划",
-                    "拉个协同约定，和朋友一起背单词",
-                    "帮我订一张明天去上海的高铁票",
-                    "心里有点乱，陪我聊聊",
-                  ]
-                : [
-                    "帮我安排今天的计划",
-                    "把现在脑子里的事记成心签",
-                    "这周我做得怎么样？",
-                    "拉个协同约定，和朋友一起推进",
-                    "帮我订一张明天去上海的高铁票",
-                    "心里有点乱，陪我聊聊",
-                  ]
-              ).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => sendText(s, null)}
-                  disabled={busy}
-                  className="w-full text-left rounded-full px-4 py-2.5 text-[13px] transition-all active:scale-[0.99]"
-                  style={{ border: "1px solid #e8ecef", color: "#3a3a3c", background: "#fff", cursor: "pointer" }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      {inline && (
+        /* 案例模版：固定在输入区上方（不随消息滚动、不随历史加载消失），品牌蓝描边 */
+        <div className="shrink-0 px-4 pt-2 pb-1" style={{ background: "#FAF9F7", borderTop: "1px solid #efeae4" }}>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[11px] tracking-widest font-medium" style={{ color: "#384877" }}>和心栈说事</span>
+            <span className="text-[10px]" style={{ color: "#c4c6cc" }}>不用认领搭子，直接说</span>
+          </div>
+          <div className="mt-2 flex flex-col gap-2">
+            {(newUser
+              ? [
+                  "提醒我每周日给妈妈打电话",
+                  "把「先做最重要的一件事」记成心签",
+                  "帮我做一个 7 天晨读计划",
+                  "拉个协同约定，和朋友一起背单词",
+                  "帮我订一张明天去上海的高铁票",
+                  "心里有点乱，陪我聊聊",
+                ]
+              : [
+                  "帮我安排今天的计划",
+                  "把现在脑子里的事记成心签",
+                  "这周我做得怎么样？",
+                  "拉个协同约定，和朋友一起推进",
+                  "帮我订一张明天去上海的高铁票",
+                  "心里有点乱，陪我聊聊",
+                ]
+            ).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => sendText(s, null)}
+                disabled={busy}
+                className="w-full text-left rounded-full px-4 py-2 text-[13px] transition-all active:scale-[0.99]"
+                style={{ border: "1px solid #d8e0f0", color: "#384877", background: "#fff", cursor: "pointer" }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 动作提案卡片 */}
       {actions && actions.length > 0 && (
@@ -545,7 +546,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             className="rounded-full text-white text-[13px] font-semibold shrink-0"
             style={
               inline
-                ? { minWidth: 56, height: 40, padding: "0 14px", background: input.trim() ? "#1c1c1e" : "#c6c9cf", border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1 }
+                ? { minWidth: 56, height: 40, padding: "0 14px", background: input.trim() ? "#384877" : "#c6c9cf", border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1 }
                 : { width: 40, height: 40, background: input.trim() ? "#384877" : "#c6c9cf", border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1 }
             }
             aria-label="发送"
@@ -561,7 +562,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   if (inline) {
     return (
       <div
-        className="flex flex-col overflow-hidden rounded-3xl h-[560px] lg:h-[680px]"
+        className="flex flex-col overflow-hidden rounded-3xl h-[600px] lg:h-[720px]"
         style={{ background: "#FAF9F7", border: "1px solid #e7e5e4" }}
       >
         {panelBody}

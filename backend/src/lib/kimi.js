@@ -1,7 +1,9 @@
 const DEFAULT_BASE_URL = "https://api.moonshot.cn/v1";
 const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
-const DEFAULT_TEXT_MODELS = ["kimi-k2.7", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
-const DEFAULT_WEB_MODELS = ["kimi-k2.7", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
+// 模型链说明：K2.7 只有编程版（code/code-highspeed），无通用对话版，且 K2 全系 2026-12 底下线；
+// 故主用 K3 旗舰，K2.7 编程版与 K2.6 作兜底（账号无权限/下线时自动降级，不影响功能）
+const DEFAULT_TEXT_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
+const DEFAULT_WEB_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
 
 function getEndpointConfigs() {
   const primaryApiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;

@@ -381,9 +381,9 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             </div>
           </div>
         )}
-        {messages.length === 0 && inline && (
-          <div className="px-4 pt-4 pb-2">
-            {/* 问候：新用户给引导，老用户给今日总结 */}
+        {inline && (
+          /* 问候（常驻页首）：新用户给引导，老用户给今日总结；之后的提醒与沟通都在本窗口继续 */
+          <div className="px-4 pb-3">
             <div className="flex items-start gap-3">
               <img src={assistantAvatar} alt="心栈" className="assistant-avatar w-10 h-10 rounded-full object-cover shrink-0 mt-0.5" />
               <p className="text-[15px] leading-relaxed" style={{ color: "#1c1c1e" }}>
@@ -392,7 +392,21 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
                   : summary || "欢迎回来。想从哪件开始，还是先说点别的？"}
               </p>
             </div>
-            <div className="mt-4 flex items-baseline justify-between">
+          </div>
+        )}
+        {messages.map(renderMessage)}
+        {busy && (
+          <div className="flex items-center gap-2 px-4 mb-4">
+            <img src={assistantAvatar} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
+            <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#9ca0a8" }}>
+              正在输入…
+            </div>
+          </div>
+        )}
+        {inline && (
+          /* 案例模版（常驻页尾）：作为聊天窗口的固定一部分，不随消息有无而消失 */
+          <div className="px-4 pb-2">
+            <div className="mt-2 flex items-baseline justify-between">
               <span className="text-[11px] tracking-widest" style={{ color: "#9ca0a8" }}>和心栈说事</span>
               <span className="text-[10px]" style={{ color: "#c4c6cc" }}>不用认领搭子，直接说</span>
             </div>
@@ -426,15 +440,6 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
                   {s}
                 </button>
               ))}
-            </div>
-          </div>
-        )}
-        {messages.map(renderMessage)}
-        {busy && (
-          <div className="flex items-center gap-2 px-4 mb-4">
-            <img src={assistantAvatar} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
-            <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#fff", border: "1px solid #e8ecef", color: "#9ca0a8" }}>
-              正在输入…
             </div>
           </div>
         )}

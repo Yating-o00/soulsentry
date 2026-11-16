@@ -1,9 +1,11 @@
 const DEFAULT_BASE_URL = "https://api.moonshot.cn/v1";
 const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
 // 模型链说明：K2.7 只有编程版（code/code-highspeed），无通用对话版，且 K2 全系 2026-12 底下线；
-// 故主用 K3 旗舰，K2.7 编程版与 K2.6 作兜底（账号无权限/下线时自动降级，不影响功能）
+// 故主用 K3 旗舰，K2.7 编程版与 K2.6 作兜底（账号无权限/下线时自动降级，不影响功能）；
+// DeepSeek 作为最后一道兜底：Kimi 全部不可用（欠费/故障/下线）时接管文本对话
 const DEFAULT_TEXT_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
 const DEFAULT_WEB_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
+const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
 
 function getEndpointConfigs() {
   const primaryApiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
@@ -33,8 +35,24 @@ function getEndpointConfigs() {
     }
   }
 
+  // DeepSeek 兜底端点：排在最后，Kimi 各端点/模型全部失败后才启用；
+  // models 固定在 DeepSeek 自有模型上，不会拿 Kimi 模型名去请求
+  const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
+  if (deepseekApiKey) {
+    const deepseekModels = String(process.env.DEEPSEEK_MODELS || "deepseek-chat")
+      .split(",")
+      .map((m) => m.trim())
+      .filter(Boolean);
+    endpoints.push({
+      label: "deepseek",
+      apiKey: deepseekApiKey.trim(),
+      baseUrl: (process.env.DEEPSEEK_BASE_URL || DEFAULT_DEEPSEEK_BASE_URL).replace(/\/+$/, ""),
+      models: deepseekModels.length > 0 ? deepseekModels : ["deepseek-chat"]
+    });
+  }
+
   if (endpoints.length === 0) {
-    const error = new Error("KIMI_API_KEY 或 MOONSHOT_API_KEY 未配置");
+    const error = new Error("KIMI_API_KEY / MOONSHOT_API_KEY / DEEPSEEK_API_KEY 均未配置");
     error.status = 500;
     throw error;
   }
@@ -107,8 +125,10 @@ export async function callKimiChat({
 
   for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex += 1) {
     const endpoint = endpoints[endpointIndex];
+    // DeepSeek 等兜底端点自带模型列表，不沿用 Kimi 候选模型
+    const modelsForEndpoint = Array.isArray(endpoint.models) && endpoint.models.length > 0 ? endpoint.models : candidateModels;
 
-    for (const candidateModel of candidateModels) {
+    for (const candidateModel of modelsForEndpoint) {
       const body = {
         model: candidateModel,
         messages,
@@ -120,7 +140,8 @@ export async function callKimiChat({
         body.response_format = { type: "json_object" };
       }
 
-      if (Array.isArray(tools) && tools.length > 0) {
+      // DeepSeek 不支持 Kimi 的内置联网工具（builtin_function）：兜底时退化为无工具回答
+      if (endpoint.label !== "deepseek" && Array.isArray(tools) && tools.length > 0) {
         body.tools = tools;
       }
 

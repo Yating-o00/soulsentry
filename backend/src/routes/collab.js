@@ -12,6 +12,7 @@ import { runCollabAgent, postAgentMessage, cascadeNodeCompletion } from "../serv
 import { scheduleCollabDrive } from "../services/collabDrive.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "../services/collabSpace.js";
 import { AGENT_DOMAINS, AGENT_TEMPLATES, findAgentTemplate } from "../services/agentStore.js";
+import { BUDDY_NAMES } from "./buddies.js";
 
 export const collabRouter = Router();
 
@@ -607,11 +608,14 @@ collabRouter.post("/:taskId/docs/:docId/confirm", async (req, res) => {
   ]);
 
   // 知识沉淀闭环：确认收下 → 自动写入心签页成为「沉淀签」，带来源徽标（协同 → 心签）。
-  // 同一成员对同一文档只沉淀一条，重复确认更新内容与版本号
+  // 同一成员对同一文档只沉淀一条，重复确认更新内容与版本号；
+  // 协同约定若归属于某颗搭子（metadata._extraFields.buddy_id），沉淀签一并标注搭子来源
   try {
     const existing = await prisma.note.findFirst({
       where: { userId: req.user.id, sourceType: "collab_sediment", title: doc.title, deletedAt: null }
     });
+    const taskExtra = task.metadata && typeof task.metadata === "object" ? task.metadata._extraFields : null;
+    const buddyId = taskExtra && typeof taskExtra === "object" ? taskExtra.buddy_id : null;
     const noteData = {
       title: doc.title,
       content: doc.content || doc.title,
@@ -623,7 +627,18 @@ collabRouter.post("/:taskId/docs/:docId/confirm", async (req, res) => {
           sediment_source: `协同空间 · ${task.title}`,
           collab_task_id: task.id,
           collab_doc_id: doc.id,
-          doc_version: updated.version
+          doc_version: updated.version,
+          ...(buddyId
+            ? {
+                buddy_id: buddyId,
+                buddy_name: BUDDY_NAMES[buddyId] || "搭子",
+                source_buddy: buddyId,
+                source_buddy_name: BUDDY_NAMES[buddyId] || "搭子",
+                source_scene: "协同沉淀",
+                source_task_id: task.id,
+                source_task_title: task.title
+              }
+            : {})
         }
       }
     };

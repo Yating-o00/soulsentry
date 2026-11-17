@@ -23,7 +23,7 @@ import ReviewDialog from "@/components/heartsign/ReviewDialog";
 import JournalDialog from "@/components/heartsign/JournalDialog";
 import VaultDialog from "@/components/heartsign/VaultDialog";
 import { detectSensitive } from "@/components/heartsign/detectSensitive";
-import { normalizeNote, getNoteType, isPinnedNote, isVaultNote, DENSITY_KEY, DENSITY_OPTIONS, classifyNoteText, notePlainText } from "@/components/heartsign/heartSignMeta";
+import { normalizeNote, getNoteType, getBuddySource, isPinnedNote, isVaultNote, DENSITY_KEY, DENSITY_OPTIONS, classifyNoteText, notePlainText } from "@/components/heartsign/heartSignMeta";
 import { isStandaloneMode } from "@/api/platformConfig";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
@@ -580,9 +580,12 @@ export default function Notes() {
       result = result.filter((note) => !EXTERNAL_SOURCES.includes(note.source_type));
     }
 
-    // 五类签过滤 / 已置顶（与小程序口径一致：source_type 优先，回落 ai 分类）
+    // 五类签过滤 / 已置顶 / 来自搭子（与小程序口径一致：source_type 优先，回落 ai 分类）
     if (categoryFilter === 'pinned') {
       result = result.filter((note) => isPinnedNote(note) || note.is_pinned === true);
+    } else if (categoryFilter === 'buddy') {
+      // 来源于搭子的内容罗列在一起（含搭子归属的协同沉淀）
+      result = result.filter((note) => getBuddySource(note));
     } else if (categoryFilter !== 'all') {
       result = result.filter((note) => getNoteType(note) === categoryFilter);
     }

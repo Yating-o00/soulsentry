@@ -10,7 +10,7 @@ const parseGoal = (mins) => parseInt(String(mins || "20"), 10) || 20;
  * 在读（读书搭子首页板块）：在读卡（今日分钟数持久化）+ 输出式「讲给搭子听」——
  * 讲一段，搭子回应并抛下一个问题；讲述同时存成笔记（板块状态 + 心签）。
  */
-export function ReadingNowPanel({ profile, tint, persona }) {
+export function ReadingNowPanel({ profile, tint, persona, projectTask = null }) {
   const { call } = useBuddyAgent("reading");
   const { state, patch } = useBuddyState("reading");
   const [talkInput, setTalkInput] = useState("");
@@ -41,12 +41,20 @@ export function ReadingNowPanel({ profile, tint, persona }) {
       setTalkInput("");
       const note = { text, book, day: today, reply: data.reply, question: data.question };
       patch({ notes: [...(state.notes || []), note] });
-      // 同步收进心签（讲出来才算读懂——这是最值得留住的）
+      // 同步收进心签（讲出来才算读懂——这是最值得留住的；带来源徽标：读书搭子 · 讲书共读）
       base44.entities.Note.create({
         title: `讲书 · 《${book}》`,
         content: `我讲：${text}\n搭子说：${data.reply}\n下一问：${data.question}`,
         source_type: "buddy_reading",
         tags: ["读书笔记", "心签"],
+        metadata: {
+          _extraFields: {
+            source_buddy: "reading",
+            source_buddy_name: "读书搭子",
+            source_scene: `讲书共读 · 《${book}》`,
+            ...(projectTask?.id ? { source_task_id: projectTask.id, source_task_title: projectTask.title } : {}),
+          },
+        },
       }).catch(() => {});
     } catch (e) {
       toast.error(e?.message || "搭子走神了，再试一次");

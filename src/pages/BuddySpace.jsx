@@ -169,7 +169,7 @@ export default function BuddySpace() {
         {activeTab === sections[0] && buddyId === "reading" && (
           <div className="space-y-4">
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <ReadingNowPanel profile={profile} tint={tint} persona={persona} />
+            <ReadingNowPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
             {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
           </div>
         )}
@@ -179,7 +179,7 @@ export default function BuddySpace() {
             <MorningCheckPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
           </div>
         )}
-        {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} />}
+        {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}
         {activeTab === "周报" && <WeekPanel tint={tint} projectTask={projectTask} />}
         {activeTab === "灵感" && <InspirationPanel buddy={buddy} tint={tint} />}
         {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
@@ -200,10 +200,11 @@ export default function BuddySpace() {
           activeTab !== sections[0] && <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />}
       </div>
 
-      {/* 协同约定创建（为项目约定开启协同）：开启后留在本板块，协同空间内嵌呈现 */}
+      {/* 协同约定创建（为项目约定开启协同）：开启后留在本板块，协同空间内嵌呈现；新建协同归属本搭子 */}
       <CollabCreateDialog
         open={collabOpen}
         existingTask={projectTask}
+        buddyId={buddy.id}
         onClose={() => setCollabOpen(false)}
         onCreated={() => {
           setCollabOpen(false);

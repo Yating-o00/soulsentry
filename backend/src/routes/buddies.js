@@ -200,7 +200,7 @@ buddiesRouter.post("/:id/graduate", async (req, res) => {
 
 /* ---------- 板块状态持久化：每个搭子空间的模块数据（清单勾选/阅读分钟/行程/习惯链…） ---------- */
 
-const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
+export const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
 
 function isPlainObject(v) {
   return v && typeof v === "object" && !Array.isArray(v);

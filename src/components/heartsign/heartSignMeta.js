@@ -114,3 +114,33 @@ export function notePlainText(note) {
 export function isVaultNote(note) {
   return note?.source_type === "vault" || !!note?.metadata?.is_vault;
 }
+
+// 搭子来源标注：写入方在各搭子板块 Note.create 时带 metadata._extraFields.source_*；
+// 旧数据按 source_type 兜底（buddy_solve/buddy_reading），协同沉淀按 buddy 归属识别
+const BUDDY_SOURCE_BY_TYPE = {
+  buddy_solve: { buddyId: "study", buddyName: "学习搭子", scene: "解题沉淀" },
+  buddy_reading: { buddyId: "reading", buddyName: "读书搭子", scene: "讲书共读" },
+};
+
+export function getBuddySource(note) {
+  const extra = note?.metadata?._extraFields;
+  if (extra && typeof extra === "object" && (extra.source_buddy || extra.source_buddy_name)) {
+    return {
+      buddyId: extra.source_buddy || null,
+      buddyName: extra.source_buddy_name || "搭子",
+      scene: extra.source_scene || null,
+      taskTitle: extra.source_task_title || null,
+    };
+  }
+  if (note?.source_type === "collab_sediment" && extra?.buddy_id) {
+    return {
+      buddyId: extra.buddy_id,
+      buddyName: extra.buddy_name || "搭子",
+      scene: "协同沉淀",
+      taskTitle: typeof extra.sediment_source === "string" ? extra.sediment_source.replace(/^协同空间 · /, "") : null,
+    };
+  }
+  const legacy = BUDDY_SOURCE_BY_TYPE[note?.source_type];
+  if (legacy) return { ...legacy, taskTitle: null };
+  return null;
+}

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useTranslation } from "@/components/TranslationContext";
+import { getBuddySource } from "@/components/heartsign/heartSignMeta";
 
 const COLORS = {
   white: "bg-white hover:border-stone-300",
@@ -30,6 +31,7 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
   const colorClass = COLORS[note.color] || COLORS.white;
   const [timeRemaining, setTimeRemaining] = React.useState(null);
   const { isAIMode } = useTranslation();
+  const buddySrc = getBuddySource(note);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(note.plain_text);
@@ -162,9 +164,19 @@ export default function NoteCard({ note, onEdit, onDelete, onPin, onCopy, onConv
           )}
 
           {/* Tags & Status */}
-          {((note.tags && note.tags.length > 0) || note.is_shared || note.metadata?._extraFields?.sediment_source) && (
+          {(buddySrc || (note.tags && note.tags.length > 0) || note.is_shared || note.metadata?._extraFields?.sediment_source) && (
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
-              {note.metadata?._extraFields?.sediment_source && (
+              {buddySrc && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 border-[#c9d5ef] text-[#384877] bg-[#eef2ff]/60"
+                  title={buddySrc.taskTitle ? `来源于${buddySrc.buddyName}，沉淀于约定「${buddySrc.taskTitle}」` : `来源于${buddySrc.buddyName}`}
+                >
+                  <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                  {buddySrc.buddyName}{buddySrc.scene ? ` · ${buddySrc.scene}` : ""}{buddySrc.taskTitle ? ` · ${buddySrc.taskTitle}` : ""}
+                </Badge>
+              )}
+              {note.metadata?._extraFields?.sediment_source && !buddySrc && (
                 <Badge
                   variant="outline"
                   className="text-[10px] px-1.5 py-0 border-[#c9d5ef] text-[#384877] bg-[#eef2ff]/60"

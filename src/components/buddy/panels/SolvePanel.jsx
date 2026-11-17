@@ -9,7 +9,7 @@ import { BuddyMsg, PanelCard, TintButton, useBuddyAgent } from "./shared";
  * 考点定位 → 分层提示 L1-L4 → 变式题检验 → 沉淀闭环（错题清除 + 心签）。
  * 全程 LLM 驱动（/api/buddies/study/agent），提示词服务端定型：引导而非直接给答案。
  */
-export default function SolvePanel({ tint, persona }) {
+export default function SolvePanel({ tint, persona, projectTask = null }) {
   const { call } = useBuddyAgent("study");
   const [problem, setProblem] = useState("");
   const [stage, setStage] = useState("idle"); // idle → located → hinting → quiz → done
@@ -82,13 +82,21 @@ export default function SolvePanel({ tint, persona }) {
     setQuizPick(i);
     if (i === quiz.answer) {
       setStage("done");
-      // 沉淀闭环：这道题的考点 + 思路进心签（带来源徽标）
+      // 沉淀闭环：这道题的考点 + 思路进心签（带来源徽标：学习搭子 · 解题沉淀 · 所属约定）
       try {
         await base44.entities.Note.create({
           title: `解题沉淀 · ${located?.point || "一道题"}`,
           content: `题目：${problem}\n考点：${located?.subject || ""} · ${located?.point || ""}\n关键提示：${hints.map((h) => `L${h.level} ${h.content}`).join("；")}`,
           source_type: "buddy_solve",
           tags: ["沉淀", "心签"],
+          metadata: {
+            _extraFields: {
+              source_buddy: "study",
+              source_buddy_name: "学习搭子",
+              source_scene: "解题沉淀",
+              ...(projectTask?.id ? { source_task_id: projectTask.id, source_task_title: projectTask.title } : {}),
+            },
+          },
         });
         setSediment(true);
       } catch (_e) {

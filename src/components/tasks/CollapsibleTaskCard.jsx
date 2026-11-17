@@ -24,6 +24,9 @@ const isTouchLike = () =>
  */
 export default function CollapsibleTaskCard({ task, onToggleDone, onOpenDetail, children }) {
   const [open, setOpen] = useState(false);
+  // 展开区内一旦发生交互（点按钮/开下拉菜单）即固定展开：
+  // 否则鼠标移向 portal 弹层（渲染在卡片 DOM 之外）会触发 mouseleave 把卡片连同菜单一起收起
+  const [pinned, setPinned] = useState(false);
   const queryClient = useQueryClient();
   const isCheckin = task.category === "checkin";
   const recurring = isRecurringTask(task);
@@ -63,7 +66,7 @@ export default function CollapsibleTaskCard({ task, onToggleDone, onOpenDetail, 
         if (!isTouchLike()) setOpen(true);
       }}
       onMouseLeave={() => {
-        if (!isTouchLike()) setOpen(false);
+        if (!isTouchLike() && !pinned) setOpen(false);
       }}
       className={cn(
         "bg-white rounded-2xl border border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden transition-colors duration-300 hover:border-stone-300",
@@ -138,12 +141,13 @@ export default function CollapsibleTaskCard({ task, onToggleDone, onOpenDetail, 
           </span>
         )}
 
-        {/* 收起/展开小箭头：触屏上收起用（桌面 hover 收起用不到） */}
+        {/* 收起/展开小箭头：触屏上收起用（桌面 hover 收起用不到）；收起时解除固定 */}
         <button
           type="button"
           aria-label={open ? "收起约定" : "展开约定"}
           onClick={(e) => {
             e.stopPropagation();
+            if (open) setPinned(false);
             setOpen((v) => !v);
           }}
           className="w-6 h-6 flex items-center justify-center flex-shrink-0 text-stone-300 hover:text-stone-500 transition-colors"
@@ -154,7 +158,8 @@ export default function CollapsibleTaskCard({ task, onToggleDone, onOpenDetail, 
         </button>
       </div>
 
-      {/* 展开区：完整卡片（去掉自身边框/阴影/圆角，与摘要行合成一张卡） */}
+      {/* 展开区：完整卡片（去掉自身边框/阴影/圆角，与摘要行合成一张卡）。
+          区内任何交互（pointer/focus，含打开弹层）都会固定展开，保证卡片上的功能都能点到 */}
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
@@ -163,6 +168,8 @@ export default function CollapsibleTaskCard({ task, onToggleDone, onOpenDetail, 
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeInOut" }}
             className="overflow-hidden"
+            onPointerDownCapture={() => setPinned(true)}
+            onFocusCapture={() => setPinned(true)}
           >
             <div className="border-t border-stone-100 [&>div]:!rounded-none [&>div]:!border-0 [&>div]:!shadow-none">
               {children}

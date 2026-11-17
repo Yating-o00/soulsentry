@@ -65,11 +65,12 @@ function shouldTryFallback(status, errorText = "") {
   if ([401, 403].includes(status)) {
     return false;
   }
-  if ([404, 408, 409, 429, 500, 502, 503, 504].includes(status)) {
+  // 402 欠费/余额不足：换下一个模型/端点（如 DeepSeek 兜底）继续尝试
+  if ([402, 404, 408, 409, 429, 500, 502, 503, 504].includes(status)) {
     return true;
   }
 
-  return /resource_not_found|rate limit|overload|timeout|aborted/i.test(errorText);
+  return /resource_not_found|rate limit|overload|timeout|aborted|insufficient/i.test(errorText);
 }
 
 function normalizeTemperature(model, temperature) {

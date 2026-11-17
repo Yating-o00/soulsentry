@@ -130,9 +130,14 @@ export default function WeekPanel({ tint, projectTask }) {
         <PanelCard>
           <div className="py-4 text-center">
             <p className="text-sm text-stone-500">每周日晚，搭子和你一起看这一周。</p>
-            <TintButton tint={tint} onClick={generate} disabled={generating || !projectTask} className="mt-4 w-full">
+            <TintButton tint={tint} onClick={generate} disabled={generating} className="mt-4 w-full">
               {generating ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "生成本周复盘"}
             </TintButton>
+            {!projectTask && (
+              <p className="mt-3 text-xs leading-relaxed text-stone-400">
+                未识别到本搭子的项目约定，本周将按零打卡数据生成复盘。
+              </p>
+            )}
           </div>
         </PanelCard>
       )}

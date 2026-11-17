@@ -19,6 +19,8 @@ import { ReadingNowPanel, ShelfPanel, ReadingNotesPanel } from "@/components/bud
 import { MorningCheckPanel, HabitChainPanel } from "@/components/buddy/panels/MorningPanels";
 import BuddyChatPanel from "@/components/buddy/panels/BuddyChatPanel";
 import { useBuddyState } from "@/components/buddy/panels/shared";
+import { useListSubtasks } from "@/components/buddy/useListSubtasks";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 
 /**
  * 搭子空间（二期）：配置驱动的空间脚手架——每颗搭子一套板块（buddy.sections），
@@ -44,12 +46,26 @@ export default function BuddySpace() {
   const { data: allTasks = [] } = useQuery({
     queryKey: ["tasks", "with-subs"],
     queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-reminder_time", 300),
-    enabled: !!profile?.project_task_id,
+    enabled: !!profile,
   });
-  const projectTask = useMemo(
-    () => allTasks.find((t) => t.id === profile?.project_task_id) || null,
-    [allTasks, profile]
-  );
+  // 项目约定优先；缺失（被删/未同步）时回退到本搭子最新的一条顶层约定——
+  // 一键开启协同新建的协同约定也走这里，清单/行程同样能落到它下面。
+  const projectTask = useMemo(() => {
+    const preferred = profile?.project_task_id
+      ? allTasks.find((t) => t.id === profile.project_task_id && !t.deleted_at)
+      : null;
+    if (preferred) return preferred;
+    return (
+      allTasks
+        .filter(
+          (t) =>
+            !t.deleted_at &&
+            !t.parent_task_id &&
+            t.metadata?._extraFields?.buddy_id === buddyId
+        )
+        .sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0))[0] || null
+    );
+  }, [allTasks, profile, buddyId]);
 
   const [tab, setTab] = useState(null); // null → 取 sections[0]
   const [graduateOpen, setGraduateOpen] = useState(false);
@@ -181,7 +197,9 @@ export default function BuddySpace() {
         )}
         {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}
         {activeTab === "周报" && <WeekPanel tint={tint} projectTask={projectTask} />}
-        {activeTab === "灵感" && <InspirationPanel buddy={buddy} profile={profile} tint={tint} />}
+        {activeTab === "灵感" && (
+          <InspirationPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+        )}
         {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
         {activeTab === "笔记" && <ReadingNotesPanel tint={tint} />}
         {activeTab === "协同" && (
@@ -286,18 +304,27 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
 function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }) {
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
+  const [createdCollabId, setCreatedCollabId] = useState(null);
   const isMine = (t) =>
     t?.metadata?.collab &&
     !t.deleted_at &&
     !t.parent_task_id &&
     (t.id === projectTask?.id || t.metadata?._extraFields?.buddy_id === buddy.id);
-  const collabs = allTasks.filter(isMine).filter((t) => t.id !== projectTask?.id);
+  const myCollabs = allTasks
+    .filter(isMine)
+    .sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
   const projectCollab = projectTask?.metadata?.collab ? projectTask : null;
+  // 新建成功后先用返回的 id 立即切入协同空间，不必等 tasks 列表回刷。
+  const createdCollab = createdCollabId ? { id: createdCollabId } : null;
+  // 项目约定已开协同 → 用它；没有项目约定（被删/未同步）→ 用本搭子最近的一场协同，
+  // 这样一键新建的协同约定会直接切换成内嵌协同空间，不会再停在按钮页。
+  const activeCollab = projectCollab || (!projectTask ? myCollabs[0] || createdCollab : null);
+  const otherCollabs = myCollabs.filter((t) => t.id !== activeCollab?.id);
 
   // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单；
   // 项目约定存在则就地开启，缺失（被删/未同步）时直接新建一场归属本搭子的协同约定
   const enableCollab = async () => {
-    if (enabling) return;
+    if (enabling || activeCollab) return;
     setEnabling(true);
     const collabMeta = (goal) => ({
       scenario: "friends",
@@ -317,7 +344,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
           },
         });
       } else {
-        await httpRequest("/api/tasks", {
+        const created = await httpRequest("/api/tasks", {
           method: "POST",
           body: {
             title: `${buddy.name}的协同约定`,
@@ -328,6 +355,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
             metadata: { collab: collabMeta(`和伙伴一起推进`), _extraFields: { buddy_id: buddy.id } },
           },
         });
+        if (created?.id) setCreatedCollabId(created.id);
       }
       toast.success("协同空间已开启，点右上角邀请伙伴加入");
       await queryClient.invalidateQueries();
@@ -338,25 +366,33 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
     }
   };
 
-  // 项目约定已开启协同：直接内嵌极简协同空间（执行概览 / 子约定 / 主要沉淀）
-  if (projectCollab) {
+  // 已开启协同：内嵌完整协同空间——共同讨论 + Agent 维护的执行概览 / 子约定 / 沉淀都在
+  if (activeCollab) {
     return (
       <div className="space-y-3">
-        <CollabSpace taskId={projectCollab.id} embedded minimal />
-        {collabs.map((t) => (
-          <Link
-            key={t.id}
-            to={`/collabspace?taskId=${t.id}`}
-            className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white px-4 py-3 transition-colors hover:bg-stone-50"
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>协</span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-medium text-stone-800">{t.title}</span>
-              <span className="text-xs text-stone-400">本搭子的另一场协同 · 多人共创中</span>
-            </span>
-            <span className="text-stone-400">→</span>
-          </Link>
-        ))}
+        <CollabSpace taskId={activeCollab.id} embedded />
+        {otherCollabs.length > 0 && (
+          <section className="rounded-2xl border border-stone-200 bg-white p-5">
+            <div className="text-[11px] tracking-widest text-stone-400">本搭子的其他协同约定</div>
+            <ul className="mt-3 space-y-2">
+              {otherCollabs.map((t) => (
+                <li key={t.id}>
+                  <Link
+                    to={`/collabspace?taskId=${t.id}`}
+                    className="flex items-center gap-3 rounded-xl bg-[#FAF9F7] px-4 py-3 transition-colors hover:bg-stone-100"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>协</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-medium text-stone-800">{t.title}</span>
+                      <span className="text-xs text-stone-400">本搭子的另一场协同 · 多人共创中</span>
+                    </span>
+                    <span className="text-stone-400">→</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     );
   }
@@ -377,11 +413,11 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
       </section>
 
       {/* 本搭子的其他协同约定 */}
-      {collabs.length > 0 && (
+      {myCollabs.length > 0 && (
         <section className="rounded-2xl border border-stone-200 bg-white p-5">
           <div className="text-[11px] tracking-widest text-stone-400">本搭子的协同约定</div>
           <ul className="mt-3 space-y-2">
-            {collabs.map((t) => (
+            {myCollabs.map((t) => (
               <li key={t.id}>
                 <Link
                   to={`/collabspace?taskId=${t.id}`}
@@ -479,67 +515,69 @@ function ProfileSection({ buddy, profile, tint, projectTask }) {
   );
 }
 
-/* ---------- 领域特色：旅行清单（勾选持久化到搭子板块状态，灵感库加进来的也在此核对） ---------- */
+/* ---------- 领域特色：旅行清单（逐项落成项目约定下的子约定，勾选状态与约定列表同源） ---------- */
 function ChecklistSection({ items, tint, projectTask = null }) {
   const { state, patch } = useBuddyState("travel");
-  const queryClient = useQueryClient();
-  const [syncing, setSyncing] = useState(false);
-  const checked = state.checklist_checked || [];
-  const extra = state.checklist_extra || [];
-  const synced = state.checklist_synced || [];
-  const all = [...items, ...extra];
-  const toSync = all.filter((x) => !synced.includes(x));
+  const extra = useMemo(() => state.checklist_extra || [], [state.checklist_extra]);
+  const all = useMemo(() => Array.from(new Set([...items, ...extra])), [items, extra]);
+  const legacyChecked = useMemo(() => state.checklist_checked || [], [state.checklist_checked]);
+  // 老版本本地勾选过的项，在创建子约定时直接落成已完成，不丢进度
+  const subItems = useMemo(
+    () =>
+      all.map((item) => ({
+        title: item,
+        description: "行前清单 · 来自旅游搭子",
+        done: legacyChecked.includes(item),
+      })),
+    [all, legacyChecked]
+  );
+  const { childByTitle, missingCount, syncing, autoError, syncNow, toggle } = useListSubtasks(
+    projectTask,
+    subItems,
+    "travel_checklist"
+  );
 
-  const toggle = (item) => {
-    const next = checked.includes(item) ? checked.filter((x) => x !== item) : [...checked, item];
-    patch({ checklist_checked: next });
-  };
+  const doneCount = subItems.filter((item) => {
+    const child = childByTitle.get(item.title);
+    return child ? isTaskEffectivelyCompleted(child) : legacyChecked.includes(item.title);
+  }).length;
 
-  // 清单 → 子约定：逐项落成项目约定的子任务，约定列表里逐项勾选，不再怕遗忘
-  const syncToTasks = async () => {
-    if (!projectTask || syncing || toSync.length === 0) return;
-    setSyncing(true);
-    try {
-      for (const item of toSync) {
-        await httpRequest("/api/tasks", {
-          method: "POST",
-          body: {
-            title: item,
-            description: "行前清单 · 来自旅游搭子",
-            category: "personal",
-            priority: "medium",
-            parent_task_id: projectTask.id,
-          },
-        });
-      }
-      patch({ checklist_synced: all });
-      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast.success(`已把 ${toSync.length} 项清单列为子约定，去约定列表逐项勾选吧`);
-    } catch (e) {
-      toast.error("同步没完成，再试一次");
-    } finally {
-      setSyncing(false);
+  // 没有项目约定时保留本地勾选（等约定接上后，会自动把已勾选项落成已完成子约定）
+  const toggleItem = (item) => {
+    if (!projectTask) {
+      const next = legacyChecked.includes(item)
+        ? legacyChecked.filter((x) => x !== item)
+        : [...legacyChecked, item];
+      patch({ checklist_checked: next });
+      return;
     }
+    toggle(item);
   };
 
   return (
     <section className="rounded-2xl border border-stone-200 bg-white p-5">
       <div className="flex items-baseline justify-between">
         <div className="text-[11px] tracking-widest text-stone-400">行前清单</div>
-        <span className="text-xs text-stone-400">{`${checked.length}/${all.length}`}</span>
+        <span className="text-xs text-stone-400">{`${doneCount}/${all.length}`}</span>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-stone-100">
         <div
           className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${all.length ? (checked.length / all.length) * 100 : 0}%`, background: tint[2] }}
+          style={{ width: `${all.length ? (doneCount / all.length) * 100 : 0}%`, background: tint[2] }}
         />
       </div>
       <ul className="mt-3 space-y-2.5">
         {all.map((item) => {
-          const done = checked.includes(item);
+          const child = childByTitle.get(item);
+          const done = child ? isTaskEffectivelyCompleted(child) : legacyChecked.includes(item);
+          const ready = !!child;
           return (
             <li key={item}>
-              <button onClick={() => toggle(item)} className="flex w-full items-center gap-3 text-left">
+              <button
+                onClick={() => toggleItem(item)}
+                disabled={!!projectTask && !ready}
+                className="flex w-full items-center gap-3 text-left disabled:cursor-default"
+              >
                 <span
                   className={cn(
                     "flex h-5 w-5 items-center justify-center rounded-md border-2 flex-shrink-0 transition-colors",
@@ -550,26 +588,45 @@ function ChecklistSection({ items, tint, projectTask = null }) {
                   {done && <Check className="w-3 h-3" strokeWidth={3} />}
                 </span>
                 <span className={cn("text-sm", done ? "text-stone-400 line-through" : "text-stone-700")}>{item}</span>
-                {synced.includes(item) && <span className="ml-auto text-[10px] text-stone-400 flex-shrink-0">已入约定</span>}
+                {projectTask && !ready && (
+                  <span className="ml-auto text-[10px] text-stone-400 flex-shrink-0">
+                    {syncing ? "同步中…" : "待同步"}
+                  </span>
+                )}
               </button>
             </li>
           );
         })}
       </ul>
       {projectTask ? (
-        <button
-          onClick={syncToTasks}
-          disabled={syncing || toSync.length === 0}
-          className="mt-3 min-h-[40px] w-full rounded-full text-xs font-medium text-white disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
-          style={{ background: tint[2] }}
-        >
-          {syncing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-          {toSync.length === 0 ? "已全部列为子约定" : `把 ${toSync.length} 项清单列为子约定`}
-        </button>
+        <div className="mt-3 flex items-center justify-between gap-3 text-[11px] text-stone-400">
+          <span>
+            {autoError
+              ? "清单同步没完成，点右侧重试。"
+              : missingCount > 0 || syncing
+                ? "正在把清单逐项列为子约定…"
+                : "已全部列为子约定，勾选会同步到约定列表。"}
+          </span>
+          {autoError && (
+            <button
+              onClick={() => syncNow({ notify: true }).catch(() => {})}
+              className="shrink-0 underline underline-offset-2 hover:text-stone-600"
+            >
+              重试同步
+            </button>
+          )}
+        </div>
       ) : (
-        <p className="mt-3 text-xs text-stone-400">识别到项目约定后，可一键把清单列为子约定逐项勾选。</p>
+        <p className="mt-3 text-xs text-stone-400">认领项目约定后，清单会自动逐项列为子约定，方便在约定列表勾选。</p>
       )}
-      <p className="mt-3 text-xs text-stone-400">出发前一晚 21:00，我会逐项跟你核对——勾选云端同步，换设备也不丢。</p>
+      <p className="mt-3 text-xs text-stone-400">
+        出发前一晚 21:00，我会逐项跟你核对——勾选云端同步，换设备也不丢。
+        {projectTask && (
+          <Link to={createPageUrl("Tasks")} className="ml-1 text-[#384877] hover:underline">
+            去约定列表勾选 →
+          </Link>
+        )}
+      </p>
     </section>
   );
 }

@@ -473,8 +473,11 @@ tasksRouter.post("/", async (req, res) => {
   // 新建子约定会稀释父约定的完成比：进度条同步为重算后的值
   await syncParentProgress(task.parentTaskId);
 
-  // 主动检测可自动执行的部分，异步执行后待用户验收（不阻塞创建）
-  void maybeAutoExecute(task, req.user.id, prisma);
+  // 主动检测可自动执行的部分，异步执行后待用户验收（不阻塞创建）。
+  // 搭子清单自动落成的子约定只用于勾选，不触发自动执行，避免误扣 AI 点数。
+  if (!payload.data.buddy_list_source) {
+    void maybeAutoExecute(task, req.user.id, prisma);
+  }
 
   logBehavior(req.user.id, "task_created", { taskId: task.id, category: task.category, metadata: { via: task.parentTaskId ? "subtask" : "top" } });
 
@@ -932,8 +935,13 @@ tasksRouter.patch("/:id", async (req, res) => {
     }
   }
 
-  // 标题/描述变更后重新检测可自动执行的部分（maybeAutoExecute 内部有去重）
-  if (payload.data.title !== undefined || payload.data.description !== undefined) {
+  // 标题/描述变更后重新检测可自动执行的部分（maybeAutoExecute 内部有去重）。
+  // 搭子清单生成/更新的子约定不参与自动执行，避免行程重排时误扣 AI 点数。
+  const isBuddyListTask = Boolean(extraFields.buddy_list_source || prevExtra.buddy_list_source);
+  if (
+    !isBuddyListTask &&
+    (payload.data.title !== undefined || payload.data.description !== undefined)
+  ) {
     void maybeAutoExecute(task, req.user.id, prisma);
   }
 

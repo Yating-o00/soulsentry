@@ -1,8 +1,12 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
+import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
+import { useListSubtasks } from "@/components/buddy/useListSubtasks";
 import { BuddyMsg, PanelCard, TintButton, useBuddyAgent, useBuddyState } from "./shared";
 
 /**
@@ -12,14 +16,28 @@ import { BuddyMsg, PanelCard, TintButton, useBuddyAgent, useBuddyState } from ".
 export function ItineraryPanel({ buddy, profile, tint, persona, projectTask = null }) {
   const { call } = useBuddyAgent("travel");
   const { state, patch } = useBuddyState("travel");
-  const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [adjustInput, setAdjustInput] = useState("");
-  const [syncing, setSyncing] = useState(false);
 
   const dest = profile?.answers?.dest || "目的地";
   const style = profile?.answers?.style || "躺平度假";
   const days = state.itinerary?.days || null;
+  // 每一天行程 = 一条子约定，生成后自动落到项目约定下，约定列表里逐天勾选
+  const itineraryItems = useMemo(
+    () =>
+      (days || []).map((d, i) => ({
+        // 按天次做稳定 key：重新规划后更新原来的子约定，而不是每天再建一条
+        key: `day-${i + 1}`,
+        title: `${d.day || `D${i + 1}`} · ${d.title}`,
+        description: d.note || "",
+      })),
+    [days]
+  );
+  const { childByKey, missingCount, syncing, autoError, syncNow } = useListSubtasks(
+    projectTask,
+    itineraryItems,
+    "travel_itinerary"
+  );
 
   const greeting = {
     gentle: "行程不用赶，每天只排两件事，累了我们就砍。",
@@ -73,6 +91,7 @@ export function ItineraryPanel({ buddy, profile, tint, persona, projectTask = nu
           <div className="space-y-0">
             {days.map((d, i) => {
               const isFirst = i === 0;
+              const child = childByKey.get(`day-${i + 1}`);
               return (
                 <div key={`${d.day}-${i}`} className="relative flex gap-3.5 pb-4 pl-1">
                   <div className="flex flex-col items-center">
@@ -85,7 +104,17 @@ export function ItineraryPanel({ buddy, profile, tint, persona, projectTask = nu
                     {i < days.length - 1 && <span className="mt-1 w-px flex-1" style={{ background: tint[1] }} />}
                   </div>
                   <div className={`flex-1 rounded-2xl p-3.5 ${isFirst ? "bg-white border border-stone-200" : "bg-[#FAF9F7]"}`}>
-                    <span className="text-[15px] font-medium text-stone-900">{d.title}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[15px] font-medium text-stone-900">{d.title}</span>
+                      {child && (
+                        <span
+                          className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                          style={{ background: tint[0], color: tint[2] }}
+                        >
+                          {isTaskEffectivelyCompleted(child) ? "已完成" : "已列入约定"}
+                        </span>
+                      )}
+                    </div>
                     <p className="mt-1 text-[13px] leading-relaxed text-stone-600">{d.note}</p>
                   </div>
                 </div>
@@ -96,41 +125,34 @@ export function ItineraryPanel({ buddy, profile, tint, persona, projectTask = nu
             途中随时喊我调整：「今天累了」→ 我立刻给出删减方案，不内耗。
           </p>
 
-          {/* 行程 → 子约定：每天一条子约定，约定列表里逐天勾选 */}
-          {projectTask && !state.itinerary?.synced && (
-            <TintButton
-              tint={tint}
-              onClick={async () => {
-                if (syncing) return;
-                setSyncing(true);
-                try {
-                  for (const d of days) {
-                    await httpRequest("/api/tasks", {
-                      method: "POST",
-                      body: {
-                        title: `${d.day || "行程"} · ${d.title}`,
-                        description: d.note || "",
-                        category: "personal",
-                        priority: "medium",
-                        parent_task_id: projectTask.id,
-                      },
-                    });
-                  }
-                  patch({ itinerary: { ...state.itinerary, synced: true } });
-                  await queryClient.invalidateQueries({ queryKey: ["tasks"] });
-                  toast.success(`已把 ${days.length} 天行程列为子约定，逐天勾选不怕漏`);
-                } catch (e) {
-                  toast.error("同步没完成，再试一次");
-                } finally {
-                  setSyncing(false);
-                }
-              }}
-              disabled={syncing}
-              className="w-full"
-            >
-              {syncing ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `把 ${days.length} 天行程列为子约定`}
-            </TintButton>
-          )}
+          {/* 行程 → 子约定：每天自动落成一条子约定，约定列表里逐天勾选 */}
+          <div className="rounded-2xl bg-[#FAF9F7] p-3.5 text-[12px] leading-relaxed text-stone-500">
+            {projectTask ? (
+              <div className="flex items-center justify-between gap-3">
+                <span>
+                  {autoError
+                    ? "行程同步没完成，点右侧重试。"
+                    : missingCount > 0 || syncing
+                      ? "正在把每日行程逐天列为子约定…"
+                      : "每日行程已逐天列为子约定，勾选状态和约定列表同步。"}
+                </span>
+                {autoError ? (
+                  <button
+                    onClick={() => syncNow({ notify: true }).catch(() => {})}
+                    className="shrink-0 underline underline-offset-2 hover:text-stone-700"
+                  >
+                    重试同步
+                  </button>
+                ) : (
+                  <Link to={createPageUrl("Tasks")} className="shrink-0 text-[#384877] hover:underline">
+                    去约定列表勾选 →
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <span>认领项目约定后，每日行程会自动逐天列为子约定，不用再记在攻略里。</span>
+            )}
+          </div>
 
           {/* 动态调整：时间 / 天气 / 人员状态 / 费用有变化，一句话重排后续行程 */}
           <PanelCard title="动态调整">
@@ -175,9 +197,10 @@ export function ItineraryPanel({ buddy, profile, tint, persona, projectTask = nu
 }
 
 /** 当地灵感库：按认领目的地 LLM 生成（绝不串目的地）；一键「加进行前清单」 */
-export function InspirationPanel({ buddy, profile, tint }) {
+export function InspirationPanel({ buddy, profile, tint, projectTask = null }) {
   const { state, patch } = useBuddyState("travel");
   const { call } = useBuddyAgent("travel");
+  const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const dest = String(profile?.answers?.dest || "").trim();
   const added = state.inspiration_added || [];
@@ -202,10 +225,27 @@ export function InspirationPanel({ buddy, profile, tint }) {
 
   const add = (idea) => {
     if (added.includes(idea.name)) return;
+    const title = `${idea.name}（灵感）`;
     patch({
       inspiration_added: [...added, idea.name],
-      checklist_extra: [...(state.checklist_extra || []), `${idea.name}（灵感）`],
+      checklist_extra: [...(state.checklist_extra || []), title],
     });
+    // 立刻落成子约定，不必等用户切到「清单」页再同步
+    if (projectTask) {
+      httpRequest("/api/tasks", {
+        method: "POST",
+        body: {
+          title,
+          description: "行前清单 · 来自旅游搭子",
+          category: "personal",
+          priority: "medium",
+          parent_task_id: projectTask.id,
+          buddy_list_source: "travel_checklist",
+        },
+      })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["tasks"] }))
+        .catch(() => {});
+    }
     toast.success(`已加进行前清单：${idea.name}`);
   };
 

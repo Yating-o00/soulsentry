@@ -6,7 +6,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { httpRequest } from "@/api/httpClient";
-import assistantAvatar from "@/assets/xinzhan-orb.jpg";
 import assistantPlanet from "@/assets/assistant-planet.png";
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划" };
@@ -318,15 +317,11 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     return (
       <div key={m.id} className={`flex items-start gap-2 px-4 mb-4 ${mine ? "flex-row-reverse" : ""}`}>
         {!mine && (
-          inline ? (
-            <img
-              src={assistantAvatar}
-              alt="心栈小助手"
-              className="assistant-avatar w-8 h-8 rounded-full shrink-0 object-cover"
-            />
-          ) : (
-            <img src={assistantPlanet} alt="心栈小助手" className="assistant-avatar w-8 h-8 rounded-full shrink-0 object-cover" />
-          )
+          <img
+            src={assistantPlanet}
+            alt="心栈小助手"
+            className="assistant-avatar w-8 h-8 rounded-full shrink-0 object-cover"
+          />
         )}
         <div className={`max-w-[78%] flex flex-col ${mine ? "items-end" : "items-start"}`}>
           {m.kind === "proactive" && (
@@ -390,7 +385,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           /* 问候（常驻页首）：新用户给引导，老用户给今日总结；之后的提醒与沟通都在本窗口继续 */
           <div className="px-4 pb-3">
             <div className="flex items-start gap-3">
-              <img src={assistantAvatar} alt="心栈" className="assistant-avatar w-10 h-10 rounded-full object-cover shrink-0 mt-0.5" style={{ border: "2px solid #d8e0f0" }} />
+              <img src={assistantPlanet} alt="心栈小助手" className="assistant-avatar w-10 h-10 rounded-full object-cover shrink-0 mt-0.5" style={{ border: "2px solid #d8e0f0" }} />
               <p className="text-[15px] leading-relaxed" style={{ color: "#1c1c1e" }}>
                 {newUser
                   ? "今天想做点什么？日程、情绪、随便聊聊都可以找我；你的搭子们也在各自的岗位上待命。"
@@ -402,11 +397,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         {messages.map(renderMessage)}
         {busy && (
           <div className="flex items-center gap-2 px-4 mb-4">
-            {inline ? (
-              <img src={assistantAvatar} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
-            ) : (
-              <img src={assistantPlanet} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
-            )}
+            <img src={assistantPlanet} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
             <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#eef1f9", border: "1px solid #dbe3f2", color: "#384877" }}>
               正在输入…
             </div>

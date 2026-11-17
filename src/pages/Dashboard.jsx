@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
 import { createPageUrl } from "@/utils";
-import xinzhanOrb from "@/assets/xinzhan-orb.jpg";
+import assistantPlanet from "@/assets/assistant-planet.png";
 import AssistantWidget from "@/components/assistant/AssistantWidget";
 import BuddyCompanions from "@/components/buddy/BuddyCompanions";
 import BuddyStoreStrip from "@/components/buddy/BuddyStoreStrip";
@@ -86,7 +86,6 @@ export default function Dashboard() {
     localStorage.setItem(key, "1");
     localStorage.setItem("ss_imprint_echo_last", text);
     httpRequest("/api/companion/messages", { method: "POST", body: { assistant_echo: text } }).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imprint.guarding, imprint.todayPending, imprint.notes, allTasks]);
 
   const hour = new Date().getHours();
@@ -102,7 +101,7 @@ export default function Dashboard() {
             <div className="text-lg font-semibold tracking-wide">SoulSentry</div>
             <div className="text-xs text-[#a8a29e]">{personaName}模式 · 我一直都在</div>
           </div>
-          <img src={xinzhanOrb} alt="心栈" className="w-11 h-11 rounded-full object-cover" />
+          <img src={assistantPlanet} alt="心栈小助手" className="w-11 h-11 rounded-full object-cover" />
         </header>
 
         {/* PC：左列对话层（更宽更高），右列问候 + 陪伴 + Store；手机：保持样例纵向流 */}
@@ -121,7 +120,7 @@ export default function Dashboard() {
             {/* 心栈的问候 + 今日印记（真实数据的一行播报） */}
             <div className="mx-1 mt-4 lg:mt-0 flex items-start gap-3 rounded-2xl bg-[#FFFFFF] p-4 shadow-[0_1px_2px_rgba(36,36,36,0.06)] border border-stone-200/60">
               <div className="mt-0.5 shrink-0">
-                <img src={xinzhanOrb} alt="心栈" className="w-9 h-9 rounded-full object-cover" />
+                <img src={assistantPlanet} alt="心栈小助手" className="w-9 h-9 rounded-full object-cover" />
               </div>
               <div>
                 <p className="text-[15px] leading-relaxed">

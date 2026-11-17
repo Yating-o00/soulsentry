@@ -76,9 +76,18 @@ function buildProjectTaskData(buddyId, answers = {}) {
     case "travel":
       return {
         title: `${a("dest", "下一趟旅行")} · 行前清单核对`,
-        description: `旅游搭子：${a("dest", "目的地")}（${a("when", "时间待定")}），风格「${a("style", "躺平度假")}」。行前清单：身份证/护照、充电宝、防晒、薄外套、常用药、舒服的鞋——出发前一晚逐项核对。`,
+        description: `旅游搭子：${a("dest", "目的地")}（${a("when", "时间待定")}），风格「${a("style", "躺平度假")}」。行前清单已逐项列为子约定，出发前一晚逐项核对。`,
         category: "personal",
         extra: { buddy_id: "travel" },
+        // 清单直接落成子约定，而不是只写在描述里——用户才能在约定列表逐项勾选、不怕遗忘
+        subtasks: [
+          "身份证 / 护照",
+          "充电宝 + 数据线",
+          "防晒霜 SPF50+",
+          "薄外套（早晚温差大）",
+          "常用药（感冒 / 肠胃 / 创可贴）",
+          "舒服的徒步鞋",
+        ],
       };
     default:
       return null;
@@ -165,6 +174,32 @@ buddiesRouter.post("/:id/claim", async (req, res) => {
       metadata: { _extraFields: taskData.extra },
     },
   });
+
+  // 认领时把固定清单逐项落成子约定（旅游搭子的行前清单）。
+  // 失败不阻断认领：搭子空间打开清单时会按标题去重自动补齐。
+  if (Array.isArray(taskData.subtasks) && taskData.subtasks.length > 0) {
+    try {
+      await Promise.all(
+        taskData.subtasks.map((title) =>
+          prisma.task.create({
+            data: {
+              userId: req.user.id,
+              title,
+              description: "行前清单 · 来自旅游搭子",
+              category: "personal",
+              priority: "medium",
+              parentTaskId: task.id,
+              metadata: {
+                _extraFields: { buddy_id: buddyId, buddy_list_source: "travel_checklist" },
+              },
+            },
+          })
+        )
+      );
+    } catch (error) {
+      console.warn("[buddies/claim] 清单子约定创建失败:", error?.message || error);
+    }
+  }
 
   profiles[buddyId] = {
     status: "active",

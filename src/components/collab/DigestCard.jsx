@@ -6,8 +6,7 @@ import { C, formatTime } from "./constants";
 import { AgentAvatar } from "./Common";
 
 export default function DigestCard({ doc }) {
-  if (!doc) return null;
-  const lines = String(doc.content || "").split("\n").filter((l) => l.trim());
+  const lines = doc ? String(doc.content || "").split("\n").filter((l) => l.trim()) : [];
 
   return (
     <section className="px-4 pt-5 sm:px-6" aria-label="执行概览">
@@ -17,11 +16,17 @@ export default function DigestCard({ doc }) {
           <div className="min-w-0 flex-1">
             <h2 className="text-[15px] font-semibold tracking-[-0.01em]" style={{ color: "#302c2a" }}>执行概览</h2>
             <p className="text-[10px]" style={{ color: C.faint }}>
-              由心栈 Agent 自动维护{doc.updated_date ? ` · ${formatTime(doc.updated_date)}` : ""}
+              由心栈 Agent 自动维护{doc?.updated_date ? ` · ${formatTime(doc.updated_date)}` : " · 讨论后更新"}
             </p>
           </div>
           <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: C.sub }} aria-hidden />
         </div>
+
+        {!doc && (
+          <p className="mt-3 text-[13px] leading-5" style={{ color: "#8a867e" }}>
+            还没有执行概览。和伙伴聊起来，或在讨论区 @Agent 整理，这里会生成大方向、新进展与待确认。
+          </p>
+        )}
 
         <div className="mt-3 space-y-2.5">
           {lines.map((line, i) => {

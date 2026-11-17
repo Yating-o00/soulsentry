@@ -11,6 +11,7 @@ export function ItineraryPanel({ buddy, profile, tint, persona }) {
   const { call } = useBuddyAgent("travel");
   const { state, patch } = useBuddyState("travel");
   const [generating, setGenerating] = useState(false);
+  const [adjustInput, setAdjustInput] = useState("");
 
   const dest = profile?.answers?.dest || "目的地";
   const style = profile?.answers?.style || "躺平度假";
@@ -90,17 +91,74 @@ export function ItineraryPanel({ buddy, profile, tint, persona }) {
           <p className="rounded-2xl bg-[#FAF9F7] p-3.5 text-[13px] leading-relaxed text-stone-600">
             途中随时喊我调整：「今天累了」→ 我立刻给出删减方案，不内耗。
           </p>
+
+          {/* 动态调整：时间 / 天气 / 人员状态 / 费用有变化，一句话重排后续行程 */}
+          <PanelCard title="动态调整">
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {["今天累了", "下雨了", "预算有限", "有老人/小孩同行", "时间压缩一天"].map((chip) => (
+                <button
+                  key={chip}
+                  onClick={() => generate(`动态调整：${chip}，请重排后续行程`)}
+                  disabled={generating}
+                  className="rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-50"
+                  style={{ borderColor: tint[1], color: tint[2] }}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+            <form
+              className="mt-2.5 flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const v = adjustInput.trim();
+                if (!v) return;
+                setAdjustInput("");
+                generate(`动态调整：${v}，请重排后续行程`);
+              }}
+            >
+              <input
+                value={adjustInput}
+                onChange={(e) => setAdjustInput(e.target.value)}
+                placeholder="说说情况变化：时间/天气/人员/费用…"
+                className="min-h-[40px] flex-1 rounded-full border border-stone-200 bg-white px-4 text-[13px] text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-stone-400"
+              />
+              <TintButton tint={tint} outline className="!px-4 !min-h-[40px]" disabled={generating || !adjustInput.trim()}>
+                {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : "重排"}
+              </TintButton>
+            </form>
+          </PanelCard>
         </>
       )}
     </div>
   );
 }
 
-/** 本地灵感库：一键「加进行前清单」——灵感会变成清单里要准备的事项 */
-export function InspirationPanel({ buddy, tint }) {
+/** 当地灵感库：按认领目的地 LLM 生成（绝不串目的地）；一键「加进行前清单」 */
+export function InspirationPanel({ buddy, profile, tint }) {
   const { state, patch } = useBuddyState("travel");
-  const ideas = buddy.extras?.inspirations || [];
+  const { call } = useBuddyAgent("travel");
+  const [generating, setGenerating] = useState(false);
+  const dest = String(profile?.answers?.dest || "").trim();
   const added = state.inspiration_added || [];
+  // 只展示为本目的地生成的灵感；未认领目的地时展示示例（大理），并明确标注是示例
+  const dynamicIdeas = dest && state.inspiration?.dest === dest ? state.inspiration.ideas : null;
+  const staticIdeas = buddy.extras?.inspirations || [];
+  const ideas = dynamicIdeas || (!dest ? staticIdeas : []);
+
+  const generate = async () => {
+    if (generating || !dest) return;
+    setGenerating(true);
+    try {
+      const data = await call({ mode: "inspiration", payload: { dest } });
+      if (!Array.isArray(data?.ideas) || data.ideas.length === 0) throw new Error("empty");
+      patch({ inspiration: { dest, ideas: data.ideas, generated_at: new Date().toISOString() } });
+    } catch (e) {
+      toast.error(e?.message || "灵感没生成出来，再试一次");
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const add = (idea) => {
     if (added.includes(idea.name)) return;
@@ -113,24 +171,53 @@ export function InspirationPanel({ buddy, tint }) {
 
   return (
     <div className="space-y-3">
-      <h2 className="px-1 text-base font-semibold text-stone-900">本地灵感</h2>
-      {ideas.map((idea) => {
-        const isAdded = added.includes(idea.name);
-        return (
-          <PanelCard key={idea.name}>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: tint[0], color: tint[2] }}>
-                {idea.kind}
-              </span>
-              <span className="text-[15px] font-medium text-stone-900">{idea.name}</span>
-            </div>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-stone-600">{idea.desc}</p>
-            <TintButton tint={tint} outline={!isAdded} onClick={() => add(idea)} disabled={isAdded} className="mt-3 w-full">
-              {isAdded ? "已进行前清单" : "＋ 加入行前清单"}
+      <div className="flex items-center justify-between px-1">
+        <h2 className="text-base font-semibold text-stone-900">
+          {dest ? `「${dest}」当地灵感` : "本地灵感"}
+        </h2>
+        {dest && dynamicIdeas && (
+          <button
+            onClick={generate}
+            disabled={generating}
+            className="inline-flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${generating ? "animate-spin" : ""}`} /> 换一批
+          </button>
+        )}
+      </div>
+      {dest && !dynamicIdeas ? (
+        <PanelCard>
+          <div className="py-4 text-center">
+            <p className="text-sm text-stone-500">还没有「{dest}」的当地灵感。让搭子按目的地给你找真正值得去的？</p>
+            <TintButton tint={tint} onClick={generate} disabled={generating} className="mt-4 w-full">
+              {generating ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `生成「${dest}」当地灵感`}
             </TintButton>
-          </PanelCard>
-        );
-      })}
+          </div>
+        </PanelCard>
+      ) : (
+        <>
+          {!dest && (
+            <p className="px-1 text-xs text-stone-400">示例（大理）。认领时告诉搭子你的目的地，灵感会换成你要去的地方。</p>
+          )}
+          {ideas.map((idea) => {
+            const isAdded = added.includes(idea.name);
+            return (
+              <PanelCard key={idea.name}>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: tint[0], color: tint[2] }}>
+                    {idea.kind}
+                  </span>
+                  <span className="text-[15px] font-medium text-stone-900">{idea.name}</span>
+                </div>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-stone-600">{idea.desc}</p>
+                <TintButton tint={tint} outline={!isAdded} onClick={() => add(idea)} disabled={isAdded} className="mt-3 w-full">
+                  {isAdded ? "已进行前清单" : "＋ 加入行前清单"}
+                </TintButton>
+              </PanelCard>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

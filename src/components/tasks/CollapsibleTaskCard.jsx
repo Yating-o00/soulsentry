@@ -168,6 +168,7 @@ export default function CollapsibleTaskCard({ task, onToggleDone, onOpenDetail, 
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.25, ease: "easeInOut" }}
             className="overflow-hidden"
+            onPointerEnter={() => setPinned(true)}
             onPointerDownCapture={() => setPinned(true)}
             onFocusCapture={() => setPinned(true)}
           >

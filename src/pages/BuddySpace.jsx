@@ -181,7 +181,7 @@ export default function BuddySpace() {
         )}
         {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}
         {activeTab === "周报" && <WeekPanel tint={tint} projectTask={projectTask} />}
-        {activeTab === "灵感" && <InspirationPanel buddy={buddy} tint={tint} />}
+        {activeTab === "灵感" && <InspirationPanel buddy={buddy} profile={profile} tint={tint} />}
         {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
         {activeTab === "笔记" && <ReadingNotesPanel tint={tint} />}
         {activeTab === "协同" && (
@@ -284,6 +284,8 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
    讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
    其他搭子的协同约定不出现在这里。 */
 function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }) {
+  const queryClient = useQueryClient();
+  const [enabling, setEnabling] = useState(false);
   const isMine = (t) =>
     t?.metadata?.collab &&
     !t.deleted_at &&
@@ -292,11 +294,39 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
   const collabs = allTasks.filter(isMine).filter((t) => t.id !== projectTask?.id);
   const projectCollab = projectTask?.metadata?.collab ? projectTask : null;
 
-  // 项目约定已开启协同：直接内嵌完整协同空间（讨论 / 子约定 / 沉淀，与朋友和 Agent 共创）
+  // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单
+  const enableCollab = async () => {
+    if (!projectTask || enabling) return;
+    setEnabling(true);
+    try {
+      await httpRequest(`/api/tasks/${projectTask.id}`, {
+        method: "PATCH",
+        body: {
+          metadata: {
+            ...(projectTask.metadata || {}),
+            collab: {
+              scenario: "friends",
+              goal: `和伙伴一起推进「${projectTask.title}」`,
+              agent: { enabled: true, paused: false },
+              confirmRule: "owner",
+            },
+          },
+        },
+      });
+      toast.success("协同空间已开启，点右上角邀请伙伴加入");
+      await queryClient.invalidateQueries();
+    } catch (e) {
+      toast.error(e?.message || "开启失败，再试一次");
+    } finally {
+      setEnabling(false);
+    }
+  };
+
+  // 项目约定已开启协同：直接内嵌极简协同空间（执行概览 / 子约定 / 主要沉淀）
   if (projectCollab) {
     return (
       <div className="space-y-3">
-        <CollabSpace taskId={projectCollab.id} embedded />
+        <CollabSpace taskId={projectCollab.id} embedded minimal />
         {collabs.map((t) => (
           <Link
             key={t.id}
@@ -362,12 +392,20 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
           大家和 {buddy.name} 在一个讨论区里聊，子约定和沉淀由 ta 维护。
         </p>
         <button
-          onClick={onOpenCollab}
-          disabled={!projectTask}
-          className="mt-4 min-h-[44px] w-full rounded-full text-sm font-medium text-white disabled:opacity-50"
+          onClick={enableCollab}
+          disabled={!projectTask || enabling}
+          className="mt-4 min-h-[44px] w-full rounded-full text-sm font-medium text-white disabled:opacity-50 inline-flex items-center justify-center gap-2"
           style={{ background: tint[2] }}
         >
-          开启协同约定
+          {enabling && <Loader2 className="w-4 h-4 animate-spin" />}
+          {enabling ? "正在开启…" : "一键开启协同约定"}
+        </button>
+        <button
+          onClick={onOpenCollab}
+          disabled={!projectTask}
+          className="mt-2.5 text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2 disabled:opacity-50"
+        >
+          自定义场景与确认规则
         </button>
       </section>
     </div>

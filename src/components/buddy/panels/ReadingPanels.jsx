@@ -188,6 +188,28 @@ export function ShelfPanel({ profile, tint }) {
       <div>
         <h3 className="px-1 text-[11px] tracking-widest text-stone-400">想读 · 搭子按你的偏好排队</h3>
         <div className="mt-2 space-y-2">
+          {want.length === 0 && (
+            <PanelCard>
+              <p className="text-xs text-stone-400">搭子按你的偏好推荐，点一下就排进队列（示例）：</p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {(profile?.answers?.genre === "商业成长"
+                  ? ["纳瓦尔宝典", "穷查理宝典", "原则"]
+                  : profile?.answers?.genre === "文学小说"
+                    ? ["活着", "百年孤独", "克拉拉与太阳"]
+                    : ["置身事内", "人类简史", "枪炮、病菌与钢铁"]
+                ).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => patch({ shelf_want: [t] })}
+                    className="rounded-full border border-dashed px-3 py-1.5 text-xs transition-colors hover:bg-stone-50"
+                    style={{ borderColor: tint[1], color: tint[2] }}
+                  >
+                    ＋《{t}》
+                  </button>
+                ))}
+              </div>
+            </PanelCard>
+          )}
           {want.map((title) => (
             <PanelCard key={title}>
               <div className="flex items-center justify-between">

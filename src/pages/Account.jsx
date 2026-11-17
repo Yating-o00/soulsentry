@@ -607,6 +607,70 @@ export default function Account() {
         </Card>
       </motion.div>
 
+      {/* 全设备智能协同 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.198 }}
+      >
+        <Card className="border-stone-200/60 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
+          <CardHeader className="bg-stone-50">
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-[#384877]" />
+              全设备智能协同
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-5">
+            <p className="text-xs text-slate-500 mb-4">
+              同一账户下，约定、心签、搭子与协同空间在 Web / 手机桌面 / 微信小程序之间实时同步，在哪都能接着推进。
+            </p>
+            <div className="space-y-2">
+              {(() => {
+                const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+                const isMobile = /Android|iPhone|iPad/i.test(ua);
+                const isPWA = typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)")?.matches;
+                const devices = [
+                  {
+                    label: "Web 网页端",
+                    sub: "www.xinzhan-soulsentry.cn",
+                    active: !isMobile && !isPWA,
+                    hint: "",
+                  },
+                  {
+                    label: "手机桌面（PWA）",
+                    sub: isMobile
+                      ? "当前浏览器打开 → 分享/菜单 →「添加到主屏幕」，像 App 一样使用"
+                      : "手机浏览器打开网站 →「添加到主屏幕」",
+                    active: isPWA || (isMobile && !isPWA),
+                    hint: isMobile && !isPWA ? "去添加" : "",
+                  },
+                  {
+                    label: "微信小程序",
+                    sub: "微信搜索「心栈SoulSentry」",
+                    active: false,
+                    hint: "",
+                  },
+                ];
+                return devices.map((d) => (
+                  <div key={d.label} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white px-3.5 py-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#384877] flex items-center justify-center flex-shrink-0">
+                      <Globe className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800">{d.label}</p>
+                      <p className="text-xs text-slate-400 truncate">{d.sub}</p>
+                    </div>
+                    {d.active && (
+                      <Badge className="bg-[#eef2ff] text-[#384877] border-0 text-[10px] flex-shrink-0">本设备</Badge>
+                    )}
+                  </div>
+                ));
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
       {/* 账户操作 */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

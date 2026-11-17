@@ -256,7 +256,7 @@ const PERSONA_TONES = {
 };
 
 const agentSchema = z.object({
-  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "weekly", "talk", "chat", "greeting"]),
+  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "inspiration", "weekly", "talk", "chat", "greeting"]),
   payload: z.record(z.any()).optional().default({}),
 });
 
@@ -309,9 +309,17 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
       const dest = String(payload.dest || "目的地").slice(0, 30);
       const style = String(payload.style || "躺平度假").slice(0, 20);
       const days = Math.min(9, Math.max(2, Number(payload.days) || 5));
+      const note = String(payload.note || "").slice(0, 300);
       return {
-        systemPrompt: `${base}你是弹性行程规划师：按用户风格排行程，每天最多 2-3 件事，留白 20%，标注坑点（高原/温差/预约门槛/体力强度）。`,
-        prompt: `为「${dest}」规划 ${days} 天弹性行程，旅行风格「${style}」。只输出 JSON：{"days":[{"day":"D1","title":"当天主题（10字内）","note":"2-3 件安排 + 1 条坑点提示（60字内）"}]}`,
+        systemPrompt: `${base}你是弹性行程规划师：按用户风格排行程，每天最多 2-3 件事，留白 20%，标注坑点（高原/温差/预约门槛/体力强度）。当用户给出动态调整要求（时间变化、天气、人员状态、费用预算等）时，必须针对性重排：累了砍强度、下雨改室内、超预算换免费/低价方案、有老人小孩降步行量。所有安排必须与目的地「${dest}」严格匹配，绝不出现其他城市的景点。`,
+        prompt: `为「${dest}」规划 ${days} 天弹性行程，旅行风格「${style}」。${note ? `\n动态调整要求（必须逐条体现）：${note}\n` : ""}只输出 JSON：{"days":[{"day":"D1","title":"当天主题（10字内）","note":"2-3 件安排 + 1 条坑点提示（60字内）"}]}`,
+      };
+    }
+    case "inspiration": {
+      const dest = String(payload.dest || "").slice(0, 30);
+      return {
+        systemPrompt: `${base}你是资深旅行策划师：只推荐目的地本地或当日往返可达的真实体验，给实操提示（最佳时间/预约方式/避坑）。严禁推荐与目的地无关的任何地点。`,
+        prompt: `用户的目的地是「${dest || "云南大理"}」。推荐 6 个当地灵感（体验/美食/景点各约 2 个，全部必须在「${dest || "云南大理"}」本地或当日往返可达），只输出 JSON：{"ideas":[{"kind":"体验","name":"名称（12字内）","desc":"一句话实操提示（40字内，含最佳时间/预约/避坑）"}]}`,
       };
     }
     case "weekly": {

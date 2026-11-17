@@ -24,7 +24,7 @@ import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
 
 const smooth = () => (window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth");
 
-export default function CollabSpace({ taskId: taskIdProp, embedded = false }) {
+export default function CollabSpace({ taskId: taskIdProp, embedded = false, minimal = false }) {
   const [searchParams] = useSearchParams();
   const taskId = taskIdProp || searchParams.get("taskId");
   const navigate = useNavigate();
@@ -203,9 +203,11 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false }) {
   return (
     <div
       className={
-        embedded
-          ? "rounded-2xl border overflow-hidden min-[900px]:grid min-[900px]:h-[720px] min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)]"
-          : "min-h-dvh pb-[64px] min-[900px]:grid min-[900px]:h-screen min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden min-[900px]:pb-0"
+        minimal
+          ? "rounded-2xl border overflow-hidden"
+          : embedded
+            ? "rounded-2xl border overflow-hidden min-[900px]:grid min-[900px]:h-[720px] min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)]"
+            : "min-h-dvh pb-[64px] min-[900px]:grid min-[900px]:h-screen min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden min-[900px]:pb-0"
       }
       style={{ backgroundColor: "#f1f0ec", color: "#231f20", ...(embedded ? { borderColor: "#d5d3cc" } : {}) }}
     >
@@ -294,19 +296,20 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false }) {
               summary={summary}
               taskId={taskId}
               currentUserId={currentUser?.id}
-              onJumpToDiscussion={jumpToDiscussion}
+              onJumpToDiscussion={minimal ? undefined : jumpToDiscussion}
             />
-            <MilestonesPanel summary={summary} taskId={taskId} />
+            {!minimal && <MilestonesPanel summary={summary} taskId={taskId} />}
             <DocsPanel
               docs={(summary.docs || []).filter((d) => d.doc_type !== "digest")}
               taskId={taskId}
-              onJumpToSource={jumpToDiscussion}
+              onJumpToSource={minimal ? undefined : jumpToDiscussion}
             />
           </>
         )}
       </main>
 
-      {/* 右栏：会话窗（独立裁剪，任何情况下不撑破版面） */}
+      {/* 右栏：会话窗（独立裁剪，任何情况下不撑破版面）；极简模式（搭子空间内嵌）不显示 */}
+      {!minimal && (
       <aside className="min-w-0 border-t min-[900px]:h-full min-[900px]:min-h-0 min-[900px]:overflow-hidden min-[900px]:border-l min-[900px]:border-t-0" style={{ borderColor: "#d5d3cc" }}>
         <ConversationPane
           taskId={taskId}
@@ -319,6 +322,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false }) {
           currentUserId={currentUser?.id}
         />
       </aside>
+      )}
 
       {!embedded && (
         <MobileNav

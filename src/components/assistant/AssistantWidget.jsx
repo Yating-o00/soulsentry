@@ -6,20 +6,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { httpRequest } from "@/api/httpClient";
-import { Bot } from "lucide-react";
 import assistantAvatar from "@/assets/xinzhan-orb.jpg";
-
-// 小助手品牌图标：主题色打底 + 白色图标（浮动入口/面板内使用；今日页对话保留心栈 orb）
-function BrandBot({ size = 32, icon = 16, className = "", style = {} }) {
-  return (
-    <span
-      className={`rounded-full inline-flex items-center justify-center shrink-0 ${className}`}
-      style={{ width: size, height: size, background: "#384877", ...style }}
-    >
-      <Bot style={{ width: icon, height: icon, color: "#fff" }} />
-    </span>
-  );
-}
+import assistantPlanet from "@/assets/assistant-planet.png";
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划" };
 const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️" };
@@ -337,7 +325,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
               className="assistant-avatar w-8 h-8 rounded-full shrink-0 object-cover"
             />
           ) : (
-            <BrandBot size={32} icon={16} className="assistant-avatar" />
+            <img src={assistantPlanet} alt="心栈小助手" className="assistant-avatar w-8 h-8 rounded-full shrink-0 object-cover" />
           )
         )}
         <div className={`max-w-[78%] flex flex-col ${mine ? "items-end" : "items-start"}`}>
@@ -366,7 +354,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
       {/* 头部（浮动形态；内嵌形态用问候区代替） */}
       {!inline && (
       <div className="flex items-center gap-2.5 px-4 py-3 shrink-0" style={{ background: "#fff", borderBottom: "1px solid #e8ecef" }}>
-        <BrandBot size={36} icon={18} className={`assistant-avatar ${busy ? "assistant-avatar--active" : ""}`} />
+        <img src={assistantPlanet} alt="" className={`assistant-avatar w-9 h-9 rounded-full object-cover ${busy ? "assistant-avatar--active" : ""}`} />
         <div className="flex-1 min-w-0">
           <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>心栈小助手</div>
           <div className="flex items-center gap-1.5">
@@ -392,7 +380,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-4" style={{ minHeight: 0 }}>
         {messages.length === 0 && !inline && (
           <div className="flex flex-col items-center px-6 pb-2">
-            <BrandBot size={80} icon={38} className="assistant-avatar mb-3" />
+            <img src={assistantPlanet} alt="" className="assistant-avatar w-20 h-20 rounded-full object-cover mb-3" />
             <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#eef1f9", border: "1px solid #dbe3f2", color: "#384877" }}>
               你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。
             </div>
@@ -417,7 +405,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             {inline ? (
               <img src={assistantAvatar} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
             ) : (
-              <BrandBot size={32} icon={16} className="assistant-avatar assistant-avatar--active" />
+              <img src={assistantPlanet} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
             )}
             <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#eef1f9", border: "1px solid #dbe3f2", color: "#384877" }}>
               正在输入…
@@ -601,11 +589,11 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         className="fixed bottom-5 right-5 z-[90] rounded-full focus:outline-none"
         style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
       >
-        <BrandBot
-          size={56}
-          icon={26}
-          className="assistant-avatar"
-          style={{ border: "2px solid #fff", boxShadow: "0 8px 24px rgba(56,72,119,0.35)" }}
+        <img
+          src={assistantPlanet}
+          alt=""
+          className="assistant-avatar w-14 h-14 rounded-full object-cover"
+          style={{ border: "2px solid #fff", boxShadow: "0 8px 24px rgba(61,71,99,0.40)" }}
         />
         {unread > 0 && (
           <span

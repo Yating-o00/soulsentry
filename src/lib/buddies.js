@@ -29,12 +29,14 @@ export const DEFAULT_PERSONA = "gentle";
 export const personaName = (key) =>
   PERSONAS.find((p) => p.key === key)?.name || PERSONAS[0].name;
 
-// 每颗搭子球的配色（暖色系内的不同色相，与文档附录 A 一致）
+// 每颗搭子球的配色：每颗搭子保有自己的色相，但统一归入品牌蓝 #384877 的冷调低饱和色系，
+// 浅底 ~94% / 中间调 ~48% / 深色 ~34% 的明度节奏保持一致，四颗搭子既一眼可辨又像一家人。
+// 新增搭子时请沿用这套节奏（冷色相、低饱和、同明度），不要引入高明度暖色。
 export const BUDDY_TINTS = {
-  study: ["#f5e9d4", "#dcc9a4", "#b59767"], // 金 · 学习
-  travel: ["#eef0e2", "#c9d0ae", "#7d8c6a"], // 苔绿 · 旅游
-  reading: ["#f2e4d8", "#d9bda4", "#8a5a3c"], // 深焦糖 · 读书
-  morning: ["#fdeeda", "#f0cfa0", "#d9a05b"], // 杏 · 早起
+  study: ["#e9edf7", "#5b6c9e", "#384877"], // 靛蓝 · 学习（品牌色锚点）
+  travel: ["#e6f0f1", "#4f787c", "#35646a"], // 雾青 · 旅游
+  reading: ["#efebf5", "#786491", "#5b4a76"], // 灰紫 · 读书
+  morning: ["#eaf1eb", "#5c7a66", "#456852"], // 苔绿 · 早起
 };
 
 /**

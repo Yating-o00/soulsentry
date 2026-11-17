@@ -1,17 +1,21 @@
 import React, { useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import { httpRequest } from "@/api/httpClient";
 import { BuddyMsg, PanelCard, TintButton, useBuddyAgent, useBuddyState } from "./shared";
 
 /**
  * 弹性行程（旅游搭子核心板块）：按认领档案（目的地/风格）LLM 生成逐日行程，
  * 每天留白 20% + 坑点提示；结果持久化在板块状态，可随时重排。途中说「今天累了」→ 重新生成后续。
  */
-export function ItineraryPanel({ buddy, profile, tint, persona }) {
+export function ItineraryPanel({ buddy, profile, tint, persona, projectTask = null }) {
   const { call } = useBuddyAgent("travel");
   const { state, patch } = useBuddyState("travel");
+  const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [adjustInput, setAdjustInput] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
   const dest = profile?.answers?.dest || "目的地";
   const style = profile?.answers?.style || "躺平度假";
@@ -91,6 +95,42 @@ export function ItineraryPanel({ buddy, profile, tint, persona }) {
           <p className="rounded-2xl bg-[#FAF9F7] p-3.5 text-[13px] leading-relaxed text-stone-600">
             途中随时喊我调整：「今天累了」→ 我立刻给出删减方案，不内耗。
           </p>
+
+          {/* 行程 → 子约定：每天一条子约定，约定列表里逐天勾选 */}
+          {projectTask && !state.itinerary?.synced && (
+            <TintButton
+              tint={tint}
+              onClick={async () => {
+                if (syncing) return;
+                setSyncing(true);
+                try {
+                  for (const d of days) {
+                    await httpRequest("/api/tasks", {
+                      method: "POST",
+                      body: {
+                        title: `${d.day || "行程"} · ${d.title}`,
+                        description: d.note || "",
+                        category: "personal",
+                        priority: "medium",
+                        parent_task_id: projectTask.id,
+                      },
+                    });
+                  }
+                  patch({ itinerary: { ...state.itinerary, synced: true } });
+                  await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                  toast.success(`已把 ${days.length} 天行程列为子约定，逐天勾选不怕漏`);
+                } catch (e) {
+                  toast.error("同步没完成，再试一次");
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+              disabled={syncing}
+              className="w-full"
+            >
+              {syncing ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : `把 ${days.length} 天行程列为子约定`}
+            </TintButton>
+          )}
 
           {/* 动态调整：时间 / 天气 / 人员状态 / 费用有变化，一句话重排后续行程 */}
           <PanelCard title="动态调整">

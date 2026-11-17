@@ -163,7 +163,7 @@ export default function BuddySpace() {
           <div className="space-y-4">
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <ItineraryPanel buddy={buddy} profile={profile} tint={tint} persona={persona} />
+            <ItineraryPanel buddy={buddy} profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "reading" && (
@@ -191,7 +191,7 @@ export default function BuddySpace() {
           <ProfileSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
         )}
         {activeTab === "清单" && buddy.extras?.checklist && (
-          <ChecklistSection items={buddy.extras.checklist} tint={tint} />
+          <ChecklistSection items={buddy.extras.checklist} tint={tint} projectTask={projectTask} />
         )}
         {activeTab === "习惯" && buddy.extras?.habitChain && (
           <HabitChainPanel chain={buddy.extras.habitChain} tint={tint} />
@@ -294,25 +294,41 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
   const collabs = allTasks.filter(isMine).filter((t) => t.id !== projectTask?.id);
   const projectCollab = projectTask?.metadata?.collab ? projectTask : null;
 
-  // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单
+  // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单；
+  // 项目约定存在则就地开启，缺失（被删/未同步）时直接新建一场归属本搭子的协同约定
   const enableCollab = async () => {
-    if (!projectTask || enabling) return;
+    if (enabling) return;
     setEnabling(true);
+    const collabMeta = (goal) => ({
+      scenario: "friends",
+      goal,
+      agent: { enabled: true, paused: false },
+      confirmRule: "owner",
+    });
     try {
-      await httpRequest(`/api/tasks/${projectTask.id}`, {
-        method: "PATCH",
-        body: {
-          metadata: {
-            ...(projectTask.metadata || {}),
-            collab: {
-              scenario: "friends",
-              goal: `和伙伴一起推进「${projectTask.title}」`,
-              agent: { enabled: true, paused: false },
-              confirmRule: "owner",
+      if (projectTask) {
+        await httpRequest(`/api/tasks/${projectTask.id}`, {
+          method: "PATCH",
+          body: {
+            metadata: {
+              ...(projectTask.metadata || {}),
+              collab: collabMeta(`和伙伴一起推进「${projectTask.title}」`),
             },
           },
-        },
-      });
+        });
+      } else {
+        await httpRequest("/api/tasks", {
+          method: "POST",
+          body: {
+            title: `${buddy.name}的协同约定`,
+            description: "和伙伴一起推进，子约定与沉淀由搭子维护",
+            category: "collab",
+            status: "pending",
+            priority: "medium",
+            metadata: { collab: collabMeta(`和伙伴一起推进`), _extraFields: { buddy_id: buddy.id } },
+          },
+        });
+      }
       toast.success("协同空间已开启，点右上角邀请伙伴加入");
       await queryClient.invalidateQueries();
     } catch (e) {
@@ -393,7 +409,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
         </p>
         <button
           onClick={enableCollab}
-          disabled={!projectTask || enabling}
+          disabled={enabling}
           className="mt-4 min-h-[44px] w-full rounded-full text-sm font-medium text-white disabled:opacity-50 inline-flex items-center justify-center gap-2"
           style={{ background: tint[2] }}
         >
@@ -402,8 +418,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
         </button>
         <button
           onClick={onOpenCollab}
-          disabled={!projectTask}
-          className="mt-2.5 text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2 disabled:opacity-50"
+          className="mt-2.5 text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2"
         >
           自定义场景与确认规则
         </button>
@@ -465,15 +480,46 @@ function ProfileSection({ buddy, profile, tint, projectTask }) {
 }
 
 /* ---------- 领域特色：旅行清单（勾选持久化到搭子板块状态，灵感库加进来的也在此核对） ---------- */
-function ChecklistSection({ items, tint }) {
+function ChecklistSection({ items, tint, projectTask = null }) {
   const { state, patch } = useBuddyState("travel");
+  const queryClient = useQueryClient();
+  const [syncing, setSyncing] = useState(false);
   const checked = state.checklist_checked || [];
   const extra = state.checklist_extra || [];
+  const synced = state.checklist_synced || [];
   const all = [...items, ...extra];
+  const toSync = all.filter((x) => !synced.includes(x));
 
   const toggle = (item) => {
     const next = checked.includes(item) ? checked.filter((x) => x !== item) : [...checked, item];
     patch({ checklist_checked: next });
+  };
+
+  // 清单 → 子约定：逐项落成项目约定的子任务，约定列表里逐项勾选，不再怕遗忘
+  const syncToTasks = async () => {
+    if (!projectTask || syncing || toSync.length === 0) return;
+    setSyncing(true);
+    try {
+      for (const item of toSync) {
+        await httpRequest("/api/tasks", {
+          method: "POST",
+          body: {
+            title: item,
+            description: "行前清单 · 来自旅游搭子",
+            category: "personal",
+            priority: "medium",
+            parent_task_id: projectTask.id,
+          },
+        });
+      }
+      patch({ checklist_synced: all });
+      await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success(`已把 ${toSync.length} 项清单列为子约定，去约定列表逐项勾选吧`);
+    } catch (e) {
+      toast.error("同步没完成，再试一次");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   return (
@@ -504,11 +550,25 @@ function ChecklistSection({ items, tint }) {
                   {done && <Check className="w-3 h-3" strokeWidth={3} />}
                 </span>
                 <span className={cn("text-sm", done ? "text-stone-400 line-through" : "text-stone-700")}>{item}</span>
+                {synced.includes(item) && <span className="ml-auto text-[10px] text-stone-400 flex-shrink-0">已入约定</span>}
               </button>
             </li>
           );
         })}
       </ul>
+      {projectTask ? (
+        <button
+          onClick={syncToTasks}
+          disabled={syncing || toSync.length === 0}
+          className="mt-3 min-h-[40px] w-full rounded-full text-xs font-medium text-white disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+          style={{ background: tint[2] }}
+        >
+          {syncing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+          {toSync.length === 0 ? "已全部列为子约定" : `把 ${toSync.length} 项清单列为子约定`}
+        </button>
+      ) : (
+        <p className="mt-3 text-xs text-stone-400">识别到项目约定后，可一键把清单列为子约定逐项勾选。</p>
+      )}
       <p className="mt-3 text-xs text-stone-400">出发前一晚 21:00，我会逐项跟你核对——勾选云端同步，换设备也不丢。</p>
     </section>
   );

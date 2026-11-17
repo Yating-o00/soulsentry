@@ -5,6 +5,12 @@ const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
 // DeepSeek 作为最后一道兜底：Kimi 全部不可用（欠费/故障/下线）时接管文本对话
 const DEFAULT_TEXT_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
 const DEFAULT_WEB_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
+// 交互式对话（小助手/搭子）优先走更快的模型，失败再降级到旗舰 K3；
+// 复杂任务（解题/行程/周报）仍走 DEFAULT_TEXT_MODELS。
+export const FAST_TEXT_MODELS = String(process.env.FAST_TEXT_MODELS || "kimi-k2.6,kimi-k3")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
 
 function getEndpointConfigs() {
@@ -108,15 +114,18 @@ export async function callKimiChat({
   messages,
   responseJsonSchema,
   model,
+  models,
   temperature = 0.3,
   maxTokens = 4000,
   tools,
   fetchTimeout = 30000
 }) {
   const endpoints = getEndpointConfigs();
-  const candidateModels = model
-    ? [model]
-    : (Array.isArray(tools) && tools.length > 0 ? DEFAULT_WEB_MODELS : DEFAULT_TEXT_MODELS);
+  const candidateModels = Array.isArray(models) && models.length > 0
+    ? models
+    : model
+      ? [model]
+      : (Array.isArray(tools) && tools.length > 0 ? DEFAULT_WEB_MODELS : DEFAULT_TEXT_MODELS);
 
   let lastStatus = 0;
   let lastErrorText = "";
@@ -242,6 +251,7 @@ export async function invokeKimiText({
   systemPrompt,
   responseJsonSchema,
   model,
+  models,
   temperature,
   maxTokens,
   fetchTimeout,
@@ -257,6 +267,7 @@ export async function invokeKimiText({
     messages,
     responseJsonSchema,
     model,
+    models,
     temperature,
     maxTokens,
     fetchTimeout

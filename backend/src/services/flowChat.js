@@ -1,4 +1,4 @@
-import { invokeKimiText } from "../lib/kimi.js";
+import { invokeKimiText, FAST_TEXT_MODELS } from "../lib/kimi.js";
 import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
@@ -589,7 +589,7 @@ const RESPONSE_SCHEMA = {
             goal: { type: "string", description: "一句话概括要规划的目标，如「一周英语学习」" },
             horizon_days: { type: ["number", "null"], description: "计划总天数；推断不出为 null" },
             daily_minutes: { type: ["number", "null"], description: "每天可投入分钟数；推断不出为 null" },
-            preferences: { type: ["string", "null"], description: "用户对时段/节奏的偏好，如「早上」「下班后」" },
+            preferences: { type: ["string", "null"], description: "用户对时段/节奏的偏好，以及身体条件/经验/限制（如体重、伤病、运动基础、饮食禁忌、作息），如「早上；130斤；无运动基础」" },
             adjustments: {
               type: ["array", "null"],
               description: "用户在调整已有规划时的定向修改（保持 goal/horizon/daily 不变，把修改写这里，可多条）：target=作用对象（周末/工作日/每天/周六/组名如「力量」），field=duration|start_time|content|note|add，value=新值（如「60分钟」「19:30」「新的内容描述」；field=add 时 value=新项名称如「瑜伽」）",
@@ -638,7 +638,88 @@ async function loadPersonaTone({ userId, prisma }) {
   }
 }
 
-async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "", personaTone = PERSONA_TONES.gentle }) {
+const BUDDY_NAME_ZH = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
+
+/**
+ * 小助手对话的真实数据上下文：主档案 + 在岗搭子 + 未完成约定 + 最近心签。
+ * 只读、限长，用于个性化回复与规划；不把全量数据塞给模型。
+ */
+async function loadDialogueContext({ userId, prisma }) {
+  if (!userId || !prisma) return "";
+  try {
+    const [tasks, notes, pref] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          userId,
+          deletedAt: null,
+          parentTaskId: null,
+          status: { notIn: ["DONE", "ARCHIVED"] },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+        select: { title: true, status: true, category: true, reminderTime: true, dueAt: true, progress: true },
+      }),
+      prisma.note.findMany({
+        where: { userId, deletedAt: null },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { title: true, plainText: true, content: true },
+      }),
+      prisma.userPreference.findUnique({ where: { userId }, select: { metadata: true } }),
+    ]);
+
+    const extra = pref?.metadata?._extraFields || {};
+    const idp = extra.id_profile && typeof extra.id_profile === "object" ? extra.id_profile : {};
+    const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? extra.buddy_profiles : {};
+    const lines = [];
+
+    const idBits = [
+      idp.age ? `${idp.age}岁` : null,
+      Array.isArray(idp.likes) && idp.likes.length > 0 ? `喜欢${idp.likes.slice(0, 8).join("、")}` : null,
+      Array.isArray(idp.wants) && idp.wants.length > 0 ? `想要${idp.wants.slice(0, 8).join("、")}` : null,
+    ].filter(Boolean);
+    if (idBits.length > 0) lines.push(`用户主档案：${idBits.join("；")}`);
+
+    const activeBuddies = Object.entries(profiles)
+      .filter(([, p]) => p?.status === "active")
+      .map(([id, p]) => `${BUDDY_NAME_ZH[id] || id}${p.plan_title ? `（${p.plan_title}）` : ""}`);
+    if (activeBuddies.length > 0) lines.push(`在岗搭子：${activeBuddies.join("、")}`);
+
+    const fmtTime = (d) => {
+      if (!d) return "";
+      const t = new Date(new Date(d).getTime() + 8 * 3600 * 1000);
+      return `${t.toISOString().slice(5, 10)} ${t.toISOString().slice(11, 16)}`;
+    };
+    if (tasks.length > 0) {
+      lines.push(
+        `未完成约定（最多 8 条）：${tasks
+          .slice(0, 8)
+          .map((t) => `「${String(t.title || "").slice(0, 30)}」${t.reminderTime || t.dueAt ? ` ${fmtTime(t.reminderTime || t.dueAt)}` : ""}${t.status === "IN_PROGRESS" ? " 进行中" : ""}`)
+          .join("；")}`
+      );
+    } else {
+      lines.push("当前没有未完成的约定");
+    }
+
+    if (notes.length > 0) {
+      lines.push(
+        `最近心签：${notes
+          .map((n) => {
+            const text = String(n.title || n.plainText || n.content || "").replace(/<[^>]+>/g, "").slice(0, 40);
+            return `「${text}」`;
+          })
+          .join("、")}`
+      );
+    }
+
+    return lines.join("\n").slice(0, 1600);
+  } catch (error) {
+    console.warn("[flowChat] 真实数据上下文构建失败:", error?.message || error);
+    return "";
+  }
+}
+
+async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "", personaTone = PERSONA_TONES.gentle, userContext = "" }) {
   const now = chinaNow();
   const extractedCtx = lastExtracted
     ? `（你上一轮提出的待确认提案如下，用户可能正在对它做修改：${JSON.stringify(lastExtracted)}）`
@@ -647,7 +728,7 @@ async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "", perso
   const prompt = `现在是中国时间 ${now.date} ${now.dateTime.slice(11)}。以下是用户与 SoulSentry 的对话${extractedCtx}：
 
 ${buildMessagesBlock(messages)}${attachmentCtx}
-
+${userContext ? `\n你此刻掌握的用户真实数据（只读参考，用于个性化回答和规划；不要在回复里机械罗列）：\n${userContext}\n` : ""}
 请按系统要求返回 JSON。`;
 
   const resultAndUsage = await invokeKimiText({
@@ -658,7 +739,7 @@ ${buildMessagesBlock(messages)}${attachmentCtx}
 - type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。用户明确说「打卡/签到」，或想长期重复坚持同一件事（如每天跑步、每日阅读、练琴打卡），category 用 checkin（打卡约定，每次做到点一下记一次）。
 - type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
-- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。用户想在规划里新增一项（如"周六下午3点加半小时瑜伽""每天加冥想"）时用 field="add"，value=新项名称（如"瑜伽"），并带上 start_time（如"15:00"）与 duration_minutes（如 30），target 为适用日。
+- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好；用户提到的体重、伤病、运动基础、饮食禁忌、作息等个性化条件也必须写进 preferences，规划器会据此调整强度与内容），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。用户想在规划里新增一项（如"周六下午3点加半小时瑜伽""每天加冥想"）时用 field="add"，value=新项名称（如"瑜伽"），并带上 start_time（如"15:00"）与 duration_minutes（如 30），target 为适用日。
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天或信息还不足：extracted 为 null。
 
@@ -680,7 +761,9 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
 人格引擎（语气最高优先级，覆盖第 5 条的默认温柔）：用户当前人格为「${personaTone}」按这个人格的方式说话，但心栈的克制、真诚、不制造焦虑始终保留。`,
     responseJsonSchema: RESPONSE_SCHEMA,
     temperature: 0.7,
-    maxTokens: 4000,
+    models: FAST_TEXT_MODELS,
+    maxTokens: 1500,
+    fetchTimeout: 25000,
     withUsage: true
   });
 
@@ -815,9 +898,10 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
       : lastExtracted;
     const personaTone = await loadPersonaTone({ userId, prisma });
+    const userContext = await loadDialogueContext({ userId, prisma });
     const out = await Promise.race([
-      chatWithKimi({ messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx, personaTone }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 30000))
+      chatWithKimi({ messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx, personaTone, userContext }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 35000))
     ]);
 
     // 协同约定强意图优先：「建立/创建…协同约定」明确要的是多人共创卡片，

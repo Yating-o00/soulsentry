@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
-import { invokeKimiText } from "../lib/kimi.js";
+import { invokeKimiText, FAST_TEXT_MODELS } from "../lib/kimi.js";
 
 /**
  * 搭子（Buddy）L1 底座：
@@ -227,15 +227,167 @@ buddiesRouter.post("/:id/graduate", async (req, res) => {
   if (!profile || profile.status !== "active") {
     return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
   }
-  profiles[buddyId] = { ...profile, status: "graduated", graduated_at: new Date().toISOString() };
+  const note = await createBuddySediment(req.user.id, buddyId, profile, "毕业沉淀").catch((error) => {
+    console.warn("[buddies/graduate] 沉淀失败:", error?.message || error);
+    return null;
+  });
+  profiles[buddyId] = {
+    ...profile,
+    status: "graduated",
+    graduated_at: new Date().toISOString(),
+    sediment_note_id: note?.id || null,
+  };
   await writeExtraFields(req.user.id, pref, { buddy_profiles: profiles });
-  return res.json({ profile: profiles[buddyId] });
+  return res.json({ profile: profiles[buddyId], note_id: note?.id || null });
+});
+
+// POST /api/buddies/:id/stop —— 取消陪伴：先把这段关系沉淀成一条按主题命名的心签，
+// 再让搭子回货架；约定、心签、子约定全部保留，下次可以重新认领接着用。
+buddiesRouter.post("/:id/stop", async (req, res) => {
+  const buddyId = req.params.id;
+  if (!BUDDY_IDS.has(buddyId)) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
+  }
+  const { pref, extra } = await readExtraFields(req.user.id);
+  const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? { ...extra.buddy_profiles } : {};
+  const profile = profiles[buddyId];
+  if (!profile || profile.status !== "active") {
+    return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经收起" });
+  }
+  const note = await createBuddySediment(req.user.id, buddyId, profile, "取消陪伴沉淀").catch((error) => {
+    console.warn("[buddies/stop] 沉淀失败:", error?.message || error);
+    return null;
+  });
+  profiles[buddyId] = {
+    ...profile,
+    status: "graduated",
+    graduated_at: new Date().toISOString(),
+    stopped_at: new Date().toISOString(),
+    sediment_note_id: note?.id || null,
+  };
+  await writeExtraFields(req.user.id, pref, { buddy_profiles: profiles });
+  return res.json({ profile: profiles[buddyId], note_id: note?.id || null });
 });
 
 
 /* ---------- 板块状态持久化：每个搭子空间的模块数据（清单勾选/阅读分钟/行程/习惯链…） ---------- */
 
 export const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
+
+/**
+ * 结束一段陪伴时，把这段关系的真实内容按主题沉淀成一条心签：
+ * 项目约定进度、子约定完成情况、打卡次数、最近沉淀、下次接着做的事。
+ * 约定/心签本身不删除；下次重新认领还能接着用。
+ */
+async function createBuddySediment(userId, buddyId, profile, scene) {
+  const buddyName = BUDDY_NAMES[buddyId] || "搭子";
+  const planTitle = profile?.plan_title ? String(profile.plan_title) : "";
+  let projectTask = null;
+  let childStats = null;
+  let checkinTotal = 0;
+
+  try {
+    if (profile?.project_task_id) {
+      projectTask = await prisma.task.findUnique({
+        where: { id: profile.project_task_id },
+        select: { id: true, title: true, status: true, category: true, progress: true },
+      });
+      if (projectTask) {
+        const children = await prisma.task.findMany({
+          where: { parentTaskId: projectTask.id, deletedAt: null },
+          orderBy: { createdAt: "asc" },
+          select: { title: true, status: true },
+        });
+        childStats = {
+          total: children.length,
+          done: children.filter((c) => c.status === "DONE").length,
+          open: children
+            .filter((c) => c.status !== "DONE" && c.status !== "ARCHIVED")
+            .map((c) => c.title)
+            .slice(0, 6),
+        };
+        if (projectTask.category === "checkin") {
+          checkinTotal = await prisma.checkin.count({ where: { taskId: projectTask.id } });
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("[buddies/sediment] 项目统计失败:", error?.message || error);
+  }
+
+  let relatedNotes = [];
+  try {
+    const notes = await prisma.note.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+      select: { title: true, plainText: true, content: true, sourceType: true, metadata: true },
+    });
+    relatedNotes = notes
+      .filter(
+        (n) =>
+          n.metadata?._extraFields?.source_buddy === buddyId ||
+          (buddyId === "study" && n.sourceType === "buddy_solve") ||
+          (buddyId === "reading" && n.sourceType === "buddy_reading")
+      )
+      .slice(0, 5);
+  } catch (error) {
+    console.warn("[buddies/sediment] 心签统计失败:", error?.message || error);
+  }
+
+  const days = profile?.claimed_at
+    ? Math.max(1, Math.ceil((Date.now() - new Date(profile.claimed_at).getTime()) / 86400000))
+    : null;
+  const topic = planTitle || projectTask?.title || buddyName;
+  const lines = [];
+  lines.push(`这段${buddyName}的陪伴${days ? `持续了 ${days} 天` : ""}。`);
+  if (projectTask) {
+    lines.push(
+      `项目约定「${projectTask.title}」当前${projectTask.status === "DONE" ? "已完成" : "仍在进行中"}${childStats?.total ? `，子约定 ${childStats.done}/${childStats.total} 条完成` : ""}。`
+    );
+  }
+  if (checkinTotal > 0) lines.push(`累计打卡 ${checkinTotal} 次。`);
+  if (Array.isArray(profile?.plan_lines) && profile.plan_lines.length > 0) {
+    lines.push(`原来的陪伴计划：${profile.plan_lines.slice(0, 6).join("；")}`);
+  }
+  if (childStats?.open?.length > 0) {
+    lines.push(`下次接着做：${childStats.open.map((t) => `「${t}」`).join("、")}。`);
+  }
+  if (relatedNotes.length > 0) {
+    lines.push(
+      `这段陪伴沉淀过 ${relatedNotes.length} 条心签：${relatedNotes
+        .map((n) => `「${String(n.title || n.plainText || n.content || "").replace(/<[^>]+>/g, "").slice(0, 20)}」`)
+        .join("、")}。`
+    );
+  }
+  lines.push("约定和心签都保留着，随时可以重新认领这颗搭子，接着往下走。");
+
+  const plainText = lines.join("\n");
+  const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const content = lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("");
+  const tags = ["搭子沉淀", buddyName, String(topic).slice(0, 20)].filter(Boolean);
+
+  return prisma.note.create({
+    data: {
+      userId,
+      title: `「${String(topic).slice(0, 40)}」陪伴小结`,
+      content,
+      plainText,
+      // 用现有的「备忘」签类型承载陪伴小结；来源徽标由 metadata._extraFields 提供，
+      // 这样心签的五类筛选、颜色与小程序口径都不用改
+      sourceType: "memo",
+      tags,
+      metadata: {
+        _extraFields: {
+          source_buddy: buddyId,
+          source_buddy_name: buddyName,
+          source_scene: scene,
+          source_task_title: projectTask?.title || null,
+        },
+      },
+    },
+  });
+}
 
 function isPlainObject(v) {
   return v && typeof v === "object" && !Array.isArray(v);
@@ -375,7 +527,7 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
     case "greeting": {
       const context = String(payload.context || "").slice(0, 600);
       return {
-        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}`,
+        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}开场白必须落在真实进度上，给出一个具体可执行的提醒，不说套话。`,
         prompt: `用户此刻的真实状态：${context}\n\n以${buddyName}的身份写一句今日开场白（60字内）：结合ta当下的真实状态，给一句具体、有专业含量的提醒或鼓励。不许用「今天也要加油」之类的套话，每次都要不一样。只输出 JSON：{"text":"..."}`,
       };
     }
@@ -388,13 +540,82 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
             .join("\n")
         : "";
       return {
-        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的上下文：${context || "（暂无）"}`,
-        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n\n以${buddyName}的身份回复最后一条用户消息（120字内）：像朋友一样说话，给最实在的专业指导；涉及行动就给具体下一步，涉及情绪先接住再引导。只输出 JSON：{"reply":"..."}`,
+        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。`,
+        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。只输出 JSON：{"reply":"..."}`,
       };
     }
     default:
       return null;
   }
+}
+
+/**
+ * 搭子对话的真实进度上下文：项目约定 + 未完成子约定 + 近 7 天打卡 + 本搭子沉淀的心签。
+ * 让「专业指导」落在用户真实进度上，而不是泛泛而谈。
+ */
+async function loadBuddyLiveContext(userId, buddyId, profile) {
+  const lines = [];
+  try {
+    if (profile?.project_task_id) {
+      const projectTask = await prisma.task.findUnique({
+        where: { id: profile.project_task_id },
+        select: { id: true, title: true, status: true, progress: true, category: true },
+      });
+      if (projectTask) {
+        lines.push(
+          `项目约定「${projectTask.title}」：${projectTask.status === "DONE" ? "已完成" : `进行中，进度 ${projectTask.progress || 0}%`}`
+        );
+        const children = await prisma.task.findMany({
+          where: { parentTaskId: projectTask.id, deletedAt: null },
+          orderBy: { createdAt: "asc" },
+          take: 20,
+          select: { title: true, status: true },
+        });
+        const open = children.filter((c) => c.status !== "DONE" && c.status !== "ARCHIVED");
+        if (open.length > 0) {
+          lines.push(
+            `未完成子约定：${open.slice(0, 6).map((c) => `「${c.title}」`).join("、")}${open.length > 6 ? ` 等 ${open.length} 条` : ""}`
+          );
+        }
+        if (projectTask.category === "checkin") {
+          const since = new Date(Date.now() - 7 * 86400000);
+          const [total, week] = await Promise.all([
+            prisma.checkin.count({ where: { taskId: projectTask.id } }),
+            prisma.checkin.count({ where: { taskId: projectTask.id, createdAt: { gte: since } } }),
+          ]);
+          lines.push(`打卡：累计 ${total} 次，近 7 天 ${week} 次`);
+        }
+      }
+    }
+
+    const notes = await prisma.note.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+      select: { title: true, plainText: true, content: true, sourceType: true, metadata: true },
+    });
+    const related = notes
+      .filter(
+        (n) =>
+          n.metadata?._extraFields?.source_buddy === buddyId ||
+          (buddyId === "study" && n.sourceType === "buddy_solve") ||
+          (buddyId === "reading" && n.sourceType === "buddy_reading")
+      )
+      .slice(0, 3);
+    if (related.length > 0) {
+      lines.push(
+        `最近沉淀：${related
+          .map((n) => {
+            const text = String(n.title || n.plainText || n.content || "").replace(/<[^>]+>/g, "").slice(0, 30);
+            return `「${text}」`;
+          })
+          .join("、")}`
+      );
+    }
+  } catch (error) {
+    console.warn("[buddies/agent] live context failed:", error?.message || error);
+  }
+  return lines.join("；").slice(0, 1200);
 }
 
 // POST /api/buddies/:id/agent —— 领域技能调用（人格 + 领域档案注入，服务端定型提示词防跑偏）
@@ -412,21 +633,45 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
     return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
   }
   const personaTone = PERSONA_TONES[extra.persona] || PERSONA_TONES.gentle;
-  const built = buildAgentPrompt(buddyId, parsed.data.mode, parsed.data.payload, personaTone, profile.answers);
+  const isFastChat = ["chat", "greeting", "talk"].includes(parsed.data.mode);
+  let payload = parsed.data.payload || {};
+  if (isFastChat) {
+    const liveContext = await loadBuddyLiveContext(req.user.id, buddyId, profile);
+    if (liveContext) {
+      payload = { ...payload, context: [payload.context, liveContext].filter(Boolean).join("；") };
+    }
+  }
+  const built = buildAgentPrompt(buddyId, parsed.data.mode, payload, personaTone, profile.answers);
   if (!built) {
     return res.status(400).json({ error: "INVALID_INPUT", message: "未知的技能模式" });
   }
   try {
-    const data = await invokeKimiText({
-      prompt: built.prompt,
-      systemPrompt: built.systemPrompt,
-      responseJsonSchema: true,
-      maxTokens: 1500,
-      fetchTimeout: 45000,
-    });
+    const data = await Promise.race([
+      invokeKimiText({
+        prompt: built.prompt,
+        systemPrompt: built.systemPrompt,
+        responseJsonSchema: true,
+        models: isFastChat ? FAST_TEXT_MODELS : undefined,
+        maxTokens: isFastChat ? 700 : 1500,
+        fetchTimeout: isFastChat ? 15000 : 45000,
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("AGENT_TIMEOUT")), isFastChat ? 28000 : 60000)
+      ),
+    ]);
     return res.json({ data });
   } catch (error) {
     console.error(`[buddies/agent] ${buddyId}/${parsed.data.mode} failed:`, error?.message || error);
+    if (isFastChat) {
+      // 快速对话失败时给一句可继续的回执，而不是让用户等 502
+      return res.json({
+        data:
+          parsed.data.mode === "greeting"
+            ? { text: "我在。今天先挑一件最想推进的事，我们从最小的一步开始。" }
+            : { reply: "我在。刚才想得有点久——先说说你现在最卡的那一步，我们把动作缩到最小。" },
+        degraded: true,
+      });
+    }
     return res.status(502).json({ error: "AGENT_FAILED", message: "搭子走神了，再试一次" });
   }
 });

@@ -51,7 +51,6 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
         // 问候失败不打扰，静态问候仍在页头
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile]);
 
   useEffect(() => {
@@ -106,7 +105,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
           )}
           {sending && (
             <div className="flex items-center gap-2 pl-10 text-xs text-stone-400">
-              <Loader2 className="w-3 h-3 animate-spin" /> {buddy.name}在想…
+              <Loader2 className="w-3 h-3 animate-spin" /> {buddy.name}正在看你的真实进度…
             </div>
           )}
         </div>

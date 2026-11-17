@@ -8,8 +8,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { httpRequest } from "@/api/httpClient";
 import assistantPlanet from "@/assets/assistant-planet.png";
 
-const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划" };
-const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️" };
+const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划", collab: "协同约定" };
+const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️", collab: "👥" };
 
 function fmtTime(iso) {
   const d = new Date(iso);
@@ -34,10 +34,12 @@ function detectLedgerLike(t) {
   return false;
 }
 
-export default function AssistantWidget({ inline = false, newUser = false, summary = "" }) {
+export default function AssistantWidget({ inline = false, newUser = false, summary = "", quickAsks = null }) {
   const queryClient = useQueryClient();
-  // inline 模式：内嵌在首页（通用 Agent 对话层），无浮动按钮、面板常开
+  // inline 模式：内嵌在首页（通用 Agent 对话层），无浮动按钮、面板常开；
+  // 历史对话默认折叠，只保留一条按真实数据生成的今日问候
   const [open, setOpen] = useState(inline);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -101,10 +103,17 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
 
   useEffect(() => {
     if (!open) return undefined;
-    fetchHistory().then(scrollToBottom);
+    fetchHistory().then(() => {
+      if (inline) {
+        // 首页只展示今日问候：历史折叠时停在顶部，不自动滚到旧消息
+        requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: 0 }));
+      } else {
+        scrollToBottom();
+      }
+    });
     const timer = setInterval(() => fetchHistory({ quiet: true }), 10000);
     return () => clearInterval(timer);
-  }, [open, fetchHistory, scrollToBottom]);
+  }, [open, inline, fetchHistory, scrollToBottom]);
 
   // ── 发送 ──
   const sendViaLegacyChat = async (t, lastExtracted) => {
@@ -127,6 +136,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   const sendText = useCallback(async (text, lastExtracted = null) => {
     const t = String(text || "").trim();
     if (!t || busy) return false;
+    if (inline) setHistoryOpen(true); // 用户开口后才展开对话流
     setBusy(true);
     const optimistic = { id: `local-${Date.now()}`, role: "user", content: t, kind: "chat", created_date: new Date().toISOString() };
     appendMessage(optimistic);
@@ -161,7 +171,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     } finally {
       setBusy(false);
     }
-  }, [busy, appendMessage, markUnsupported, scrollToBottom]);
+  }, [busy, appendMessage, markUnsupported, scrollToBottom, inline]);
 
   const send = async () => {
     const t = input.trim();
@@ -185,6 +195,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     try {
       let doneLabel = "";
       let planChildCount = 0;
+      let collabCreated = false;
       if (pending.type === "task") {
         const firstUserText = messagesRef.current.find((m) => m.role === "user")?.content || "";
         await httpRequest("/api/tasks", {
@@ -222,6 +233,28 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           }
         });
         doneLabel = "链接";
+      } else if (pending.type === "collab") {
+        const scenario = pending.scenario || "friends";
+        await httpRequest("/api/tasks", {
+          method: "POST",
+          body: {
+            title: pending.title,
+            description: pending.goal || pending.description || "",
+            category: "collab",
+            status: "pending",
+            priority: "medium",
+            metadata: {
+              collab: {
+                scenario,
+                goal: pending.goal || "",
+                agent: { enabled: true, paused: false },
+                confirmRule: scenario === "couple" ? "all" : "owner",
+              },
+            },
+          },
+        });
+        doneLabel = pending.title;
+        collabCreated = true;
       } else if (pending.type === "plan") {
         const pl = pending.plan || {};
         const p = pl.parent || {};
@@ -257,9 +290,11 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
       } else {
         return;
       }
-      const echo = planChildCount
-        ? `「${doneLabel}」的智能规划已生成 ✓ 共 ${planChildCount} 条子约定排在接下来的日子里。`
-        : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？`;
+      const echo = collabCreated
+        ? `协同约定「${doneLabel}」已创建 ✓ 去约定列表就能邀请伙伴一起推进。`
+        : planChildCount
+          ? `「${doneLabel}」的智能规划已生成 ✓ 共 ${planChildCount} 条子约定排在接下来的日子里。`
+          : `「${doneLabel}」已为你记下了 ✓ 还想聊点什么吗？`;
       setPending(null);
       await appendEcho(echo);
       queryClient.invalidateQueries();
@@ -394,12 +429,28 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             </div>
           </div>
         )}
-        {messages.map(renderMessage)}
-        {busy && (
+        {inline && messages.length > 0 && (
+          <div className="px-4 pb-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !historyOpen;
+                setHistoryOpen(next);
+                if (next) requestAnimationFrame(scrollToBottom);
+              }}
+              className="rounded-full px-3 py-1 text-[11px] transition-colors"
+              style={{ color: "#63666e", background: "#fff", border: "1px solid #e4e6ec", cursor: "pointer" }}
+            >
+              {historyOpen ? "收起历史对话" : `查看历史对话（${messages.length} 条）`}
+            </button>
+          </div>
+        )}
+        {(!inline || historyOpen) && messages.map(renderMessage)}
+        {busy && (!inline || historyOpen) && (
           <div className="flex items-center gap-2 px-4 mb-4">
             <img src={assistantPlanet} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
             <div className="rounded-2xl px-3.5 py-2.5 text-[12.5px]" style={{ background: "#eef1f9", border: "1px solid #dbe3f2", color: "#384877" }}>
-              正在输入…
+              正在结合你的真实约定和心签…
             </div>
           </div>
         )}
@@ -413,35 +464,42 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             <span className="text-[10px]" style={{ color: "#c4c6cc" }}>不用认领搭子，直接说</span>
           </div>
           <div className="mt-2 flex flex-col gap-2">
-            {(newUser
-              ? [
-                  "提醒我每周日给妈妈打电话",
-                  "把「先做最重要的一件事」记成心签",
-                  "帮我做一个 7 天晨读计划",
-                  "拉个协同约定，和朋友一起背单词",
-                  "帮我订一张明天去上海的高铁票",
-                  "心里有点乱，陪我聊聊",
-                ]
-              : [
-                  "帮我安排今天的计划",
-                  "把现在脑子里的事记成心签",
-                  "这周我做得怎么样？",
-                  "拉个协同约定，和朋友一起推进",
-                  "帮我订一张明天去上海的高铁票",
-                  "心里有点乱，陪我聊聊",
-                ]
-            ).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => sendText(s, null)}
-                disabled={busy}
-                className="w-full text-left rounded-full px-4 py-2 text-[13px] transition-all active:scale-[0.99]"
-                style={{ border: "1px solid #d8e0f0", color: "#384877", background: "#fff", cursor: "pointer" }}
-              >
-                {s}
-              </button>
-            ))}
+            {(quickAsks && quickAsks.length > 0
+              ? quickAsks
+              : (newUser
+                  ? [
+                      "提醒我每周日给妈妈打电话",
+                      "把「先做最重要的一件事」记成心签",
+                      "帮我做一个 7 天晨读计划",
+                      "拉个协同约定，和朋友一起背单词",
+                      "帮我订一张明天去上海的高铁票",
+                      "心里有点乱，陪我聊聊",
+                    ]
+                  : [
+                      "帮我安排今天的计划",
+                      "把现在脑子里的事记成心签",
+                      "这周我做得怎么样？",
+                      "拉个协同约定，和朋友一起推进",
+                      "帮我订一张明天去上海的高铁票",
+                      "心里有点乱，陪我聊聊",
+                    ]
+                ).map((prompt) => ({ label: prompt, prompt }))
+            ).map((item) => {
+              const label = typeof item === "string" ? item : item.label;
+              const prompt = typeof item === "string" ? item : item.prompt;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => sendText(prompt, null)}
+                  disabled={busy}
+                  className="w-full text-left rounded-full px-4 py-2 text-[13px] transition-all active:scale-[0.99]"
+                  style={{ border: "1px solid #d8e0f0", color: "#384877", background: "#fff", cursor: "pointer" }}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -491,8 +549,8 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           ) : (
             <div className="text-[13px]" style={{ color: "#1c1c1e" }}>
               <div className="font-semibold">{pending.title || pending.content || pending.text}</div>
-              {pending.description && (
-                <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>{pending.description}</div>
+              {(pending.goal || pending.description) && (
+                <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>{pending.goal || pending.description}</div>
               )}
             </div>
           )}

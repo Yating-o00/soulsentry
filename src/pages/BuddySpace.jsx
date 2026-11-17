@@ -70,6 +70,7 @@ export default function BuddySpace() {
   const [tab, setTab] = useState(null); // null → 取 sections[0]
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [graduating, setGraduating] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
 
   if (!buddy) {
@@ -110,13 +111,37 @@ export default function BuddySpace() {
     if (graduating) return;
     setGraduating(true);
     try {
-      await httpRequest(`/api/buddies/${buddy.id}/graduate`, { method: "POST" });
+      const res = await httpRequest(`/api/buddies/${buddy.id}/graduate`, { method: "POST" });
       queryClient.invalidateQueries({ queryKey: ["buddies"] });
-      toast.success(`毕业快乐，${buddy.name}为你骄傲`);
+      toast.success(
+        res?.note_id
+          ? `毕业快乐，${buddy.name}为你骄傲；这段陪伴已沉淀成心签`
+          : `毕业快乐，${buddy.name}为你骄傲；约定和心签都保留着`
+      );
       navigate(createPageUrl("BuddyStore"));
     } catch (e) {
       toast.error(e?.message || "操作失败，请再试一次");
       setGraduating(false);
+    }
+  };
+
+  // 取消陪伴：先让服务端把真实进度沉淀成一条按主题命名的心签，再回货架；
+  // 约定、子约定、心签都保留，下次重新认领可以接着用。
+  const stopCompanionship = async () => {
+    if (stopping) return;
+    setStopping(true);
+    try {
+      const res = await httpRequest(`/api/buddies/${buddy.id}/stop`, { method: "POST" });
+      queryClient.invalidateQueries();
+      toast.success(
+        res?.note_id
+          ? `已收起，${buddy.name}的陪伴已沉淀为一条心签`
+          : `已收起；陪伴小结没生成成功，约定和心签都还在`
+      );
+      navigate(createPageUrl("BuddyStore"));
+    } catch (e) {
+      toast.error(e?.message || "操作失败，请再试一次");
+      setStopping(false);
     }
   };
 
@@ -140,7 +165,7 @@ export default function BuddySpace() {
         </div>
         <button
           onClick={() => setGraduateOpen(true)}
-          title="项目走完了，举行毕业仪式"
+          title="结束陪伴：毕业或先收起（内容会沉淀）"
           className="flex h-9 w-9 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
         >
           <GraduationCap className="w-5 h-5" />
@@ -251,7 +276,7 @@ export default function BuddySpace() {
             <div className="mt-6 flex items-center justify-center gap-3">
               <button
                 onClick={graduate}
-                disabled={graduating}
+                disabled={graduating || stopping}
                 className="rounded-full px-6 py-3 text-sm text-white bg-[#384877] disabled:opacity-50"
               >
                 {graduating ? "珍重…" : "毕业快乐"}
@@ -261,6 +286,19 @@ export default function BuddySpace() {
                 className="text-[13px] text-stone-400 hover:text-stone-600 px-2 py-3"
               >
                 再陪陪我
+              </button>
+            </div>
+            <div className="mt-5 border-t border-stone-100 pt-4">
+              <p className="text-[11px] leading-relaxed text-stone-400">
+                还没走完也可以先收起：会把这段陪伴按主题沉淀成一条「陪伴小结」心签，
+                约定、子约定和心签全部保留，下次重新认领接着用。
+              </p>
+              <button
+                onClick={stopCompanionship}
+                disabled={stopping || graduating}
+                className="mt-2.5 text-[13px] text-stone-500 underline underline-offset-4 hover:text-stone-700 disabled:opacity-50"
+              >
+                {stopping ? "正在沉淀…" : "先收起搭子（沉淀为心签）"}
               </button>
             </div>
           </div>

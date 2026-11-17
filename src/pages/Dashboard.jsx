@@ -9,13 +9,18 @@ import AssistantWidget from "@/components/assistant/AssistantWidget";
 import BuddyCompanions from "@/components/buddy/BuddyCompanions";
 import BuddyStoreStrip from "@/components/buddy/BuddyStoreStrip";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
-import { PERSONAS, DEFAULT_PERSONA } from "@/lib/buddies";
+import { PERSONAS, DEFAULT_PERSONA, BUDDIES } from "@/lib/buddies";
 
 /**
  * 首页：通用 Agent 对话层（与样例一致）
  * —— 对话框（说事、记事、办事）+ 进行中的陪伴 + 搭子Store 常驻入口。
  * 场景之内有搭子，场景之外有我。
  */
+const clip = (text, max = 14) => {
+  const s = String(text || "").trim();
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+};
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
 
@@ -47,50 +52,100 @@ export default function Dashboard() {
     const roots = alive.filter((t) => !t.parent_task_id);
     const guarding = roots.filter((t) => !isTaskEffectivelyCompleted(t)).length;
     const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-    const todayPending = roots.filter((t) => {
+    const pendingTodayTasks = roots.filter((t) => {
       if (isTaskEffectivelyCompleted(t)) return false;
       if (!t.reminder_time) return false;
       const d = new Date(new Date(t.reminder_time).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
       return d <= todayStr;
-    }).length;
-    return { todayPending, guarding, notes: notesList.length };
+    });
+    return { todayPending: pendingTodayTasks.length, guarding, notes: notesList.length, pendingTodayTasks };
   }, [allTasks, notesList]);
 
-  // 今日印记播报：每天首次进入首页时，由心栈把当天安排作为对话的第一句话。
-  // 带上具体的约定名字（每天内容确实不同）；若与上一次播报完全雷同则跳过，防止聊天记录重复
-  useEffect(() => {
-    const todayStr = new Date(new Date().getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-    const key = `ss_imprint_echo_${todayStr}`;
-    if (localStorage.getItem(key)) return;
-    if (imprint.guarding === 0 && imprint.notes === 0) return; // 新用户没有数据，不打扰
-    const pendingTitles = allTasks
-      .filter((t) => !t.deleted_at && !t.parent_task_id && !isTaskEffectivelyCompleted(t))
-      .filter((t) => {
-        if (!t.reminder_time) return false;
-        return new Date(new Date(t.reminder_time).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10) <= todayStr;
-      })
-      .slice(0, 3)
-      .map((t) => `「${t.title}」`);
-    const week = ["日", "一", "二", "三", "四", "五", "六"][new Date().getDay()];
-    const now = new Date();
-    const text =
-      `${dayGreeting}${name ? `，${name}` : ""}。今天是 ${now.getMonth() + 1} 月 ${now.getDate()} 日，星期${week}。\n` +
-      (pendingTitles.length > 0
-        ? `今天待赴约：${pendingTitles.join("、")}${imprint.todayPending > 3 ? ` 等 ${imprint.todayPending} 件` : ""}。`
-        : `今日印记：${imprint.todayPending} 条约定今日待赴约，${imprint.guarding} 条约定守护中。`) +
-      `心签已沉淀 ${imprint.notes} 条。说事、记事、办事，随时找我。`;
-    if (localStorage.getItem("ss_imprint_echo_last") === text) {
-      localStorage.setItem(key, "1"); // 内容没有变化，今天不再重复播报
-      return;
-    }
-    localStorage.setItem(key, "1");
-    localStorage.setItem("ss_imprint_echo_last", text);
-    httpRequest("/api/companion/messages", { method: "POST", body: { assistant_echo: text } }).catch(() => {});
-  }, [imprint.guarding, imprint.todayPending, imprint.notes, allTasks]);
+  const activeBuddies = useMemo(
+    () => BUDDIES.filter((b) => mine?.buddies?.[b.id]?.status === "active"),
+    [mine]
+  );
 
   const hour = new Date().getHours();
   const dayGreeting = hour < 6 ? "夜深了" : hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
   const name = user?.full_name || user?.display_name || "";
+  const isNewUser = imprint.guarding === 0 && imprint.notes === 0 && claimedCount === 0;
+
+  // 今日唯一问候：按真实约定/心签/搭子实时生成，不写进聊天记录，
+  // 也不在用户开口前主动追加消息。
+  const greetingText = useMemo(() => {
+    if (isNewUser) {
+      return "今天想做点什么？日程、情绪、随便聊聊都可以找我；如果有个想长期推进的目标，我帮你找个专业搭子。";
+    }
+    const parts = [`${dayGreeting}${name ? `，${name}` : ""}。`];
+    if (imprint.pendingTodayTasks.length > 0) {
+      const titles = imprint.pendingTodayTasks.slice(0, 3).map((t) => `「${clip(t.title, 12)}」`).join("、");
+      parts.push(`今天有 ${imprint.todayPending} 件约定要赴：${titles}${imprint.todayPending > 3 ? " 等" : ""}。`);
+    } else {
+      parts.push(
+        imprint.guarding > 0
+          ? `今天没有到点的约定，${imprint.guarding} 件在守护中。`
+          : "今天还没有排约定。"
+      );
+    }
+    if (imprint.notes > 0) parts.push(`心签已沉淀 ${imprint.notes} 条。`);
+    if (activeBuddies.length > 0) parts.push(`${activeBuddies.map((b) => b.name).join("、")}在岗。`);
+    parts.push("想先排今天的安排，还是先聊两句？");
+    return parts.join("");
+  }, [isNewUser, dayGreeting, name, imprint, activeBuddies]);
+
+  // 「和心栈说事」快捷条目：每条都从真实约定 / 心签 / 搭子 / 项目里长出来
+  const quickAsks = useMemo(() => {
+    const asks = [];
+    const pending = imprint.pendingTodayTasks;
+    if (pending.length > 0) {
+      asks.push({
+        label: `安排今天的 ${pending.length} 件约定`,
+        prompt: `帮我安排今天这几件约定：${pending.slice(0, 4).map((t) => `「${clip(t.title, 16)}」`).join("、")}。先做什么、后做什么，给我一个具体顺序。`,
+      });
+    } else {
+      asks.push({
+        label: "看看我现在的约定",
+        prompt: "帮我看看我现在所有的约定，今天最该先做什么？",
+      });
+    }
+    if (notesList.length > 0) {
+      asks.push({
+        label: `回顾最近 ${Math.min(notesList.length, 5)} 条心签`,
+        prompt: `帮我回顾最近的心签，看看有什么共同主题：${notesList
+          .slice(0, 5)
+          .map((n) => `「${clip(n.title || n.plain_text, 16)}」`)
+          .join("、")}。给我一个下一步建议。`,
+      });
+    }
+    if (activeBuddies.length > 0) {
+      const buddy = activeBuddies[0];
+      const planTitle = mine?.buddies?.[buddy.id]?.plan_title;
+      asks.push({
+        label: `看看${buddy.name}的下一步`,
+        prompt: `帮我看看${buddy.name}这边「${planTitle || buddy.name}」的进度，下一步该做什么？`,
+      });
+    }
+    const collabSource =
+      pending[0] ||
+      allTasks.find((t) => !t.deleted_at && !t.parent_task_id && !isTaskEffectivelyCompleted(t));
+    if (collabSource) {
+      asks.push({
+        label: `把「${clip(collabSource.title, 14)}」变成协同约定`,
+        prompt: `帮我创建一个以「${clip(collabSource.title, 30)}」为主题的协同约定，和朋友一起推进。`,
+      });
+    } else {
+      asks.push({
+        label: "拉个协同约定，和朋友一起推进",
+        prompt: "帮我创建一个协同约定，和朋友一起推进。",
+      });
+    }
+    asks.push({
+      label: "去网页上帮我办件事",
+      prompt: "帮我查一下明天从北京到上海的高铁，给我两个可选车次；如果需要登录或支付，再停下来问我。",
+    });
+    return asks.slice(0, 6);
+  }, [imprint, notesList, activeBuddies, mine, allTasks]);
 
   return (
     <div className="min-h-screen bg-[#FAF9F7] pb-24 font-sans text-[#1c1917]">
@@ -111,8 +166,9 @@ export default function Dashboard() {
           <section className="mt-4 px-1">
             <AssistantWidget
               inline
-              newUser={imprint.guarding === 0 && imprint.notes === 0 && claimedCount === 0}
-              summary={`欢迎回来${name ? `，${name}` : ""}。今日印记：${imprint.todayPending} 条约定今日待赴约，${imprint.guarding} 条守护中，${imprint.notes} 条心签已沉淀。想从哪件开始，还是先说点别的？`}
+              newUser={isNewUser}
+              summary={greetingText}
+              quickAsks={quickAsks}
             />
           </section>
 

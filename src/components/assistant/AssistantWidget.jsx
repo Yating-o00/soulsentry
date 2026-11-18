@@ -47,6 +47,42 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   const [actions, setActions] = useState(null); // 动作提案
   const [acting, setActing] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memories, setMemories] = useState([]);
+  const [memoryError, setMemoryError] = useState("");
+  const [editingMemory, setEditingMemory] = useState(null);
+  const [memoryText, setMemoryText] = useState("");
+
+  const loadMemories = async () => {
+    try {
+      const records = await httpRequest("/api/memory-records?limit=300");
+      setMemories(records);
+      setMemoryError("");
+    } catch {
+      setMemoryError("记忆加载失败，请重试。");
+    }
+  };
+
+  const saveMemoryEdit = async () => {
+    const content = memoryText.trim();
+    if (!content) return;
+    try {
+      await httpRequest(`/api/memory-records/${editingMemory}`, { method: "PATCH", body: { title: content.slice(0, 200), content } });
+      setEditingMemory(null);
+      await loadMemories();
+    } catch {
+      setMemoryError("记忆更新失败，请重试。");
+    }
+  };
+
+  const deleteMemory = async (id) => {
+    try {
+      await httpRequest(`/api/memory-records/${id}`, { method: "DELETE" });
+      await loadMemories();
+    } catch {
+      setMemoryError("记忆删除失败，请重试。");
+    }
+  };
   const supportedRef = useRef(true);
   const messagesRef = useRef([]);
   const scrollRef = useRef(null);
@@ -405,6 +441,35 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         </button>
       </div>
       )}
+      <div className="flex justify-end px-4 py-2">
+        <button type="button" onClick={() => { const next = !memoryOpen; setMemoryOpen(next); if (next) loadMemories(); }} className="text-xs text-slate-600">我的记忆</button>
+      </div>
+      {memoryOpen && <div className="max-h-52 overflow-auto bg-white px-4 py-3 text-sm border-b border-slate-200">
+        <p className="text-xs text-slate-500 mb-2">对小助手说“记住我……”可以添加记忆。</p>
+        {memoryError && <p role="alert" className="text-red-600">{memoryError}</p>}
+        {memories.length === 0 && !memoryError && <p className="text-slate-500">暂无记忆</p>}
+        {memories.map((memory) => <div key={memory.id} className="py-2 border-b border-slate-100">
+          {editingMemory === memory.id ? (
+            <>
+              <textarea aria-label="编辑记忆" value={memoryText} onChange={(event) => setMemoryText(event.target.value)} className="w-full border rounded p-1" />
+              <button type="button" onClick={saveMemoryEdit}>保存</button>{" "}
+              <button type="button" onClick={() => setEditingMemory(null)}>取消</button>
+            </>
+          ) : (
+            <>
+              <p>{memory.content || memory.title}</p>
+              {memory.ai_insight?.sourceMessageId && <p className="text-xs text-slate-500">
+                来自对话{memory.ai_insight.editedAt ? "，已编辑" : ""} · {fmtTime(memory.created_date)}
+                {messages.find((message) => message.id === memory.ai_insight.sourceMessageId)?.content && (
+                  <span className="block">原话：{messages.find((message) => message.id === memory.ai_insight.sourceMessageId).content}</span>
+                )}
+              </p>}
+              <button type="button" onClick={() => { setEditingMemory(memory.id); setMemoryText(memory.content || memory.title); }} className="mr-3 text-blue-700">编辑</button>
+              <button type="button" onClick={() => deleteMemory(memory.id)} className="text-red-700">删除</button>
+            </>
+          )}
+        </div>)}
+      </div>}
 
       {/* 消息流 */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-4" style={{ minHeight: 0 }}>

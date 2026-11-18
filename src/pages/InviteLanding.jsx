@@ -124,7 +124,18 @@ export default function InviteLanding() {
     );
   }
 
-  const { invite, pact, summary, consensus, progressing, next_node, todos, viewer } = data;
+  const {
+    invite,
+    pact,
+    summary,
+    consensus,
+    progressing,
+    next_node,
+    todos,
+    viewer,
+    progress = { done: 0, total: 0, percent: 0 },
+    sediment = { digest: "", docs: [] },
+  } = data;
   const responded = viewer?.responded || invite.status !== "open";
 
   return (
@@ -146,56 +157,96 @@ export default function InviteLanding() {
       <main className="mx-auto max-w-xl space-y-4 px-4 pt-5">
         {/* 约定概览 */}
         <section className="rounded-2xl border p-5" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
-          <p className="font-mono text-[9px] uppercase tracking-[0.16em]" style={{ color: "#8a867e" }}>Invitation</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[9px] uppercase tracking-[0.16em]" style={{ color: "#8a867e" }}>Invitation</p>
+            <span className="text-[10px]" style={{ color: "#8a867e" }}>来自 {invite.inviter_name || "邀请人"}</span>
+          </div>
           <h1 className="mt-1.5 text-xl font-semibold tracking-[-0.02em]" style={{ color: "#302c2a" }}>{pact.title}</h1>
           {pact.goal && <p className="mt-1.5 text-[13px] leading-6" style={{ color: "#77736c" }}>{pact.goal}</p>}
           <div className="mt-3 flex items-center gap-2 text-[11px]" style={{ color: "#8a867e" }}>
             <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: "#eef2ff", color: "#384877" }}>{SCENARIO_LABELS[pact.scenario] || "协同"}</span>
             <span className="flex items-center gap-1"><Users className="h-3 w-3" />{pact.member_count} 人在协作</span>
           </div>
-          <p className="mt-3 border-t pt-3 text-xs leading-5" style={{ borderColor: "#e5e4df", color: "#57534d" }}>
-            <span className="font-semibold" style={{ color: "#35312f" }}>{invite.invitee_name}</span>，你好：
-            {invite.note ? ` ${invite.note}。` : " 邀请你加入这个协同约定。"}
+          <div className="mt-4 rounded-xl border p-3.5" style={{ borderColor: "#dbe3f2", backgroundColor: "#eef2ff80" }}>
+            <p className="text-[13px] leading-6" style={{ color: "#35312f" }}>
+              {invite.note || "邀请你加入这个协同约定，一起把这件事推进下去。"}
+            </p>
+            <p className="mt-2 text-[11px]" style={{ color: "#8a867e" }}>
+              —— {invite.inviter_name || "邀请人"} 邀请 {invite.invitee_name}
+            </p>
+          </div>
+        </section>
+
+        {/* AI 邀请概况 */}
+        <section className="rounded-2xl border p-5" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-full text-white" style={{ backgroundColor: "#384877" }}>
+              <Sparkles className="h-3.5 w-3.5" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>邀请概况 · 30 秒了解</h2>
+              <p className="text-[10px]" style={{ color: "#8a867e" }}>由心栈 Agent 根据当前进展整理</p>
+            </div>
+          </div>
+          <p className="mt-3 text-[13px] leading-6 whitespace-pre-wrap" style={{ color: "#57534d" }}>
+            {summary || "这份邀请还没有附加概况；加入后可以在协同空间查看完整进展。"}
           </p>
         </section>
 
-        {/* 30 秒前情摘要 */}
+        {/* 当前进展：子约定 + 下一节点 */}
         <section className="rounded-2xl border p-5" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full text-white" style={{ backgroundColor: "#231f20" }}>
-              <Sparkles className="h-3.5 w-3.5" />
-            </span>
-            <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>Agent 的 30 秒前情摘要</h2>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>当前进展</h2>
+            <span className="text-[11px]" style={{ color: "#8a867e" }}>{progress.done}/{progress.total} 项子约定</span>
           </div>
-          <p className="mt-3 text-[13px] leading-6 whitespace-pre-wrap" style={{ color: "#57534d" }}>
-            {summary || "摘要生成中……进入约定后 Agent 会基于讨论持续整理。"}
-          </p>
+          {progress.total > 0 && (
+            <div className="mt-2.5 h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: "#e5e4df" }}>
+              <div className="h-full rounded-full transition-all" style={{ width: `${progress.percent}%`, backgroundColor: "#384877" }} />
+            </div>
+          )}
+          <div className="mt-3 space-y-1.5">
+            {progressing.length === 0 ? (
+              <p className="text-xs" style={{ color: "#8a867e" }}>还没有正在推进的子约定。</p>
+            ) : (
+              progressing.map((p) => (
+                <p key={p.id} className="flex items-center gap-2 text-[13px]" style={{ color: "#57534d" }}>
+                  <Circle className="h-2.5 w-2.5 shrink-0" style={{ color: "#384877" }} />{p.title}
+                </p>
+              ))
+            )}
+          </div>
+          {next_node && (
+            <p className="mt-3 flex items-center gap-1.5 border-t pt-3 text-xs" style={{ borderColor: "#e5e4df", color: "#77736c" }}>
+              <Flag className="h-3.5 w-3.5" style={{ color: "#384877" }} /> 下一节点：{next_node.title}
+            </p>
+          )}
         </section>
+
+        {/* 已沉淀：执行概览 + 最近文件 */}
+        {(sediment.digest || (sediment.docs && sediment.docs.length > 0)) && (
+          <section className="rounded-2xl border p-5" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
+            <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>已沉淀</h2>
+            {sediment.digest && (
+              <p className="mt-2.5 text-[13px] leading-6 whitespace-pre-wrap" style={{ color: "#57534d" }}>{sediment.digest}</p>
+            )}
+            {sediment.docs?.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {sediment.docs.map((doc, index) => (
+                  <div key={`${doc.title}-${index}`} className="rounded-lg px-3 py-2" style={{ backgroundColor: "#f4f2ec" }}>
+                    <p className="text-[12px] font-medium" style={{ color: "#35312f" }}>{doc.title}</p>
+                    {doc.excerpt && <p className="mt-0.5 text-[11px] leading-4" style={{ color: "#77736c" }}>{doc.excerpt}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 共识 */}
         {consensus && (
           <section className="rounded-2xl border p-5" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
             <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>已形成的共识</h2>
             <p className="mt-2.5 text-[13px] leading-6 whitespace-pre-wrap" style={{ color: "#57534d" }}>{consensus}</p>
-          </section>
-        )}
-
-        {/* 推进中 + 下一节点 */}
-        {(progressing.length > 0 || next_node) && (
-          <section className="rounded-2xl border p-5" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
-            <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>正在推进</h2>
-            <div className="mt-2.5 space-y-1.5">
-              {progressing.map((p) => (
-                <p key={p.id} className="flex items-center gap-2 text-[13px]" style={{ color: "#57534d" }}>
-                  <Circle className="h-2.5 w-2.5 shrink-0" style={{ color: "#384877" }} />{p.title}
-                </p>
-              ))}
-            </div>
-            {next_node && (
-              <p className="mt-3 flex items-center gap-1.5 border-t pt-3 text-xs" style={{ borderColor: "#e5e4df", color: "#77736c" }}>
-                <Flag className="h-3.5 w-3.5" style={{ color: "#384877" }} /> 下一节点：{next_node.title}
-              </p>
-            )}
           </section>
         )}
 

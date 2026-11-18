@@ -11,7 +11,7 @@ import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js"
 import { collectSubtasks, logCollabChange } from "../services/collabSpace.js";
 import { syncParentProgress } from "./tasks.js";
 import { loadSpaceSnapshot, buildSystem, postAgentMessage } from "../services/collabAgent.js";
-import { callKimiChat } from "../lib/kimi.js";
+import { callKimiChat, FAST_TEXT_MODELS } from "../lib/kimi.js";
 import { assertAICredits, chargeAICredits } from "../services/aiCredits.js";
 import { AI_CALL_COSTS } from "../config/aiCosts.js";
 
@@ -39,7 +39,9 @@ const serializeInvite = (invite) => ({
   status: invite.status,
   response_msg: invite.responseMsg,
   responded_at: invite.respondedAt,
-  created_date: invite.createdAt
+  created_date: invite.createdAt,
+  // 公开落地页需要知道是谁发出的邀请；列表接口没有 include inviter 时为 undefined
+  inviter_name: invite.inviter ? actorName(invite.inviter) : undefined
 });
 
 // 访问校验 + 协同开关校验；失败时已响应，返回 null（与 collab.js 同口径）
@@ -55,7 +57,7 @@ async function loadCollabSpace(req, res) {
 }
 
 // Agent 30 秒前情摘要：失败不阻断邀请创建（返回空串，落地页显示兜底文案）
-async function generateInviteSummary({ task, user }) {
+async function generateInviteSummary({ task, user, inviteeName = "", note = "" }) {
   if (process.env.COLLAB_AGENT_MOCK_LLM === "1") {
     return "（本地 mock）这是一次协同约定的邀请：成员们已经在讨论中形成了一些共识，邀请你加入并认领与自己相关的待办。";
   }
@@ -70,33 +72,55 @@ async function generateInviteSummary({ task, user }) {
     const collab = task.metadata?.collab || {};
     const memberNames = [task.user, ...task.members.map((m) => m.user)]
       .filter(Boolean).map((u) => actorName(u));
-    const activeItems = snapshot.subtasks.filter((s) => s.status !== "DONE").slice(0, 8)
+    const stripHtml = (value) => String(value || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    const confirmedSubtasks = snapshot.subtasks.filter((s) => s.metadata?.collab?.state !== "draft");
+    const doneCount = confirmedSubtasks.filter((s) => s.status === "DONE").length;
+    const activeItems = confirmedSubtasks.filter((s) => s.status !== "DONE").slice(0, 6)
       .map((s) => `- ${s.title}`).join("\n") || "（暂无）";
     const nextNode = snapshot.nodes.find((n) => !n.doneAt);
+    const digestDoc = snapshot.docs.find((d) => d.docType === "digest");
+    const consensusDoc = snapshot.docs.find((d) => d.docType === "consensus");
+    const sedimentDocs = snapshot.docs
+      .filter((d) => d.docType !== "digest" && d.docType !== "consensus")
+      .slice(0, 3);
+    const sedimentParts = [];
+    if (digestDoc) sedimentParts.push(`执行概览：${stripHtml(digestDoc.content).slice(0, 220)}`);
+    if (consensusDoc) sedimentParts.push(`已有共识：${stripHtml(consensusDoc.content).slice(0, 160)}`);
+    if (sedimentDocs.length > 0) sedimentParts.push(`沉淀文件：${sedimentDocs.map((d) => d.title).join("、")}`);
+    const sedimentText = sedimentParts.join("；") || "（暂无沉淀）";
     const prompt = `约定主题：${task.title}
 共同目标：${collab.goal || "（未填写）"}
+邀请人：${actorName(user)}
+受邀者：${inviteeName || "伙伴"}
+邀请人想对 TA 说：${note || "（没有额外留言）"}
 成员：${[...new Set(memberNames)].join("、")}
-当前推进中的事项：
+当前进展：已完成 ${doneCount}/${confirmedSubtasks.length} 条子约定
+正在推进的事项：
 ${activeItems}
+${sedimentText}
 下一执行节点：${nextNode ? nextNode.title : "（暂无）"}
 
-请为即将受邀加入的新成员写一段「30 秒前情摘要」（120 字以内）：让 TA 快速明白这个约定在做什么、目前进展到哪、加入后大概要做什么。口吻亲切、信息密度高，不要客套话。只输出摘要正文。`;
+请为即将受邀加入的新成员写一段「邀请概况」（120 字以内）：让 TA 快速明白这个约定在做什么、为什么邀请 TA、目前进展（子约定 + 沉淀），以及加入后大概能一起做什么。口吻尊重、亲切、具体，不要客套话，不要机械罗列全部信息。只输出正文。`;
     const buildMessages = () => [
       { role: "system", content: system },
       { role: "user", content: prompt }
     ];
     let text = "";
-    // 推理型模型可能把内容放在 reasoning_content 而 content 为空：换一个候选模型再试一次
-    for (const candidate of [null, "kimi-k3"]) {
-      const result = await callKimiChat({
-        messages: buildMessages(),
-        ...(candidate ? { model: candidate } : {}),
-        temperature: 0.4,
-        maxTokens: 500,
-        fetchTimeout: 30000
-      });
-      text = String(result?.content || "").trim().slice(0, 500);
-      if (text) break;
+    // 先走快速模型链；推理型模型可能把内容放在 reasoning_content 而 content 为空，再用 K3 兜底一次
+    for (const modelOptions of [{ models: FAST_TEXT_MODELS }, { model: "kimi-k3" }]) {
+      try {
+        const result = await callKimiChat({
+          messages: buildMessages(),
+          ...modelOptions,
+          temperature: 0.4,
+          maxTokens: 500,
+          fetchTimeout: 18000
+        });
+        text = String(result?.content || "").trim().slice(0, 500);
+        if (text) break;
+      } catch (error) {
+        console.warn("[collabInvite] 摘要尝试失败，换下一个模型:", error?.message || error);
+      }
     }
     if (!text) {
       console.warn("[collabInvite] 前情摘要为空（已尝试备选模型），邀请照常创建");
@@ -134,7 +158,12 @@ collabInviteRouter.post("/collab/:taskId/invites", requireAuth, async (req, res)
   const idSet = new Set(subtasks.map((s) => s.id));
   const boundIds = payload.data.subtask_ids.filter((id) => idSet.has(id)).slice(0, 20);
 
-  const summary = await generateInviteSummary({ task, user: req.user });
+  const summary = await generateInviteSummary({
+    task,
+    user: req.user,
+    inviteeName: payload.data.invitee_name.trim(),
+    note: payload.data.note?.trim() || ""
+  });
   const invite = await prisma.collabInvite.create({
     data: {
       taskId: task.id,
@@ -152,7 +181,10 @@ collabInviteRouter.post("/collab/:taskId/invites", requireAuth, async (req, res)
     { field: "todos", field_label: "绑定待办", new_value: `${boundIds.length} 项` }
   ]);
 
-  return res.status(201).json({ invite: serializeInvite(invite), url: `/invite/${invite.code}` });
+  return res.status(201).json({
+    invite: { ...serializeInvite(invite), inviter_name: actorName(req.user) },
+    url: `/invite/${invite.code}`
+  });
 });
 
 // GET /api/collab/:taskId/invites — 最近邀请及回应状态
@@ -171,7 +203,10 @@ collabInviteRouter.get("/collab/:taskId/invites", requireAuth, async (req, res) 
 collabInviteRouter.get("/invite/:code", optionalAuth, async (req, res) => {
   const invite = await prisma.collabInvite.findUnique({
     where: { code: req.params.code },
-    include: { task: { include: { members: { include: { user: true } }, user: true } } }
+    include: {
+      inviter: true,
+      task: { include: { members: { include: { user: true } }, user: true } }
+    }
   });
   if (!invite || !invite.task?.metadata?.collab) {
     return res.status(404).json({ error: "NOT_FOUND", message: "邀请不存在或已失效" });
@@ -191,6 +226,19 @@ collabInviteRouter.get("/invite/:code", optionalAuth, async (req, res) => {
       done: s.status === "DONE"
     }));
   const memberIds = new Set([task.userId, ...task.members.map((m) => m.userId)]);
+  const stripHtml = (value) => String(value || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  // 只统计已确认的子约定（草案不计入进度），与协同空间口径一致
+  const confirmedSubtasks = snapshot.subtasks.filter((s) => s.metadata?.collab?.state !== "draft");
+  const doneCount = confirmedSubtasks.filter((s) => s.status === "DONE").length;
+  const digestDoc = snapshot.docs.find((d) => d.docType === "digest");
+  const sedimentDocs = snapshot.docs
+    .filter((d) => d.docType !== "digest" && d.docType !== "consensus")
+    .slice(0, 4)
+    .map((d) => ({
+      title: d.title,
+      type: d.docType,
+      excerpt: stripHtml(d.content).slice(0, 120)
+    }));
   return res.json({
     invite: serializeInvite(invite),
     pact: {
@@ -200,9 +248,18 @@ collabInviteRouter.get("/invite/:code", optionalAuth, async (req, res) => {
       member_count: memberIds.size
     },
     summary: invite.summary || "",
-    consensus: consensusDoc ? String(consensusDoc.content || "").slice(0, 800) : "",
-    progressing: snapshot.subtasks.filter((s) => s.status !== "DONE" && s.metadata?.collab?.state !== "draft").slice(0, 5)
+    consensus: consensusDoc ? stripHtml(consensusDoc.content).slice(0, 800) : "",
+    progress: {
+      done: doneCount,
+      total: confirmedSubtasks.length,
+      percent: confirmedSubtasks.length ? Math.round((doneCount / confirmedSubtasks.length) * 100) : 0
+    },
+    progressing: confirmedSubtasks.filter((s) => s.status !== "DONE").slice(0, 5)
       .map((s) => ({ id: s.id, title: s.title })),
+    sediment: {
+      digest: digestDoc ? stripHtml(digestDoc.content).slice(0, 400) : "",
+      docs: sedimentDocs
+    },
     next_node: (() => { const n = snapshot.nodes.find((x) => !x.doneAt); return n ? { title: n.title } : null; })(),
     todos,
     viewer: req.user

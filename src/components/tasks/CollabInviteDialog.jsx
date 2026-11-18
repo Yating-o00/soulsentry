@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Copy,
@@ -43,12 +44,6 @@ const getInitials = (name) => {
   return parts.map((p) => p[0]).join("").toUpperCase().slice(0, 2) || "?";
 };
 
-const CATEGORY_LABELS = {
-  work: "工作", personal: "个人", health: "健康", study: "学习",
-  family: "家庭", shopping: "购物", finance: "财务", life: "生活",
-  checkin: "打卡", other: "其他"
-};
-
 const TABS = [
   { key: "card", label: "邀请卡片", icon: ImageIcon },
   { key: "link", label: "邀请链接", icon: LinkIcon },
@@ -66,7 +61,10 @@ const INVITE_STATUS_LABELS = {
 export default function CollabInviteDialog({ task, members = [], subtasks = [], open, onClose, onChanged }) {
   const [tab, setTab] = useState("card");
   const [inviteUrl, setInviteUrl] = useState("");
-  const [linkLoading, setLinkLoading] = useState(false);
+  const [cardInviteeName, setCardInviteeName] = useState("");
+  const [cardNote, setCardNote] = useState("");
+  const [cardInvite, setCardInvite] = useState(null);
+  const [creatingCard, setCreatingCard] = useState(false);
   const [adding, setAdding] = useState(false);
   const [exporting, setExporting] = useState(false);
   // @直接邀请：输入 @ 检索协作过的伙伴，选中后点邀请即刻发出
@@ -90,35 +88,36 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
     enabled: open,
   });
 
-  // 打开时确保分享链接已生成：二维码/卡片指向 /share/<token> 公开协作页（与 TaskShareCard 同一链路）
-  const generateInviteLink = async () => {
-    if (!task?.id) return;
-    setLinkLoading(true);
-    try {
-      const result = await httpRequest(`/api/public/share/generate/task/${task.id}`, {
-        method: "POST",
-        body: { enabled: true },
-      });
-      if (result?.url) {
-        setInviteUrl(result.url.replace(/^https?:\/\/[^/]+/, window.location.origin));
-      }
-    } catch (error) {
-      console.error("[collab] 邀请链接生成失败:", error?.message || error);
-      toast.error(error?.data?.message || error?.message || "邀请链接生成失败，请稍后再试");
-    } finally {
-      setLinkLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!open || !task?.id) return;
-    generateInviteLink();
-  }, [open, task?.id]);
-
   const inviterName = useMemo(() => {
     const name = currentUser?.displayName || currentUser?.display_name || currentUser?.email || "发起人";
     return name;
   }, [currentUser]);
+
+  // 生成通用邀请：二维码指向 /invite/<code>，由服务端基于当前子约定+沉淀生成邀请概况，
+  // 受邀者扫码后能看到概况、进展和邀请人的自定义留言。
+  const createGeneralInvite = async () => {
+    if (!task?.id || creatingCard) return;
+    setCreatingCard(true);
+    try {
+      const res = await httpRequest(`/api/collab/${task.id}/invites`, {
+        method: "POST",
+        body: {
+          invitee_name: cardInviteeName.trim() || "伙伴",
+          subtask_ids: [],
+          note: cardNote.trim() || null,
+        },
+      });
+      const url = res?.url ? `${window.location.origin}${res.url}` : "";
+      setCardInvite({ ...(res?.invite || {}), url });
+      setInviteUrl(url);
+      loadRecentInvites();
+      toast.success("邀请卡片已生成");
+    } catch (error) {
+      toast.error(error?.data?.message || error?.message || "邀请生成失败，请稍后再试");
+    } finally {
+      setCreatingCard(false);
+    }
+  };
 
   // @邀请候选检索（防抖 250ms）：候选来自与我协作过的伙伴，排除本约定已有成员
   useEffect(() => {
@@ -144,7 +143,6 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
     return () => clearTimeout(timer);
   }, [mentionText, open, task?.id, mentionSelected]);
 
-  const memberList = members.filter((m) => m.role !== "owner");
   const ownerMember = members.find((m) => m.role === "owner");
 
   // 剪贴板写入：优先现代 API，失败（权限/非安全上下文）回退隐藏 textarea 方案，确保一定有反馈
@@ -207,7 +205,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
   const renderCardBlob = async () => {
     const canvas = await html2canvas(cardRef.current, {
       scale: 2,
-      backgroundColor: "#2e3a62",
+      backgroundColor: "#F8F5ED",
       logging: false,
       useCORS: true,
     });
@@ -247,7 +245,8 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
             navigator.share({
               files: [file],
               title: "心栈协同约定邀请",
-              text: `邀请你一起协作完成「${task?.title || "协同约定"}」`,
+              text: `${inviterName} 邀请你一起协作「${task?.title || "协同约定"}」${cardInvite?.note ? `：“${cardInvite.note}”` : ""}`,
+              url: inviteUrl,
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error("SHARE_TIMEOUT")), 8000)),
           ]);
@@ -366,18 +365,28 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
     }
   };
 
-  const flatSubtasks = useMemo(() => {
+  const allSubtasks = useMemo(() => {
     const source = subtasks.length > 0 ? subtasks : fetchedSubtasks;
     const out = [];
     const walk = (list) => {
       for (const n of list || []) {
-        if (n.status !== "DONE" && n.status !== "completed") out.push(n);
+        out.push(n);
         walk(n.children || []);
       }
     };
     walk(source);
     return out;
   }, [subtasks, fetchedSubtasks]);
+
+  const confirmedSubtasks = useMemo(
+    () => allSubtasks.filter((s) => s.metadata?.collab?.state !== "draft"),
+    [allSubtasks]
+  );
+  const completedCount = confirmedSubtasks.filter((s) => s.status === "DONE" || s.status === "completed").length;
+
+  const flatSubtasks = useMemo(() => {
+    return allSubtasks.filter((n) => n.status !== "DONE" && n.status !== "completed");
+  }, [allSubtasks]);
 
   const loadRecentInvites = async () => {
     if (!task?.id) return;
@@ -393,6 +402,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
     if (!open) return;
     setTodoInvite(null);
     loadRecentInvites();
+    loadSubtasks();
   }, [open, task?.id]);
 
   const handleCreateTodoInvite = async () => {
@@ -467,93 +477,119 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
         {/* ① 邀请卡片 */}
         {tab === "card" && (
           <div className="space-y-3">
-            {linkLoading ? (
-              <div className="flex items-center justify-center py-16 text-slate-400">
-                <Loader2 className="w-5 h-5 animate-spin mr-2" /> 正在生成邀请卡片…
-              </div>
-            ) : inviteUrl ? (
+            <div className="space-y-2">
+              <Input
+                value={cardInviteeName}
+                onChange={(e) => setCardInviteeName(e.target.value)}
+                placeholder="对方称呼（可选，默认「伙伴」）"
+                maxLength={20}
+                className="h-9 text-xs"
+              />
+              <Textarea
+                value={cardNote}
+                onChange={(e) => setCardNote(e.target.value)}
+                placeholder="想对 TA 说的一句话（可选）"
+                maxLength={200}
+                rows={2}
+                className="text-xs resize-none"
+              />
+              <Button
+                className="w-full bg-[#384877] hover:bg-[#2e3a62]"
+                onClick={createGeneralInvite}
+                disabled={creatingCard}
+              >
+                {creatingCard ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <ImageIcon className="w-4 h-4 mr-1.5" />}
+                {creatingCard ? "正在生成邀请卡片…" : cardInvite ? "重新生成邀请卡片" : "生成邀请卡片"}
+              </Button>
+              <p className="text-[10px] text-slate-400 text-center">
+                Agent 会基于当前子约定和沉淀生成邀请概况，对方扫码即可看到
+              </p>
+            </div>
+
+            {cardInvite && inviteUrl ? (
               <>
-                {/* 卡片本体：纯 DOM + 首字母头像 + dataURL 二维码，保证 html2canvas 导出无跨域污染 */}
+                {/* 卡片本体：米白底 + 品牌蓝，极简排版；纯 DOM + dataURL 二维码，导出无跨域污染 */}
                 <div className="flex justify-center py-1">
                   <div
                     ref={cardRef}
-                    className="relative overflow-hidden rounded-2xl shadow-xl"
                     style={{
                       width: 330,
-                      background: "linear-gradient(135deg, #2e3a62 0%, #384877 55%, #3b5aa2 100%)",
-                      padding: 20,
+                      background: "#F8F5ED",
+                      borderRadius: 22,
+                      border: "1px solid #E6E0D3",
+                      padding: 22,
                       fontFamily: "inherit",
+                      color: "#2C2A26",
                     }}
                   >
-                    {/* 装饰圆 */}
-                    <div style={{ position: "absolute", top: -46, right: -46, width: 150, height: 150, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }} />
-                    <div style={{ position: "absolute", bottom: -60, left: -40, width: 170, height: 170, borderRadius: "50%", background: "rgba(255,255,255,0.05)" }} />
-                    <div style={{ position: "absolute", top: 60, right: 40, width: 60, height: 60, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.12)" }} />
-
-                    <div style={{ position: "relative" }}>
-                      {/* 头部品牌 */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center text-white text-sm font-bold">
-                            心
-                          </div>
-                          <div>
-                            <p style={{ fontSize: 13, fontWeight: 600, color: "#fff", lineHeight: 1.2 }}>心栈 SoulSentry</p>
-                            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", marginTop: 2 }}>协同约定邀请</p>
-                          </div>
+                    {/* 品牌头 */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                        <div style={{ width: 30, height: 30, borderRadius: 10, background: "#384877", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700 }}>
+                          心
                         </div>
-                        <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 999, background: "rgba(255,255,255,0.14)", color: "#fff" }}>
-                          多人协同
-                        </span>
+                        <div>
+                          <p style={{ fontSize: 12, fontWeight: 600, color: "#384877", lineHeight: 1.2 }}>心栈 SoulSentry</p>
+                          <p style={{ fontSize: 9, color: "#9A9488", marginTop: 2, letterSpacing: "0.12em" }}>协同约定邀请</p>
+                        </div>
                       </div>
+                      <span style={{ fontSize: 9, color: "#384877", border: "1px solid #D8D2C4", borderRadius: 999, padding: "3px 8px" }}>
+                        邀请
+                      </span>
+                    </div>
 
-                      {/* 约定信息 */}
-                      <p style={{ marginTop: 16, fontSize: 17, fontWeight: 700, color: "#fff", lineHeight: 1.4 }}>
-                        {task?.title || "未命名约定"}
+                    <div style={{ height: 1, background: "#E6E0D3", margin: "16px 0" }} />
+
+                    {/* 邀请对象与目的 */}
+                    <p style={{ fontSize: 10, color: "#9A9488" }}>致 {cardInvite?.invitee_name || "伙伴"}</p>
+                    <p style={{ marginTop: 6, fontSize: 18, fontWeight: 700, color: "#2C2A26", lineHeight: 1.45, display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>
+                      {task?.title || "未命名约定"}
+                    </p>
+                    <p style={{ marginTop: 6, fontSize: 11, color: "#6F6A61", lineHeight: 1.65, display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden" }}>
+                      {task?.metadata?.collab?.goal || task?.description || "一起把这件事推进下去"}
+                    </p>
+
+                    {/* 邀请人留言：二维码落地页会展示同一句 */}
+                    <div style={{ marginTop: 12, padding: "10px 12px", borderLeft: "2px solid #384877", background: "#FFFFFF", borderRadius: "0 10px 10px 0" }}>
+                      <p style={{ fontSize: 11, color: "#57534D", lineHeight: 1.65, display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 3, overflow: "hidden" }}>
+                        {cardInvite?.note || "邀请你加入这个协同约定。"}
                       </p>
-                      {task?.description && (
-                        <p style={{
-                          marginTop: 6, fontSize: 11, color: "rgba(255,255,255,0.72)", lineHeight: 1.6,
-                          display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, overflow: "hidden",
-                        }}>
-                          {task.description}
-                        </p>
-                      )}
-                      <div className="flex items-center gap-2" style={{ marginTop: 10 }}>
-                        {task?.category && (
-                          <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 999, background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.85)" }}>
-                            {CATEGORY_LABELS[task.category] || task.category}
-                          </span>
-                        )}
-                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.6)" }}>
-                          {members.length} 人在协作{memberList.length > 0 ? ` · ${memberList.slice(0, 2).map((m) => m.display_name).join("、")}${memberList.length > 2 ? " 等" : ""}` : ""}
+                    </div>
+
+                    {/* 轻量进展 */}
+                    <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      <span style={{ fontSize: 9, color: "#384877", background: "#E9EDF7", borderRadius: 999, padding: "3px 8px" }}>
+                        {members.length} 人协作
+                      </span>
+                      {confirmedSubtasks.length > 0 && (
+                        <span style={{ fontSize: 9, color: "#57534D", background: "#F0ECE2", borderRadius: 999, padding: "3px 8px" }}>
+                          已完成 {completedCount}/{confirmedSubtasks.length} 项子约定
                         </span>
+                      )}
+                    </div>
+
+                    <div style={{ height: 1, background: "#E6E0D3", margin: "16px 0" }} />
+
+                    {/* 邀请人 + 二维码 */}
+                    <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#384877", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
+                            {getInitials(cardInvite?.inviter_name || inviterName)}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <p style={{ fontSize: 9, color: "#9A9488" }}>邀请人</p>
+                            <p style={{ fontSize: 11, fontWeight: 600, color: "#2C2A26", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 130 }}>
+                              {cardInvite?.inviter_name || inviterName}
+                            </p>
+                          </div>
+                        </div>
+                        <p style={{ fontSize: 9, color: "#9A9488", marginTop: 10, lineHeight: 1.5 }}>
+                          扫码查看完整邀请<br />与当前进展
+                        </p>
                       </div>
-
-                      <div style={{ height: 1, background: "rgba(255,255,255,0.14)", margin: "14px 0" }} />
-
-                      {/* 底部：邀请人 + 二维码 */}
-                      <div className="flex items-end justify-between">
-                        <div style={{ maxWidth: 160 }}>
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-white text-[#384877] text-xs font-bold flex items-center justify-center">
-                              {getInitials(inviterName)}
-                            </div>
-                            <p style={{ fontSize: 11, color: "#fff", fontWeight: 600 }}>{inviterName}</p>
-                          </div>
-                          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.78)", marginTop: 8, lineHeight: 1.6 }}>
-                            邀请你加入协作<br />一起把这个约定完成
-                          </p>
-                          <p style={{ fontSize: 9, color: "rgba(255,255,255,0.45)", marginTop: 8 }}>
-                            心栈 · 从容记录每一声心动
-                          </p>
-                        </div>
-                        <div className="flex flex-col items-center gap-1">
-                          <div className="bg-white rounded-xl p-1.5 shadow-md">
-                            <QRCodeImage value={inviteUrl} size={96} className="w-24 h-24 block" alt="邀请二维码" />
-                          </div>
-                          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.72)" }}>扫码加入协同</span>
-                        </div>
+                      <div style={{ background: "#fff", border: "1px solid #E6E0D3", borderRadius: 12, padding: 6, flexShrink: 0 }}>
+                        <QRCodeImage value={inviteUrl} size={88} className="w-[88px] h-[88px] block" alt="邀请二维码" />
                       </div>
                     </div>
                   </div>
@@ -572,10 +608,14 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                     <Copy className="w-4 h-4 mr-1.5" /> 复制卡片
                   </Button>
                 </div>
-                <p className="text-[11px] text-slate-400 text-center">卡片内含邀请二维码，对方扫码即可加入协作</p>
+                <p className="text-[11px] text-slate-400 text-center">
+                  对方扫码后可看到 AI 邀请概况、子约定进展、已沉淀内容和你的留言
+                </p>
               </>
             ) : (
-              <p className="text-xs text-slate-400 text-center py-10">未能生成邀请链接：需要是该约定的发起人或成员</p>
+              <p className="text-xs text-slate-400 text-center py-8">
+                填写称呼和留言后，点击上方按钮生成邀请卡片。
+              </p>
             )}
           </div>
         )}
@@ -583,43 +623,49 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
         {/* ② 邀请链接 */}
         {tab === "link" && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0" onClick={handleCopy} title="点击即可复制链接">
-                <Input
-                  value={inviteUrl}
-                  readOnly
-                  className="text-xs h-9 cursor-pointer"
-                  placeholder={linkLoading ? "正在生成链接…" : "未能生成链接"}
-                  onFocus={(e) => e.target.select()}
-                />
-              </div>
-              <Button size="sm" className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]" onClick={handleCopyPrimary} disabled={!inviteUrl}>
-                <Copy className="w-3.5 h-3.5 mr-1" /> 复制邀请链接
-              </Button>
-            </div>
-            {inviteUrl && (
-              <div className="flex justify-center py-2">
-                <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-sm">
-                  <QRCodeImage value={inviteUrl} size={160} className="w-36 h-36" alt="邀请二维码" />
+            {inviteUrl ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0" onClick={handleCopy} title="点击即可复制链接">
+                    <Input
+                      value={inviteUrl}
+                      readOnly
+                      className="text-xs h-9 cursor-pointer"
+                      onFocus={(e) => e.target.select()}
+                    />
+                  </div>
+                  <Button size="sm" className="h-9 shrink-0 bg-[#384877] hover:bg-[#2e3a62]" onClick={handleCopyPrimary}>
+                    <Copy className="w-3.5 h-3.5 mr-1" /> 复制邀请链接
+                  </Button>
                 </div>
+                <div className="flex justify-center py-2">
+                  <div className="p-2 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <QRCodeImage value={inviteUrl} size={160} className="w-36 h-36" alt="邀请二维码" />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 text-center">
+                  {copied ? (
+                    <span className="text-emerald-600 font-medium">✓ 已复制，去微信/QQ 粘贴给伙伴吧</span>
+                  ) : (
+                    "对方打开即可看到 AI 邀请概况、当前进展和你的留言；登录后可加入协同"
+                  )}
+                </p>
+              </>
+            ) : (
+              <div className="space-y-2 py-4 text-center">
+                <p className="text-xs text-slate-400">
+                  邀请链接会打开同一份邀请概况页。可先在「邀请卡片」填写称呼和留言。
+                </p>
+                <Button
+                  className="w-full bg-[#384877] hover:bg-[#2e3a62]"
+                  onClick={createGeneralInvite}
+                  disabled={creatingCard}
+                >
+                  {creatingCard ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <LinkIcon className="w-4 h-4 mr-1.5" />}
+                  {creatingCard ? "正在生成邀请链接…" : "生成邀请链接"}
+                </Button>
               </div>
             )}
-            <p className="text-[11px] text-slate-400 text-center">
-              {inviteUrl ? (
-                copied ? (
-                  <span className="text-emerald-600 font-medium">✓ 已复制，去微信/QQ 粘贴给伙伴吧</span>
-                ) : (
-                  "点击上方链接或「复制邀请链接」即可复制；发到微信/QQ 后，对方打开登录即可加入协同"
-                )
-              ) : linkLoading ? (
-                "正在生成链接…"
-              ) : (
-                <>
-                  未能生成链接，
-                  <button type="button" onClick={generateInviteLink} className="text-[#384877] underline underline-offset-2">点击重试</button>
-                </>
-              )}
-            </p>
           </div>
         )}
 

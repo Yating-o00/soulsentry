@@ -92,7 +92,16 @@ export default function InviteLanding() {
       setSuggestOpen(false);
       setSuggestText("");
       if (autoAction) clearAutoParam();
-      setData((prev) => ({ ...prev, invite: res.invite, viewer: { ...(prev?.viewer || { is_member: action === "accept" }), responded: true, status: res.invite.status } }));
+      setData((prev) => ({
+        ...prev,
+        invite: res.invite,
+        viewer: {
+          ...(prev?.viewer || {}),
+          is_member: action === "accept" ? true : !!prev?.viewer?.is_member,
+          responded: true,
+          status: res.invite.status,
+        },
+      }));
     } catch (e) {
       if (e?.status === 401) {
         // 未登录：带上本次意图跳登录页，登录回跳后由 auto 逻辑自动完成

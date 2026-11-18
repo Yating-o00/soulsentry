@@ -185,7 +185,7 @@ export default function InviteLanding() {
             </span>
             <div>
               <h2 className="text-sm font-semibold" style={{ color: "#302c2a" }}>邀请概况 · 30 秒了解</h2>
-              <p className="text-[10px]" style={{ color: "#8a867e" }}>由心栈 Agent 根据当前进展整理</p>
+              <p className="text-[10px]" style={{ color: "#8a867e" }}>基于邀请时的当前进展整理</p>
             </div>
           </div>
           <p className="mt-3 text-[13px] leading-6 whitespace-pre-wrap" style={{ color: "#57534d" }}>

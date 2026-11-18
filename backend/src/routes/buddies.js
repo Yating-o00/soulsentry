@@ -459,6 +459,41 @@ const BUDDY_EXPERTISE = {
     "你是睡眠与作息科学专家：擅长渐进式早起、睡眠卫生、习惯链设计、破功后的温柔修复。懂生理节律，给的建议科学且可执行。",
 };
 
+// 搭子对话里的「成立小组 / 拉伙伴一起做」意图：本地快速识别并给出可确认的协同小组提案，
+// 不把这类明确诉求交给慢模型自由发挥，避免超时后落到通用兜底话术。
+const GROUP_TOPICS = ["考公", "考研", "英语", "数学", "四六级", "雅思", "托福", "法考", "教资", "CPA", "高考", "中考", "编程", "健身", "减脂", "读书", "早起"];
+
+function detectBuddyGroupIntent(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  const wantsGroup =
+    /(成立|创建|新建|组建|单独成立|开一个|建一个|拉一个|组一个)/.test(t) &&
+    /(小组|群|搭子|队伍|协同)/.test(t) &&
+    /(想|希望|要|准备|帮我|给我|打算|计划|一个)/.test(t);
+  const wantsPartners =
+    /(小组|群|搭子|队伍)/.test(t) &&
+    /(伙伴|朋友|同学|同事)/.test(t) &&
+    /(参与|加入|一起|更多)/.test(t);
+  if (!wantsGroup && !wantsPartners) return null;
+
+  let subject = GROUP_TOPICS.find((k) => t.includes(k)) || "";
+  if (!subject) {
+    const match = t.match(/(?:专门用来做|专门做|用来做|一起做|做)(.{2,20}?)(?:的)?(?:搭子|小组|群|队伍)/);
+    subject = match
+      ? match[1].replace(/^(学习|备考|一起|专门|用来|做)/, "").replace(/的$/, "").trim()
+      : "";
+  }
+  subject = subject.slice(0, 12);
+  const title = subject ? `${subject}搭子小组` : "新的协同小组";
+  const goal = subject
+    ? `找更多${subject}的伙伴一起推进、互相监督、共享资料`
+    : "找更多伙伴一起推进这件事";
+  return {
+    reply: `这个想法适合做成一个独立的协同小组。我建议叫「${title}」，目标是「${goal}」。确认后我就创建，你再邀请伙伴加入。`,
+    proposal: { type: "create_collab", title, goal, scenario: "friends" },
+  };
+}
+
 function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
   const buddyName = BUDDY_NAMES[buddyId] || "搭子";
   const profileLine =
@@ -540,8 +575,8 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
             .join("\n")
         : "";
       return {
-        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。`,
-        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。只输出 JSON：{"reply":"..."}`,
+        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。如果用户想成立小组、拉伙伴一起做某件事（如「成立一个专门考公的学习小组」），不要只给建议：在 proposal 里给出可确认的协同小组提案（type=create_collab，title=小组名，goal=一句话目标，scenario=friends），reply 里说明确认后会创建；普通问题 proposal 为 null。`,
+        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。只输出 JSON：{"reply":"...","proposal":null}；需要创建小组时输出 {"reply":"...","proposal":{"type":"create_collab","title":"...","goal":"...","scenario":"friends"}}。`,
       };
     }
     default:
@@ -633,9 +668,25 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
     return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
   }
   const personaTone = PERSONA_TONES[extra.persona] || PERSONA_TONES.gentle;
-  const isFastChat = ["chat", "greeting", "talk"].includes(parsed.data.mode);
   let payload = parsed.data.payload || {};
-  if (isFastChat) {
+  const lastUserText = Array.isArray(payload.messages)
+    ? [...payload.messages].reverse().find((m) => m?.role === "user" && typeof m.content === "string")?.content || ""
+    : "";
+  const isInteractive = ["chat", "greeting", "talk"].includes(parsed.data.mode);
+
+  // 成立小组 / 拉伙伴一起做：本地秒回一个可确认的协同小组提案，不走慢模型
+  if (parsed.data.mode === "chat") {
+    const groupIntent = detectBuddyGroupIntent(lastUserText);
+    if (groupIntent) return res.json({ data: groupIntent });
+  }
+
+  // 复杂问题（小组/规划/备考/长文本）用旗舰模型换专业度；短闲聊继续走快速模型
+  const isComplex =
+    lastUserText.length > 60 ||
+    /(小组|协同|计划|规划|方案|目标|考公|考研|英语|数学|复习|安排|成立|创建)/.test(lastUserText);
+  const useFast = isInteractive && !isComplex;
+
+  if (isInteractive) {
     const liveContext = await loadBuddyLiveContext(req.user.id, buddyId, profile);
     if (liveContext) {
       payload = { ...payload, context: [payload.context, liveContext].filter(Boolean).join("；") };
@@ -651,24 +702,29 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
         prompt: built.prompt,
         systemPrompt: built.systemPrompt,
         responseJsonSchema: true,
-        models: isFastChat ? FAST_TEXT_MODELS : undefined,
-        maxTokens: isFastChat ? 700 : 1500,
-        fetchTimeout: isFastChat ? 15000 : 45000,
+        models: useFast ? FAST_TEXT_MODELS : undefined,
+        maxTokens: useFast ? 700 : 1200,
+        fetchTimeout: useFast ? 15000 : 45000,
       }),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("AGENT_TIMEOUT")), isFastChat ? 28000 : 60000)
+        setTimeout(() => reject(new Error("AGENT_TIMEOUT")), useFast ? 28000 : 60000)
       ),
     ]);
     return res.json({ data });
   } catch (error) {
     console.error(`[buddies/agent] ${buddyId}/${parsed.data.mode} failed:`, error?.message || error);
-    if (isFastChat) {
-      // 快速对话失败时给一句可继续的回执，而不是让用户等 502
+    if (isInteractive) {
+      // 兜底也要接住用户刚才说的话，而不是给一句通用话术
+      const snippet = String(lastUserText || "").trim().slice(0, 24);
       return res.json({
         data:
           parsed.data.mode === "greeting"
             ? { text: "我在。今天先挑一件最想推进的事，我们从最小的一步开始。" }
-            : { reply: "我在。刚才想得有点久——先说说你现在最卡的那一步，我们把动作缩到最小。" },
+            : {
+                reply: snippet
+                  ? `我在。刚才没来得及把「${snippet}${lastUserText.length > 24 ? "…" : ""}」完整展开——你先告诉我最想先解决哪一步，我马上接着答。`
+                  : "我在。刚才想得有点久——先告诉我你现在最想先解决哪一步，我马上接着答。"
+              },
         degraded: true,
       });
     }

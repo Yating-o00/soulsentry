@@ -57,14 +57,16 @@ async function loadCollabSpace(req, res) {
 }
 
 // Agent 30 秒前情摘要：失败不阻断邀请创建（返回空串，落地页显示兜底文案）
-async function generateInviteSummary({ task, user, inviteeName = "", note = "" }) {
+async function generateInviteSummary({ task, user, inviteeName = "", note = "", skipSummary = false }) {
   if (process.env.COLLAB_AGENT_MOCK_LLM === "1") {
     return "（本地 mock）这是一次协同约定的邀请：成员们已经在讨论中形成了一些共识，邀请你加入并认领与自己相关的待办。";
   }
-  try {
-    await assertAICredits(user.id, COST(), "collab_agent");
-  } catch {
-    return "";
+  if (!skipSummary) {
+    try {
+      await assertAICredits(user.id, COST(), "collab_agent");
+    } catch {
+      return "";
+    }
   }
   try {
     const snapshot = await loadSpaceSnapshot(task);
@@ -88,6 +90,19 @@ async function generateInviteSummary({ task, user, inviteeName = "", note = "" }
     if (consensusDoc) sedimentParts.push(`已有共识：${stripHtml(consensusDoc.content).slice(0, 160)}`);
     if (sedimentDocs.length > 0) sedimentParts.push(`沉淀文件：${sedimentDocs.map((d) => d.title).join("、")}`);
     const sedimentText = sedimentParts.join("；") || "（暂无沉淀）";
+
+    // 标准卡片：不调 AI，用真实进度拼一段可直接展示的邀请概况
+    if (skipSummary) {
+      const activeTitles = confirmedSubtasks.filter((s) => s.status !== "DONE").slice(0, 3).map((s) => s.title);
+      const progressLine = confirmedSubtasks.length > 0
+        ? `已完成 ${doneCount}/${confirmedSubtasks.length} 条子约定`
+        : "刚刚开始";
+      const activeLine = activeTitles.length > 0 ? `，正在推进「${activeTitles.join("」「")}」` : "";
+      const sedimentLine = digestDoc ? "，已有执行概览沉淀" : consensusDoc ? "，已有共识沉淀" : "";
+      const goalLine = collab.goal ? `共同目标：${collab.goal}。` : "";
+      return `「${task.title}」正在进行中。${goalLine}${progressLine}${activeLine}${sedimentLine}。邀请你加入，一起把接下来的事推进。`;
+    }
+
     const prompt = `约定主题：${task.title}
 共同目标：${collab.goal || "（未填写）"}
 邀请人：${actorName(user)}
@@ -142,7 +157,9 @@ ${sedimentText}
 const createInviteSchema = z.object({
   invitee_name: z.string().trim().min(1).max(30),
   subtask_ids: z.array(z.string()).max(20).default([]),
-  note: z.string().max(200).optional().nullable()
+  note: z.string().max(200).optional().nullable(),
+  // 标准邀请卡片：跳过 AI 概况，用真实进度拼一段标准概况（不消耗 AI 点数）
+  skip_summary: z.boolean().optional().default(false)
 });
 
 collabInviteRouter.post("/collab/:taskId/invites", requireAuth, async (req, res) => {
@@ -162,7 +179,8 @@ collabInviteRouter.post("/collab/:taskId/invites", requireAuth, async (req, res)
     task,
     user: req.user,
     inviteeName: payload.data.invitee_name.trim(),
-    note: payload.data.note?.trim() || ""
+    note: payload.data.note?.trim() || "",
+    skipSummary: payload.data.skip_summary
   });
   const invite = await prisma.collabInvite.create({
     data: {
@@ -183,7 +201,8 @@ collabInviteRouter.post("/collab/:taskId/invites", requireAuth, async (req, res)
 
   return res.status(201).json({
     invite: { ...serializeInvite(invite), inviter_name: actorName(req.user) },
-    url: `/invite/${invite.code}`
+    url: `/invite/${invite.code}`,
+    standard: payload.data.skip_summary
   });
 });
 

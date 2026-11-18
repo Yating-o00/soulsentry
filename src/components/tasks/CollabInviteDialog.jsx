@@ -79,6 +79,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
   const [todoInvite, setTodoInvite] = useState(null); // 最近一次生成的 {code,url}
   const [recentInvites, setRecentInvites] = useState([]);
   const cardRef = useRef(null);
+  const standardTriedRef = useRef(false);
   // 「直接邀请」点击后滚动定位到下方 @ 邀请区块
   const mentionRef = useRef(null);
 
@@ -95,23 +96,24 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
 
   // 生成通用邀请：二维码指向 /invite/<code>，由服务端基于当前子约定+沉淀生成邀请概况，
   // 受邀者扫码后能看到概况、进展和邀请人的自定义留言。
-  const createGeneralInvite = async () => {
+  const createGeneralInvite = async ({ standard = false } = {}) => {
     if (!task?.id || creatingCard) return;
     setCreatingCard(true);
     try {
       const res = await httpRequest(`/api/collab/${task.id}/invites`, {
         method: "POST",
         body: {
-          invitee_name: cardInviteeName.trim() || "伙伴",
+          invitee_name: standard ? "伙伴" : cardInviteeName.trim() || "伙伴",
           subtask_ids: [],
-          note: cardNote.trim() || null,
+          note: standard ? null : cardNote.trim() || null,
+          skip_summary: standard,
         },
       });
       const url = res?.url ? `${window.location.origin}${res.url}` : "";
-      setCardInvite({ ...(res?.invite || {}), url });
+      setCardInvite({ ...(res?.invite || {}), url, standard: !!res?.standard });
       setInviteUrl(url);
       loadRecentInvites();
-      toast.success("邀请卡片已生成");
+      toast.success(standard ? "标准邀请卡片已准备好" : "定制邀请卡片已生成");
     } catch (error) {
       toast.error(error?.data?.message || error?.message || "邀请生成失败，请稍后再试");
     } finally {
@@ -398,11 +400,23 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
     }
   };
 
+  // 切换约定时重置标准卡片
+  useEffect(() => {
+    standardTriedRef.current = false;
+    setCardInvite(null);
+    setInviteUrl("");
+  }, [task?.id]);
+
   useEffect(() => {
     if (!open) return;
     setTodoInvite(null);
     loadRecentInvites();
     loadSubtasks();
+    // 打开即准备一张标准邀请卡片；用户填写定制内容后再生成定制卡片
+    if (!cardInvite && !creatingCard && !standardTriedRef.current) {
+      standardTriedRef.current = true;
+      createGeneralInvite({ standard: true });
+    }
   }, [open, task?.id]);
 
   const handleCreateTodoInvite = async () => {
@@ -495,14 +509,16 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
               />
               <Button
                 className="w-full bg-[#384877] hover:bg-[#2e3a62]"
-                onClick={createGeneralInvite}
-                disabled={creatingCard}
+                onClick={() => createGeneralInvite({ standard: !cardInvite && !(cardInviteeName.trim() || cardNote.trim()) })}
+                disabled={creatingCard || (!!cardInvite && !(cardInviteeName.trim() || cardNote.trim()))}
               >
                 {creatingCard ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <ImageIcon className="w-4 h-4 mr-1.5" />}
-                {creatingCard ? "正在生成邀请卡片…" : cardInvite ? "重新生成邀请卡片" : "生成邀请卡片"}
+                {creatingCard ? "正在生成邀请卡片…" : cardInvite ? "生成定制邀请卡片" : "生成邀请卡片"}
               </Button>
               <p className="text-[10px] text-slate-400 text-center">
-                Agent 会基于当前子约定和沉淀生成邀请概况，对方扫码即可看到
+                {cardInvite && !(cardInviteeName.trim() || cardNote.trim())
+                  ? "标准卡片已可直接分享；填写称呼或留言后，生成带 AI 概况的定制卡片"
+                  : "定制卡片会由 Agent 基于当前子约定和沉淀生成邀请概况"}
               </p>
             </div>
 
@@ -609,12 +625,16 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                   </Button>
                 </div>
                 <p className="text-[11px] text-slate-400 text-center">
-                  对方扫码后可看到 AI 邀请概况、子约定进展、已沉淀内容和你的留言
+                  对方扫码后可看到邀请概况、子约定进展、已沉淀内容和你的留言
                 </p>
               </>
+            ) : creatingCard ? (
+              <div className="flex items-center justify-center py-8 text-xs text-slate-400">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" /> 正在准备标准邀请卡片…
+              </div>
             ) : (
               <p className="text-xs text-slate-400 text-center py-8">
-                填写称呼和留言后，点击上方按钮生成邀请卡片。
+                正在准备标准邀请卡片，也可以填写称呼和留言生成定制卡片。
               </p>
             )}
           </div>
@@ -658,11 +678,11 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                 </p>
                 <Button
                   className="w-full bg-[#384877] hover:bg-[#2e3a62]"
-                  onClick={createGeneralInvite}
+                  onClick={() => createGeneralInvite({ standard: true })}
                   disabled={creatingCard}
                 >
                   {creatingCard ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <LinkIcon className="w-4 h-4 mr-1.5" />}
-                  {creatingCard ? "正在生成邀请链接…" : "生成邀请链接"}
+                  {creatingCard ? "正在生成邀请链接…" : "生成标准邀请链接"}
                 </Button>
               </div>
             )}

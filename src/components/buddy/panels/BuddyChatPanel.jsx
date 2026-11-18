@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, Users2 } from "lucide-react";
+import { toast } from "sonner";
+import { httpRequest } from "@/api/httpClient";
 import { BuddyMsg, useBuddyAgent, useBuddyState, todayKey } from "./shared";
 
 /**
@@ -11,8 +14,10 @@ import { BuddyMsg, useBuddyAgent, useBuddyState, todayKey } from "./shared";
 export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
   const { call } = useBuddyAgent(buddy.id);
   const { state, patch } = useBuddyState(buddy.id);
+  const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [creatingProposal, setCreatingProposal] = useState(false);
   const scrollRef = useRef(null);
   const greetedRef = useRef(false);
 
@@ -70,7 +75,14 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       const data = await call({ mode: "chat", payload: { messages: history, context } });
       const reply = String(data?.reply || "").trim();
       if (reply) {
-        patch({ chat: [...base, { role: "buddy", content: reply, at: new Date().toISOString() }].slice(-40) });
+        const proposal = data?.proposal?.type === "create_collab" ? data.proposal : null;
+        const replyMsg = {
+          role: "buddy",
+          content: reply,
+          at: new Date().toISOString(),
+          ...(proposal ? { proposal } : {}),
+        };
+        patch({ chat: [...base, replyMsg].slice(-40) });
       }
     } catch (_e) {
       patch({
@@ -78,6 +90,43 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       });
     } finally {
       setSending(false);
+    }
+  };
+
+  // 对话里的协同小组提案：确认后直接创建一场归属本搭子的协同约定
+  const createGroup = async (proposal, index) => {
+    if (!proposal || creatingProposal) return;
+    setCreatingProposal(true);
+    try {
+      await httpRequest("/api/tasks", {
+        method: "POST",
+        body: {
+          title: proposal.title,
+          description: proposal.goal || "",
+          category: "collab",
+          status: "pending",
+          priority: "medium",
+          metadata: {
+            collab: {
+              scenario: proposal.scenario || "friends",
+              goal: proposal.goal || "",
+              agent: { enabled: true, paused: false },
+              confirmRule: proposal.scenario === "couple" ? "all" : "owner",
+            },
+            _extraFields: { buddy_id: buddy.id },
+          },
+        },
+      });
+      const next = chat.map((m, i) =>
+        i === index ? { ...m, proposal: { ...m.proposal, created: true } } : m
+      );
+      patch({ chat: next });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success(`协同小组「${proposal.title}」已创建，去协同页邀请伙伴`);
+    } catch (error) {
+      toast.error(error?.message || "创建失败，再试一次");
+    } finally {
+      setCreatingProposal(false);
     }
   };
 
@@ -98,9 +147,32 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                 </div>
               </div>
             ) : (
-              <BuddyMsg key={i} tint={tint}>
-                {m.content}
-              </BuddyMsg>
+              <div key={i}>
+                <BuddyMsg tint={tint}>{m.content}</BuddyMsg>
+                {m.proposal && (
+                  <div className="ml-10 mt-2 rounded-2xl border border-[#c9d5ef] bg-[#eef2ff]/60 p-3">
+                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#384877]">
+                      <Users2 className="w-3.5 h-3.5" /> 协同小组提案
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-stone-800">{m.proposal.title}</p>
+                    {m.proposal.goal && (
+                      <p className="mt-0.5 text-xs leading-relaxed text-stone-500">{m.proposal.goal}</p>
+                    )}
+                    {m.proposal.created ? (
+                      <p className="mt-2 text-xs font-medium text-emerald-600">✓ 已创建，去「协同」页邀请伙伴</p>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => createGroup(m.proposal, i)}
+                        disabled={creatingProposal}
+                        className="mt-2 min-h-[36px] w-full rounded-full bg-[#384877] text-xs font-medium text-white disabled:opacity-50"
+                      >
+                        {creatingProposal ? "正在创建…" : "创建协同小组"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )
           )}
           {sending && (

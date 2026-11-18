@@ -67,11 +67,35 @@ export default function BuddySpace() {
     );
   }, [allTasks, profile, buddyId]);
 
+  // 本搭子名下的所有顶层项目/协同小组（主项目 + 子项目 + 协同小组）
+  const buddyTasks = useMemo(() => {
+    const list = allTasks
+      .filter(
+        (t) =>
+          !t.deleted_at &&
+          !t.parent_task_id &&
+          t.metadata?._extraFields?.buddy_id === buddyId
+      )
+      .sort((a, b) => {
+        if (a.id === projectTask?.id) return -1;
+        if (b.id === projectTask?.id) return 1;
+        return new Date(b.created_date || 0) - new Date(a.created_date || 0);
+      });
+    if (projectTask && !list.some((t) => t.id === projectTask.id)) list.unshift(projectTask);
+    return list;
+  }, [allTasks, buddyId, projectTask]);
+
   const [tab, setTab] = useState(null); // null → 取 sections[0]
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [graduating, setGraduating] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [collabOpen, setCollabOpen] = useState(false);
+  const [newCollabOpen, setNewCollabOpen] = useState(false);
+  const [selectedCollabId, setSelectedCollabId] = useState(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [newProjectTitle, setNewProjectTitle] = useState("");
+  const [newProjectGoal, setNewProjectGoal] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
 
   if (!buddy) {
     return (
@@ -145,6 +169,35 @@ export default function BuddySpace() {
     }
   };
 
+  // 在同一颗搭子下新建子项目（如学习搭子里的「数学」「英语」）
+  const createProject = async () => {
+    const title = newProjectTitle.trim();
+    if (!title || creatingProject) return;
+    setCreatingProject(true);
+    try {
+      await httpRequest("/api/tasks", {
+        method: "POST",
+        body: {
+          title,
+          description: newProjectGoal.trim() || undefined,
+          category: "personal",
+          priority: "medium",
+          buddy_id: buddy.id,
+          buddy_project: true,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      setNewProjectOpen(false);
+      setNewProjectTitle("");
+      setNewProjectGoal("");
+      toast.success(`已创建子项目「${title}」`);
+    } catch (e) {
+      toast.error(e?.message || "创建失败，请再试一次");
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
   return (
     <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 pt-6 md:pt-10 pb-10">
       {/* 页眉：搭子头 + 人格化问候 */}
@@ -198,6 +251,12 @@ export default function BuddySpace() {
           <div className="space-y-4">
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+            <BuddyProjectsSection
+              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
+              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
+              onCreateProject={() => setNewProjectOpen(true)}
+              onCreateCollab={() => setNewCollabOpen(true)}
+            />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "travel" && (
@@ -205,6 +264,12 @@ export default function BuddySpace() {
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <ItineraryPanel buddy={buddy} profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
+            <BuddyProjectsSection
+              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
+              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
+              onCreateProject={() => setNewProjectOpen(true)}
+              onCreateCollab={() => setNewCollabOpen(true)}
+            />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "reading" && (
@@ -212,12 +277,24 @@ export default function BuddySpace() {
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <ReadingNowPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
             {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
+            <BuddyProjectsSection
+              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
+              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
+              onCreateProject={() => setNewProjectOpen(true)}
+              onCreateCollab={() => setNewCollabOpen(true)}
+            />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "morning" && (
           <div className="space-y-4">
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
             <MorningCheckPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
+            <BuddyProjectsSection
+              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
+              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
+              onCreateProject={() => setNewProjectOpen(true)}
+              onCreateCollab={() => setNewCollabOpen(true)}
+            />
           </div>
         )}
         {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}
@@ -228,7 +305,16 @@ export default function BuddySpace() {
         {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
         {activeTab === "笔记" && <ReadingNotesPanel tint={tint} />}
         {activeTab === "协同" && (
-          <CollabSection buddy={buddy} tint={tint} projectTask={projectTask} allTasks={allTasks} onOpenCollab={() => setCollabOpen(true)} />
+          <CollabSection
+            buddy={buddy}
+            tint={tint}
+            projectTask={projectTask}
+            allTasks={allTasks}
+            selectedCollabId={selectedCollabId}
+            onSelectCollab={setSelectedCollabId}
+            onCreateCollab={() => setNewCollabOpen(true)}
+            onOpenCollab={() => setCollabOpen(true)}
+          />
         )}
         {activeTab === "画像" && (
           <ProfileSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
@@ -254,6 +340,68 @@ export default function BuddySpace() {
           queryClient.invalidateQueries({ queryKey: ["tasks"] });
         }}
       />
+
+      {/* 新建独立协同小组：按主题创建多个小组，归属本搭子 */}
+      <CollabCreateDialog
+        open={newCollabOpen}
+        existingTask={null}
+        buddyId={buddy.id}
+        onClose={() => setNewCollabOpen(false)}
+        onCreated={(id) => {
+          setNewCollabOpen(false);
+          if (id) setSelectedCollabId(id);
+          setTab("协同");
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        }}
+      />
+
+      {/* 新建子项目：同一颗搭子下并行推进多条线 */}
+      {newProjectOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-[#384877]/45 p-5"
+          onClick={() => setNewProjectOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl bg-white p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-stone-900">新建子项目</h3>
+            <p className="mt-1 text-xs leading-relaxed text-stone-400">
+              在{buddy.name}下并行推进另一条线，比如「数学」「英语」。
+            </p>
+            <input
+              value={newProjectTitle}
+              onChange={(e) => setNewProjectTitle(e.target.value)}
+              placeholder="项目名称，如「数学 · 中考复习」"
+              maxLength={60}
+              className="mt-4 w-full rounded-xl border border-stone-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#384877]"
+            />
+            <textarea
+              value={newProjectGoal}
+              onChange={(e) => setNewProjectGoal(e.target.value)}
+              placeholder="一句话目标（可选）"
+              rows={2}
+              maxLength={200}
+              className="mt-2 w-full resize-none rounded-xl border border-stone-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#384877]"
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setNewProjectOpen(false)}
+                className="flex-1 rounded-full border border-stone-200 py-2.5 text-sm text-stone-600"
+              >
+                取消
+              </button>
+              <button
+                onClick={createProject}
+                disabled={!newProjectTitle.trim() || creatingProject}
+                className="flex-1 rounded-full bg-[#384877] py-2.5 text-sm text-white disabled:opacity-50"
+              >
+                {creatingProject ? "创建中…" : "创建"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 毕业仪式确认 */}
       {graduateOpen && (
@@ -335,11 +483,83 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
   );
 }
 
+/* ---------- 项目与小组：同一颗搭子下并行多个子项目 / 协同小组 ---------- */
+function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCollab, onCreateProject, onCreateCollab }) {
+  return (
+    <section className="rounded-2xl border border-stone-200 bg-white p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <div className="text-[11px] tracking-widest text-stone-400">项目与小组</div>
+          <p className="mt-1 text-xs text-stone-400">同一个{buddy.name}下，可以并行推进多条线</p>
+        </div>
+        <span className="shrink-0 text-xs text-stone-400">{tasks.length} 个</span>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {tasks.map((t) => {
+          const isPrimary = t.id === primaryTask?.id;
+          const isCollab = !!t.metadata?.collab;
+          const done = isTaskEffectivelyCompleted(t);
+          return (
+            <div key={t.id} className="flex items-center gap-3 rounded-xl bg-[#FAF9F7] px-3.5 py-3">
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold text-white"
+                style={{ background: isCollab ? tint[2] : "#384877" }}
+              >
+                {isCollab ? "协" : "项"}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-[13px] font-medium text-stone-800">{t.title}</span>
+                  <span className="shrink-0 rounded-full bg-white px-1.5 py-0.5 text-[9px] text-stone-400">
+                    {isPrimary ? (isCollab ? "主项目 · 协同" : "主项目") : isCollab ? "协同小组" : "子项目"}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[11px] text-stone-400">
+                  {done ? "已完成" : `${t.progress || 0}% · ${isCollab ? "多人协作中" : "进行中"}`}
+                </p>
+              </div>
+              {isCollab && (
+                <button
+                  type="button"
+                  onClick={() => onSelectCollab(t.id)}
+                  className="shrink-0 text-[11px] text-[#384877] hover:underline"
+                >
+                  进入协同 →
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {tasks.length === 0 && <p className="text-xs text-stone-400">还没有项目或小组。</p>}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={onCreateProject}
+          className="flex-1 rounded-full border border-stone-200 px-3 py-2 text-xs text-stone-600 transition-colors hover:bg-stone-50"
+        >
+          ＋ 新建子项目
+        </button>
+        <button
+          type="button"
+          onClick={onCreateCollab}
+          className="flex-1 rounded-full px-3 py-2 text-xs font-medium text-white"
+          style={{ background: tint[2] }}
+        >
+          ＋ 新建协同小组
+        </button>
+      </div>
+    </section>
+  );
+}
+
 /* ---------- 协同：朋友 + 搭子 Agent 的多方共创 ----------
    以专业 Agent 为协调者（拉齐共识、化解分歧、推进讨论、总结沉淀、外部信息支援）；
    讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
    其他搭子的协同约定不出现在这里。 */
-function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }) {
+function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onOpenCollab }) {
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
   const [createdCollabId, setCreatedCollabId] = useState(null);
@@ -354,10 +574,11 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
   const projectCollab = projectTask?.metadata?.collab ? projectTask : null;
   // 新建成功后先用返回的 id 立即切入协同空间，不必等 tasks 列表回刷。
   const createdCollab = createdCollabId ? { id: createdCollabId } : null;
-  // 项目约定已开协同 → 用它；没有项目约定（被删/未同步）→ 用本搭子最近的一场协同，
-  // 这样一键新建的协同约定会直接切换成内嵌协同空间，不会再停在按钮页。
-  const activeCollab = projectCollab || (!projectTask ? myCollabs[0] || createdCollab : null);
-  const otherCollabs = myCollabs.filter((t) => t.id !== activeCollab?.id);
+  // 选中的小组优先；项目约定已开协同 → 用它；没有项目约定 → 用本搭子最近的一场协同
+  const selectedCollab = selectedCollabId ? myCollabs.find((t) => t.id === selectedCollabId) : null;
+  // 新建小组后任务列表还没回刷时，先用 id 打开它的协同空间
+  const selectedFallback = selectedCollabId ? { id: selectedCollabId } : null;
+  const activeCollab = selectedCollab || projectCollab || selectedFallback || (!projectTask ? myCollabs[0] || createdCollab : null);
 
   // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单；
   // 项目约定存在则就地开启，缺失（被删/未同步）时直接新建一场归属本搭子的协同约定
@@ -404,33 +625,42 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
     }
   };
 
-  // 已开启协同：内嵌完整协同空间——共同讨论 + Agent 维护的执行概览 / 子约定 / 沉淀都在
+  // 已开启协同：小组切换 + 极简内容区；共同讨论一键进入完整空间
   if (activeCollab) {
     return (
       <div className="space-y-3">
-        <CollabSpace taskId={activeCollab.id} embedded />
-        {otherCollabs.length > 0 && (
-          <section className="rounded-2xl border border-stone-200 bg-white p-5">
-            <div className="text-[11px] tracking-widest text-stone-400">本搭子的其他协同约定</div>
-            <ul className="mt-3 space-y-2">
-              {otherCollabs.map((t) => (
-                <li key={t.id}>
-                  <Link
-                    to={`/collabspace?taskId=${t.id}`}
-                    className="flex items-center gap-3 rounded-xl bg-[#FAF9F7] px-4 py-3 transition-colors hover:bg-stone-100"
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>协</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-medium text-stone-800">{t.title}</span>
-                      <span className="text-xs text-stone-400">本搭子的另一场协同 · 多人共创中</span>
-                    </span>
-                    <span className="text-stone-400">→</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+          {myCollabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onSelectCollab?.(t.id)}
+              className={`max-w-[160px] shrink-0 truncate rounded-full px-3 py-1.5 text-[11px] transition-colors ${
+                t.id === activeCollab.id
+                  ? "bg-[#384877] text-white"
+                  : "border border-stone-200 bg-white text-stone-500 hover:text-[#384877]"
+              }`}
+            >
+              {t.title}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={onCreateCollab}
+            className="shrink-0 rounded-full border border-dashed border-stone-300 px-3 py-1.5 text-[11px] text-stone-400 hover:text-[#384877]"
+          >
+            ＋ 新建小组
+          </button>
+        </div>
+        <CollabSpace taskId={activeCollab.id} embedded minimal />
+        <div className="flex justify-end">
+          <Link
+            to={`/collabspace?taskId=${activeCollab.id}`}
+            className="text-xs text-[#384877] hover:underline"
+          >
+            进入完整协同空间（含共同讨论）→
+          </Link>
+        </div>
       </div>
     );
   }
@@ -495,6 +725,12 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], onOpenCollab }
           className="mt-2.5 text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2"
         >
           自定义场景与确认规则
+        </button>
+        <button
+          onClick={onCreateCollab}
+          className="mt-2.5 block w-full text-xs text-[#384877] hover:underline underline-offset-2"
+        >
+          或者新建一个独立的协同小组 →
         </button>
       </section>
     </div>

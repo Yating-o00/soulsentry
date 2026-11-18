@@ -45,7 +45,8 @@ export default function BuddySpace() {
 
   const { data: allTasks = [] } = useQuery({
     queryKey: ["tasks", "with-subs"],
-    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-reminder_time", 300),
+    // 按创建时间倒序：新建的协同小组没有提醒时间，按提醒时间排会沉到 300 条之后
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-created_date", 300),
     enabled: !!profile,
   });
   // 项目约定优先；缺失（被删/未同步）时回退到本搭子最新的一条顶层约定——
@@ -89,7 +90,6 @@ export default function BuddySpace() {
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [graduating, setGraduating] = useState(false);
   const [stopping, setStopping] = useState(false);
-  const [collabOpen, setCollabOpen] = useState(false);
   const [newCollabOpen, setNewCollabOpen] = useState(false);
   const [selectedCollabId, setSelectedCollabId] = useState(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -313,7 +313,6 @@ export default function BuddySpace() {
             selectedCollabId={selectedCollabId}
             onSelectCollab={setSelectedCollabId}
             onCreateCollab={() => setNewCollabOpen(true)}
-            onOpenCollab={() => setCollabOpen(true)}
           />
         )}
         {activeTab === "画像" && (
@@ -328,18 +327,6 @@ export default function BuddySpace() {
         {!["协同", "画像", "清单", "习惯", "解题", "周报", "灵感", "书架", "笔记"].includes(activeTab) &&
           activeTab !== sections[0] && <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />}
       </div>
-
-      {/* 协同约定创建（为项目约定开启协同）：开启后留在本板块，协同空间内嵌呈现；新建协同归属本搭子 */}
-      <CollabCreateDialog
-        open={collabOpen}
-        existingTask={projectTask}
-        buddyId={buddy.id}
-        onClose={() => setCollabOpen(false)}
-        onCreated={() => {
-          setCollabOpen(false);
-          queryClient.invalidateQueries({ queryKey: ["tasks"] });
-        }}
-      />
 
       {/* 新建独立协同小组：按主题创建多个小组，归属本搭子 */}
       <CollabCreateDialog
@@ -559,7 +546,7 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
    以专业 Agent 为协调者（拉齐共识、化解分歧、推进讨论、总结沉淀、外部信息支援）；
    讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
    其他搭子的协同约定不出现在这里。 */
-function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onOpenCollab }) {
+function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab }) {
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
   const [createdCollabId, setCreatedCollabId] = useState(null);
@@ -578,7 +565,8 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
   const selectedCollab = selectedCollabId ? myCollabs.find((t) => t.id === selectedCollabId) : null;
   // 新建小组后任务列表还没回刷时，先用 id 打开它的协同空间
   const selectedFallback = selectedCollabId ? { id: selectedCollabId } : null;
-  const activeCollab = selectedCollab || projectCollab || selectedFallback || (!projectTask ? myCollabs[0] || createdCollab : null);
+  // 刚新建的小组可能还没进入任务列表：用 id 先打开它，而不是退回主项目的协同
+  const activeCollab = selectedCollab || selectedFallback || projectCollab || (!projectTask ? myCollabs[0] || createdCollab : null);
 
   // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单；
   // 项目约定存在则就地开启，缺失（被删/未同步）时直接新建一场归属本搭子的协同约定
@@ -652,13 +640,13 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
             ＋ 新建小组
           </button>
         </div>
-        <CollabSpace taskId={activeCollab.id} embedded minimal />
+        <CollabSpace taskId={activeCollab.id} embedded />
         <div className="flex justify-end">
           <Link
             to={`/collabspace?taskId=${activeCollab.id}`}
-            className="text-xs text-[#384877] hover:underline"
+            className="text-xs text-stone-400 hover:text-[#384877] underline-offset-2 hover:underline"
           >
-            进入完整协同空间（含共同讨论）→
+            全屏打开协同空间 →
           </Link>
         </div>
       </div>
@@ -719,12 +707,6 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
         >
           {enabling && <Loader2 className="w-4 h-4 animate-spin" />}
           {enabling ? "正在开启…" : "一键开启协同约定"}
-        </button>
-        <button
-          onClick={onOpenCollab}
-          className="mt-2.5 text-xs text-stone-400 hover:text-stone-600 underline underline-offset-2"
-        >
-          自定义场景与确认规则
         </button>
         <button
           onClick={onCreateCollab}

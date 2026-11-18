@@ -1,4 +1,5 @@
-import { invokeKimiText, FAST_TEXT_MODELS } from "../lib/kimi.js";
+import { invokeDashboardAi } from "../lib/dashboardAi.js";
+import { FAST_TEXT_MODELS } from "../lib/kimi.js";
 import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
@@ -731,7 +732,7 @@ ${buildMessagesBlock(messages)}${attachmentCtx}
 ${userContext ? `\n你此刻掌握的用户真实数据（只读参考，用于个性化回答和规划；不要在回复里机械罗列）：\n${userContext}\n` : ""}
 请按系统要求返回 JSON。`;
 
-  const resultAndUsage = await invokeKimiText({
+  const resultAndUsage = await invokeDashboardAi({
     prompt,
     systemPrompt: `你是 SoulSentry「心栈」，一个温柔、克制、值得信赖的陪伴式记录助手。用户通过和你聊天的方式，把心里想记的东西告诉你。
 

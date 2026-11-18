@@ -1,4 +1,4 @@
-import { invokeKimiText } from "../lib/kimi.js";
+import { invokeDashboardAi } from "../lib/dashboardAi.js";
 
 // 智能约定规划：把「一类要做的事」（如"两周的健身计划"）落成母约定 + 逐日子约定。
 // 架构：AI 只生成 2-5 个「日型模板」（工作日/周末/饮食等），服务端本地展开为逐日计划——
@@ -816,7 +816,7 @@ ${bits.join("\n")}
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const { data, usage } = await Promise.race([
-        invokeKimiText({
+        invokeDashboardAi({
           prompt,
           systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles } from "lucide-react";
+import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
@@ -86,16 +86,21 @@ export default function BuddySpace() {
     return list;
   }, [allTasks, buddyId, projectTask]);
 
-  const [tab, setTab] = useState(null); // null → 取 sections[0]
+  // 支持从全屏协同退回来时直接落在「协同」页（?tab=协同）
+  const [tab, setTab] = useState(() => new URLSearchParams(location.search).get("tab") || null);
   const [graduateOpen, setGraduateOpen] = useState(false);
   const [graduating, setGraduating] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [newCollabOpen, setNewCollabOpen] = useState(false);
-  const [selectedCollabId, setSelectedCollabId] = useState(null);
+  const [selectedCollabId, setSelectedCollabId] = useState(
+    () => new URLSearchParams(location.search).get("collab") || null
+  );
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectTitle, setNewProjectTitle] = useState("");
   const [newProjectGoal, setNewProjectGoal] = useState("");
   const [creatingProject, setCreatingProject] = useState(false);
+  const [deleteCollabTarget, setDeleteCollabTarget] = useState(null);
+  const [deletingCollab, setDeletingCollab] = useState(false);
 
   if (!buddy) {
     return (
@@ -166,6 +171,24 @@ export default function BuddySpace() {
     } catch (e) {
       toast.error(e?.message || "操作失败，请再试一次");
       setStopping(false);
+    }
+  };
+
+  // 删除搭子里新建的协同小组（主项目不可删；成员身份由后端权限兜底）
+  const deleteCollab = async () => {
+    const target = deleteCollabTarget;
+    if (!target || deletingCollab) return;
+    setDeletingCollab(true);
+    try {
+      await httpRequest(`/api/tasks/${target.id}`, { method: "DELETE" });
+      if (selectedCollabId === target.id) setSelectedCollabId(null);
+      setDeleteCollabTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success(`已删除协同小组「${target.title}」`);
+    } catch (e) {
+      toast.error(e?.data?.message || e?.message || "删除失败，只有创建者可以删除");
+    } finally {
+      setDeletingCollab(false);
     }
   };
 
@@ -256,6 +279,7 @@ export default function BuddySpace() {
               onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
               onCreateProject={() => setNewProjectOpen(true)}
               onCreateCollab={() => setNewCollabOpen(true)}
+              onDeleteCollab={setDeleteCollabTarget}
             />
           </div>
         )}
@@ -269,6 +293,7 @@ export default function BuddySpace() {
               onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
               onCreateProject={() => setNewProjectOpen(true)}
               onCreateCollab={() => setNewCollabOpen(true)}
+              onDeleteCollab={setDeleteCollabTarget}
             />
           </div>
         )}
@@ -282,6 +307,7 @@ export default function BuddySpace() {
               onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
               onCreateProject={() => setNewProjectOpen(true)}
               onCreateCollab={() => setNewCollabOpen(true)}
+              onDeleteCollab={setDeleteCollabTarget}
             />
           </div>
         )}
@@ -294,6 +320,7 @@ export default function BuddySpace() {
               onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
               onCreateProject={() => setNewProjectOpen(true)}
               onCreateCollab={() => setNewCollabOpen(true)}
+              onDeleteCollab={setDeleteCollabTarget}
             />
           </div>
         )}
@@ -313,6 +340,7 @@ export default function BuddySpace() {
             selectedCollabId={selectedCollabId}
             onSelectCollab={setSelectedCollabId}
             onCreateCollab={() => setNewCollabOpen(true)}
+            onDeleteCollab={setDeleteCollabTarget}
           />
         )}
         {activeTab === "画像" && (
@@ -384,6 +412,42 @@ export default function BuddySpace() {
                 className="flex-1 rounded-full bg-[#384877] py-2.5 text-sm text-white disabled:opacity-50"
               >
                 {creatingProject ? "创建中…" : "创建"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 删除协同小组确认 */}
+      {deleteCollabTarget && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-[#384877]/45 p-5"
+          onClick={() => {
+            if (!deletingCollab) setDeleteCollabTarget(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl bg-white p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-stone-900">删除协同小组？</h3>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-stone-500">
+              「{deleteCollabTarget.title}」的讨论、子约定、执行节点和沉淀会一起删除，且无法恢复。
+            </p>
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => setDeleteCollabTarget(null)}
+                disabled={deletingCollab}
+                className="flex-1 rounded-full border border-stone-200 py-2.5 text-sm text-stone-600 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={deleteCollab}
+                disabled={deletingCollab}
+                className="flex-1 rounded-full bg-rose-600 py-2.5 text-sm text-white disabled:opacity-50"
+              >
+                {deletingCollab ? "删除中…" : "确认删除"}
               </button>
             </div>
           </div>
@@ -471,7 +535,7 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
 }
 
 /* ---------- 项目与小组：同一颗搭子下并行多个子项目 / 协同小组 ---------- */
-function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCollab, onCreateProject, onCreateCollab }) {
+function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCollab, onCreateProject, onCreateCollab, onDeleteCollab }) {
   return (
     <section className="rounded-2xl border border-stone-200 bg-white p-5">
       <div className="flex items-baseline justify-between gap-3">
@@ -515,6 +579,16 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
                   进入协同 →
                 </button>
               )}
+              {isCollab && !isPrimary && !t.shared_role && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteCollab?.(t)}
+                  title="删除协同小组"
+                  className="shrink-0 text-stone-300 transition-colors hover:text-rose-500"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           );
         })}
@@ -546,7 +620,7 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
    以专业 Agent 为协调者（拉齐共识、化解分歧、推进讨论、总结沉淀、外部信息支援）；
    讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
    其他搭子的协同约定不出现在这里。 */
-function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab }) {
+function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onDeleteCollab }) {
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
   const [createdCollabId, setCreatedCollabId] = useState(null);
@@ -567,6 +641,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
   const selectedFallback = selectedCollabId ? { id: selectedCollabId } : null;
   // 刚新建的小组可能还没进入任务列表：用 id 先打开它，而不是退回主项目的协同
   const activeCollab = selectedCollab || selectedFallback || projectCollab || (!projectTask ? myCollabs[0] || createdCollab : null);
+  const activeTask = activeCollab ? myCollabs.find((t) => t.id === activeCollab.id) || null : null;
 
   // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单；
   // 项目约定存在则就地开启，缺失（被删/未同步）时直接新建一场归属本搭子的协同约定
@@ -641,9 +716,20 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
           </button>
         </div>
         <CollabSpace taskId={activeCollab.id} embedded />
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between gap-3">
+          {activeTask && activeTask.id !== projectTask?.id && !activeTask.shared_role ? (
+            <button
+              type="button"
+              onClick={() => onDeleteCollab?.(activeTask)}
+              className="inline-flex items-center gap-1 text-xs text-stone-400 transition-colors hover:text-rose-500"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> 删除当前小组
+            </button>
+          ) : (
+            <span />
+          )}
           <Link
-            to={`/collabspace?taskId=${activeCollab.id}`}
+            to={`/collabspace?taskId=${activeCollab.id}&from=buddy&buddy=${buddy.id}&collab=${activeCollab.id}`}
             className="text-xs text-stone-400 hover:text-[#384877] underline-offset-2 hover:underline"
           >
             全屏打开协同空间 →

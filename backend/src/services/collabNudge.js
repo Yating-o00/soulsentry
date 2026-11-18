@@ -12,7 +12,9 @@ const STALE_MS = 24 * 3600 * 1000;       // 成员多久没发言算停滞
 const NODE_WINDOW_MS = 48 * 3600 * 1000; // 节点临期窗口
 const AGENT_QUIET_MS = 12 * 3600 * 1000; // Agent 自己刚说过话就闭嘴
 const NUDGE_COOLDOWN_MS = 24 * 3600 * 1000; // 同一空间推动冷却
+const REPLY_REMINDER_MS = Number(process.env.COLLAB_REPLY_REMINDER_HOURS || 4) * 3600 * 1000;
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
+const NUDGE_TOPICS = new Set(["推进", "提醒"]);
 
 const COST = () => AI_CALL_COSTS.collab_agent || 2;
 
@@ -43,6 +45,54 @@ async function maybeNudgeTask(task) {
     prisma.comment.findFirst({ where: { taskId: task.id, agent: false }, orderBy: { createdAt: "desc" } }),
     prisma.comment.findFirst({ where: { taskId: task.id, agent: true }, orderBy: { createdAt: "desc" } })
   ]);
+
+  const lastAgentWasNudge = Boolean(lastAgentComment && NUDGE_TOPICS.has(lastAgentComment.topic));
+  const memberRepliedAfterAgent = Boolean(
+    lastMemberComment && lastAgentComment && lastMemberComment.createdAt > lastAgentComment.createdAt
+  );
+  // 已经推动/提醒过且无人回应：保持安静，等成员回应后再继续
+  if (lastAgentWasNudge && !memberRepliedAfterAgent) return;
+
+  // Agent 刚 @ 过具体成员、但一直没人回应：沉默过久只补一次提醒
+  if (
+    lastAgentComment &&
+    !lastAgentWasNudge &&
+    Array.isArray(lastAgentComment.mentions) &&
+    lastAgentComment.mentions.length > 0 &&
+    !memberRepliedAfterAgent &&
+    now - lastAgentComment.createdAt.getTime() >= REPLY_REMINDER_MS
+  ) {
+    const taskWithMembers = await prisma.task.findUnique({
+      where: { id: task.id },
+      include: { members: { include: { user: true } }, user: true }
+    });
+    const nameById = new Map(
+      [taskWithMembers?.user, ...(taskWithMembers?.members || []).map((m) => m.user)]
+        .filter(Boolean)
+        .map((u) => [u.id, displayName(u)])
+    );
+    const names = lastAgentComment.mentions.map((id) => nameById.get(id)).filter(Boolean);
+    const prefix = names.length > 0 ? `${names.map((name) => `@${name}`).join(" ")} ` : "";
+    const content = `${prefix}提醒一下：上一条里的下一步还在等大家回应。方便时回一句「可以」或「需要调整」，心栈再继续推进。`;
+    await postAgentMessage(task.id, {
+      content,
+      topic: "提醒",
+      parentId: lastAgentComment.parentId || lastAgentComment.id,
+      mentions: lastAgentComment.mentions
+    });
+    await prisma.task.update({
+      where: { id: task.id },
+      data: {
+        metadata: {
+          ...(task.metadata || {}),
+          collab: { ...collab, agent: { ...agentMeta, lastNudgeAt: new Date().toISOString() } }
+        }
+      }
+    });
+    console.log(`[collabNudge] reminded task=${task.id} mentioned=${lastAgentComment.mentions.length}`);
+    return;
+  }
+
   if (lastAgentComment && now - lastAgentComment.createdAt.getTime() < AGENT_QUIET_MS) return;
 
   const subtasks = await collectSubtasks(task.id);
@@ -100,24 +150,10 @@ async function maybeNudgeTask(task) {
   await postAgentMessage(task.id, {
     content,
     topic: "推进",
-    parentId: null
+    parentId: null,
+    // 明确点名全体参与方：postAgentMessage 会落库 mentions 并逐个发站内通知
+    mentions: parties.map((p) => p.userId)
   });
-  // mentions 仅落库供前端高亮，不改表结构：写入最新一条 agent 消息的 mentions
-  const posted = await prisma.comment.findFirst({ where: { taskId: task.id, agent: true }, orderBy: { createdAt: "desc" } });
-  if (posted) await prisma.comment.update({ where: { id: posted.id }, data: { mentions: parties.map((p) => p.userId) } });
-
-  for (const p of parties) {
-    await prisma.notification.create({
-      data: {
-        userId: p.userId,
-        title: "协同约定：Agent 推动了一下",
-        body: `「${taskWithMembers.title}」进展有点慢了，Agent 在讨论里给出了下一步建议。`,
-        channel: "in_app",
-        status: "SENT",
-        payload: { type: "collab_agent_nudge", taskId: task.id, link: `/collabspace?taskId=${task.id}` }
-      }
-    });
-  }
 
   const nextMeta = {
     ...task.metadata,

@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
+import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +29,14 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
   const [searchParams] = useSearchParams();
   const taskId = taskIdProp || searchParams.get("taskId");
   const navigate = useNavigate();
+  // 从搭子空间进入的全屏协同：退出时回到搭子空间的「协同」页，并尽量回到同一个小群
+  const buddyReturnId = searchParams.get("from") === "buddy" ? searchParams.get("buddy") : "";
+  const returnCollabId = searchParams.get("collab");
+  const backTarget = buddyReturnId
+    ? `${createPageUrl("BuddySpace")}?buddy=${encodeURIComponent(buddyReturnId)}&tab=${encodeURIComponent("协同")}${
+        returnCollabId ? `&collab=${encodeURIComponent(returnCollabId)}` : ""
+      }`
+    : "/tasks";
   const queryClient = useQueryClient();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [agentDrawerOpen, setAgentDrawerOpen] = useState(false);
@@ -195,7 +204,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4" style={{ backgroundColor: "#f1f0ec" }}>
         <p className="text-sm" style={{ color: "#77736c" }}>缺少 taskId 参数</p>
-        <Button variant="outline" onClick={() => navigate("/tasks")}>返回约定列表</Button>
+        <Button variant="outline" onClick={() => navigate(backTarget)}>返回约定列表</Button>
       </div>
     );
   }
@@ -237,14 +246,14 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
           task={task}
           summary={summary}
           isLoading={isLoading}
-          onBack={embedded ? null : () => navigate("/tasks")}
+          onBack={embedded ? null : () => navigate(backTarget)}
           onOpenInvite={() => setInviteOpen(true)}
         />
 
         {error && (
           <div className="mx-4 my-6 rounded-2xl border border-rose-200 bg-rose-50/60 p-8 text-center sm:mx-6">
             <p className="text-sm text-rose-700">{error?.data?.message || error?.message || "无法打开共创空间"}</p>
-            <Button variant="outline" className="mt-4" onClick={() => navigate("/tasks")}>返回约定列表</Button>
+            <Button variant="outline" className="mt-4" onClick={() => navigate(backTarget)}>返回约定列表</Button>
           </div>
         )}
 

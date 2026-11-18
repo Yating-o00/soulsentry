@@ -53,9 +53,9 @@ const TABS = [
 
 const INVITE_STATUS_LABELS = {
   open: "待回应",
-  accepted: "已接受分工",
-  suggested: "已提出建议",
-  declined: "暂时无法参与",
+  accepted: "已接受邀请",
+  suggested: "已建议",
+  declined: "暂不参与",
 };
 
 export default function CollabInviteDialog({ task, members = [], subtasks = [], open, onClose, onChanged }) {

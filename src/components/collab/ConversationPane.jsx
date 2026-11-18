@@ -136,7 +136,7 @@ function MessageActions({ message, canDelete, onConvert, onMark, onReply, onDele
 
 // ──────────────────────────── 讨论视图 ────────────────────────────
 
-function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }) {
+function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, compact = false }) {
   const queryClient = useQueryClient();
   const [topicFilter, setTopicFilter] = useState("all");
   const [replyTo, setReplyTo] = useState(null);
@@ -205,7 +205,6 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
       setTimeout(() => scrollStreamToBottom(), 100);
       setTimeout(() => setFlashingId(null), 2200);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, agentPendingSince]);
 
   // 光标前出现 @xx 时自动弹出 Agent 选项
@@ -396,9 +395,15 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
   };
 
   return (
-    <div id="section-discussion" role="tabpanel" aria-labelledby="discussion-tab" className="flex min-h-0 flex-1 flex-col">
-      {/* 主题过滤 */}
-      {topics.length > 0 && (
+    <div
+      id="section-discussion"
+      role="tabpanel"
+      aria-label={compact ? "共同讨论" : undefined}
+      aria-labelledby={compact ? undefined : "discussion-tab"}
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      {/* 主题过滤：极简模式隐藏，减少噪音 */}
+      {!compact && topics.length > 0 && (
         <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b px-4 py-2.5 sm:px-6" style={{ borderColor: C.lineSoft }}>
           <button
             type="button"
@@ -436,7 +441,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
         ) : filteredMessages.length === 0 ? (
           <EmptyState
             title={topicFilter === "all" ? "还没有讨论" : "该主题下暂无讨论"}
-            description="写下第一条想法，共同约定会从这里开始。输入 @ 可以召唤心栈 Agent 总结、查资料或转化内容。"
+            description={
+              compact
+                ? "先聊起来，Agent 会从讨论里整理约定和沉淀。"
+                : "写下第一条想法，共同约定会从这里开始。输入 @ 可以召唤心栈 Agent 总结、查资料或转化内容。"
+            }
           />
         ) : (
           filteredMessages.map((m) => renderMessage(m))
@@ -457,7 +466,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
       </div>
 
       {/* 输入区 */}
-      <div className="relative shrink-0 border-t p-4 sm:px-6" style={{ borderColor: C.line, backgroundColor: C.card }}>
+      <div className={compact ? "relative shrink-0 border-t p-3" : "relative shrink-0 border-t p-4 sm:px-6"} style={{ borderColor: C.line, backgroundColor: C.card }}>
         {/* @ 自动弹出：选择心栈 Agent */}
         {mentionOpen && (
           <div
@@ -530,19 +539,21 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
               >
                 {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               </button>
-              <button
-                type="button"
-                onClick={() => setShowTopicInput((v) => !v)}
-                className={cn(
-                  "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
-                  showTopicInput || topic ? "border-[#c7d2fe] text-[#384877]" : "text-[#99958d] hover:text-[#57534d]"
-                )}
-                style={showTopicInput || topic ? { backgroundColor: C.brandTint } : { borderColor: "#d8d6cf" }}
-                title="给这条讨论加个主题"
-                aria-label="给这条讨论加个主题"
-              >
-                <MapPin className="w-3.5 h-3.5" />
-              </button>
+              {!compact && (
+                <button
+                  type="button"
+                  onClick={() => setShowTopicInput((v) => !v)}
+                  className={cn(
+                    "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
+                    showTopicInput || topic ? "border-[#c7d2fe] text-[#384877]" : "text-[#99958d] hover:text-[#57534d]"
+                  )}
+                  style={showTopicInput || topic ? { backgroundColor: C.brandTint } : { borderColor: "#d8d6cf" }}
+                  title="给这条讨论加个主题"
+                  aria-label="给这条讨论加个主题"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
             <input
               ref={fileRef}
@@ -560,7 +571,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
                 detectMention(e.target.value, e.target.selectionStart);
               }}
               onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
-              placeholder="写下想法，输入 @ 召唤心栈 Agent…"
+              placeholder={compact ? "@ 召唤 Agent · 讨论会自动整理" : "写下想法，输入 @ 召唤心栈 Agent…"}
               className="min-h-[60px] max-h-28 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
               rows={2}
               onKeyDown={(e) => {
@@ -593,14 +604,16 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId }
               <ArrowUp className="w-4 h-4" />
             </Button>
           </div>
-          <div className="mt-2 flex items-center justify-between border-t pt-2" style={{ borderColor: C.lineSoft }}>
-            <span className="px-1.5 text-[11px]" style={{ color: "#8a867e" }}>
-              <span className="font-medium" style={{ color: "#384877" }}>@</span> 召唤 Agent 总结 · 查攻略 · 转化
-            </span>
-            <span className="font-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: "#b8b4ab" }}>
-              {content.trim() || attachments.length > 0 ? "Enter 发送 · Shift+Enter 换行" : "成员与 Agent 的共同讨论"}
-            </span>
-          </div>
+          {!compact && (
+            <div className="mt-2 flex items-center justify-between border-t pt-2" style={{ borderColor: C.lineSoft }}>
+              <span className="px-1.5 text-[11px]" style={{ color: "#8a867e" }}>
+                <span className="font-medium" style={{ color: "#384877" }}>@</span> 召唤 Agent 总结 · 查攻略 · 转化
+              </span>
+              <span className="font-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: "#b8b4ab" }}>
+                {content.trim() || attachments.length > 0 ? "Enter 发送 · Shift+Enter 换行" : "成员与 Agent 的共同讨论"}
+              </span>
+            </div>
+          )}
         </div>
         {showTopicInput && (
           <Input
@@ -674,14 +687,15 @@ function ActivityView({ taskId }) {
 // ──────────────────────────── 会话窗（右栏） ────────────────────────────
 
 export default function ConversationPane({
-  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId,
+  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId, compact = false,
 }) {
   return (
     <section
       id="conversation-pane"
-      className="flex min-h-[75vh] flex-col min-[900px]:h-full min-[900px]:min-h-0"
+      className={compact ? "flex h-full min-h-0 flex-col" : "flex min-h-[75vh] flex-col min-[900px]:h-full min-[900px]:min-h-0"}
       style={{ backgroundColor: C.pane }}
     >
+      {!compact && (
       <div className="shrink-0 border-b px-4 pt-4 sm:px-6" style={{ borderColor: C.line }}>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -735,8 +749,9 @@ export default function ConversationPane({
           </button>
         </div>
       </div>
+      )}
       {view === "discussion"
-        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} />
+        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} compact={compact} />
         : <ActivityView taskId={taskId} />}
     </section>
   );

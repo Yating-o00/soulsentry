@@ -56,8 +56,8 @@ export default function InviteLanding() {
     if (responding || !code) return;
     if (!getToken() || isDemoMode()) {
       Taro.showModal({
-        title: "先登录再接受",
-        content: "当前是体验账号，接受邀请需要登录你自己的心栈账号，否则约定不会出现在你的列表里。",
+        title: "需登录",
+        content: "请登录你自己的心栈账号后再接受。",
         confirmText: "去登录",
         success: (r) => { if (r.confirm) gotoLogin(); },
       });
@@ -67,7 +67,7 @@ export default function InviteLanding() {
     try {
       await post(`/invite/${code}/respond`, { action: "accept" });
       setAccepted(true);
-      Taro.showToast({ title: "已加入协同约定", icon: "success" });
+      Taro.showToast({ title: "已接受邀请", icon: "success" });
     } catch (_err) {
       // handled globally
     } finally {
@@ -109,17 +109,19 @@ export default function InviteLanding() {
             <Text style={{ display: "block", fontSize: "26rpx", color: "#666", lineHeight: "40rpx" }}>{pact.goal}</Text>
           ) : null}
           <Text style={{ display: "block", marginTop: "16rpx", fontSize: "22rpx", color: "#9ca0a8" }}>
-            {pact?.member_count || 1} 人在协作
+            {pact?.member_count || 1} 人
           </Text>
-          <Text style={{ display: "block", marginTop: "16rpx", fontSize: "26rpx", color: "#333", lineHeight: "40rpx" }}>
-            {invite?.invitee_name}，你好：{invite?.note ? ` ${invite.note}。` : " 邀请你加入这个协同约定。"}
-          </Text>
+          {invite?.note ? (
+            <Text style={{ display: "block", marginTop: "16rpx", fontSize: "26rpx", color: "#333", lineHeight: "40rpx" }}>
+              {invite.note}
+            </Text>
+          ) : null}
         </View>
 
-        {/* 前情摘要 */}
+        {/* 邀请概况 */}
         {summary ? (
           <View className="ss-card">
-            <View className="ss-section-title" style={{ marginTop: 0 }}>30 秒前情摘要</View>
+            <View className="ss-section-title" style={{ marginTop: 0 }}>邀请概况</View>
             <Text style={{ display: "block", fontSize: "26rpx", color: "#57534d", lineHeight: "42rpx" }}>{summary}</Text>
           </View>
         ) : null}
@@ -127,7 +129,7 @@ export default function InviteLanding() {
         {/* 推进中 */}
         {(progressing.length > 0 || nextNode) && (
           <View className="ss-card">
-            <View className="ss-section-title" style={{ marginTop: 0 }}>正在推进</View>
+            <View className="ss-section-title" style={{ marginTop: 0 }}>进展</View>
             {progressing.map((p) => (
               <Text key={p.id} style={{ display: "block", fontSize: "26rpx", color: "#333", lineHeight: "44rpx" }}>· {p.title}</Text>
             ))}
@@ -139,21 +141,14 @@ export default function InviteLanding() {
 
         {/* 与我有关的待办 */}
         <View className="ss-card">
-          <View className="ss-section-title" style={{ marginTop: 0 }}>
-            与 {invite?.invitee_name} 有关的待办 · {todos.length}
-          </View>
-          {todos.length === 0 && (
-            <Text style={{ display: "block", fontSize: "24rpx", color: "#9ca0a8" }}>
-              这份邀请没有绑定具体待办，加入后即可参与讨论与分工。
-            </Text>
-          )}
+          <View className="ss-section-title" style={{ marginTop: 0 }}>相关待办 · {todos.length}</View>
           {todos.map((t) => (
             <View key={t.id} style={{ padding: "10rpx 0" }}>
               <Text style={{ fontSize: "26rpx", color: t.done ? "#9ca0a8" : "#333", textDecoration: t.done ? "line-through" : "none" }}>
                 {t.title}
               </Text>
               {t.standard ? (
-                <Text style={{ display: "block", marginTop: "4rpx", fontSize: "20rpx", color: "#9ca0a8" }}>完成标准：{t.standard}</Text>
+                <Text style={{ display: "block", marginTop: "4rpx", fontSize: "20rpx", color: "#9ca0a8" }}>{t.standard}</Text>
               ) : null}
             </View>
           ))}
@@ -164,20 +159,20 @@ export default function InviteLanding() {
           {accepted ? (
             <View>
               <Text style={{ display: "block", fontSize: "26rpx", color: "#1f9d55", textAlign: "center", padding: "8rpx 0" }}>
-                你已是协同成员，待办已认领
+                已加入协同
               </Text>
               <Button className="ss-btn" style={{ marginTop: "16rpx" }} onClick={gotoTasks}>
-                前往约定列表查看
+                查看约定
               </Button>
             </View>
           ) : (
             <View>
               <Button className="ss-btn" loading={responding} onClick={respond}>
-                接受分工{needLogin ? "（先登录）" : ""}
+                接受邀请{needLogin ? " · 需登录" : ""}
               </Button>
               {needLogin && (
                 <Text style={{ display: "block", marginTop: "16rpx", fontSize: "20rpx", color: "#b07818", textAlign: "center" }}>
-                  当前是体验账号：请登录你自己的心栈账号再接受，否则约定不会出现在你的列表里
+                  登录后再接受
                 </Text>
               )}
             </View>

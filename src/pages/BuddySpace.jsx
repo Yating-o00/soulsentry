@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles, Trash2 } from "lucide-react";
@@ -11,7 +11,7 @@ import Orb from "@/components/buddy/Orb";
 import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy } from "@/lib/buddies";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
 import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
-import CollabSpace from "@/pages/CollabSpace";
+import BuddyCollabPanel from "@/components/collab/BuddyCollabPanel";
 import SolvePanel from "@/components/buddy/panels/SolvePanel";
 import WeekPanel from "@/components/buddy/panels/WeekPanel";
 import { ItineraryPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
@@ -624,6 +624,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
   const [createdCollabId, setCreatedCollabId] = useState(null);
+  const [createdOpened, setCreatedOpened] = useState(false);
   const isMine = (t) =>
     t?.metadata?.collab &&
     !t.deleted_at &&
@@ -633,8 +634,14 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
     .filter(isMine)
     .sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0));
   const projectCollab = projectTask?.metadata?.collab ? projectTask : null;
-  // 新建成功后先用返回的 id 立即切入协同空间，不必等 tasks 列表回刷。
-  const createdCollab = createdCollabId ? { id: createdCollabId } : null;
+  // 新建成功后先用返回的 id 立即切入协同空间，不必等 tasks 列表回刷；
+  // 一旦它出现在任务列表里就交给列表接管，避免删除后仍回退到失效 id。
+  useEffect(() => {
+    if (createdCollabId && !createdOpened && myCollabs.some((t) => t.id === createdCollabId)) {
+      setCreatedOpened(true);
+    }
+  }, [createdCollabId, createdOpened, myCollabs]);
+  const createdCollab = createdCollabId && !createdOpened ? { id: createdCollabId } : null;
   // 选中的小组优先；项目约定已开协同 → 用它；没有项目约定 → 用本搭子最近的一场协同
   const selectedCollab = selectedCollabId ? myCollabs.find((t) => t.id === selectedCollabId) : null;
   // 新建小组后任务列表还没回刷时，先用 id 打开它的协同空间
@@ -677,7 +684,10 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
             metadata: { collab: collabMeta(`和伙伴一起推进`), _extraFields: { buddy_id: buddy.id } },
           },
         });
-        if (created?.id) setCreatedCollabId(created.id);
+        if (created?.id) {
+          setCreatedOpened(false);
+          setCreatedCollabId(created.id);
+        }
       }
       toast.success("协同空间已开启，点右上角邀请伙伴加入");
       await queryClient.invalidateQueries();
@@ -688,7 +698,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
     }
   };
 
-  // 已开启协同：小组切换 + 极简内容区；共同讨论一键进入完整空间
+  // 已开启协同：小组切换 + 极简协同面板（讨论为主，约定/沉淀按需查看）
   if (activeCollab) {
     return (
       <div className="space-y-3">
@@ -715,9 +725,9 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
             ＋ 新建小组
           </button>
         </div>
-        <CollabSpace taskId={activeCollab.id} embedded />
-        <div className="flex items-center justify-between gap-3">
-          {activeTask && activeTask.id !== projectTask?.id && !activeTask.shared_role ? (
+        <BuddyCollabPanel key={activeCollab.id} taskId={activeCollab.id} buddy={buddy} tint={tint} />
+        {activeTask && activeTask.id !== projectTask?.id && !activeTask.shared_role && (
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={() => onDeleteCollab?.(activeTask)}
@@ -725,16 +735,8 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
             >
               <Trash2 className="h-3.5 w-3.5" /> 删除当前小组
             </button>
-          ) : (
-            <span />
-          )}
-          <Link
-            to={`/collabspace?taskId=${activeCollab.id}&from=buddy&buddy=${buddy.id}&collab=${activeCollab.id}`}
-            className="text-xs text-stone-400 hover:text-[#384877] underline-offset-2 hover:underline"
-          >
-            全屏打开协同空间 →
-          </Link>
-        </div>
+          </div>
+        )}
       </div>
     );
   }

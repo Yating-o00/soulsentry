@@ -6,6 +6,8 @@ import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
 import { readAttachmentText } from "./readAttachment.js";
 import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, resolvePlanAdjustments, rebuildPatternsFromChildren, buildFallbackPlan } from "./planCommitment.js";
+import { planningConstraints, validateScheduledSessions } from "./taskHarness.js";
+import { trainingClarification } from "./trainingWorkflow.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
@@ -924,18 +926,17 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     if (out.extracted?.type === "plan" && out.extracted.plan_request && userId && prisma) {
       try {
         const req = out.extracted.plan_request;
+        const userContext = safeMessages.filter((message) => message.role === "user").map((message) => message.content).join(" ");
+        const constraints = planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context: userContext });
 
         // —— 反问门控：关键参数缺失时不烧规划调用，先问清楚（多轮对话把需求明确，一次只问一个） ——
         const missingQuestion = !req.horizon_days
           ? "这个计划想坚持多少天？比如 7 天、14 天或 21 天～"
           : !req.daily_minutes
             ? "每天大概能投入多少分钟？我按这个强度来排～"
-            : null;
+            : trainingClarification({ goal: req.goal, context: [userContext, ...memories.map((memory) => memory.content || memory.title)].join(" ") });
         if (missingQuestion) {
-          // 对话模型已被要求提问；兜底保证 reply 里确实有问题
-          if (!out.reply.includes("？") && !out.reply.includes("?")) {
-            out.reply = `${out.reply} ${missingQuestion}`;
-          }
+          out.reply = missingQuestion;
         } else {
         const horizon = req.horizon_days || 7;
         const dayMs = 86400000;
@@ -971,11 +972,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           return null;
         });
         // 近期执行力偏低时自动降档起步（用户明确要的量不再加码）
-        let dailyMinutes = req.daily_minutes || undefined;
-        if (dailyMinutes && insights?.subtaskDoneRate30d !== null && insights?.subtaskDoneRate30d !== undefined
-          && insights.subtaskDoneRate30d < 0.5) {
-          dailyMinutes = Math.max(15, Math.round(dailyMinutes * 0.7));
-        }
+        const dailyMinutes = req.daily_minutes || undefined;
 
         // —— 快速路径 A：定向调整（「周末加到一小时」）→ 补丁模板 + 本地秒级重排，不调 AI ——
         const prev = lastExtracted && lastExtracted.type === "plan" ? lastExtracted : null;
@@ -1077,7 +1074,8 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             dailyMinutes,
             preferences: [req.preferences, ...memories.map((memory) => memory.content || memory.title)].filter(Boolean).join("；"),
             existing,
-            insights
+            insights,
+            constraints
           });
           out.extracted.plan = {
             parent: planned.parent,
@@ -1098,6 +1096,11 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             };
           }
         }
+        const planErrors = validateScheduledSessions(planned, constraints);
+        if (planErrors.length) {
+          out.extracted = null;
+          out.reply = `计划还不符合要求：${planErrors.join("；")}。请重新规划或调整要求。`;
+        }
         // 用了个性化排期就让用户感知到「这是为你调的」
         if (out.extracted?.plan?.source !== "fallback" && insights) {
           const activeWindows = Array.isArray(insights.activeWindows) ? insights.activeWindows : [];
@@ -1109,7 +1112,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
       } catch (planErr) {
         console.warn("[flowChat] 规划失败:", planErr?.message || planErr);
-        out.reply = `${out.reply}（排期这一步没成功，跟我说「重新规划」再试一次？）`;
+        out.reply = `计划暂时无法生成：${planErr?.message || "请稍后重试"}。你可以调整要求后重新规划。`;
       }
       // 规划内容缺失（反问中/调整未识别/生成失败）时降级为纯对话，绝不弹空的「将要生成智能规划」卡片
       if (out.extracted?.type === "plan" && !out.extracted.plan) {
@@ -1158,6 +1161,19 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           out.extracted = dbAdj.extracted;
           out.reply = dbAdj.reply;
         }
+      }
+    }
+
+    // Every proposal, including local adjustment shortcuts, must pass the same
+    // checks before it can be confirmed.
+    if (out.extracted?.type === "plan" && out.extracted.plan) {
+      const req = out.extracted.plan_request || {};
+      const context = safeMessages.filter((message) => message.role === "user").map((message) => message.content).join(" ");
+      const constraints = planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context });
+      const errors = validateScheduledSessions(out.extracted.plan, constraints);
+      if (errors.length) {
+        out.extracted = null;
+        out.reply = `调整后的计划还不符合要求：${errors.join("；")}。请重新规划或调整要求。`;
       }
     }
 
@@ -1236,16 +1252,11 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       }
     }
 
-    // Kimi 不在线但用户想要规划：兜底模板直接给一份保守计划，确认即可落库
+    // Provider failure must not produce a substitute plan that can be saved.
     if (PLAN_INTENT_RE.test(lastUser?.content || "")) {
-      const planned = buildFallbackPlan({ goal: extractPlanGoal(lastUser.content) });
       return {
-        reply: `AI 暂时有点累，我先用保守模板帮你排了「${planned.parent.title}」：共 ${planned.children.length} 条子约定，今晚 19:30 起每天一条。点确认就生成；想要更贴合你的排期，晚点跟我说「重新规划」。`,
-        extracted: {
-          type: "plan",
-          plan_request: { goal: planned.parent.title, horizon_days: 7, daily_minutes: 30, preferences: null },
-          plan: { parent: planned.parent, children: planned.children, source: "fallback" }
-        },
+        reply: "AI 服务暂时不可用，未生成计划。请稍后重新规划。",
+        extracted: null,
         source: "fallback"
       };
     }
@@ -1264,7 +1275,9 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             preferences: lastExtracted.plan_request?.preferences,
             baseDailyMinutes: budget
           });
-          if (re) {
+          const req = lastExtracted.plan_request || {};
+          const context = safeMessages.filter((message) => message.role === "user").map((message) => message.content).join(" ");
+          if (re && !validateScheduledSessions(re, planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context })).length) {
             return {
               reply: `好的，已替你更新：${patched.applied.slice(0, 4).join("；")}${patched.missed.length > 0 ? `；没匹配到「${patched.missed.map((m2) => m2.target).join("、")}」` : ""}～`,
               extracted: {
@@ -1289,7 +1302,12 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     if (userId && prisma) {
       const dbAdj = await tryDbPlanAdjustment({ userId, prisma, text: lastUser?.content || "" });
       if (dbAdj) {
-        return { reply: dbAdj.reply, extracted: dbAdj.extracted, source: "fallback" };
+        const req = dbAdj.extracted?.plan_request || {};
+        const context = safeMessages.filter((message) => message.role === "user").map((message) => message.content).join(" ");
+        if (!validateScheduledSessions(dbAdj.extracted?.plan, planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context })).length) {
+          return { reply: dbAdj.reply, extracted: dbAdj.extracted, source: "fallback" };
+        }
+        return { reply: "调整后的计划无法验证，请稍后重新规划。", extracted: null, source: "fallback" };
       }
     }
 

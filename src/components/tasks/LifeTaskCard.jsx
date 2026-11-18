@@ -103,6 +103,7 @@ function PlanSubtaskRow({ subtask, overdue, dateLabel, onToggleSubtask }) {
         )}>
           {subtask.title}
         </span>
+        {subtask.description && <p className="mt-1 text-xs text-stone-500 whitespace-pre-wrap">{subtask.description}</p>}
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           {subtask.reminder_time && (
             <span className={cn(
@@ -1394,6 +1395,7 @@ export default function LifeTaskCard({
                             )}>
                               {subtask.title}
                             </span>
+                            {subtask.description && <p className="mt-1 text-xs text-stone-500 whitespace-pre-wrap">{subtask.description}</p>}
                             <SubtaskContextBadges subtask={subtask} />
                           </div>
                         </div>

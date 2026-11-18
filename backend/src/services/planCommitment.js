@@ -1,4 +1,5 @@
 import { invokeDashboardAi } from "../lib/dashboardAi.js";
+import { runTaskHarness, validateScheduledSessions } from "./taskHarness.js";
 
 // 智能约定规划：把「一类要做的事」（如"两周的健身计划"）落成母约定 + 逐日子约定。
 // 架构：AI 只生成 2-5 个「日型模板」（工作日/周末/饮食等），服务端本地展开为逐日计划——
@@ -146,6 +147,7 @@ function normalizePatterns(raw, ctx) {
     patterns.push({
       plan_group: String(item.plan_group || item.group || "").trim().replace(/\s+/g, "").slice(0, 12) || "每日安排",
       kind: item.kind === "checkin" ? "checkin" : "task",
+      session_type: item.session_type === "recovery" ? "recovery" : "session",
       applies_to: String(item.applies_to || item.days || item.day_type || "daily").trim().slice(0, 40),
       start_time: startTime,
       duration_minutes: clampInt(item.duration_minutes ?? item.duration ?? item.minutes, 10, 240, 30),
@@ -202,6 +204,7 @@ export function expandPatterns(patterns, ctx) {
         duration_minutes: finalDuration,
         note: p.note,
         kind: p.kind,
+        session_type: p.session_type,
         plan_group: p.plan_group
       });
     }
@@ -218,6 +221,7 @@ export function expandPatterns(patterns, ctx) {
         duration_minutes: 15,
         note: null,
         kind: "task",
+        session_type: "recovery",
         plan_group: "缓冲调整"
       });
     }
@@ -746,14 +750,14 @@ export function rebuildPatternsFromChildren(children) {
   return patterns;
 }
 
-export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], insights = null, now = new Date() } = {}) {
+export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], insights = null, now = new Date(), constraints = {}, invoke = invokeDashboardAi } = {}) {
   const ctx = {
     goal: String(goal || "").trim().slice(0, 80),
     horizonDays: clampInt(horizonDays, 2, 30, 7),
     dailyMinutes: clampInt(dailyMinutes, 15, 180, 30)
   };
   if (!ctx.goal) {
-    return { ...buildFallbackPlan({ goal: "新的计划", ...ctx, insights, now }), source: "fallback" };
+    throw new Error("请先说明计划目标");
   }
 
   const today = chinaToday();
@@ -778,6 +782,7 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
           properties: {
             plan_group: { type: "string", description: "分组名，≤8字，如「日常训练」「周末强化」「饮食配合」" },
             kind: { type: "string", enum: ["checkin", "task"], description: "checkin=每日坚持做完要打卡的项；task=普通定时项（默认）" },
+            session_type: { type: "string", enum: ["session", "recovery"], description: "主要活动或休息恢复" },
             applies_to: { type: "string", description: "适用日：daily / weekday / weekend / mon..sun / 周一..周日，可逗号组合" },
             start_time: { type: "string", description: "HH:MM，24小时制，避开 23:00-7:00，贴合用户活跃时段" },
             duration_minutes: { type: "number", description: "单次时长，10-240" },
@@ -786,7 +791,7 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
             note: { type: "string", description: "可选，执行小提示，≤20字" },
             weekly_progression: { type: "string", description: "可选，每周进阶，如「每周+5分钟」或「第2周加速」" }
           },
-          required: ["plan_group", "applies_to", "start_time", "duration_minutes", "title"]
+          required: ["plan_group", "session_type", "applies_to", "start_time", "duration_minutes", "title", "description"]
         }
       }
     },
@@ -808,16 +813,20 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
   if (busyBlocks.length > 0) {
     bits.push(`已有安排（避开这些时段）：${JSON.stringify(busyBlocks).slice(0, 300)}`);
   }
+  const frequencyInstruction = constraints.sessionsPerWeek
+    ? `每个完整的七天周期安排恰好 ${constraints.sessionsPerWeek} 次主要活动，每次 ${constraints.sessionMinutes} 分钟。使用适用日为具体星期的模板，主要活动日只安排一条主要活动，休息日可以不安排。不要安排其他项目占用主要活动日的时间。`
+    : "所有模板的适用日合起来覆盖规划期，未安排的日期留作休息。";
   const prompt = `用户想规划：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。偏好：${String(preferences || "无").slice(0, 100)}
 ${bits.join("\n")}
-不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合；所有模板的适用日合起来必须覆盖规划期每一天，不要漏天）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（≤30字，含量化标准如「慢跑3公里」）、note（可选≤20字）、weekly_progression（可选，写「每周+N分钟」形式）。每满 7 天留 1 天缓冲不用排。直接输出 JSON。`;
+${frequencyInstruction}
+${constraints.training ? "训练日的 description 必须列出具体动作及各自的组数和每组次数（例如深蹲3组12次、划船3组10次），确保适合用户的器械与经验。" : ""}
+不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（含具体执行步骤和量化标准）、note（可选）、weekly_progression（可选）。直接输出 JSON。`;
 
-  let lastErr = null;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    try {
+  const outcome = await runTaskHarness({
+    draft: async ({ errors }) => {
       const { data, usage } = await Promise.race([
-        invokeDashboardAi({
-          prompt,
+        invoke({
+          prompt: `${prompt}\n每条模板必须包含 session_type，主要训练或学习填 session，休息恢复填 recovery。${errors.length ? `上一版存在问题，请修正：${errors.join("；")}` : ""}`,
           systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,
           model: "kimi-k3",
@@ -825,7 +834,7 @@ ${bits.join("\n")}
           fetchTimeout: 60000,
           withUsage: true
         }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 60000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 60000).unref())
       ]);
 
       // 主路径：日型模板 → 本地展开
@@ -843,12 +852,12 @@ ${bits.join("\n")}
         const legacy = normalizePlan(data, ctx);
         if (legacy) return { ...legacy, patterns: null, usage };
       }
-      lastErr = new Error("模型返回缺少可用模板");
-    } catch (err) {
-      lastErr = err;
-      console.warn(`[planCommitment] 第 ${attempt} 次规划失败:`, err?.message || err);
-    }
+      return null;
+    },
+    validate: (plan) => validateScheduledSessions(plan, constraints),
+  });
+  if (outcome.status !== "ready") {
+    throw new Error(outcome.status === "invalid" ? outcome.errors.join("；") : "AI 服务暂不可用，请稍后重试");
   }
-  console.warn("[planCommitment] 规划失败，使用兜底模板:", lastErr?.message || lastErr);
-  return { ...buildFallbackPlan({ ...ctx, insights, now }), source: "fallback", patterns: null };
+  return outcome.result;
 }

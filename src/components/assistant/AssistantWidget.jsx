@@ -163,7 +163,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     });
     const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
     appendMessage({ id: `local-a-${Date.now()}`, role: "assistant", content: reply, kind: "chat", created_date: new Date().toISOString() });
-    setPending(res?.extracted || null);
+    setPending(res?.extracted?.type === "plan" ? { ...res.extracted, proposal_id: crypto.randomUUID() } : res?.extracted || null);
     setActions(null);
     scrollToBottom();
     return true;
@@ -190,7 +190,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             setMessages(next);
             lastIdRef.current = res.reply.id;
           }
-          setPending(res?.extracted || null);
+          setPending(res?.extracted?.type === "plan" ? { ...res.extracted, proposal_id: crypto.randomUUID() } : res?.extracted || null);
           setActions(Array.isArray(res?.actions) && res.actions.length > 0 ? res.actions : null);
           scrollToBottom();
           return true;
@@ -293,34 +293,37 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         collabCreated = true;
       } else if (pending.type === "plan") {
         const pl = pending.plan || {};
+        if (!pl.parent || !Array.isArray(pl.children) || pl.children.length === 0 || pl.source === "fallback") {
+          throw new Error("计划尚未准备好，请重新生成后再确认。");
+        }
         const p = pl.parent || {};
         const children = Array.isArray(pl.children) ? pl.children : [];
-        const parentTask = await httpRequest("/api/tasks", {
+        await httpRequest("/api/tasks/plan", {
           method: "POST",
           body: {
-            title: p.title,
-            description: p.description || undefined,
-            category: p.category || "personal",
-            priority: p.priority || "medium",
-            status: "pending"
-          }
-        });
-        const parentId = parentTask?.id || parentTask?.data?.id;
-        for (const c of children) {
-          await httpRequest("/api/tasks", {
-            method: "POST",
-            body: {
+            proposal_id: pending.proposal_id,
+            parent: {
+              title: p.title,
+              description: p.description || undefined,
+              category: p.category || "personal",
+              priority: p.priority || "medium",
+              status: "pending"
+            },
+            children: children.map((c) => ({
               title: c.title,
               description: c.description || undefined,
               category: p.category || "personal",
               priority: p.priority || "medium",
-              parent_task_id: parentId,
               reminder_time: `${c.date}T${c.start_time}:00+08:00`,
               end_time: `${c.date}T${c.end_time}:00+08:00`,
+              plan_kind: c.kind,
+              plan_group: c.plan_group,
+              session_type: c.session_type,
+              note: c.note || undefined,
               tags: ["智能规划"]
-            }
-          }).catch(() => {});
-        }
+            }))
+          }
+        });
         doneLabel = p.title;
         planChildCount = children.length;
       } else {
@@ -571,7 +574,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
 
       {/* 动作提案卡片 */}
       {actions && actions.length > 0 && (
-        <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
+        <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0 max-h-80 overflow-y-auto" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
           <div className="text-[12px] font-semibold mb-2" style={{ color: "#384877" }}>✋ 确认后我将执行这些修改</div>
           {actions.map((a) => (
             <div key={a.id} className="text-[13px] py-1" style={{ color: "#1c1c1e" }}>· {a.label}</div>
@@ -610,6 +613,15 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
               <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>
                 共 {(pending.plan?.children || []).length} 条子约定，按天排好具体时刻
               </div>
+              <ul className="mt-2 max-h-56 overflow-auto space-y-2">
+                {(pending.plan?.children || []).map((child, index) => (
+                  <li key={`${child.date}-${child.start_time}-${index}`} className="rounded-lg bg-slate-50 p-2">
+                    <div>{child.date} {child.start_time}–{child.end_time} · {child.title} {child.session_type === "recovery" ? "（恢复）" : child.session_type === "session" ? "（主要活动）" : ""} · {child.duration_minutes} 分钟</div>
+                    {child.description && <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap">{child.description}</p>}
+                    {child.note && <p className="mt-1 text-xs text-slate-500">{child.note}</p>}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : (
             <div className="text-[13px]" style={{ color: "#1c1c1e" }}>
@@ -631,7 +643,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             <button
               type="button"
               onClick={confirmCreate}
-              disabled={acting}
+              disabled={acting || (pending.type === "plan" && (!pending.plan?.children?.length || pending.plan?.source === "fallback"))}
               className="rounded-full py-2 text-[12.5px] font-semibold text-white"
               style={{ flex: 1.4, background: "#384877", border: "none", cursor: "pointer", opacity: acting ? 0.6 : 1 }}
             >

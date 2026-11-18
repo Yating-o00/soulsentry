@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -306,7 +307,7 @@ function fieldLabel(field) {
   return labels[field] || field;
 }
 
-async function createTaskChangeLog(userId, task, changeType, payload = {}, previous = null) {
+async function createTaskChangeLog(userId, task, changeType, payload = {}, previous = null, db = prisma) {
   const changedFields = Object.keys(payload || {}).filter((key) => key !== "metadata");
   const changesDetail = changedFields.map((field) => ({
     field,
@@ -315,7 +316,7 @@ async function createTaskChangeLog(userId, task, changeType, payload = {}, previ
     new_value: toDisplayValue(payload?.[field])
   }));
 
-  await prisma.taskChangeLog.create({
+  await db.taskChangeLog.create({
     data: {
       userId,
       taskId: task.id,
@@ -436,6 +437,60 @@ tasksRouter.get("/:id", async (req, res) => {
   const result = await assertTaskAccess(req, res, req.params.id);
   if (!result) return;
   return res.json(withSharedInfo(serializeTask(result.task), result.task, result.role));
+});
+
+// A stable client-generated key makes retries safe even if the response is lost.
+tasksRouter.post("/plan", async (req, res) => {
+  const schema = z.object({
+    proposal_id: z.string().uuid(),
+    parent: taskInputSchema,
+    children: z.array(taskInputSchema).min(1).max(100),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
+  const { proposal_id, parent, children } = parsed.data;
+  if (parent.parent_task_id) return res.status(400).json({ error: "INVALID_INPUT", message: "计划必须是顶层约定" });
+  const taskId = createHash("sha256").update(`${req.user.id}:${proposal_id}`).digest("hex");
+  const payloadHash = createHash("sha256").update(JSON.stringify({ parent, children })).digest("hex");
+  const existingResult = async () => {
+    const existing = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!existing || existing.userId !== req.user.id) return null;
+    if (existing.metadata?.planPayloadHash !== payloadHash) return { conflict: true };
+    return { parent: serializeTask(existing), child_count: children.length };
+  };
+  const previous = await existingResult();
+  if (previous?.conflict) return res.status(409).json({ error: "PROPOSAL_CONFLICT" });
+  if (previous) return res.json(previous);
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const parentData = buildTaskCreateData(req.user.id, parent);
+      const task = await tx.task.create({ data: { ...parentData, id: taskId, metadata: { ...(parentData.metadata || {}), planPayloadHash: payloadHash } } });
+      await createTaskChangeLog(req.user.id, task, "created", parent, null, tx);
+      const createdChildren = [];
+      for (const child of children) {
+        const payload = { ...child, parent_task_id: taskId };
+        const createdChild = await tx.task.create({ data: buildTaskCreateData(req.user.id, payload) });
+        await createTaskChangeLog(req.user.id, createdChild, "subtask_created", payload, null, tx);
+        createdChildren.push(createdChild);
+      }
+      return { task, createdChildren };
+    });
+    for (const task of [created.task, ...created.createdChildren]) {
+      checkTextSecurityAsync(`${task.title || ""}\n${task.description || ""}`, req.user.id, () => {
+        prisma.task.update({ where: { id: task.id }, data: { deletedAt: new Date() } }).catch(() => {});
+      });
+      void maybeAutoExecute(task, req.user.id, prisma);
+      logBehavior(req.user.id, "task_created", { taskId: task.id, category: task.category, metadata: { via: task.parentTaskId ? "subtask" : "top" } });
+    }
+    return res.status(201).json({ parent: serializeTask(created.task), child_count: children.length });
+  } catch (error) {
+    if (error.code === "P2002") {
+      const result = await existingResult();
+      if (result?.conflict) return res.status(409).json({ error: "PROPOSAL_CONFLICT" });
+      if (result) return res.json(result);
+    }
+    throw error;
+  }
 });
 
 tasksRouter.post("/", async (req, res) => {

@@ -1,0 +1,1405 @@
+{
+  "suite": "memory-pilot-v2",
+  "mode": "retrieval-only",
+  "callLimit": 0,
+  "totals": {
+    "calls": 0,
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "unmeteredCalls": 0,
+    "errors": 0
+  },
+  "usage": {},
+  "variants": {
+    "baseline": {
+      "summary": {
+        "recallAt5": 0.6,
+        "allEvidence": 8,
+        "answerableCases": 15,
+        "cleanContext": 4,
+        "queries": 19,
+        "noEvidencePollution": 2,
+        "irrelevantHits": 30,
+        "staleHits": 0,
+        "correctAnswers": null,
+        "scoredAnswers": 0,
+        "exactState": 4,
+        "stateCheckpoints": 4
+      },
+      "states": [
+        {
+          "history": "fitness",
+          "stage": "seeded",
+          "expected": 2,
+          "correct": 2,
+          "active": 2,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 29,
+          "currentFactsPer1000Chars": 68.96551724137932,
+          "exact": true
+        },
+        {
+          "history": "study",
+          "stage": "seeded",
+          "expected": 6,
+          "correct": 6,
+          "active": 6,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 102,
+          "currentFactsPer1000Chars": 58.8235294117647,
+          "exact": true
+        },
+        {
+          "history": "schedule",
+          "stage": "seeded",
+          "expected": 2,
+          "correct": 2,
+          "active": 2,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 25,
+          "currentFactsPer1000Chars": 80,
+          "exact": true
+        },
+        {
+          "history": "commute",
+          "stage": "seeded",
+          "expected": 2,
+          "correct": 2,
+          "active": 2,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 23,
+          "currentFactsPer1000Chars": 86.95652173913044,
+          "exact": true
+        }
+      ],
+      "cases": [
+        {
+          "id": "equipment",
+          "query": "我现在有什么器械可以练背？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "bands"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "bands",
+              "title": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "content": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "sourceIds": [
+                "bands"
+              ],
+              "facts": [
+                "bands"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "fitness-plan",
+          "query": "按我现有的器械安排一周背部训练，每周三次，每次45分钟。",
+          "offlineOnly": false,
+          "required": 2,
+          "expectedEvidence": [
+            "bands",
+            "experience"
+          ],
+          "missingEvidence": [
+            "experience"
+          ],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "bands",
+              "title": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "content": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "sourceIds": [
+                "bands"
+              ],
+              "facts": [
+                "bands"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "unknown-gym",
+          "query": "我办的是哪家健身房的会员卡？",
+          "offlineOnly": false,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 1,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "bands",
+              "title": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "content": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "sourceIds": [
+                "bands"
+              ],
+              "facts": [
+                "bands"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "subject",
+          "query": "我这学期在复习哪门课？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "subject"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 3,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            },
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            },
+            {
+              "id": "subject",
+              "title": "这学期我在复习英语词汇",
+              "content": "这学期我在复习英语词汇",
+              "sourceIds": [
+                "subject"
+              ],
+              "facts": [
+                "subject"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-plan",
+          "query": "帮我规划一周英语词汇复习，每周三次，单次时长按我现在的上限，也用我平常的复习方式。",
+          "offlineOnly": false,
+          "required": 2,
+          "expectedEvidence": [
+            "duration",
+            "format"
+          ],
+          "missingEvidence": [],
+          "found": 2,
+          "stale": 0,
+          "irrelevant": 3,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "sister-exam",
+              "title": "我妹妹的英语考试是12月8日",
+              "content": "我妹妹的英语考试是12月8日",
+              "sourceIds": [
+                "sister-exam"
+              ],
+              "facts": [
+                "sister-exam"
+              ]
+            },
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            },
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "podcast-duration",
+              "title": "我听英语播客每次可以安排45分钟",
+              "content": "我听英语播客每次可以安排45分钟",
+              "sourceIds": [
+                "podcast-duration"
+              ],
+              "facts": [
+                "podcast-duration"
+              ]
+            },
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "unknown-exam",
+          "query": "我的英语考试是几月几号？",
+          "offlineOnly": false,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 5,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "sister-exam",
+              "title": "我妹妹的英语考试是12月8日",
+              "content": "我妹妹的英语考试是12月8日",
+              "sourceIds": [
+                "sister-exam"
+              ],
+              "facts": [
+                "sister-exam"
+              ]
+            },
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            },
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "podcast-duration",
+              "title": "我听英语播客每次可以安排45分钟",
+              "content": "我听英语播客每次可以安排45分钟",
+              "sourceIds": [
+                "podcast-duration"
+              ],
+              "facts": [
+                "podcast-duration"
+              ]
+            },
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-limit-paraphrase",
+          "query": "背新词一轮顶多能花多久？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "duration"
+          ],
+          "missingEvidence": [
+            "duration"
+          ],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": false,
+          "returned": []
+        },
+        {
+          "id": "study-limit-old-conflict",
+          "query": "英语词汇复习现在还要按每次半小时安排吗？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "duration"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 4,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "sister-exam",
+              "title": "我妹妹的英语考试是12月8日",
+              "content": "我妹妹的英语考试是12月8日",
+              "sourceIds": [
+                "sister-exam"
+              ],
+              "facts": [
+                "sister-exam"
+              ]
+            },
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            },
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "podcast-duration",
+              "title": "我听英语播客每次可以安排45分钟",
+              "content": "我听英语播客每次可以安排45分钟",
+              "sourceIds": [
+                "podcast-duration"
+              ],
+              "facts": [
+                "podcast-duration"
+              ]
+            },
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-format-paraphrase",
+          "query": "我习惯拿什么做生词小测？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "format"
+          ],
+          "missingEvidence": [
+            "format"
+          ],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": false,
+          "returned": []
+        },
+        {
+          "id": "study-sister-duration",
+          "query": "我妹妹复习英语词汇每次多久？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "sister-duration"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 4,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "sister-exam",
+              "title": "我妹妹的英语考试是12月8日",
+              "content": "我妹妹的英语考试是12月8日",
+              "sourceIds": [
+                "sister-exam"
+              ],
+              "facts": [
+                "sister-exam"
+              ]
+            },
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            },
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "podcast-duration",
+              "title": "我听英语播客每次可以安排45分钟",
+              "content": "我听英语播客每次可以安排45分钟",
+              "sourceIds": [
+                "podcast-duration"
+              ],
+              "facts": [
+                "podcast-duration"
+              ]
+            },
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-podcast-duration",
+          "query": "听英语播客一次能安排多久？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "podcast-duration"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 4,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "sister-exam",
+              "title": "我妹妹的英语考试是12月8日",
+              "content": "我妹妹的英语考试是12月8日",
+              "sourceIds": [
+                "sister-exam"
+              ],
+              "facts": [
+                "sister-exam"
+              ]
+            },
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            },
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "podcast-duration",
+              "title": "我听英语播客每次可以安排45分钟",
+              "content": "我听英语播客每次可以安排45分钟",
+              "sourceIds": [
+                "podcast-duration"
+              ],
+              "facts": [
+                "podcast-duration"
+              ]
+            },
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-sister-exam",
+          "query": "我妹妹的英语考试是哪天？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "sister-exam"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 4,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "sister-exam",
+              "title": "我妹妹的英语考试是12月8日",
+              "content": "我妹妹的英语考试是12月8日",
+              "sourceIds": [
+                "sister-exam"
+              ],
+              "facts": [
+                "sister-exam"
+              ]
+            },
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            },
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "podcast-duration",
+              "title": "我听英语播客每次可以安排45分钟",
+              "content": "我听英语播客每次可以安排45分钟",
+              "sourceIds": [
+                "podcast-duration"
+              ],
+              "facts": [
+                "podcast-duration"
+              ]
+            },
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-unrelated",
+          "query": "怎么给米饭保温？",
+          "offlineOnly": true,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": []
+        },
+        {
+          "id": "availability",
+          "query": "礼拜六什么时候方便安排活动？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "saturday"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "saturday",
+              "title": "我礼拜六上午有空，可以安排活动",
+              "content": "我礼拜六上午有空，可以安排活动",
+              "sourceIds": [
+                "saturday"
+              ],
+              "facts": [
+                "saturday"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "schedule-plan",
+          "query": "帮我排一周阅读计划，每周三次，每次30分钟，避开我没空的时段。",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "evenings"
+          ],
+          "missingEvidence": [
+            "evenings"
+          ],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": false,
+          "returned": []
+        },
+        {
+          "id": "unrelated-meal",
+          "query": "豆腐怎么煎才不容易碎？",
+          "offlineOnly": false,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": []
+        },
+        {
+          "id": "commute-mode",
+          "query": "早上通勤我一般怎么走？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "bicycle"
+          ],
+          "missingEvidence": [
+            "bicycle"
+          ],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 1,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "ride-duration",
+              "title": "从家骑车去公司一般要二十分钟",
+              "content": "从家骑车去公司一般要二十分钟",
+              "sourceIds": [
+                "ride-duration"
+              ],
+              "facts": [
+                "ride-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "commute-duration",
+          "query": "早上通勤一般怎么走，大约多久到？",
+          "offlineOnly": false,
+          "required": 2,
+          "expectedEvidence": [
+            "bicycle",
+            "ride-duration"
+          ],
+          "missingEvidence": [
+            "bicycle"
+          ],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "ride-duration",
+              "title": "从家骑车去公司一般要二十分钟",
+              "content": "从家骑车去公司一般要二十分钟",
+              "sourceIds": [
+                "ride-duration"
+              ],
+              "facts": [
+                "ride-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "commute-plan",
+          "query": "我想用平时去公司的方式练耐力，制定一周计划，每周三次，每次30分钟。",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "bicycle"
+          ],
+          "missingEvidence": [
+            "bicycle"
+          ],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 1,
+          "contextPass": false,
+          "returned": [
+            {
+              "id": "ride-duration",
+              "title": "从家骑车去公司一般要二十分钟",
+              "content": "从家骑车去公司一般要二十分钟",
+              "sourceIds": [
+                "ride-duration"
+              ],
+              "facts": [
+                "ride-duration"
+              ]
+            }
+          ]
+        }
+      ],
+      "jobErrors": []
+    },
+    "candidate": {
+      "summary": {
+        "recallAt5": 1,
+        "allEvidence": 15,
+        "answerableCases": 15,
+        "cleanContext": 19,
+        "queries": 19,
+        "noEvidencePollution": 0,
+        "irrelevantHits": 0,
+        "staleHits": 0,
+        "correctAnswers": null,
+        "scoredAnswers": 0,
+        "exactState": 4,
+        "stateCheckpoints": 4
+      },
+      "states": [
+        {
+          "history": "fitness",
+          "stage": "seeded",
+          "expected": 2,
+          "correct": 2,
+          "active": 2,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 29,
+          "currentFactsPer1000Chars": 68.96551724137932,
+          "exact": true
+        },
+        {
+          "history": "study",
+          "stage": "seeded",
+          "expected": 6,
+          "correct": 6,
+          "active": 6,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 102,
+          "currentFactsPer1000Chars": 58.8235294117647,
+          "exact": true
+        },
+        {
+          "history": "schedule",
+          "stage": "seeded",
+          "expected": 2,
+          "correct": 2,
+          "active": 2,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 25,
+          "currentFactsPer1000Chars": 80,
+          "exact": true
+        },
+        {
+          "history": "commute",
+          "stage": "seeded",
+          "expected": 2,
+          "correct": 2,
+          "active": 2,
+          "duplicateCurrent": 0,
+          "unsupportedOrInactive": 0,
+          "activeTextChars": 23,
+          "currentFactsPer1000Chars": 86.95652173913044,
+          "exact": true
+        }
+      ],
+      "cases": [
+        {
+          "id": "equipment",
+          "query": "我现在有什么器械可以练背？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "bands"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "bands",
+              "title": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "content": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "sourceIds": [
+                "bands"
+              ],
+              "facts": [
+                "bands"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "fitness-plan",
+          "query": "按我现有的器械安排一周背部训练，每周三次，每次45分钟。",
+          "offlineOnly": false,
+          "required": 2,
+          "expectedEvidence": [
+            "bands",
+            "experience"
+          ],
+          "missingEvidence": [],
+          "found": 2,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "experience",
+              "title": "我是刚开始练背的新手",
+              "content": "我是刚开始练背的新手",
+              "sourceIds": [
+                "experience"
+              ],
+              "facts": [
+                "experience"
+              ]
+            },
+            {
+              "id": "bands",
+              "title": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "content": "现在在家锻炼只用弹力带，哑铃已经送人了",
+              "sourceIds": [
+                "bands"
+              ],
+              "facts": [
+                "bands"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "unknown-gym",
+          "query": "我办的是哪家健身房的会员卡？",
+          "offlineOnly": false,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": []
+        },
+        {
+          "id": "subject",
+          "query": "我这学期在复习哪门课？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "subject"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "subject",
+              "title": "这学期我在复习英语词汇",
+              "content": "这学期我在复习英语词汇",
+              "sourceIds": [
+                "subject"
+              ],
+              "facts": [
+                "subject"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-plan",
+          "query": "帮我规划一周英语词汇复习，每周三次，单次时长按我现在的上限，也用我平常的复习方式。",
+          "offlineOnly": false,
+          "required": 2,
+          "expectedEvidence": [
+            "duration",
+            "format"
+          ],
+          "missingEvidence": [],
+          "found": 2,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            },
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "unknown-exam",
+          "query": "我的英语考试是几月几号？",
+          "offlineOnly": false,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": []
+        },
+        {
+          "id": "study-limit-paraphrase",
+          "query": "背新词一轮顶多能花多久？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "duration"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-limit-old-conflict",
+          "query": "英语词汇复习现在还要按每次半小时安排吗？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "duration"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "duration",
+              "title": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "content": "现在我复习英语词汇一次最多20分钟，半小时的旧上限改掉了",
+              "sourceIds": [
+                "duration"
+              ],
+              "facts": [
+                "duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-format-paraphrase",
+          "query": "我习惯拿什么做生词小测？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "format"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "format",
+              "title": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "content": "我复习英语词汇时喜欢用纸质单词卡自测",
+              "sourceIds": [
+                "format"
+              ],
+              "facts": [
+                "format"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-sister-duration",
+          "query": "我妹妹复习英语词汇每次多久？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "sister-duration"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "sister-duration",
+              "title": "我妹妹复习英语词汇每次45分钟",
+              "content": "我妹妹复习英语词汇每次45分钟",
+              "sourceIds": [
+                "sister-duration"
+              ],
+              "facts": [
+                "sister-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-podcast-duration",
+          "query": "听英语播客一次能安排多久？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "podcast-duration"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "podcast-duration",
+              "title": "我听英语播客每次可以安排45分钟",
+              "content": "我听英语播客每次可以安排45分钟",
+              "sourceIds": [
+                "podcast-duration"
+              ],
+              "facts": [
+                "podcast-duration"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-sister-exam",
+          "query": "我妹妹的英语考试是哪天？",
+          "offlineOnly": true,
+          "required": 1,
+          "expectedEvidence": [
+            "sister-exam"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "sister-exam",
+              "title": "我妹妹的英语考试是12月8日",
+              "content": "我妹妹的英语考试是12月8日",
+              "sourceIds": [
+                "sister-exam"
+              ],
+              "facts": [
+                "sister-exam"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "study-unrelated",
+          "query": "怎么给米饭保温？",
+          "offlineOnly": true,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": []
+        },
+        {
+          "id": "availability",
+          "query": "礼拜六什么时候方便安排活动？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "saturday"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "saturday",
+              "title": "我礼拜六上午有空，可以安排活动",
+              "content": "我礼拜六上午有空，可以安排活动",
+              "sourceIds": [
+                "saturday"
+              ],
+              "facts": [
+                "saturday"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "schedule-plan",
+          "query": "帮我排一周阅读计划，每周三次，每次30分钟，避开我没空的时段。",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "evenings"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "evenings",
+              "title": "我工作日晚上都没有空",
+              "content": "我工作日晚上都没有空",
+              "sourceIds": [
+                "evenings"
+              ],
+              "facts": [
+                "evenings"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "unrelated-meal",
+          "query": "豆腐怎么煎才不容易碎？",
+          "offlineOnly": false,
+          "required": 0,
+          "expectedEvidence": [],
+          "missingEvidence": [],
+          "found": 0,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": []
+        },
+        {
+          "id": "commute-mode",
+          "query": "早上通勤我一般怎么走？",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "bicycle"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "bicycle",
+              "title": "上班我通常骑自行车",
+              "content": "上班我通常骑自行车",
+              "sourceIds": [
+                "bicycle"
+              ],
+              "facts": [
+                "bicycle"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "commute-duration",
+          "query": "早上通勤一般怎么走，大约多久到？",
+          "offlineOnly": false,
+          "required": 2,
+          "expectedEvidence": [
+            "bicycle",
+            "ride-duration"
+          ],
+          "missingEvidence": [],
+          "found": 2,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "ride-duration",
+              "title": "从家骑车去公司一般要二十分钟",
+              "content": "从家骑车去公司一般要二十分钟",
+              "sourceIds": [
+                "ride-duration"
+              ],
+              "facts": [
+                "ride-duration"
+              ]
+            },
+            {
+              "id": "bicycle",
+              "title": "上班我通常骑自行车",
+              "content": "上班我通常骑自行车",
+              "sourceIds": [
+                "bicycle"
+              ],
+              "facts": [
+                "bicycle"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "commute-plan",
+          "query": "我想用平时去公司的方式练耐力，制定一周计划，每周三次，每次30分钟。",
+          "offlineOnly": false,
+          "required": 1,
+          "expectedEvidence": [
+            "bicycle"
+          ],
+          "missingEvidence": [],
+          "found": 1,
+          "stale": 0,
+          "irrelevant": 0,
+          "contextPass": true,
+          "returned": [
+            {
+              "id": "bicycle",
+              "title": "上班我通常骑自行车",
+              "content": "上班我通常骑自行车",
+              "sourceIds": [
+                "bicycle"
+              ],
+              "facts": [
+                "bicycle"
+              ]
+            }
+          ]
+        }
+      ],
+      "jobErrors": []
+    }
+  }
+}

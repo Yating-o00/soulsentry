@@ -1,0 +1,1143 @@
+{
+  "suite": "memory-pilot-v2",
+  "variant": "baseline",
+  "summary": {
+    "recallAt5": 0.26666666666666666,
+    "allEvidence": 4,
+    "answerableCases": 15,
+    "cleanContext": 2,
+    "queries": 19,
+    "noEvidencePollution": 2,
+    "irrelevantHits": 33,
+    "staleHits": 17,
+    "correctAnswers": 3,
+    "scoredAnswers": 12,
+    "exactState": 0,
+    "stateCheckpoints": 4
+  },
+  "states": [
+    {
+      "history": "fitness",
+      "stage": "beforeConsolidation",
+      "expected": 2,
+      "correct": 1,
+      "active": 2,
+      "duplicateCurrent": 0,
+      "unsupportedOrInactive": 1,
+      "activeTextChars": 20,
+      "currentFactsPer1000Chars": 50,
+      "exact": false
+    },
+    {
+      "history": "study",
+      "stage": "beforeConsolidation",
+      "expected": 6,
+      "correct": 4,
+      "active": 6,
+      "duplicateCurrent": 0,
+      "unsupportedOrInactive": 2,
+      "activeTextChars": 95,
+      "currentFactsPer1000Chars": 42.10526315789474,
+      "exact": false
+    },
+    {
+      "history": "schedule",
+      "stage": "beforeConsolidation",
+      "expected": 2,
+      "correct": 1,
+      "active": 1,
+      "duplicateCurrent": 0,
+      "unsupportedOrInactive": 0,
+      "activeTextChars": 10,
+      "currentFactsPer1000Chars": 100,
+      "exact": false
+    },
+    {
+      "history": "commute",
+      "stage": "beforeConsolidation",
+      "expected": 2,
+      "correct": 0,
+      "active": 0,
+      "duplicateCurrent": 0,
+      "unsupportedOrInactive": 0,
+      "activeTextChars": 0,
+      "currentFactsPer1000Chars": null,
+      "exact": false
+    }
+  ],
+  "cases": [
+    {
+      "id": "equipment",
+      "query": "我现在有什么器械可以练背？",
+      "offlineOnly": false,
+      "required": 1,
+      "expectedEvidence": [
+        "bands"
+      ],
+      "missingEvidence": [
+        "bands"
+      ],
+      "found": 0,
+      "stale": 1,
+      "irrelevant": 1,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "dumbbells",
+          "title": "以前在家练背只用哑铃",
+          "content": "以前在家练背只用哑铃",
+          "sourceIds": [
+            "dumbbells"
+          ],
+          "facts": [
+            "dumbbells"
+          ]
+        }
+      ],
+      "answer": {
+        "pass": false,
+        "reply": "我记得你以前在家练背只用哑铃，现在手边是还是那副哑铃，还是添了新器械？跟我说说你有什么，我陪你一起想想怎么练。"
+      }
+    },
+    {
+      "id": "fitness-plan",
+      "query": "按我现有的器械安排一周背部训练，每周三次，每次45分钟。",
+      "offlineOnly": false,
+      "required": 2,
+      "expectedEvidence": [
+        "bands",
+        "experience"
+      ],
+      "missingEvidence": [
+        "bands",
+        "experience"
+      ],
+      "found": 0,
+      "stale": 1,
+      "irrelevant": 1,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "dumbbells",
+          "title": "以前在家练背只用哑铃",
+          "content": "以前在家练背只用哑铃",
+          "sourceIds": [
+            "dumbbells"
+          ],
+          "facts": [
+            "dumbbells"
+          ]
+        }
+      ],
+      "answer": {
+        "pass": false,
+        "plannerMode": "normal",
+        "draftPass": false,
+        "chatPlan": {
+          "goal": "按现有器械安排一周背部训练",
+          "horizon_days": 7,
+          "daily_minutes": 45,
+          "preferences": null
+        },
+        "reply": "好呀，一周三次、每次45分钟的背部训练，我帮你整体排一下。你手边有哪些器械呢？说说我好按它们来安排，慢慢来。",
+        "children": [
+          {
+            "title": "背部放松恢复",
+            "description": "胸椎旋转拉伸每侧30秒×2；背阔肌泡沫轴放松每侧1分钟；肩胛后缩10次×2组；深呼吸放松2分钟。全程无负重，感受轻微牵拉即可。",
+            "date": "2026-11-18",
+            "start_time": "20:30",
+            "end_time": "20:45",
+            "duration_minutes": 15,
+            "note": "训练日之间促进恢复，不占用主要活动日",
+            "kind": "task",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "背部力量B·垂直拉",
+            "description": "热身5分钟（猫牛式10次、肩胛激活2组12次）。引体向上或弹力带辅助引体4组6次（无器械则改哑铃俯身宽划船4组10次）；哑铃直立划船3组12次；哑铃俯身飞鸟3组15次；哑铃耸肩3组15次。组间休息60-90秒，结束做胸椎伸展1分钟。",
+            "date": "2026-11-19",
+            "start_time": "19:00",
+            "end_time": "19:45",
+            "duration_minutes": 45,
+            "note": "垂直拉与水平拉交替，均衡发展",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "背部主练B"
+          },
+          {
+            "title": "背部放松恢复",
+            "description": "胸椎旋转拉伸每侧30秒×2；背阔肌泡沫轴放松每侧1分钟；肩胛后缩10次×2组；深呼吸放松2分钟。全程无负重，感受轻微牵拉即可。",
+            "date": "2026-11-20",
+            "start_time": "20:30",
+            "end_time": "20:45",
+            "duration_minutes": 15,
+            "note": "训练日之间促进恢复，不占用主要活动日",
+            "kind": "task",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "背部强化·代谢收尾",
+            "description": "热身5分钟。哑铃划船递减组3组（12次+10次+8次，组间仅30秒）；哑铃硬拉3组15次（中等重量）；哑铃俯身飞鸟3组15次；哑铃弯举3组12次。最后5分钟背部拉伸与泡沫轴放松。",
+            "date": "2026-11-21",
+            "start_time": "10:00",
+            "end_time": "10:45",
+            "duration_minutes": 45,
+            "note": "强度适中，重视动作质量",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "背部强化C"
+          },
+          {
+            "title": "背部放松恢复",
+            "description": "胸椎旋转拉伸每侧30秒×2；背阔肌泡沫轴放松每侧1分钟；肩胛后缩10次×2组；深呼吸放松2分钟。全程无负重，感受轻微牵拉即可。",
+            "date": "2026-11-22",
+            "start_time": "20:30",
+            "end_time": "20:45",
+            "duration_minutes": 15,
+            "note": "训练日之间促进恢复，不占用主要活动日",
+            "kind": "task",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "背部放松恢复",
+            "description": "胸椎旋转拉伸每侧30秒×2；背阔肌泡沫轴放松每侧1分钟；肩胛后缩10次×2组；深呼吸放松2分钟。全程无负重，感受轻微牵拉即可。",
+            "date": "2026-11-23",
+            "start_time": "20:30",
+            "end_time": "20:45",
+            "duration_minutes": 15,
+            "note": "训练日之间促进恢复，不占用主要活动日",
+            "kind": "task",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "背部力量A·水平拉",
+            "description": "热身5分钟（肩绕环20次、弹力带外旋2组15次）。哑铃俯身划船4组10次（重量选能标准完成10次的负荷）；单臂哑铃划船3组12次/侧；哑铃硬拉3组12次；俯卧哑铃弯举3组12次。组间休息60-90秒，最后拉伸背阔肌2分钟。",
+            "date": "2026-11-24",
+            "start_time": "19:00",
+            "end_time": "19:45",
+            "duration_minutes": 45,
+            "note": "沿用家里哑铃习惯，重量逐周小幅增加",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "背部主练A"
+          }
+        ]
+      }
+    },
+    {
+      "id": "unknown-gym",
+      "query": "我办的是哪家健身房的会员卡？",
+      "offlineOnly": false,
+      "required": 0,
+      "expectedEvidence": [],
+      "missingEvidence": [],
+      "found": 0,
+      "stale": 1,
+      "irrelevant": 1,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "dumbbells",
+          "title": "以前在家练背只用哑铃",
+          "content": "以前在家练背只用哑铃",
+          "sourceIds": [
+            "dumbbells"
+          ],
+          "facts": [
+            "dumbbells"
+          ]
+        }
+      ],
+      "answer": {
+        "pass": true,
+        "reply": "我这边没存过你办的是哪家健身房的卡呢，之前的记录里只提到你在家练背用哑铃。你要是想起来名字，可以告诉我，我帮你记下来～"
+      }
+    },
+    {
+      "id": "subject",
+      "query": "我这学期在复习哪门课？",
+      "offlineOnly": false,
+      "required": 1,
+      "expectedEvidence": [
+        "subject"
+      ],
+      "missingEvidence": [],
+      "found": 1,
+      "stale": 2,
+      "irrelevant": 3,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "past-exception",
+          "title": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "content": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "sourceIds": [
+            "past-exception"
+          ],
+          "facts": [
+            "past-exception"
+          ]
+        },
+        {
+          "id": "sister-duration",
+          "title": "我妹妹复习英语词汇每次45分钟",
+          "content": "我妹妹复习英语词汇每次45分钟",
+          "sourceIds": [
+            "sister-duration"
+          ],
+          "facts": [
+            "sister-duration"
+          ]
+        },
+        {
+          "id": "duration-old",
+          "title": "以前我复习英语词汇每次最多30分钟",
+          "content": "以前我复习英语词汇每次最多30分钟",
+          "sourceIds": [
+            "duration-old"
+          ],
+          "facts": [
+            "duration-old"
+          ]
+        },
+        {
+          "id": "subject",
+          "title": "这学期我在复习英语词汇",
+          "content": "这学期我在复习英语词汇",
+          "sourceIds": [
+            "subject"
+          ],
+          "facts": [
+            "subject"
+          ]
+        }
+      ],
+      "answer": {
+        "pass": true,
+        "reply": "这学期你在复习英语词汇呀，之前还提过每次的时间不太一样。需要我帮你规划一下复习节奏吗？"
+      }
+    },
+    {
+      "id": "study-plan",
+      "query": "帮我规划一周英语词汇复习，每周三次，单次时长按我现在的上限，也用我平常的复习方式。",
+      "offlineOnly": false,
+      "required": 2,
+      "expectedEvidence": [
+        "duration",
+        "format"
+      ],
+      "missingEvidence": [
+        "duration",
+        "format"
+      ],
+      "found": 0,
+      "stale": 2,
+      "irrelevant": 5,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "sister-exam",
+          "title": "我妹妹的英语考试是12月8日",
+          "content": "我妹妹的英语考试是12月8日",
+          "sourceIds": [
+            "sister-exam"
+          ],
+          "facts": [
+            "sister-exam"
+          ]
+        },
+        {
+          "id": "past-exception",
+          "title": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "content": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "sourceIds": [
+            "past-exception"
+          ],
+          "facts": [
+            "past-exception"
+          ]
+        },
+        {
+          "id": "podcast-duration",
+          "title": "我听英语播客每次可以安排45分钟",
+          "content": "我听英语播客每次可以安排45分钟",
+          "sourceIds": [
+            "podcast-duration"
+          ],
+          "facts": [
+            "podcast-duration"
+          ]
+        },
+        {
+          "id": "sister-duration",
+          "title": "我妹妹复习英语词汇每次45分钟",
+          "content": "我妹妹复习英语词汇每次45分钟",
+          "sourceIds": [
+            "sister-duration"
+          ],
+          "facts": [
+            "sister-duration"
+          ]
+        },
+        {
+          "id": "duration-old",
+          "title": "以前我复习英语词汇每次最多30分钟",
+          "content": "以前我复习英语词汇每次最多30分钟",
+          "sourceIds": [
+            "duration-old"
+          ],
+          "facts": [
+            "duration-old"
+          ]
+        }
+      ],
+      "answer": {
+        "pass": false,
+        "plannerMode": "normal",
+        "chatPlan": {
+          "goal": "一周英语词汇复习",
+          "horizon_days": 7,
+          "daily_minutes": 30,
+          "preferences": "每周三次，沿用平常的复习方式"
+        },
+        "reply": "好呀，一周的英语词汇复习，每周三次，每次按你往常的上限30分钟来安排，方式也用你习惯的那套。这样理解对吗？确认后我就帮你排好～",
+        "planError": "需要 3 次训练或学习，实际为 7 次，分布在 7 天；每次主要活动必须为 30 分钟"
+      }
+    },
+    {
+      "id": "unknown-exam",
+      "query": "我的英语考试是几月几号？",
+      "offlineOnly": false,
+      "required": 0,
+      "expectedEvidence": [],
+      "missingEvidence": [],
+      "found": 0,
+      "stale": 2,
+      "irrelevant": 5,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "sister-exam",
+          "title": "我妹妹的英语考试是12月8日",
+          "content": "我妹妹的英语考试是12月8日",
+          "sourceIds": [
+            "sister-exam"
+          ],
+          "facts": [
+            "sister-exam"
+          ]
+        },
+        {
+          "id": "past-exception",
+          "title": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "content": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "sourceIds": [
+            "past-exception"
+          ],
+          "facts": [
+            "past-exception"
+          ]
+        },
+        {
+          "id": "podcast-duration",
+          "title": "我听英语播客每次可以安排45分钟",
+          "content": "我听英语播客每次可以安排45分钟",
+          "sourceIds": [
+            "podcast-duration"
+          ],
+          "facts": [
+            "podcast-duration"
+          ]
+        },
+        {
+          "id": "sister-duration",
+          "title": "我妹妹复习英语词汇每次45分钟",
+          "content": "我妹妹复习英语词汇每次45分钟",
+          "sourceIds": [
+            "sister-duration"
+          ],
+          "facts": [
+            "sister-duration"
+          ]
+        },
+        {
+          "id": "duration-old",
+          "title": "以前我复习英语词汇每次最多30分钟",
+          "content": "以前我复习英语词汇每次最多30分钟",
+          "sourceIds": [
+            "duration-old"
+          ],
+          "facts": [
+            "duration-old"
+          ]
+        }
+      ],
+      "answer": {
+        "pass": false,
+        "reply": "我这儿只记着你妹妹的英语考试是12月8号，你自己那场考试的日期我还没记过呢。方便的话告诉我哪天，我帮你记下来～"
+      }
+    },
+    {
+      "id": "study-limit-paraphrase",
+      "query": "背新词一轮顶多能花多久？",
+      "offlineOnly": true,
+      "required": 1,
+      "expectedEvidence": [
+        "duration"
+      ],
+      "missingEvidence": [
+        "duration"
+      ],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": false,
+      "returned": []
+    },
+    {
+      "id": "study-limit-old-conflict",
+      "query": "英语词汇复习现在还要按每次半小时安排吗？",
+      "offlineOnly": true,
+      "required": 1,
+      "expectedEvidence": [
+        "duration"
+      ],
+      "missingEvidence": [
+        "duration"
+      ],
+      "found": 0,
+      "stale": 2,
+      "irrelevant": 5,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "sister-exam",
+          "title": "我妹妹的英语考试是12月8日",
+          "content": "我妹妹的英语考试是12月8日",
+          "sourceIds": [
+            "sister-exam"
+          ],
+          "facts": [
+            "sister-exam"
+          ]
+        },
+        {
+          "id": "past-exception",
+          "title": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "content": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "sourceIds": [
+            "past-exception"
+          ],
+          "facts": [
+            "past-exception"
+          ]
+        },
+        {
+          "id": "podcast-duration",
+          "title": "我听英语播客每次可以安排45分钟",
+          "content": "我听英语播客每次可以安排45分钟",
+          "sourceIds": [
+            "podcast-duration"
+          ],
+          "facts": [
+            "podcast-duration"
+          ]
+        },
+        {
+          "id": "sister-duration",
+          "title": "我妹妹复习英语词汇每次45分钟",
+          "content": "我妹妹复习英语词汇每次45分钟",
+          "sourceIds": [
+            "sister-duration"
+          ],
+          "facts": [
+            "sister-duration"
+          ]
+        },
+        {
+          "id": "duration-old",
+          "title": "以前我复习英语词汇每次最多30分钟",
+          "content": "以前我复习英语词汇每次最多30分钟",
+          "sourceIds": [
+            "duration-old"
+          ],
+          "facts": [
+            "duration-old"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "study-format-paraphrase",
+      "query": "我习惯拿什么做生词小测？",
+      "offlineOnly": true,
+      "required": 1,
+      "expectedEvidence": [
+        "format"
+      ],
+      "missingEvidence": [
+        "format"
+      ],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": false,
+      "returned": []
+    },
+    {
+      "id": "study-sister-duration",
+      "query": "我妹妹复习英语词汇每次多久？",
+      "offlineOnly": true,
+      "required": 1,
+      "expectedEvidence": [
+        "sister-duration"
+      ],
+      "missingEvidence": [],
+      "found": 1,
+      "stale": 2,
+      "irrelevant": 4,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "sister-exam",
+          "title": "我妹妹的英语考试是12月8日",
+          "content": "我妹妹的英语考试是12月8日",
+          "sourceIds": [
+            "sister-exam"
+          ],
+          "facts": [
+            "sister-exam"
+          ]
+        },
+        {
+          "id": "past-exception",
+          "title": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "content": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "sourceIds": [
+            "past-exception"
+          ],
+          "facts": [
+            "past-exception"
+          ]
+        },
+        {
+          "id": "podcast-duration",
+          "title": "我听英语播客每次可以安排45分钟",
+          "content": "我听英语播客每次可以安排45分钟",
+          "sourceIds": [
+            "podcast-duration"
+          ],
+          "facts": [
+            "podcast-duration"
+          ]
+        },
+        {
+          "id": "sister-duration",
+          "title": "我妹妹复习英语词汇每次45分钟",
+          "content": "我妹妹复习英语词汇每次45分钟",
+          "sourceIds": [
+            "sister-duration"
+          ],
+          "facts": [
+            "sister-duration"
+          ]
+        },
+        {
+          "id": "duration-old",
+          "title": "以前我复习英语词汇每次最多30分钟",
+          "content": "以前我复习英语词汇每次最多30分钟",
+          "sourceIds": [
+            "duration-old"
+          ],
+          "facts": [
+            "duration-old"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "study-podcast-duration",
+      "query": "听英语播客一次能安排多久？",
+      "offlineOnly": true,
+      "required": 1,
+      "expectedEvidence": [
+        "podcast-duration"
+      ],
+      "missingEvidence": [],
+      "found": 1,
+      "stale": 2,
+      "irrelevant": 4,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "sister-exam",
+          "title": "我妹妹的英语考试是12月8日",
+          "content": "我妹妹的英语考试是12月8日",
+          "sourceIds": [
+            "sister-exam"
+          ],
+          "facts": [
+            "sister-exam"
+          ]
+        },
+        {
+          "id": "past-exception",
+          "title": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "content": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "sourceIds": [
+            "past-exception"
+          ],
+          "facts": [
+            "past-exception"
+          ]
+        },
+        {
+          "id": "podcast-duration",
+          "title": "我听英语播客每次可以安排45分钟",
+          "content": "我听英语播客每次可以安排45分钟",
+          "sourceIds": [
+            "podcast-duration"
+          ],
+          "facts": [
+            "podcast-duration"
+          ]
+        },
+        {
+          "id": "sister-duration",
+          "title": "我妹妹复习英语词汇每次45分钟",
+          "content": "我妹妹复习英语词汇每次45分钟",
+          "sourceIds": [
+            "sister-duration"
+          ],
+          "facts": [
+            "sister-duration"
+          ]
+        },
+        {
+          "id": "duration-old",
+          "title": "以前我复习英语词汇每次最多30分钟",
+          "content": "以前我复习英语词汇每次最多30分钟",
+          "sourceIds": [
+            "duration-old"
+          ],
+          "facts": [
+            "duration-old"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "study-sister-exam",
+      "query": "我妹妹的英语考试是哪天？",
+      "offlineOnly": true,
+      "required": 1,
+      "expectedEvidence": [
+        "sister-exam"
+      ],
+      "missingEvidence": [],
+      "found": 1,
+      "stale": 2,
+      "irrelevant": 4,
+      "contextPass": false,
+      "returned": [
+        {
+          "id": "sister-exam",
+          "title": "我妹妹的英语考试是12月8日",
+          "content": "我妹妹的英语考试是12月8日",
+          "sourceIds": [
+            "sister-exam"
+          ],
+          "facts": [
+            "sister-exam"
+          ]
+        },
+        {
+          "id": "past-exception",
+          "title": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "content": "上个月出差那周我复习英语词汇每次只能10分钟",
+          "sourceIds": [
+            "past-exception"
+          ],
+          "facts": [
+            "past-exception"
+          ]
+        },
+        {
+          "id": "podcast-duration",
+          "title": "我听英语播客每次可以安排45分钟",
+          "content": "我听英语播客每次可以安排45分钟",
+          "sourceIds": [
+            "podcast-duration"
+          ],
+          "facts": [
+            "podcast-duration"
+          ]
+        },
+        {
+          "id": "sister-duration",
+          "title": "我妹妹复习英语词汇每次45分钟",
+          "content": "我妹妹复习英语词汇每次45分钟",
+          "sourceIds": [
+            "sister-duration"
+          ],
+          "facts": [
+            "sister-duration"
+          ]
+        },
+        {
+          "id": "duration-old",
+          "title": "以前我复习英语词汇每次最多30分钟",
+          "content": "以前我复习英语词汇每次最多30分钟",
+          "sourceIds": [
+            "duration-old"
+          ],
+          "facts": [
+            "duration-old"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "study-unrelated",
+      "query": "怎么给米饭保温？",
+      "offlineOnly": true,
+      "required": 0,
+      "expectedEvidence": [],
+      "missingEvidence": [],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": true,
+      "returned": []
+    },
+    {
+      "id": "availability",
+      "query": "礼拜六什么时候方便安排活动？",
+      "offlineOnly": false,
+      "required": 1,
+      "expectedEvidence": [
+        "saturday"
+      ],
+      "missingEvidence": [
+        "saturday"
+      ],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": false,
+      "returned": [],
+      "answer": {
+        "pass": false,
+        "reply": "周六想安排点什么活动呀？是已经心里有数了，还是想先一起想想？"
+      }
+    },
+    {
+      "id": "schedule-plan",
+      "query": "帮我排一周阅读计划，每周三次，每次30分钟，避开我没空的时段。",
+      "offlineOnly": false,
+      "required": 1,
+      "expectedEvidence": [
+        "evenings"
+      ],
+      "missingEvidence": [
+        "evenings"
+      ],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": false,
+      "returned": [],
+      "answer": {
+        "pass": false,
+        "plannerMode": "normal",
+        "draftPass": false,
+        "chatPlan": {
+          "goal": "一周阅读计划，每周三次，每次30分钟，避开没空的时段",
+          "horizon_days": 7,
+          "daily_minutes": 30,
+          "preferences": null
+        },
+        "reply": "好呀，一周三次、每次30分钟的阅读计划，我记下了~想先问一句：你哪些时段不方便呢？告诉我，我好帮你避开。",
+        "children": [
+          {
+            "title": "10分钟轻读收尾",
+            "description": "1) 选轻松的散文/杂志类材料；2) 阅读10分钟不做笔记；3) 打卡记录一句今日阅读感受。完成标准：10分钟计时完成并提交一句感受。",
+            "date": "2026-11-18",
+            "start_time": "21:30",
+            "end_time": "21:40",
+            "duration_minutes": 10,
+            "note": "主要活动日也执行，用于保持阅读节奏，不计入30分钟主课时。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "轻读打卡"
+          },
+          {
+            "title": "深度阅读30分钟",
+            "description": "1) 提前5分钟准备好书/设备并静音手机；2) 连续阅读25分钟，只在书上做标记不查资料；3) 最后5分钟用3句话写下本节要点与1个待解决问题；4) 结束时记录页码区间。完成标准：≥25分钟纯阅读+3句笔记。",
+            "date": "2026-11-19",
+            "start_time": "20:00",
+            "end_time": "20:30",
+            "duration_minutes": 30,
+            "note": "若当天该时段没空，顺延至当天其余空闲时段，仍保持30分钟不拆分。",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "阅读主课"
+          },
+          {
+            "title": "10分钟轻读收尾",
+            "description": "1) 选轻松的散文/杂志类材料；2) 阅读10分钟不做笔记；3) 打卡记录一句今日阅读感受。完成标准：10分钟计时完成并提交一句感受。",
+            "date": "2026-11-20",
+            "start_time": "21:30",
+            "end_time": "21:40",
+            "duration_minutes": 10,
+            "note": "主要活动日也执行，用于保持阅读节奏，不计入30分钟主课时。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "轻读打卡"
+          },
+          {
+            "title": "深度阅读30分钟",
+            "description": "1) 提前5分钟准备好书/设备并静音手机；2) 连续阅读25分钟，只在书上做标记不查资料；3) 最后5分钟用3句话写下本节要点与1个待解决问题；4) 结束时记录页码区间。完成标准：≥25分钟纯阅读+3句笔记。",
+            "date": "2026-11-21",
+            "start_time": "20:00",
+            "end_time": "20:30",
+            "duration_minutes": 30,
+            "note": "若当天该时段没空，顺延至当天其余空闲时段，仍保持30分钟不拆分。",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "阅读主课"
+          },
+          {
+            "title": "本周阅读复盘",
+            "description": "1) 汇总本周3次主课笔记；2) 用5条要点整理收获；3) 检查下周三次阅读时段是否有冲突，标出需调整的日期；4) 设定下周页码目标。完成标准：5条要点+下周时段确认。",
+            "date": "2026-11-22",
+            "start_time": "19:30",
+            "end_time": "19:50",
+            "duration_minutes": 20,
+            "note": "不占用主要活动日，仅周日执行。",
+            "kind": "task",
+            "session_type": "recovery",
+            "plan_group": "周末复盘"
+          },
+          {
+            "title": "10分钟轻读收尾",
+            "description": "1) 选轻松的散文/杂志类材料；2) 阅读10分钟不做笔记；3) 打卡记录一句今日阅读感受。完成标准：10分钟计时完成并提交一句感受。",
+            "date": "2026-11-22",
+            "start_time": "21:30",
+            "end_time": "21:40",
+            "duration_minutes": 10,
+            "note": "主要活动日也执行，用于保持阅读节奏，不计入30分钟主课时。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "轻读打卡"
+          },
+          {
+            "title": "10分钟轻读收尾",
+            "description": "1) 选轻松的散文/杂志类材料；2) 阅读10分钟不做笔记；3) 打卡记录一句今日阅读感受。完成标准：10分钟计时完成并提交一句感受。",
+            "date": "2026-11-23",
+            "start_time": "21:30",
+            "end_time": "21:40",
+            "duration_minutes": 10,
+            "note": "主要活动日也执行，用于保持阅读节奏，不计入30分钟主课时。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "轻读打卡"
+          },
+          {
+            "title": "深度阅读30分钟",
+            "description": "1) 提前5分钟准备好书/设备并静音手机；2) 连续阅读25分钟，只在书上做标记不查资料；3) 最后5分钟用3句话写下本节要点与1个待解决问题；4) 结束时记录页码区间。完成标准：≥25分钟纯阅读+3句笔记。",
+            "date": "2026-11-24",
+            "start_time": "20:00",
+            "end_time": "20:30",
+            "duration_minutes": 30,
+            "note": "若当天该时段没空，顺延至当天其余空闲时段，仍保持30分钟不拆分。",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "阅读主课"
+          }
+        ]
+      }
+    },
+    {
+      "id": "unrelated-meal",
+      "query": "豆腐怎么煎才不容易碎？",
+      "offlineOnly": false,
+      "required": 0,
+      "expectedEvidence": [],
+      "missingEvidence": [],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": true,
+      "returned": [],
+      "answer": {
+        "pass": true,
+        "reply": "煎豆腐想不碎，先把老豆腐用厨房纸吸干水，切厚一点；锅烧热油再下，别急着翻，等底面金黄定型了再动。小火慢煎最稳，没关系，慢慢来～"
+      }
+    },
+    {
+      "id": "commute-mode",
+      "query": "早上通勤我一般怎么走？",
+      "offlineOnly": false,
+      "required": 1,
+      "expectedEvidence": [
+        "bicycle"
+      ],
+      "missingEvidence": [
+        "bicycle"
+      ],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": false,
+      "returned": [],
+      "answer": {
+        "pass": false,
+        "reply": "我这儿还没记过你的通勤路线呢。要不你说说平时怎么走，我帮你记下来，以后就不用每次重新想啦。"
+      }
+    },
+    {
+      "id": "commute-duration",
+      "query": "早上通勤一般怎么走，大约多久到？",
+      "offlineOnly": false,
+      "required": 2,
+      "expectedEvidence": [
+        "bicycle",
+        "ride-duration"
+      ],
+      "missingEvidence": [
+        "bicycle",
+        "ride-duration"
+      ],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": false,
+      "returned": [],
+      "answer": {
+        "pass": false,
+        "reply": "听起来你在想每天早上的通勤安排。你平时是从哪儿出发、到哪儿去呢？方便的话告诉我，我陪你一起理一理。"
+      }
+    },
+    {
+      "id": "commute-plan",
+      "query": "我想用平时去公司的方式练耐力，制定一周计划，每周三次，每次30分钟。",
+      "offlineOnly": false,
+      "required": 1,
+      "expectedEvidence": [
+        "bicycle"
+      ],
+      "missingEvidence": [
+        "bicycle"
+      ],
+      "found": 0,
+      "stale": 0,
+      "irrelevant": 0,
+      "contextPass": false,
+      "returned": [],
+      "answer": {
+        "pass": false,
+        "plannerMode": "normal",
+        "draftPass": false,
+        "chatPlan": {
+          "goal": "用平时去公司的方式练耐力，每周三次，每次30分钟，制定一周计划",
+          "horizon_days": 7,
+          "daily_minutes": 30,
+          "preferences": null
+        },
+        "reply": "好呀，一周七天、每周三次、每次30分钟，用你平时去公司的方式练耐力，我慢慢帮你排好这一周。想先问问你：这三次更想放在哪几天呢？",
+        "children": [
+          {
+            "title": "拉伸放松",
+            "description": "进行10分钟全身静态拉伸，重点放松腿部、髋部和下背部，每个动作保持20-30秒，重复2组。配合深呼吸，促进恢复。",
+            "date": "2026-11-18",
+            "start_time": "20:00",
+            "end_time": "20:10",
+            "duration_minutes": 10,
+            "note": "休息日进行，避免剧烈运动。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "通勤耐力训练",
+            "description": "按平时去公司的方式（步行+公交/地铁）进行训练：①热身快走5分钟；②中等强度持续运动20分钟（如提前一站下车步行，保持微喘能说话）；③放松慢走5分钟。全程用运动手表记录，目标心率控制在最大心率的60%-70%。",
+            "date": "2026-11-19",
+            "start_time": "18:30",
+            "end_time": "19:00",
+            "duration_minutes": 30,
+            "note": "主要活动日，当天不安排其他训练。",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "耐力通勤训练"
+          },
+          {
+            "title": "拉伸放松",
+            "description": "进行10分钟全身静态拉伸，重点放松腿部、髋部和下背部，每个动作保持20-30秒，重复2组。配合深呼吸，促进恢复。",
+            "date": "2026-11-20",
+            "start_time": "20:00",
+            "end_time": "20:10",
+            "duration_minutes": 10,
+            "note": "休息日进行，避免剧烈运动。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "通勤耐力训练",
+            "description": "按平时去公司的方式（步行+公交/地铁）进行训练：①热身快走5分钟；②中等强度持续运动20分钟（如提前一站下车步行，保持微喘能说话）；③放松慢走5分钟。全程用运动手表记录，目标心率控制在最大心率的60%-70%。",
+            "date": "2026-11-21",
+            "start_time": "18:30",
+            "end_time": "19:00",
+            "duration_minutes": 30,
+            "note": "主要活动日，当天不安排其他训练。",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "耐力通勤训练"
+          },
+          {
+            "title": "拉伸放松",
+            "description": "进行10分钟全身静态拉伸，重点放松腿部、髋部和下背部，每个动作保持20-30秒，重复2组。配合深呼吸，促进恢复。",
+            "date": "2026-11-22",
+            "start_time": "20:00",
+            "end_time": "20:10",
+            "duration_minutes": 10,
+            "note": "休息日进行，避免剧烈运动。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "拉伸放松",
+            "description": "进行10分钟全身静态拉伸，重点放松腿部、髋部和下背部，每个动作保持20-30秒，重复2组。配合深呼吸，促进恢复。",
+            "date": "2026-11-23",
+            "start_time": "20:00",
+            "end_time": "20:10",
+            "duration_minutes": 10,
+            "note": "休息日进行，避免剧烈运动。",
+            "kind": "checkin",
+            "session_type": "recovery",
+            "plan_group": "休息恢复"
+          },
+          {
+            "title": "通勤耐力训练",
+            "description": "按平时去公司的方式（步行+公交/地铁）进行训练：①热身快走5分钟；②中等强度持续运动20分钟（如提前一站下车步行，保持微喘能说话）；③放松慢走5分钟。全程用运动手表记录，目标心率控制在最大心率的60%-70%。",
+            "date": "2026-11-24",
+            "start_time": "18:30",
+            "end_time": "19:00",
+            "duration_minutes": 30,
+            "note": "主要活动日，当天不安排其他训练。",
+            "kind": "task",
+            "session_type": "session",
+            "plan_group": "耐力通勤训练"
+          }
+        ]
+      }
+    }
+  ],
+  "jobErrors": []
+}

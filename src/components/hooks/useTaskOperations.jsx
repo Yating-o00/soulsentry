@@ -15,17 +15,29 @@ export function useTaskOperations() {
 
   const updateTaskMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Task.update(id, data),
-    onMutate: ({ id, data }) => {
+    onMutate: async ({ id, data }) => {
       // 乐观更新：立即把新字段写入缓存，让依赖 ['tasks'] 的 useMemo
       // (例如 pages/Tasks 的智能分组) 立刻按新时间/状态重新分类
+      await queryClient.cancelQueries({ queryKey: ['tasks'] });
+      const previous = queryClient.getQueriesData({ queryKey: ['tasks'] });
       queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
         if (!Array.isArray(oldData)) return oldData;
         return oldData.map(t => t.id === id ? { ...t, ...data } : t);
       });
+      return { previous };
     },
     onSuccess: (data, variables) => {
+      // 用服务端返回的最新任务覆盖缓存，避免列表刷新过程中短暂回到旧标题/旧内容
+      if (data?.id) {
+        queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
+          if (!Array.isArray(oldData)) return oldData;
+          return oldData.map((t) => (t.id === data.id ? { ...t, ...data } : t));
+        });
+        queryClient.setQueryData(['task', data.id], data);
+      }
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['subtasks'] });
+      if (variables?.id) queryClient.invalidateQueries({ queryKey: ['task', variables.id] });
       
       // Google Calendar 同步由实体自动化 autoSyncTaskToCalendar 统一处理，
       // 此处不再手动触发，避免重复创建日历事件。
@@ -39,8 +51,12 @@ export function useTaskOperations() {
         logUserBehavior("task_edited", { id: variables.id, ...variables.data });
       }
     },
-    onError: () => {
-        feedback.error("更新任务失败");
+    onError: (error, _variables, context) => {
+        // 更新失败：回滚乐观内容，避免卡片先显示新内容、刷新后又回到旧内容
+        for (const [key, oldData] of context?.previous || []) {
+          queryClient.setQueryData(key, oldData);
+        }
+        feedback.error(error?.data?.message || error?.message || "更新任务失败");
     }
   });
 
@@ -58,8 +74,16 @@ export function useTaskOperations() {
         feedback.info(`已合并到已有约定「${data.title}」，避免重复`);
         return;
       }
+      // 先把新约定写入缓存，列表立即出现；随后的失效刷新再与服务端对齐
+      if (data?.id) {
+        queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
+          if (!Array.isArray(oldData)) return oldData;
+          if (oldData.some((t) => t.id === data.id)) return oldData;
+          return [data, ...oldData];
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      
+
       // Google Calendar 同步由实体自动化 autoSyncTaskToCalendar 统一处理，
       // 此处不再手动触发，避免重复创建日历事件。
       
@@ -105,12 +129,26 @@ export function useTaskOperations() {
 
   const deleteTaskMutation = useMutation({
     mutationFn: (id) => base44.entities.Task.update(id, { deleted_at: new Date().toISOString() }),
+    onMutate: async (id) => {
+      // 先就地标记删除，卡片立即从列表消失；失败再回滚，避免“删了还在”
+      await queryClient.cancelQueries({ queryKey: ['tasks'] });
+      const previous = queryClient.getQueriesData({ queryKey: ['tasks'] });
+      const deletedAt = new Date().toISOString();
+      queryClient.setQueriesData({ queryKey: ['tasks'] }, (oldData) => {
+        if (!Array.isArray(oldData)) return oldData;
+        return oldData.map((t) => (t.id === id ? { ...t, deleted_at: deletedAt } : t));
+      });
+      return { previous };
+    },
     onSuccess: (data, id) => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       feedback.success("已移至垃圾箱");
       logUserBehavior("task_deleted", { id });
     },
-    onError: (error) => {
+    onError: (error, id, context) => {
+        for (const [key, oldData] of context?.previous || []) {
+          queryClient.setQueryData(key, oldData);
+        }
         feedback.error(error?.message || "删除任务失败");
     }
   });
@@ -298,7 +336,9 @@ ${relatedTasks.slice(0, 3).map(t => `- ${t.title} (${t.status})`).join('\n')}` :
           if (links.relatedNotes && links.relatedNotes.length > 0) {
             mergedSuggestions.push(`回顾相关心签（${links.relatedNotes.length} 条）`);
           }
-        } catch (_) {}
+        } catch (_) {
+          // 关联建议失败不阻断完成流程
+        }
 
         feedback.aiRichCard({
           title: response.summary,

@@ -100,6 +100,21 @@ notificationsRouter.get("/", async (req, res) => {
   return res.json(notifications.map(serializeNotification));
 });
 
+// GET /api/notifications/mention-unread — 侧栏红点：当前用户是否有未读的 @ 提醒
+// 覆盖 Agent @ 通知，以及后续可能出现的其他 mention 类型 / 标题含 @ 的通知
+notificationsRouter.get("/mention-unread", async (req, res) => {
+  const unread = await prisma.notification.findMany({
+    where: { userId: req.user.id, status: { notIn: ["READ", "FAILED"] } },
+    select: { title: true, payload: true }
+  });
+  const count = unread.filter((item) => {
+    const payload = isPlainObject(item.payload) ? item.payload : {};
+    const type = String(payload.type || "");
+    return type === "collab_agent_mention" || type === "mention" || String(item.title || "").includes("@");
+  }).length;
+  return res.json({ count, has_unread: count > 0 });
+});
+
 notificationsRouter.post("/", async (req, res) => {
   const payload = createNotificationSchema.safeParse(req.body);
   if (!payload.success) {

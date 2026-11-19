@@ -21,7 +21,7 @@ export default function LockScreenTodo() {
 
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ["tasks"],
-    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-reminder_time", 300),
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-reminder_time", 2000),
   });
 
   const items = useMemo(() => buildLockscreenItems(allTasks), [allTasks]);

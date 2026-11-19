@@ -461,7 +461,8 @@ Return JSON.`,
       ...task,
       reminder_time: reminderISO,
       end_time: endISO,
-      status: 'pending'
+      // 编辑已完成/已归档的约定时保留原状态，避免保存后被错误改回待办
+      status: initialData?.status || 'pending'
     };
 
     try {

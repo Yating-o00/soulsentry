@@ -17,7 +17,7 @@ export default function Trash() {
   // 只拉已删除的约定（含子约定）：后端 deleted_at=not_null 过滤，parent_task_id=all 不过滤层级
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks', 'trash'],
-    queryFn: () => base44.entities.Task.filter({ deleted_at: "not_null", parent_task_id: "all" }, '-reminder_time', 300),
+    queryFn: () => base44.entities.Task.filter({ deleted_at: "not_null", parent_task_id: "all" }, '-reminder_time', 2000),
     initialData: [],
   });
 

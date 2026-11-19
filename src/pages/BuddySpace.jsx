@@ -46,7 +46,7 @@ export default function BuddySpace() {
   const { data: allTasks = [] } = useQuery({
     queryKey: ["tasks", "with-subs"],
     // 按创建时间倒序：新建的协同小组没有提醒时间，按提醒时间排会沉到 300 条之后
-    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-created_date", 300),
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-created_date", 2000),
     enabled: !!profile,
   });
   // 项目约定优先；缺失（被删/未同步）时回退到本搭子最新的一条顶层约定——

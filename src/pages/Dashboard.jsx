@@ -30,7 +30,7 @@ export default function Dashboard() {
 
   const { data: allTasks = [] } = useQuery({
     queryKey: ["tasks", "home"],
-    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-reminder_time", 300),
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-created_date", 2000),
     initialData: [],
   });
   const { data: notesList = [] } = useQuery({

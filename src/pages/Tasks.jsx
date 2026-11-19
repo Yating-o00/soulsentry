@@ -104,7 +104,8 @@ export default function Tasks() {
   // 独立 queryKey（['tasks'] 前缀仍命中所有失效刷新），避免与日历等页面的顶层列表缓存互相覆盖
   const { data: allTasks = [], isLoading } = useQuery({
     queryKey: ['tasks', 'with-subs'],
-    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, '-reminder_time', 300),
+    // 顶层约定 + 全部子约定一次拉齐；按创建时间排序，新增约定不会因无提醒时间被挤出列表
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, '-created_date', 2000),
     initialData: []
   });
 

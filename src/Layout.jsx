@@ -17,6 +17,8 @@ import OnTheWayReminderHost from "./components/location/OnTheWayReminderHost";
 import OverdueFeedbackHost from "./components/feedback/OverdueFeedbackHost";
 import DeviceHeartbeat from "./components/devices/DeviceHeartbeat";
 import { base44 } from "@/api/base44Client";
+import { httpRequest } from "@/api/httpClient";
+import { useQuery } from "@tanstack/react-query";
 import { getCachedUser } from "@/lib/userCache";
 import { useAuth } from "@/lib/AuthContext";
 import {
@@ -87,6 +89,17 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   const { setOpenMobile } = useSidebar();
   const { t, language, toggleLanguage, isAIMode, toggleAIMode } = useTranslation();
   const { user } = useAuth();
+  // 未读 @ 提醒：收到 @ 通知时在「消息通知」旁点亮红点，读掉后自动消失
+  const { data: mentionStatus } = useQuery({
+    queryKey: ["notifications", "mention-unread"],
+    queryFn: () => httpRequest("/api/notifications/mention-unread"),
+    enabled: !!user?.id,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    staleTime: 10000,
+  });
+  const hasUnreadMention = Boolean(mentionStatus?.has_unread);
+  const notificationUrl = createPageUrl("Notifications");
   const navigationItems = getNavigationItems(t).filter(
     (item) => item.title !== "数据看板" || user?.role === "admin"
   );
@@ -173,6 +186,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                           isActive ? 'text-[#384877]' : 'text-stone-400'
                         }`} />
                         <span className="font-medium">{item.title}</span>
+                        {item.url === notificationUrl && hasUnreadMention && (
+                          <span className="ml-auto flex items-center" title="有未读的@提醒">
+                            <span className="h-2 w-2 rounded-full bg-red-500" />
+                            <span className="sr-only">有未读的@提醒</span>
+                          </span>
+                        )}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

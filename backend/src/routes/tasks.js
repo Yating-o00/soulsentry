@@ -329,7 +329,9 @@ async function createTaskChangeLog(userId, task, changeType, payload = {}, previ
 }
 
 tasksRouter.get("/", async (req, res) => {
-  const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
+  // 「约定」页需要一次拿齐顶层约定与其子约定。300 条的上限会让无提醒时间的新约定
+  // 在按提醒时间排序时被截断，出现「创建成功但列表看不到」的错觉。
+  const limit = Math.min(Number(req.query.limit || req.query.take || 100), 2000);
   const orderBy = [{ pinnedAt: "desc" }, parseSort(req.query.sort || req.query.orderBy)]; // 置顶优先（SQLite 中 DESC 的 NULL 沉底）
   // 共有约定：本人所有 + 作为成员参与的约定（含其子约定）
   const sharedIds = await getSharedTaskIds(req.user.id);
@@ -411,7 +413,7 @@ tasksRouter.get("/", async (req, res) => {
     const sharedWhere = { ...where, OR: [{ id: { in: sharedIds } }, { parentTaskId: { in: sharedIds } }] };
     const [ownTasks, sharedTasks] = await Promise.all([
       prisma.task.findMany({ where: ownWhere, orderBy, take: Number.isFinite(limit) ? limit : 100, include: includeShared }),
-      prisma.task.findMany({ where: sharedWhere, orderBy, take: 300, include: includeShared })
+      prisma.task.findMany({ where: sharedWhere, orderBy, take: 2000, include: includeShared })
     ]);
     const ownIds = new Set(ownTasks.map((t) => t.id));
     tasks = [...ownTasks, ...sharedTasks.filter((t) => !ownIds.has(t.id))];

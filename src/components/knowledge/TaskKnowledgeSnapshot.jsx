@@ -66,7 +66,7 @@ export default function TaskKnowledgeSnapshot({ item }) {
 
   const { data: allTasks = [] } = useQuery({
     queryKey: ['tasks', 'with-subs'],
-    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, '-reminder_time', 300),
+    queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, '-reminder_time', 2000),
     enabled: needLive,
     initialData: []
   });

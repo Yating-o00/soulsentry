@@ -1,4 +1,4 @@
-// 执行概览：Agent「执行驱动」自动维护的全局摘要（大方向 / 新进展 / 待确认）
+// 执行概览：Agent「执行驱动」自动维护的全局摘要（大方向 / 按主题进展 / 待确认）
 // 数据为单例沉淀文档（doc_type=digest），由后端 drive 动作每次讨论后重写。
 import React from "react";
 import { Sparkles } from "lucide-react";
@@ -24,13 +24,20 @@ export default function DigestCard({ doc }) {
 
         {!doc && (
           <p className="mt-3 text-[13px] leading-5" style={{ color: "#8a867e" }}>
-            还没有执行概览。和伙伴聊起来，或在讨论区 @Agent 整理，这里会生成大方向、新进展与待确认。
+            还没有执行概览。和伙伴聊起来，或在讨论区 @Agent 整理，这里会生成大方向、按主题进展与待确认。
           </p>
         )}
 
         <div className="mt-3 space-y-2.5">
           {lines.map((line, i) => {
             const text = line.trim();
+            if (text.startsWith("###")) {
+              return (
+                <p key={i} className="pt-1.5 text-[12px] font-medium" style={{ color: "#45413d" }}>
+                  {text.replace(/^#+\s*/, "")}
+                </p>
+              );
+            }
             if (text.startsWith("##")) {
               return (
                 <p key={i} className="pt-1 font-mono text-[9px] uppercase tracking-[0.16em]" style={{ color: "#384877" }}>

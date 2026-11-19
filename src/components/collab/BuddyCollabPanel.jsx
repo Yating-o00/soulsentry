@@ -245,7 +245,8 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
       </header>
 
       <div className="min-h-0 flex-1">
-        {view === "chat" && (
+        {/* 讨论常驻挂载：切到约定/沉淀再回来时，保留当前主题窗口与输入 */}
+        <div className={view === "chat" ? "h-full" : "hidden"}>
           <ConversationPane
             taskId={taskId}
             view="discussion"
@@ -255,9 +256,10 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
             onOpenAgent={() => navigate(fullSpaceUrl)}
             messageCount={0}
             currentUserId={currentUser?.id}
+            savedTopics={collab?.topics || []}
             compact
           />
-        )}
+        </div>
 
         {view === "pacts" && (
           <div className="h-full space-y-2.5 overflow-y-auto px-4 py-3.5">

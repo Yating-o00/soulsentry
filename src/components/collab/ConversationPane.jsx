@@ -1,16 +1,16 @@
 // 会话窗（右栏全高）：成员讨论 / 共同动态双 tab + 输入框
+// 讨论可按主题分窗口：每个主题独立沉淀上下文，Agent 归纳时按主题分节；
 // 讨论 = 各方 + Agent 的自由聊天：输入 @ 自动弹出 Agent（总结 / 查外部信息 / 转子约定·节点·沉淀），
 // 支持插入图片与文档附件（可随消息沉淀为文件）；发送含 @ 的内容后显示打字指示器，
 // 轮询发现更新的 agent 消息后撤下指示器、滚动到底部并高亮该消息 2 秒
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowUp, Bot, Check, ChevronDown, FileText, Loader2, MapPin, Paperclip, Sparkles, X,
+  ArrowUp, Bot, Check, ChevronDown, FileText, Loader2, Paperclip, Sparkles, X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -136,13 +136,15 @@ function MessageActions({ message, canDelete, onConvert, onMark, onReply, onDele
 
 // ──────────────────────────── 讨论视图 ────────────────────────────
 
-function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, compact = false }) {
+function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, compact = false, savedTopics = [] }) {
   const queryClient = useQueryClient();
   const [topicFilter, setTopicFilter] = useState("all");
+  const [createdTopics, setCreatedTopics] = useState([]);
+  const [addingTopic, setAddingTopic] = useState(false);
+  const [newTopicName, setNewTopicName] = useState("");
+  const [savingTopic, setSavingTopic] = useState(false);
   const [replyTo, setReplyTo] = useState(null);
   const [content, setContent] = useState("");
-  const [topic, setTopic] = useState("");
-  const [showTopicInput, setShowTopicInput] = useState(false);
   const [attachments, setAttachments] = useState([]); // {url,name,type,size}
   const [uploading, setUploading] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false); // @Agent 自动弹出
@@ -166,18 +168,53 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     initialData: [],
   });
 
-  const topics = useMemo(
-    () => [...new Set(messages.map((m) => m.topic).filter(Boolean))],
-    [messages]
-  );
+  const topics = useMemo(() => {
+    const out = [];
+    const add = (name) => {
+      const value = typeof name === "string" ? name.trim() : "";
+      if (value && !out.includes(value)) out.push(value);
+    };
+    savedTopics.forEach(add);
+    messages.forEach((m) => add(m.topic));
+    createdTopics.forEach(add);
+    return out;
+  }, [savedTopics, messages, createdTopics]);
 
-  const filteredMessages = useMemo(
-    () => (topicFilter === "all" ? messages : messages.filter((m) => m.topic === topicFilter)),
-    [messages, topicFilter]
-  );
+  const filteredMessages = useMemo(() => {
+    if (topicFilter === "all") return messages;
+    // 主题窗口：根消息属于该主题，或该线程里有该主题的回复时，整条线程都保留
+    return messages.filter(
+      (m) => m.topic === topicFilter || (m.replies || []).some((r) => r.topic === topicFilter)
+    );
+  }, [messages, topicFilter]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['collab', taskId] });
+  };
+
+  // 新建主题窗口：主题本身持久化在约定的 metadata.collab.topics 里，空窗口也能保留
+  const addTopic = async () => {
+    const name = newTopicName.trim().replace(/\s+/g, " ").slice(0, 20);
+    if (!name) {
+      setAddingTopic(false);
+      setNewTopicName("");
+      return;
+    }
+    setSavingTopic(true);
+    try {
+      const res = await httpRequest(`/api/collab/${taskId}/topics`, { method: "POST", body: { name } });
+      const nextTopics = Array.isArray(res?.topics) ? res.topics : [name];
+      setCreatedTopics(nextTopics);
+      setTopicFilter(name);
+      setAddingTopic(false);
+      setNewTopicName("");
+      queryClient.invalidateQueries({ queryKey: ["collab", taskId] });
+      window.setTimeout(() => inputRef.current?.focus(), 80);
+    } catch (error) {
+      toast.error(error?.message || "创建主题失败");
+    } finally {
+      setSavingTopic(false);
+    }
   };
 
   // 来源讨论跳转：滚动 + 高亮
@@ -293,13 +330,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
         body: {
           content: text || "（分享附件）",
           parent_id: replyTo?.id || undefined,
-          topic: topic.trim() || undefined,
+          topic: topicFilter === "all" ? undefined : topicFilter,
           attachments: attachments.length > 0 ? attachments : undefined,
         },
       });
       setContent("");
-      setTopic("");
-      setShowTopicInput(false);
       setReplyTo(null);
       setAttachments([]);
       setMentionOpen(false);
@@ -402,35 +437,97 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       aria-labelledby={compact ? undefined : "discussion-tab"}
       className="flex min-h-0 flex-1 flex-col"
     >
-      {/* 主题过滤：极简模式隐藏，减少噪音 */}
-      {!compact && topics.length > 0 && (
-        <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-b px-4 py-2.5 sm:px-6" style={{ borderColor: C.lineSoft }}>
+      {/* 主题窗口：每个主题是一间独立讨论；全部窗口汇总所有主题 */}
+      <div
+        className={cn(
+          "flex shrink-0 items-center gap-1.5 overflow-x-auto border-b",
+          compact ? "px-3 py-2" : "px-4 py-2.5 sm:px-6"
+        )}
+        style={{ borderColor: C.lineSoft }}
+        role="group"
+        aria-label="讨论主题"
+      >
+        <button
+          type="button"
+          aria-pressed={topicFilter === "all"}
+          onClick={() => setTopicFilter("all")}
+          className={cn(
+            "shrink-0 rounded-full border px-2.5 text-[11px] transition-colors min-h-7",
+            topicFilter === "all" ? "border-transparent text-white" : ""
+          )}
+          style={topicFilter === "all" ? { backgroundColor: "#384877" } : { borderColor: "#d8d6cf", color: "#77736c" }}
+        >
+          全部
+        </button>
+        {topics.map((topicName) => (
+          <button
+            key={topicName}
+            type="button"
+            aria-pressed={topicFilter === topicName}
+            onClick={() => setTopicFilter(topicName)}
+            className={cn("shrink-0 rounded-full border px-2.5 text-[11px] transition-colors min-h-7")}
+            style={topicFilter === topicName
+              ? { backgroundColor: "#384877", borderColor: "#384877", color: "#fff" }
+              : { borderColor: "#d8d6cf", color: "#77736c" }}
+          >
+            {topicName}
+          </button>
+        ))}
+        {addingTopic ? (
+          <form
+            className="flex shrink-0 items-center gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              addTopic();
+            }}
+          >
+            <input
+              autoFocus
+              value={newTopicName}
+              onChange={(e) => setNewTopicName(e.target.value)}
+              maxLength={20}
+              placeholder="主题"
+              aria-label="新主题名称"
+              className="h-7 w-24 rounded-full border bg-transparent px-2.5 text-[11px] outline-none focus:border-[#384877]"
+              style={{ borderColor: "#d8d6cf", color: "#45413d" }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  setAddingTopic(false);
+                  setNewTopicName("");
+                }
+              }}
+            />
+            <button
+              type="submit"
+              disabled={savingTopic || !newTopicName.trim()}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[#384877] disabled:opacity-40"
+              aria-label="创建主题"
+            >
+              {savingTopic ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAddingTopic(false);
+                setNewTopicName("");
+              }}
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[#99958d]"
+              aria-label="取消"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </form>
+        ) : (
           <button
             type="button"
-            onClick={() => setTopicFilter("all")}
-            className={cn(
-              "shrink-0 rounded-full border px-2.5 text-[11px] transition-colors min-h-7",
-              topicFilter === "all" ? "border-transparent text-white" : ""
-            )}
-            style={topicFilter === "all" ? { backgroundColor: "#384877" } : { borderColor: "#d8d6cf", color: "#77736c" }}
+            onClick={() => setAddingTopic(true)}
+            className="shrink-0 rounded-full border border-dashed px-2.5 text-[11px] transition-colors min-h-7 hover:text-[#384877]"
+            style={{ borderColor: "#d8d6cf", color: "#8a867e" }}
           >
-            全部主题
+            ＋ 主题
           </button>
-          {topics.map((topicName) => (
-            <button
-              key={topicName}
-              type="button"
-              onClick={() => setTopicFilter(topicName)}
-              className={cn("shrink-0 rounded-full border px-2.5 text-[11px] transition-colors min-h-7")}
-              style={topicFilter === topicName
-                ? { backgroundColor: "#384877", borderColor: "#384877", color: "#fff" }
-                : { borderColor: "#d8d6cf", color: "#77736c" }}
-            >
-              {topicName}
-            </button>
-          ))}
-        </div>
-      )}
+        )}
+      </div>
 
       {/* 消息流：可被输入区挤压（多行输入/附件时），保证输入框始终在视口内；滚动仅限流内部 */}
       <div ref={streamRef} className="min-h-20 flex-1 overflow-y-auto px-4 py-2 sm:px-6">
@@ -442,9 +539,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           <EmptyState
             title={topicFilter === "all" ? "还没有讨论" : "该主题下暂无讨论"}
             description={
-              compact
-                ? "先聊起来，Agent 会从讨论里整理约定和沉淀。"
-                : "写下第一条想法，共同约定会从这里开始。输入 @ 可以召唤心栈 Agent 总结、查资料或转化内容。"
+              topicFilter === "all"
+                ? compact
+                  ? "先聊起来，Agent 会从讨论里整理约定和沉淀。"
+                  : "写下第一条想法，共同约定会从这里开始。输入 @ 可以召唤心栈 Agent 总结、查资料或转化内容。"
+                : `在「${topicFilter}」里开始讨论。`
             }
           />
         ) : (
@@ -539,21 +638,6 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               >
                 {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               </button>
-              {!compact && (
-                <button
-                  type="button"
-                  onClick={() => setShowTopicInput((v) => !v)}
-                  className={cn(
-                    "flex h-7 w-7 items-center justify-center rounded-md border transition-colors",
-                    showTopicInput || topic ? "border-[#c7d2fe] text-[#384877]" : "text-[#99958d] hover:text-[#57534d]"
-                  )}
-                  style={showTopicInput || topic ? { backgroundColor: C.brandTint } : { borderColor: "#d8d6cf" }}
-                  title="给这条讨论加个主题"
-                  aria-label="给这条讨论加个主题"
-                >
-                  <MapPin className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
             <input
               ref={fileRef}
@@ -571,7 +655,13 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 detectMention(e.target.value, e.target.selectionStart);
               }}
               onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
-              placeholder={compact ? "@ 召唤 Agent · 讨论会自动整理" : "写下想法，输入 @ 召唤心栈 Agent…"}
+              placeholder={
+                topicFilter === "all"
+                  ? compact
+                    ? "@ 召唤 Agent · 讨论会自动整理"
+                    : "写下想法，输入 @ 召唤心栈 Agent…"
+                  : `在「${topicFilter}」里说…`
+              }
               className="min-h-[60px] max-h-28 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
               rows={2}
               onKeyDown={(e) => {
@@ -615,15 +705,6 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             </div>
           )}
         </div>
-        {showTopicInput && (
-          <Input
-            value={topic}
-            onChange={(e) => setTopic(e.target.value)}
-            placeholder="主题，如：住宿安排（可留空）"
-            maxLength={50}
-            className="mt-2 h-8 text-xs"
-          />
-        )}
       </div>
     </div>
   );
@@ -687,7 +768,7 @@ function ActivityView({ taskId }) {
 // ──────────────────────────── 会话窗（右栏） ────────────────────────────
 
 export default function ConversationPane({
-  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId, compact = false,
+  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId, compact = false, savedTopics = [],
 }) {
   return (
     <section
@@ -751,7 +832,7 @@ export default function ConversationPane({
       </div>
       )}
       {view === "discussion"
-        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} compact={compact} />
+        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} compact={compact} savedTopics={savedTopics} />
         : <ActivityView taskId={taskId} />}
     </section>
   );

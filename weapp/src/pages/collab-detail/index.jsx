@@ -73,6 +73,12 @@ export default function CollabDetail() {
   const [messages, setMessages] = useState([]);
   const [msgText, setMsgText] = useState("");
   const [sending, setSending] = useState(false);
+  // 主题窗口：每个主题是一间独立讨论；全部窗口汇总所有主题
+  const [topicFilter, setTopicFilter] = useState("all");
+  const [createdTopics, setCreatedTopics] = useState([]);
+  const [addingTopic, setAddingTopic] = useState(false);
+  const [newTopicName, setNewTopicName] = useState("");
+  const [topicSaving, setTopicSaving] = useState(false);
   // 待发附件（与 Web 会话窗同字段 {url,name,type,size}，随消息一并提交）
   const [msgAttachments, setMsgAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -154,6 +160,23 @@ export default function CollabDetail() {
   const flatSubs = useMemo(() => flattenTree(summary?.subtasks), [summary?.subtasks]);
   const subDoneCount = flatSubs.filter(({ node }) => isEffectivelyDone(node)).length;
   const nodesDoneCount = nodes.filter((n) => n.done_at).length;
+
+  // 主题窗口：已保存的空主题 + 消息里出现过的主题
+  const topics = useMemo(() => {
+    const out = [];
+    const add = (name) => {
+      const value = typeof name === "string" ? name.trim() : "";
+      if (value && !out.includes(value)) out.push(value);
+    };
+    (Array.isArray(collab?.topics) ? collab.topics : []).forEach(add);
+    messages.forEach((m) => add(m.topic));
+    createdTopics.forEach(add);
+    return out;
+  }, [collab?.topics, messages, createdTopics]);
+  const filteredMessages = useMemo(
+    () => (topicFilter === "all" ? messages : messages.filter((m) => m.topic === topicFilter)),
+    [messages, topicFilter]
+  );
 
   // ── 共同讨论 ──
   // 附件上传：与主输入栏同一 /uploads 接口，返回后映射为讨论附件字段 {url,name,type,size}
@@ -268,6 +291,7 @@ export default function CollabDetail() {
     try {
       await post(`/collab/${taskId}/messages`, {
         content: content || "（分享附件）",
+        topic: topicFilter === "all" ? undefined : topicFilter,
         attachments: msgAttachments.length > 0 ? msgAttachments : undefined,
       });
       setMsgText("");
@@ -277,6 +301,29 @@ export default function CollabDetail() {
       // handled globally
     } finally {
       setSending(false);
+    }
+  };
+
+  const addTopic = async () => {
+    const name = newTopicName.trim().replace(/\s+/g, " ").slice(0, 20);
+    if (!name) {
+      setAddingTopic(false);
+      setNewTopicName("");
+      return;
+    }
+    if (topicSaving) return;
+    setTopicSaving(true);
+    try {
+      await post(`/collab/${taskId}/topics`, { name });
+      setCreatedTopics((prev) => [...new Set([...prev, name])]);
+      setTopicFilter(name);
+      setNewTopicName("");
+      setAddingTopic(false);
+      fetchSummary();
+    } catch (_err) {
+      // handled globally
+    } finally {
+      setTopicSaving(false);
     }
   };
 
@@ -932,12 +979,77 @@ export default function CollabDetail() {
             <View>
               <View className="ss-card">
                 <View className="ss-section-title" style={{ marginTop: 0 }}>共同讨论</View>
-                {messages.length === 0 && (
+                {/* 主题窗口：每个主题独立讨论，全部窗口汇总 */}
+                <View style={{ display: "flex", flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: "12rpx", marginBottom: "20rpx" }}>
+                  <View
+                    onClick={() => setTopicFilter("all")}
+                    style={{
+                      padding: "8rpx 20rpx",
+                      borderRadius: "999rpx",
+                      background: topicFilter === "all" ? "#384877" : "#f5f6fa",
+                      border: topicFilter === "all" ? "1rpx solid #384877" : "1rpx solid #e5e6eb",
+                    }}
+                  >
+                    <Text style={{ fontSize: "22rpx", color: topicFilter === "all" ? "#ffffff" : "#666" }}>全部</Text>
+                  </View>
+                  {topics.map((name) => (
+                    <View
+                      key={name}
+                      onClick={() => setTopicFilter(name)}
+                      style={{
+                        padding: "8rpx 20rpx",
+                        borderRadius: "999rpx",
+                        background: topicFilter === name ? "#384877" : "#f5f6fa",
+                        border: topicFilter === name ? "1rpx solid #384877" : "1rpx solid #e5e6eb",
+                      }}
+                    >
+                      <Text style={{ fontSize: "22rpx", color: topicFilter === name ? "#ffffff" : "#666" }}>{name}</Text>
+                    </View>
+                  ))}
+                  {addingTopic ? (
+                    <View style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "8rpx" }}>
+                      <Input
+                        value={newTopicName}
+                        onInput={(e) => setNewTopicName(e.detail.value)}
+                        onConfirm={addTopic}
+                        confirmType="done"
+                        placeholder="主题"
+                        style={{
+                          width: "180rpx",
+                          height: "52rpx",
+                          padding: "0 16rpx",
+                          borderRadius: "999rpx",
+                          background: "#f5f6fa",
+                          border: "1rpx solid #e5e6eb",
+                          fontSize: "22rpx",
+                        }}
+                      />
+                      <Text onClick={addTopic} style={{ fontSize: "22rpx", color: "#384877" }}>{topicSaving ? "…" : "建"}</Text>
+                      <Text
+                        onClick={() => {
+                          setAddingTopic(false);
+                          setNewTopicName("");
+                        }}
+                        style={{ fontSize: "26rpx", color: "#9ca0a8" }}
+                      >
+                        ×
+                      </Text>
+                    </View>
+                  ) : (
+                    <View
+                      onClick={() => setAddingTopic(true)}
+                      style={{ padding: "8rpx 20rpx", borderRadius: "999rpx", border: "1rpx dashed #e5e6eb", background: "#ffffff" }}
+                    >
+                      <Text style={{ fontSize: "22rpx", color: "#8a867e" }}>＋ 主题</Text>
+                    </View>
+                  )}
+                </View>
+                {filteredMessages.length === 0 && (
                   <View className="ss-empty" style={{ padding: "40rpx 0" }}>
-                    还没有讨论，说点什么让大家对齐吧
+                    {topicFilter === "all" ? "还没有讨论，说点什么让大家对齐吧" : `「${topicFilter}」里还没有讨论`}
                   </View>
                 )}
-                {messages.map((m) => {
+                {filteredMessages.map((m) => {
                   const mine = Boolean(me?.id && m.user_id === me.id);
                   return (
                     <View
@@ -1086,7 +1198,7 @@ export default function CollabDetail() {
                   </View>
                   <Input
                     className="ss-input"
-                    placeholder="参与讨论，@心栈 可让 Agent 协助"
+                    placeholder={topicFilter === "all" ? "参与讨论，@心栈 可让 Agent 协助" : `在「${topicFilter}」里说…`}
                     value={msgText}
                     onInput={(e) => setMsgText(e.detail.value)}
                     confirmType="send"

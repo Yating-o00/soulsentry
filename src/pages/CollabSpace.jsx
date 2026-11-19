@@ -329,6 +329,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
           onOpenAgent={openAgent}
           messageCount={messageCount}
           currentUserId={currentUser?.id}
+          savedTopics={collab?.topics || []}
         />
       </aside>
       )}

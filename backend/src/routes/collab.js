@@ -201,6 +201,42 @@ collabRouter.post("/:taskId/agent", async (req, res) => {
   return res.json({ agent, template });
 });
 
+// POST /api/collab/:taskId/topics — 新建讨论主题（聊天窗口）
+// 主题持久化在 metadata.collab.topics，空主题也能保留；消息通过 comment.topic 归属主题
+const topicSchema = z.object({
+  name: z.string().trim().min(1).max(20)
+});
+
+collabRouter.post("/:taskId/topics", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+  const payload = topicSchema.safeParse(req.body || {});
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "主题名需为 1-20 个字符" });
+  }
+  const name = payload.data.name.replace(/\s+/g, " ").trim();
+  if (!name) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "主题名不能为空" });
+  }
+  const collab = task.metadata?.collab || {};
+  const current = Array.isArray(collab.topics)
+    ? collab.topics.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean).slice(0, 20)
+    : [];
+  if (current.includes(name)) {
+    return res.json({ topics: current, name });
+  }
+  if (current.length >= 20) {
+    return res.status(400).json({ error: "TOO_MANY_TOPICS", message: "最多创建 20 个主题" });
+  }
+  const topics = [...current, name];
+  await prisma.task.update({
+    where: { id: task.id },
+    data: { metadata: { ...(task.metadata || {}), collab: { ...collab, topics } } }
+  });
+  return res.json({ topics, name });
+});
+
 collabRouter.get("/:taskId/summary", async (req, res) => {
   const result = await loadCollabSpace(req, res);
   if (!result) return;

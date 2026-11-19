@@ -109,9 +109,9 @@ function draft({ days = "周一,周三,周六", start = "10:00", minutes = 20, t
   } });
 }
 
-async function post(path, body, account = user) {
+async function post(path, body, account = user, method = "POST") {
   const res = await nativeFetch(base + path, {
-    method: "POST",
+    method,
     headers: { authorization: "Bearer " + sign(account), "content-type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -155,7 +155,7 @@ function busy(start, end, account = user) {
 }
 
 async function memoryLimit(topic, content, { subject = "self", expiresAt } = {}) {
-  await db.memoryRecord.create({ data: {
+  return db.memoryRecord.create({ data: {
     userId: user.id, title: content, content, memoryType: "preference",
     fact: { create: { userId: user.id, subject, topic, attribute: "session_limit", aliases: [], expiresAt } },
   } });
@@ -415,4 +415,53 @@ test("defaults to Kimi and sends one HTTP invocation to repair invalid model JSO
   assert.equal(calls.length, 3);
   assert.ok(calls.every(({ model }) => model.startsWith("kimi-")));
   assert.equal(plannerCalls().length, 2);
+});
+
+test("forgetting a remembered limit invalidates its proposal and restores the clarification gate", async () => {
+  const memory = await memoryLimit("english_vocabulary", "英语词汇复习每次最多20分钟");
+  const query = "帮我规划一周英语词汇复习，每周三次，按我平常的上限";
+  intent();
+  draft();
+  const first = await send(query);
+  assertSchedule(first, 20);
+  const removed = await post("/api/memory-records/" + memory.id, undefined, user, "DELETE");
+  assert.equal(removed.status, 204);
+  assert.equal((await confirm(first.extracted.plan_proposal_id)).status, 404);
+  intent({ minutes: 20 });
+  const next = await send(query);
+  assert.equal(next.extracted, null);
+  assert.match(next.reply.content, /分钟|上限/);
+  assert.equal(plannerCalls().length, 1);
+  assert.deepEqual(await tasks(), []);
+});
+
+test("replays the same invalid first draft with zero repairs and with one repair", async () => {
+  const { planCommitmentWithKimi } = await import("../../src/services/planCommitment.js");
+  draft({ days: "周一,周二,周三,周六" });
+  draft();
+  const [first, revised] = answers.splice(0);
+  const constraints = {
+    checkWindows: true, startDate: "2026-11-16", horizonDays: 7, sessionsPerWeek: 3,
+    maxSessionMinutes: 20, busy: [],
+  };
+  const shared = { goal: "英语词汇复习", horizonDays: 7, dailyMinutes: 20, constraints };
+  let callsWithoutRepair = 0;
+  await assert.rejects(planCommitmentWithKimi({
+    ...shared,
+    maxRepairs: 0,
+    invoke: async () => { callsWithoutRepair += 1; return { data: first.data }; },
+  }), /SESSION_COUNT/);
+  const prompts = [];
+  const result = await planCommitmentWithKimi({
+    ...shared,
+    maxRepairs: 1,
+    invoke: async ({ prompt }) => {
+      prompts.push(prompt);
+      return { data: prompts.length === 1 ? first.data : revised.data };
+    },
+  });
+  assert.equal(callsWithoutRepair, 1);
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[1], /SESSION_COUNT/);
+  assertSchedule({ extracted: { plan: result } }, 20);
 });

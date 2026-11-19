@@ -1122,6 +1122,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             onAttempt: planRun && (({ attempt, errors, failed }) => {
               planRun.plannerCalls = attempt + 1;
               if (attempt === 0) planRun.firstValidation = noteValidation(errors);
+              planRun.validation = noteValidation(errors);
               if (failed) planRun.status = planRun.signal.aborted ? "timeout" : "provider_failure";
             }),
           });

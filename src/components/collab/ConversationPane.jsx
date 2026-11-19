@@ -359,8 +359,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
         key={message.id}
         id={`collab-msg-${message.id}`}
         className={cn(
-          "group relative border-b py-4 transition-colors last:border-b-0",
-          isReply ? "ml-10 border-transparent py-2.5" : "",
+          "group relative border-b transition-colors last:border-b-0",
+          isReply ? "ml-10 border-transparent py-2.5" : compact ? "py-3.5" : "py-4",
           flashingId === message.id && "collab-msg-flash"
         )}
         style={isReply ? undefined : { borderColor: C.lineSoft }}
@@ -391,7 +391,10 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               )}
               <span className="text-[10px]" style={{ color: "#8a867e" }}>{formatTime(message.created_date)}</span>
             </div>
-            <p className="mt-1.5 text-[13px] leading-6 whitespace-pre-wrap break-words" style={{ color: isAgent ? "#49465b" : "#57534d" }}>
+            <p
+              className={cn("mt-1.5 whitespace-pre-wrap break-words leading-6", compact ? "text-[14px]" : "text-[13px]")}
+              style={{ color: isAgent ? "#49465b" : "#57534d" }}
+            >
               {message.content}
             </p>
             <AttachmentView attachments={message.attachments} />
@@ -441,7 +444,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       <div
         className={cn(
           "flex shrink-0 items-center gap-1.5 overflow-x-auto border-b",
-          compact ? "px-3 py-2" : "px-4 py-2.5 sm:px-6"
+          compact ? "px-3 py-1.5" : "px-4 py-2.5 sm:px-6"
         )}
         style={{ borderColor: C.lineSoft }}
         role="group"
@@ -565,7 +568,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       </div>
 
       {/* 输入区 */}
-      <div className={compact ? "relative shrink-0 border-t p-3" : "relative shrink-0 border-t p-4 sm:px-6"} style={{ borderColor: C.line, backgroundColor: C.card }}>
+      <div className={compact ? "relative shrink-0 border-t p-2.5" : "relative shrink-0 border-t p-4 sm:px-6"} style={{ borderColor: C.line, backgroundColor: C.card }}>
         {/* @ 自动弹出：选择心栈 Agent */}
         {mentionOpen && (
           <div

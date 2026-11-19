@@ -165,9 +165,9 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
   ];
 
   return (
-    <div className="flex h-[calc(100dvh-260px)] min-h-[430px] max-h-[640px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)]">
+    <div className="flex h-[calc(100dvh-190px)] min-h-[540px] max-h-[820px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)]">
       {/* 极简头：标题 / 进度 / 成员 / 三个切换 */}
-      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-4 pb-3 pt-4">
+      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-4 pb-2.5 pt-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[10px] text-stone-400">
@@ -176,8 +176,8 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
                 <Sparkles className="h-3 w-3" /> {agentActive ? "Agent 参与中" : "Agent 未参与"}
               </span>
             </div>
-            <h3 className="mt-1.5 truncate text-[16px] font-semibold text-stone-900">{task.title}</h3>
-            {collab?.goal && <p className="mt-0.5 truncate text-[11px] text-stone-400">{collab.goal}</p>}
+            <h3 className="mt-1 truncate text-[16px] font-semibold text-stone-900">{task.title}</h3>
+            {collab?.goal && <p className="mt-0.5 hidden truncate text-[11px] text-stone-400 sm:block">{collab.goal}</p>}
           </div>
           <Link
             to={fullSpaceUrl}
@@ -189,7 +189,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
           </Link>
         </div>
 
-        <div className="mt-3 flex items-center gap-2.5">
+        <div className="mt-2 flex items-center gap-2.5">
           <div
             className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-200/70"
             role="progressbar"
@@ -222,7 +222,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-1" role="tablist" aria-label="协同内容">
+        <div className="mt-2 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-1" role="tablist" aria-label="协同内容">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -231,7 +231,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
               aria-selected={view === tab.key}
               onClick={() => switchView(tab.key)}
               className={cn(
-                "relative min-h-[34px] rounded-full text-[12px] transition-colors",
+                "relative min-h-[32px] rounded-full text-[12px] transition-colors",
                 view === tab.key ? "bg-white font-medium text-stone-900 shadow-sm" : "text-stone-500"
               )}
             >

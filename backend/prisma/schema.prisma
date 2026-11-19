@@ -51,6 +51,11 @@ model User {
   wechatOrders      WechatOrder[]
   weeklyPlans       WeeklyPlan[]
   memoryRecords     MemoryRecord[]
+  memorySuppressions MemorySuppression[]
+  memoryJobs        MemoryJob[]
+  memoryWorkerState MemoryWorkerState?
+  memoryRecap       MemoryRecap?
+  memoryTaskSignals MemoryTaskSignal[]
   vaultItems        VaultItem[]
   collabDocs        CollabDoc[]
   collabInvites     CollabInvite[]
@@ -69,6 +74,7 @@ model CompanionMessage {
   readAt    DateTime?
   createdAt DateTime  @default(now())
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memorySuppressions MemorySuppression[]
 
   @@index([userId, createdAt])
   @@index([userId, readAt])
@@ -109,11 +115,109 @@ model MemoryRecord {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revisions     MemoryRevision[]
+  fact          MemoryFact?
+  embedding     MemoryEmbedding?
 
   @@index([userId, createdAt])
   @@index([userId, memoryType])
   @@index([userId, sourceTaskId])
   @@index([userId, sourceNoteId])
+}
+
+model MemoryRevision {
+  id               String       @id @default(cuid())
+  memoryId         String
+  version          Int
+  snapshot         Json
+  sourceMessageIds Json
+  actor            String
+  reason           String
+  createdAt        DateTime     @default(now())
+  memory           MemoryRecord @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@unique([memoryId, version])
+}
+
+// Suppression survives removal of a record without retaining its text.
+model MemorySuppression {
+  userId    String
+  messageId String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message   CompanionMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@id([userId, messageId])
+  @@index([messageId])
+}
+
+model MemoryFact {
+  memoryId   String       @id
+  userId     String
+  slot       String?
+  subject    String
+  topic      String
+  attribute  String
+  status     String       @default("active")
+  expiresAt  DateTime?
+  aliases    Json
+  memory     MemoryRecord @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, slot])
+  @@index([userId, status, expiresAt])
+}
+
+model MemoryEmbedding {
+  memoryId String       @id
+  version  Int
+  model    String
+  vector   Json
+  memory   MemoryRecord @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+}
+
+model MemoryJob {
+  id          String    @id @default(cuid())
+  userId      String
+  kind        String
+  evidenceId  String
+  attempts    Int       @default(0)
+  availableAt DateTime  @default(now())
+  completedAt DateTime?
+  failedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, kind, evidenceId])
+  @@index([availableAt, completedAt, failedAt])
+}
+
+model MemoryWorkerState {
+  userId     String    @id
+  enabled    Boolean   @default(true)
+  leaseToken String?
+  leaseUntil DateTime?
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MemoryRecap {
+  userId    String   @id
+  cursorAt  DateTime
+  cursorId  String
+  points    Json
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model MemoryTaskSignal {
+  userId            String
+  kind              String
+  evidenceId        String
+  proposalMessageId String?
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, kind, evidenceId])
+  @@index([userId, createdAt])
 }
 
 model Task {

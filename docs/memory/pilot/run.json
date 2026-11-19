@@ -1,0 +1,44 @@
+{
+  "provider": "deepseek",
+  "model": "deepseek-flash",
+  "suite": "memory-pilot-v2",
+  "mode": "history-replay",
+  "callLimit": 44,
+  "totals": {
+    "calls": 44,
+    "inputTokens": 44158,
+    "outputTokens": 5542,
+    "unmeteredCalls": 0,
+    "errors": 0
+  },
+  "usage": {
+    "chat": {
+      "calls": 24,
+      "inputTokens": 36346,
+      "outputTokens": 1497,
+      "unmeteredCalls": 0,
+      "errors": 0
+    },
+    "planner": {
+      "calls": 8,
+      "inputTokens": 2844,
+      "outputTokens": 3901,
+      "unmeteredCalls": 0,
+      "errors": 0
+    },
+    "extraction": {
+      "calls": 8,
+      "inputTokens": 2882,
+      "outputTokens": 65,
+      "unmeteredCalls": 0,
+      "errors": 0
+    },
+    "consolidation": {
+      "calls": 4,
+      "inputTokens": 2086,
+      "outputTokens": 79,
+      "unmeteredCalls": 0,
+      "errors": 0
+    }
+  }
+}

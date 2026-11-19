@@ -2,6 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import {
+  activeMemoryScope, createMemory, currentMemoryVersion, excludeSuppressedMemories, forgetMemory, memoryHistory, memoryInclude, memorySource,
+  MemoryStoreError, restoreMemory, updateMemory,
+} from "../services/memoryStore.js";
+import { memoryLearningEnabled } from "../services/memoryWorker.js";
 
 export const memoryRecordsRouter = Router();
 
@@ -22,9 +27,25 @@ const memoryRecordInputSchema = z.object({
 
 memoryRecordsRouter.use(requireAuth);
 
+const versionSchema = z.number().int().min(1).max(2147483646);
+const withMemoryError = (handler) => async (req, res) => {
+  try {
+    return await handler(req, res);
+  } catch (error) {
+    if (error instanceof MemoryStoreError) return res.status(error.status).json({ error: error.code, message: error.message });
+    if (["P2002", "P2034", "P2028", "P1008"].includes(error.code)) {
+      return res.status(409).json({ error: "MEMORY_CONFLICT", message: "记忆正在更新，请刷新后再试" });
+    }
+    throw error;
+  }
+};
+
 function serializeMemoryRecord(item) {
   return {
     id: item.id,
+    version: currentMemoryVersion(item),
+    memory_status: item.fact?.status === "superseded" ? "superseded"
+      : item.fact?.expiresAt && item.fact.expiresAt <= new Date() ? "expired" : "active",
     title: item.title,
     content: item.content,
     memory_type: item.memoryType,
@@ -78,7 +99,7 @@ function buildMemoryRecordData(userId, payload) {
 memoryRecordsRouter.get("/", async (req, res) => {
   const limit = Math.min(Number(req.query.limit || req.query.take || 100), 300);
   const orderBy = parseSort(req.query.sort || req.query.orderBy);
-  const where = { userId: req.user.id };
+  const where = req.query.active === "true" ? activeMemoryScope(req.user.id) : { userId: req.user.id };
 
   if (req.query.id) where.id = String(req.query.id);
   if (req.query.memory_type) where.memoryType = String(req.query.memory_type);
@@ -98,10 +119,31 @@ memoryRecordsRouter.get("/", async (req, res) => {
     where,
     orderBy,
     take: Number.isFinite(limit) ? limit : 100,
-    include: { user: true }
+    include: memoryInclude
   });
 
-  return res.json(items.map(serializeMemoryRecord));
+  const visible = req.query.active === "true" ? await excludeSuppressedMemories(prisma, req.user.id, items) : items;
+  return res.json(visible.map(serializeMemoryRecord));
+});
+
+memoryRecordsRouter.get("/learning", async (req, res) => {
+  const state = await prisma.memoryWorkerState.findUnique({ where: { userId: req.user.id }, select: { enabled: true } });
+  return res.json({ available: memoryLearningEnabled(), enabled: state?.enabled ?? true });
+});
+
+memoryRecordsRouter.put("/learning", async (req, res) => {
+  const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT" });
+  const { enabled } = parsed.data;
+  const userId = req.user.id;
+  await prisma.$transaction(async (tx) => {
+    await tx.memoryWorkerState.upsert({
+      where: { userId }, create: { userId, enabled },
+      update: enabled ? { enabled } : { enabled, leaseToken: null, leaseUntil: null },
+    });
+    if (!enabled) await tx.memoryJob.deleteMany({ where: { userId, completedAt: null, failedAt: null } });
+  });
+  return res.json({ available: memoryLearningEnabled(), enabled });
 });
 
 memoryRecordsRouter.get("/:id", async (req, res) => {
@@ -110,7 +152,7 @@ memoryRecordsRouter.get("/:id", async (req, res) => {
       id: req.params.id,
       userId: req.user.id
     },
-    include: { user: true }
+    include: memoryInclude
   });
 
   if (!item) {
@@ -120,39 +162,51 @@ memoryRecordsRouter.get("/:id", async (req, res) => {
   return res.json(serializeMemoryRecord(item));
 });
 
-memoryRecordsRouter.post("/", async (req, res) => {
+memoryRecordsRouter.get("/:id/revisions", withMemoryError(async (req, res) => {
+  const query = z.object({ before: z.coerce.number().int().min(1).max(2147483646).optional() }).safeParse(req.query);
+  if (!query.success) return res.status(400).json({ error: "INVALID_INPUT" });
+  const history = await memoryHistory(prisma, { userId: req.user.id, id: req.params.id, beforeVersion: query.data.before });
+  return res.json(history);
+}));
+
+memoryRecordsRouter.get("/:id/revisions/:version/source/:messageId", withMemoryError(async (req, res) => {
+  const version = versionSchema.safeParse(Number(req.params.version));
+  if (!version.success) return res.status(400).json({ error: "INVALID_INPUT" });
+  return res.json(await memorySource(prisma, {
+    userId: req.user.id, id: req.params.id, version: version.data, messageId: req.params.messageId,
+  }));
+}));
+
+memoryRecordsRouter.post("/:id/restore", withMemoryError(async (req, res) => {
+  const payload = z.object({ version: versionSchema, expected_version: versionSchema }).safeParse(req.body);
+  if (!payload.success) return res.status(400).json({ error: "INVALID_INPUT" });
+  const item = await prisma.$transaction((tx) => restoreMemory(tx, {
+    userId: req.user.id, id: req.params.id, version: payload.data.version, expectedVersion: payload.data.expected_version,
+  }));
+  return res.json(serializeMemoryRecord(item));
+}));
+
+memoryRecordsRouter.post("/", withMemoryError(async (req, res) => {
   const payload = memoryRecordInputSchema.safeParse(req.body);
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
-  const item = await prisma.memoryRecord.create({
-    data: buildMemoryRecordData(req.user.id, payload.data),
-    include: { user: true }
-  });
+  const item = await prisma.$transaction((tx) => createMemory(tx, {
+    userId: req.user.id, data: buildMemoryRecordData(req.user.id, payload.data),
+  }));
 
   return res.status(201).json(serializeMemoryRecord(item));
-});
+}));
 
-memoryRecordsRouter.patch("/:id", async (req, res) => {
-  const payload = memoryRecordInputSchema.partial().safeParse(req.body);
+memoryRecordsRouter.patch("/:id", withMemoryError(async (req, res) => {
+  const payload = memoryRecordInputSchema.partial().extend({ expected_version: versionSchema.optional() }).safeParse(req.body);
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
   }
 
-  const existing = await prisma.memoryRecord.findFirst({
-    where: {
-      id: req.params.id,
-      userId: req.user.id
-    }
-  });
-
-  if (!existing) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "记忆不存在" });
-  }
-
-  const item = await prisma.memoryRecord.update({
-    where: { id: existing.id },
+  const item = await prisma.$transaction((tx) => updateMemory(tx, {
+    userId: req.user.id, id: req.params.id, expectedVersion: payload.data.expected_version,
     data: {
       title: payload.data.title,
       content: payload.data.content,
@@ -166,25 +220,13 @@ memoryRecordsRouter.patch("/:id", async (req, res) => {
       sourceTaskId: payload.data.source_task_id === undefined ? undefined : (payload.data.source_task_id || null),
       sourceNoteId: payload.data.source_note_id === undefined ? undefined : (payload.data.source_note_id || null),
       isPinned: payload.data.is_pinned
-    },
-    include: { user: true }
-  });
+    }
+  }));
 
   return res.json(serializeMemoryRecord(item));
-});
+}));
 
-memoryRecordsRouter.delete("/:id", async (req, res) => {
-  const existing = await prisma.memoryRecord.findFirst({
-    where: {
-      id: req.params.id,
-      userId: req.user.id
-    }
-  });
-
-  if (!existing) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "记忆不存在" });
-  }
-
-  await prisma.memoryRecord.delete({ where: { id: existing.id } });
+memoryRecordsRouter.delete("/:id", withMemoryError(async (req, res) => {
+  await prisma.$transaction((tx) => forgetMemory(tx, { userId: req.user.id, id: req.params.id }));
   return res.status(204).send();
-});
+}));

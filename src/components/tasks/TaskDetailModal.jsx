@@ -1205,6 +1205,7 @@ export default function TaskDetailModal({ task: initialTaskData, open, onClose, 
                           }`}
                         >
                           {subtask.title}
+                          {subtask.description && <span className="mt-1 block text-xs text-slate-500 whitespace-pre-wrap">{subtask.description}</span>}
                           <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             {(subtask.plan_kind === "checkin" || subtask.category === "checkin") && (
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">

@@ -28,6 +28,7 @@ import {
   ListTodo,
   ExternalLink,
   CircleCheck,
+  UserMinus,
 } from "lucide-react";
 import QRCodeImage from "@/components/ui/QRCode";
 import { httpRequest } from "@/api/httpClient";
@@ -70,6 +71,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
   const [cardInvite, setCardInvite] = useState(null);
   const [creatingCard, setCreatingCard] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState("");
   const [exporting, setExporting] = useState(false);
   // @直接邀请：输入 @ 检索协作过的伙伴，选中后点邀请即刻发出
   const [mentionText, setMentionText] = useState("");
@@ -150,6 +152,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
   }, [mentionText, open, task?.id, mentionSelected]);
 
   const ownerMember = members.find((m) => m.role === "owner");
+  const isOwner = Boolean(currentUser?.id && ownerMember?.user_id === currentUser.id);
 
   // 剪贴板写入：优先现代 API，失败（权限/非安全上下文）回退隐藏 textarea 方案，确保一定有反馈
   const copyText = async (text) => {
@@ -357,6 +360,23 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
       }
     } finally {
       setAdding(false);
+    }
+  };
+
+  // 创建者移除成员（后端二次校验发起人身份）
+  const removeMember = async (member) => {
+    if (!member?.user_id || removingMemberId) return;
+    const name = member.display_name || "该成员";
+    if (!window.confirm(`将 ${name} 移出这个协同约定？`)) return;
+    setRemovingMemberId(member.user_id);
+    try {
+      await httpRequest(`/api/collab/${task.id}/members/${member.user_id}`, { method: "DELETE" });
+      toast.success(`已将 ${name} 移出协同约定`);
+      onChanged?.();
+    } catch (error) {
+      toast.error(error?.message || "移除成员失败");
+    } finally {
+      setRemovingMemberId("");
     }
   };
 
@@ -855,6 +875,20 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                   <Badge className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200">
                     <Crown className="w-2.5 h-2.5 mr-0.5" />发起人
                   </Badge>
+                )}
+                {isOwner && m.role !== "owner" && (
+                  <button
+                    type="button"
+                    onClick={() => removeMember(m)}
+                    disabled={removingMemberId === m.user_id}
+                    title={`移出 ${m.display_name || "成员"}`}
+                    aria-label={`移出 ${m.display_name || "成员"}`}
+                    className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
+                  >
+                    {removingMemberId === m.user_id
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <UserMinus className="h-3 w-3" />}
+                  </button>
                 )}
               </div>
             ))}

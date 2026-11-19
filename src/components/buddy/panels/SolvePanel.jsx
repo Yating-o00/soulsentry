@@ -1,6 +1,7 @@
-import React, { useState } from "react";
-import { Loader2, Camera } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Loader2, Camera, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
+import { httpRequest } from "@/api/httpClient";
 import { base44 } from "@/api/base44Client";
 import { BuddyMsg, PanelCard, TintButton, useBuddyAgent } from "./shared";
 
@@ -20,6 +21,9 @@ export default function SolvePanel({ tint, persona, projectTask = null }) {
   const [quizPick, setQuizPick] = useState(null);
   const [busy, setBusy] = useState(false);
   const [sediment, setSediment] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef(null);
 
   const reset = () => {
     setStage("idle");
@@ -30,6 +34,39 @@ export default function SolvePanel({ tint, persona, projectTask = null }) {
     setQuiz(null);
     setQuizPick(null);
     setSediment(false);
+    setAttachments([]);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  // 粘贴/选择题目图片 → 上传 → 服务端 OCR 后进入解题链路
+  const handleImage = async (file) => {
+    if (!file || uploading) return;
+    if (!(file.type || "").startsWith("image/")) {
+      toast.error("请粘贴或上传题目图片");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("图片超过 20MB，换一张小一点的");
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await httpRequest("/api/uploads", { method: "POST", body: formData });
+      setAttachments([{
+        url: res.file_url,
+        name: res.file_name,
+        type: res.file_type,
+        size: res.file_size,
+      }]);
+      toast.success("图片已准备好，发给搭子开始解题");
+    } catch (error) {
+      toast.error(error?.message || "图片上传失败");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   const run = async (fn) => {
@@ -46,7 +83,23 @@ export default function SolvePanel({ tint, persona, projectTask = null }) {
 
   const locate = () =>
     run(async () => {
-      const data = await call({ mode: "solve_locate", payload: { problem } });
+      const data = await call({
+        mode: "solve_locate",
+        payload: {
+          problem,
+          ...(attachments.length > 0 ? { attachments } : {}),
+        },
+      });
+      const recognized = String(data?.problem_text || "")
+        .replace(/^【[^】]+】\s*/, "")
+        .trim();
+      if (recognized) {
+        setProblem((prev) => (prev.trim() ? `${prev.trim()}\n\n【图片识别】\n${recognized}` : recognized));
+      } else if (!problem.trim() && attachments.length > 0) {
+        toast.error("没识别到题目文字，换一张清晰一点的图片，或直接输入题目");
+        return;
+      }
+      setAttachments([]);
       setLocated(data);
       setStage("located");
     });
@@ -121,19 +174,66 @@ export default function SolvePanel({ tint, persona, projectTask = null }) {
       </BuddyMsg>
 
       {stage === "idle" && (
-        <PanelCard title="拍一道你卡住的题">
+        <PanelCard title="粘贴或上传你卡住的题">
+          {attachments.length > 0 && (
+            <div className="relative mt-3">
+              <img
+                src={attachments[0].url}
+                alt={attachments[0].name || "题目图片"}
+                className="max-h-56 w-full rounded-xl border border-stone-200 bg-[#FAF9F7] object-contain"
+              />
+              <button
+                type="button"
+                onClick={() => setAttachments([])}
+                aria-label="移除题目图片"
+                className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-stone-700 text-white shadow"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <textarea
             value={problem}
             onChange={(e) => setProblem(e.target.value)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData?.files || []);
+              if (files.length > 0) {
+                e.preventDefault();
+                handleImage(files[0]);
+              }
+            }}
             rows={4}
-            placeholder="把题目打进来（拍照识别在小程序端已支持，Web 端先贴文字）…"
+            placeholder="把题目打进来，或直接粘贴题目图片…"
             className="mt-3 w-full rounded-xl border border-stone-200 bg-[#FAF9F7] p-3.5 text-sm leading-relaxed text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-stone-400"
           />
-          <TintButton tint={tint} onClick={locate} disabled={!problem.trim() || busy} className="mt-3 w-full">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (
-              <span className="inline-flex items-center gap-1.5"><Camera className="w-4 h-4" /> 发给搭子，开始解题</span>
-            )}
-          </TintButton>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full border border-stone-200 px-3.5 text-[13px] text-stone-600 transition-colors hover:border-stone-400 disabled:opacity-50"
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+              题目图片
+            </button>
+            <TintButton
+              tint={tint}
+              onClick={locate}
+              disabled={(!problem.trim() && attachments.length === 0) || busy || uploading}
+              className="flex-1"
+            >
+              {busy ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : (
+                <span className="inline-flex items-center gap-1.5"><Camera className="w-4 h-4" /> 发给搭子，开始解题</span>
+              )}
+            </TintButton>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handleImage(e.target.files?.[0])}
+          />
         </PanelCard>
       )}
 

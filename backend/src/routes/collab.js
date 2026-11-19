@@ -404,6 +404,21 @@ collabRouter.delete("/:taskId/members/:userId", async (req, res) => {
   await prisma.taskMember.delete({ where: { id: membership.id } });
   const removedName = actorName(membership.user);
 
+  // 清掉该成员在子约定上的负责人标记，避免移除后仍显示为负责成员
+  try {
+    const subtasks = await collectSubtasks(task.id);
+    for (const subtask of subtasks) {
+      const subCollab = subtask.metadata?.collab;
+      if (subCollab?.assignee !== targetUserId) continue;
+      await prisma.task.update({
+        where: { id: subtask.id },
+        data: { metadata: { ...(subtask.metadata || {}), collab: { ...subCollab, assignee: null } } }
+      });
+    }
+  } catch (error) {
+    console.warn("[collab] clear removed member assignee failed:", error?.message || error);
+  }
+
   try {
     await prisma.notification.create({
       data: {

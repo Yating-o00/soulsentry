@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { invokeKimiText, FAST_TEXT_MODELS } from "../lib/kimi.js";
+import { readAttachmentText } from "../services/readAttachment.js";
 
 /**
  * 搭子（Buddy）L1 底座：
@@ -504,10 +505,12 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
 
   switch (mode) {
     case "solve_locate": {
-      const problem = String(payload.problem || "").slice(0, 2000);
+      const typed = String(payload.problem || "").trim().slice(0, 2000);
+      const attachmentText = String(payload.attachment_text || "").trim().slice(0, 6000);
+      const problem = [typed, attachmentText ? `题目图片/附件识别内容：\n${attachmentText}` : ""].filter(Boolean).join("\n\n");
       return {
         systemPrompt: `${base}你擅长引导式教学：绝不直接给答案，而是定位考点、分层提示。`,
-        prompt: `用户拍来一道卡住的题：\n「${problem}」\n\n请做考点定位，只输出 JSON：{"subject":"科目","point":"具体考点（10字内）","ask":"一句引导提问，问用户是完全没思路还是做到一半卡住了（30字内）"}`,
+        prompt: `用户发来一道卡住的题：\n「${problem || "（用户只发了图片，但识别失败）"}」\n\n请做考点定位，只输出 JSON：{"subject":"科目","point":"具体考点（10字内）","ask":"一句引导提问，问用户是完全没思路还是做到一半卡住了（30字内）"}`,
       };
     }
     case "solve_hint": {
@@ -568,6 +571,7 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
     }
     case "chat": {
       const context = String(payload.context || "").slice(0, 800);
+      const attachmentText = String(payload.attachment_text || "").trim().slice(0, 6000);
       const history = Array.isArray(payload.messages)
         ? payload.messages
             .slice(-10)
@@ -575,8 +579,8 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
             .join("\n")
         : "";
       return {
-        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。如果用户想成立小组、拉伙伴一起做某件事（如「成立一个专门考公的学习小组」），不要只给建议：在 proposal 里给出可确认的协同小组提案（type=create_collab，title=小组名，goal=一句话目标，scenario=friends），reply 里说明确认后会创建；普通问题 proposal 为 null。`,
-        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。只输出 JSON：{"reply":"...","proposal":null}；需要创建小组时输出 {"reply":"...","proposal":{"type":"create_collab","title":"...","goal":"...","scenario":"friends"}}。`,
+        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。如果用户想成立小组、拉伙伴一起做某件事（如「成立一个专门考公的学习小组」），不要只给建议：在 proposal 里给出可确认的协同小组提案（type=create_collab，title=小组名，goal=一句话目标，scenario=friends），reply 里说明确认后会创建；普通问题 proposal 为 null。用户可能随消息发来图片或文件，附件会以识别后的文本提供给你，必须结合附件内容回答。`,
+        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n${attachmentText ? `\n用户这条消息附带的图片/文件内容（已识别）：\n${attachmentText}\n` : ""}\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。只输出 JSON：{"reply":"...","proposal":null}；需要创建小组时输出 {"reply":"...","proposal":{"type":"create_collab","title":"...","goal":"...","scenario":"friends"}}。`,
       };
     }
     default:
@@ -674,14 +678,32 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
     : "";
   const isInteractive = ["chat", "greeting", "talk"].includes(parsed.data.mode);
 
+  // 搭子对话/解题支持图片与文件：先提取图片 OCR / 文件文本，再交给领域提示词
+  const attachments = Array.isArray(payload.attachments) ? payload.attachments.slice(0, 3) : [];
+  const hasAttachments = attachments.some((att) => att?.url || att?.file_url);
+  if (hasAttachments && (parsed.data.mode === "chat" || parsed.data.mode === "solve_locate")) {
+    const parts = [];
+    for (const att of attachments) {
+      const text = await readAttachmentText({
+        url: att.url || att.file_url,
+        name: att.name || att.file_name,
+        type: att.type || att.file_type,
+      });
+      if (text) parts.push(text);
+    }
+    const attachmentText = parts.join("\n\n").slice(0, 6000);
+    if (attachmentText) payload = { ...payload, attachment_text: attachmentText };
+  }
+
   // 成立小组 / 拉伙伴一起做：本地秒回一个可确认的协同小组提案，不走慢模型
   if (parsed.data.mode === "chat") {
     const groupIntent = detectBuddyGroupIntent(lastUserText);
     if (groupIntent) return res.json({ data: groupIntent });
   }
 
-  // 复杂问题（小组/规划/备考/长文本）用旗舰模型换专业度；短闲聊继续走快速模型
+  // 复杂问题（小组/规划/备考/长文本/带附件）用旗舰模型换专业度；短闲聊继续走快速模型
   const isComplex =
+    hasAttachments ||
     lastUserText.length > 60 ||
     /(小组|协同|计划|规划|方案|目标|考公|考研|英语|数学|复习|安排|成立|创建)/.test(lastUserText);
   const useFast = isInteractive && !isComplex;
@@ -710,6 +732,9 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
         setTimeout(() => reject(new Error("AGENT_TIMEOUT")), useFast ? 28000 : 60000)
       ),
     ]);
+    if (parsed.data.mode === "solve_locate" && payload.attachment_text) {
+      return res.json({ data: { ...(data && typeof data === "object" ? data : {}), problem_text: payload.attachment_text } });
+    }
     return res.json({ data });
   } catch (error) {
     console.error(`[buddies/agent] ${buddyId}/${parsed.data.mode} failed:`, error?.message || error);

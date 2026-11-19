@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Users2 } from "lucide-react";
+import { FileText, Loader2, Paperclip, Users2, X } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { BuddyMsg, useBuddyAgent, useBuddyState, todayKey } from "./shared";
@@ -18,7 +18,10 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [creatingProposal, setCreatingProposal] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef(null);
+  const fileRef = useRef(null);
   const greetedRef = useRef(false);
 
   const chat = useMemo(() => (Array.isArray(state.chat) ? state.chat : []), [state.chat]);
@@ -62,17 +65,63 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
     scrollRef.current?.scrollTo({ top: 99999, behavior: "smooth" });
   }, [chat.length, sending]);
 
+  const handleFiles = async (fileList) => {
+    const room = 3 - attachments.length;
+    if (room <= 0) {
+      toast.info("最多随一条消息发送 3 个附件");
+      return;
+    }
+    const files = Array.from(fileList || []).slice(0, room);
+    if (files.length === 0) return;
+    setUploading(true);
+    for (const file of files) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`「${file.name}」超过 20MB，暂时不能上传`);
+        continue;
+      }
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await httpRequest("/api/uploads", { method: "POST", body: formData });
+        setAttachments((cur) => [...cur, {
+          url: res.file_url,
+          name: res.file_name,
+          type: res.file_type,
+          size: res.file_size,
+        }].slice(0, 3));
+      } catch (error) {
+        toast.error(error?.message || `「${file.name}」上传失败`);
+      }
+    }
+    setUploading(false);
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   const send = async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if ((!text && attachments.length === 0) || sending || uploading) return;
+    const sentAttachments = attachments;
     setInput("");
+    setAttachments([]);
     setSending(true);
-    const userMsg = { role: "user", content: text, at: new Date().toISOString() };
+    const userMsg = {
+      role: "user",
+      content: text || (sentAttachments.some((a) => (a.type || "").startsWith("image/")) ? "（图片）" : "（文件）"),
+      at: new Date().toISOString(),
+      ...(sentAttachments.length > 0 ? { attachments: sentAttachments } : {}),
+    };
     const base = [...chat, userMsg];
     patch({ chat: base.slice(-40) });
     try {
       const history = base.slice(-10).map((m) => ({ role: m.role === "user" ? "user" : "buddy", content: m.content }));
-      const data = await call({ mode: "chat", payload: { messages: history, context } });
+      const data = await call({
+        mode: "chat",
+        payload: {
+          messages: history,
+          context,
+          ...(sentAttachments.length > 0 ? { attachments: sentAttachments } : {}),
+        },
+      });
       const reply = String(data?.reply || "").trim();
       if (reply) {
         const proposal = data?.proposal?.type === "create_collab" ? data.proposal : null;
@@ -143,7 +192,29 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
             m.role === "user" ? (
               <div key={i} className="flex justify-end">
                 <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[#384877] px-3.5 py-2.5 text-[14px] leading-relaxed text-[#FAF9F7]">
-                  {m.content}
+                  <p className="whitespace-pre-wrap break-words">{m.content}</p>
+                  {(m.attachments || []).length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(m.attachments || []).map((att, ai) =>
+                        (att.type || "").startsWith("image/") ? (
+                          <a key={att.url || ai} href={att.url} target="_blank" rel="noreferrer" className="block">
+                            <img src={att.url} alt={att.name || "图片"} className="h-20 w-20 rounded-lg object-cover" />
+                          </a>
+                        ) : (
+                          <a
+                            key={att.url || ai}
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex max-w-[180px] items-center gap-1.5 rounded-lg bg-white/15 px-2 py-1 text-[11px]"
+                          >
+                            <FileText className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{att.name || "文件"}</span>
+                          </a>
+                        )
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -199,6 +270,31 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
         </div>
       )}
 
+      {attachments.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {attachments.map((att, index) => (
+            <div key={`${att.url}-${index}`} className="relative">
+              {(att.type || "").startsWith("image/") ? (
+                <img src={att.url} alt={att.name || "图片"} className="h-12 w-12 rounded-xl border border-stone-200 object-cover" />
+              ) : (
+                <span className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full border border-stone-200 bg-[#FAF9F7] px-2.5 py-1.5 text-[11px] text-stone-600">
+                  <FileText className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{att.name || "文件"}</span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setAttachments((cur) => cur.filter((_, i) => i !== index))}
+                aria-label="移除附件"
+                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-stone-700 text-white shadow"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <form
         className="mt-3 flex gap-2"
         onSubmit={(e) => {
@@ -206,21 +302,48 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
           send();
         }}
       >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={`问点专业的，比如「${QUICK_ASKS[buddy.id]?.[0] || "怎么坚持下去"}」`}
-          className="min-h-[42px] flex-1 rounded-full border border-stone-200 bg-[#FAF9F7] px-4 text-[14px] text-stone-800 placeholder:text-stone-400 focus:outline-none focus:border-stone-400"
-        />
+        <div className="flex min-h-[42px] flex-1 items-center gap-1 rounded-full border border-stone-200 bg-[#FAF9F7] pl-1.5 pr-3 focus-within:border-stone-400">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading || attachments.length >= 3}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-stone-600 disabled:opacity-50"
+            title="添加图片或文件"
+            aria-label="添加图片或文件"
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+          </button>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData?.files || []);
+              if (files.length > 0) {
+                e.preventDefault();
+                handleFiles(files);
+              }
+            }}
+            placeholder={`问点专业的，也可以粘贴图片/文件，比如「${QUICK_ASKS[buddy.id]?.[0] || "怎么坚持下去"}」`}
+            className="min-w-0 flex-1 bg-transparent py-2 text-[14px] text-stone-800 placeholder:text-stone-400 focus:outline-none"
+          />
+        </div>
         <button
           type="submit"
-          disabled={!input.trim() || sending}
+          disabled={(!input.trim() && attachments.length === 0) || sending || uploading}
           className="min-h-[42px] rounded-full px-4 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-50"
           style={{ background: tint[2] }}
         >
           发送
         </button>
       </form>
+      <input
+        ref={fileRef}
+        type="file"
+        multiple
+        className="hidden"
+        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
+        onChange={(e) => handleFiles(e.target.files)}
+      />
     </section>
   );
 }

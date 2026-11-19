@@ -1,21 +1,29 @@
 import { invokeKimiText, parseModelJson } from "./kimi.js";
 
-// Keep the provider choice scoped to dashboard chat; other AI features use Kimi.
-export async function invokeDashboardAi(options) {
-  const provider = process.env.CHAT_AI_PROVIDER || "kimi";
-  if (provider === "kimi") return invokeKimiText(options);
-  if (provider !== "deepseek") throw new Error(`Unsupported chat AI provider: ${provider}`);
+// Internal default for companion chat, planning and memory jobs. Only trusted
+// server-side callers can override it; request bodies never select a provider.
+const DEFAULT_DASHBOARD_AI_PROVIDER = "kimi";
 
-  const key = process.env.DEEPSEEK_API_KEY;
+export function resolveDashboardAiProvider(provider) {
+  const selected = provider ?? (process.env.CHAT_AI_PROVIDER?.trim() || DEFAULT_DASHBOARD_AI_PROVIDER);
+  if (selected !== "kimi" && selected !== "deepseek") throw new Error(`Unsupported chat AI provider: ${selected}`);
+  return selected;
+}
+
+export async function invokeDashboardAi(options, { provider: internalProvider, model: internalModel } = {}) {
+  const provider = resolveDashboardAiProvider(internalProvider);
+  if (provider === "kimi") return invokeKimiText({ ...options, allowDeepSeekFallback: false });
+
+  const key = process.env.DEEPSEEK_API_KEY?.trim();
   if (!key) throw new Error("DEEPSEEK_API_KEY is not configured");
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-flash";
+  const model = internalModel ?? (process.env.DEEPSEEK_MODEL?.trim() || "deepseek-flash");
   const messages = [];
   if (options.systemPrompt) messages.push({ role: "system", content: options.systemPrompt });
   messages.push({ role: "user", content: options.prompt });
 
   const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key.trim()}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model,
       messages,
@@ -30,6 +38,12 @@ export async function invokeDashboardAi(options) {
   const result = await response.json();
   const content = result.choices?.[0]?.message?.content;
   if (!content) throw new Error("DeepSeek returned an empty response");
-  console.log(`[dashboardAi] provider=deepseek model=${model} success`);
-  return { data: parseModelJson(content), usage: result.usage || null, model };
+  try {
+    const data = parseModelJson(content);
+    console.log(`[dashboardAi] provider=deepseek model=${model} success`);
+    return { data, usage: result.usage || null, model };
+  } catch {
+    // Even malformed output can be billed.
+    throw Object.assign(new Error("DeepSeek returned invalid JSON"), { usage: result.usage });
+  }
 }

@@ -1,5 +1,6 @@
 import { invokeDashboardAi } from "../lib/dashboardAi.js";
 import { runTaskHarness, validateScheduledSessions } from "./taskHarness.js";
+import { renderMemoryContext } from "./memoryContext.js";
 
 // 智能约定规划：把「一类要做的事」（如"两周的健身计划"）落成母约定 + 逐日子约定。
 // 架构：AI 只生成 2-5 个「日型模板」（工作日/周末/饮食等），服务端本地展开为逐日计划——
@@ -750,7 +751,7 @@ export function rebuildPatternsFromChildren(children) {
   return patterns;
 }
 
-export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, existing = [], insights = null, now = new Date(), constraints = {}, invoke = invokeDashboardAi } = {}) {
+export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, memoryContext, existing = [], insights = null, now = new Date(), constraints = {}, invoke = invokeDashboardAi, maxRepairs = 1 } = {}) {
   const ctx = {
     goal: String(goal || "").trim().slice(0, 80),
     horizonDays: clampInt(horizonDays, 2, 30, 7),
@@ -814,15 +815,18 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
     bits.push(`已有安排（避开这些时段）：${JSON.stringify(busyBlocks).slice(0, 300)}`);
   }
   const frequencyInstruction = constraints.sessionsPerWeek
-    ? `每个完整的七天周期安排恰好 ${constraints.sessionsPerWeek} 次主要活动，每次 ${constraints.sessionMinutes} 分钟。使用适用日为具体星期的模板，主要活动日只安排一条主要活动，休息日可以不安排。不要安排其他项目占用主要活动日的时间。`
+    ? `每个完整的七天周期安排恰好 ${constraints.sessionsPerWeek} 次主要活动，每次 ${constraints.sessionMinutes ?? ctx.dailyMinutes} 分钟。使用适用日为具体星期的模板，主要活动日只安排一条主要活动，休息日可以不安排。不要安排其他项目占用主要活动日的时间。`
     : "所有模板的适用日合起来覆盖规划期，未安排的日期留作休息。";
   const prompt = `用户想规划：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。偏好：${String(preferences || "无").slice(0, 100)}
+${memoryContext ? renderMemoryContext(memoryContext) : ""}
 ${bits.join("\n")}
 ${frequencyInstruction}
+${constraints.noWeekdayEvenings ? "硬约束：周一至周五所有主要活动必须在18:00前结束。请安排工作日白天或周末，检查开始时刻加活动时长，避免任何跨过18:00的工作日安排。" : ""}
 ${constraints.training ? "训练日的 description 必须列出具体动作及各自的组数和每组次数（例如深蹲3组12次、划船3组10次），确保适合用户的器械与经验。" : ""}
 不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（含具体执行步骤和量化标准）、note（可选）、weekly_progression（可选）。直接输出 JSON。`;
 
   const outcome = await runTaskHarness({
+    maxRepairs,
     draft: async ({ errors }) => {
       const { data, usage } = await Promise.race([
         invoke({

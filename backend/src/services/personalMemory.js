@@ -1,3 +1,5 @@
+import { activeMemoryScope, excludeSuppressedMemories } from "./memoryStore.js";
+
 // Retrieve a small amount of user-owned context for a conversation turn.
 // Topic aliases help match common Chinese paraphrases before semantic search exists.
 const TOPICS = [
@@ -24,12 +26,16 @@ function termsFor(text) {
 export async function retrievePersonalMemories({ prisma, userId, query, limit = 5 }) {
   if (!userId || !String(query || "").trim()) return [];
   const terms = termsFor(query);
-  const records = await prisma.memoryRecord.findMany({
-    where: { userId },
+  const rows = await prisma.memoryRecord.findMany({
+    where: activeMemoryScope(userId),
     orderBy: { updatedAt: "desc" },
     take: 300,
-    select: { id: true, title: true, content: true, tags: true, memoryType: true, updatedAt: true },
+    select: {
+      id: true, title: true, content: true, tags: true, memoryType: true, updatedAt: true, fact: true, aiInsight: true,
+      revisions: { orderBy: { version: "desc" }, take: 1, select: { version: true, sourceMessageIds: true } },
+    },
   });
+  const records = await excludeSuppressedMemories(prisma, userId, rows);
   return records.filter((record) => {
     const searchable = [record.title, record.content, ...(Array.isArray(record.tags) ? record.tags : [])]
       .filter(Boolean).join(" ").toLowerCase();

@@ -258,14 +258,38 @@ collabInviteRouter.get("/invite/:code", optionalAuth, async (req, res) => {
       type: d.docType,
       excerpt: stripHtml(d.content).slice(0, 120)
     }));
+  // 受邀访客的协同预览：只读内容（不返回附件、内部标记和个人操作能力）
+  const pacts = snapshot.subtasks.map((subtask) => ({
+    id: subtask.id,
+    title: subtask.title,
+    standard: subtask.metadata?.collab?.standard || "",
+    done: subtask.status === "DONE",
+    draft: subtask.metadata?.collab?.state === "draft"
+  }));
+  const discussion = snapshot.comments.slice(-30).map((comment) => ({
+    id: comment.id,
+    content: String(comment.content || "").slice(0, 800),
+    // 公开预览只用显示名，不向扫码访客暴露成员的邮箱/手机号
+    author: comment.agent ? "心栈 Agent" : (comment.user?.displayName || "成员"),
+    agent: !!comment.agent,
+    topic: comment.topic || null,
+    created_date: comment.createdAt
+  }));
+  const buddyId = task.metadata?._extraFields?.buddy_id || null;
   return res.json({
     invite: serializeInvite(invite),
+    task_id: task.id,
+    buddy_id: buddyId,
     pact: {
       title: task.title,
       goal: collab.goal || "",
       scenario: collab.scenario || "custom",
-      member_count: memberIds.size
+      member_count: memberIds.size,
+      task_id: task.id,
+      buddy_id: buddyId
     },
+    pacts,
+    discussion,
     summary: invite.summary || "",
     consensus: consensusDoc ? stripHtml(consensusDoc.content).slice(0, 800) : "",
     progress: {
@@ -373,7 +397,11 @@ collabInviteRouter.post("/invite/:code/respond", requireAuth, async (req, res) =
     ]);
   }
 
-  return res.json({ invite: serializeInvite(updated) });
+  return res.json({
+    invite: serializeInvite(updated),
+    task_id: task.id,
+    buddy_id: task.metadata?._extraFields?.buddy_id || null
+  });
 });
 
 // POST /api/collab/:taskId/reuse — 一键复用模板：结构继承、状态重置、不带历史

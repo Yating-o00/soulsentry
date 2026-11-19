@@ -2,7 +2,7 @@
 // 接受邀请=加入成员并认领待办；提出建议=留言进共同讨论；暂不参与=仅记录回应。
 // 文案原则：没有内容时只留标题，有内容时只呈现内容本身，不铺解释。
 import React, { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -23,6 +23,7 @@ const STATUS_LABELS = { open: "待回应", accepted: "已接受邀请", suggeste
 
 export default function InviteLanding() {
   const { code } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loggedIn, setLoggedIn] = useState(false);
@@ -72,13 +73,31 @@ export default function InviteLanding() {
     if (!data || !loggedIn || autoFiredRef.current) return;
     if (autoAction !== "accept" && autoAction !== "decline") return;
     // 已是成员 / 已回应 / 邀请已关闭：清掉 auto 参数即可，不重复回应
-    if (data.viewer?.is_member || data.viewer?.responded || data.invite?.status !== "open") {
+    if (data.viewer?.is_member) {
+      clearAutoParam();
+      if (autoAction === "accept") openCollab(data.task_id || data.pact?.task_id, data.buddy_id || data.pact?.buddy_id);
+      return;
+    }
+    if (data.viewer?.responded || data.invite?.status !== "open") {
       clearAutoParam();
       return;
     }
     autoFiredRef.current = true;
     respond(autoAction);
   }, [data, loggedIn]);
+
+  // 接受后直接进入协同约定页；搭子归属会随任务元数据返回，退出时回到搭子空间
+  const openCollab = (taskId, buddyId) => {
+    if (!taskId) return false;
+    const params = new URLSearchParams({ taskId });
+    if (buddyId) {
+      params.set("from", "buddy");
+      params.set("buddy", buddyId);
+      params.set("collab", taskId);
+    }
+    navigate(`/collabspace?${params.toString()}`);
+    return true;
+  };
 
   const respond = async (action) => {
     if (responding) return;
@@ -102,6 +121,11 @@ export default function InviteLanding() {
           status: res.invite.status,
         },
       }));
+      if (action === "accept") {
+        const taskId = res?.task_id || data?.task_id || data?.pact?.task_id;
+        const buddyId = res?.buddy_id || data?.buddy_id || data?.pact?.buddy_id;
+        if (openCollab(taskId, buddyId)) return;
+      }
     } catch (e) {
       if (e?.status === 401) {
         // 未登录：带上本次意图跳登录页，登录回跳后由 auto 逻辑自动完成
@@ -277,6 +301,14 @@ export default function InviteLanding() {
               {accountLabel && (
                 <p className="mt-1 text-[10px]" style={{ color: "#8a867e" }}>当前账号：{accountLabel}</p>
               )}
+              <button
+                type="button"
+                onClick={() => openCollab(data?.task_id || data?.pact?.task_id, data?.buddy_id || data?.pact?.buddy_id)}
+                className="mt-3 rounded-full px-4 py-2 text-[12px] font-medium text-white"
+                style={{ backgroundColor: "#384877" }}
+              >
+                进入协同空间
+              </button>
             </div>
           ) : (
             <>
@@ -285,12 +317,18 @@ export default function InviteLanding() {
                 <button
                   type="button"
                   disabled={responding}
-                  onClick={() => respond("accept")}
+                  onClick={() => {
+                    if (!loggedIn) {
+                      navigate(`/invite/${code}/collab`, { state: { accepted: true } });
+                      return;
+                    }
+                    respond("accept");
+                  }}
                   className="flex items-center justify-center gap-1.5 rounded-full py-2.5 text-[13px] font-medium text-white transition-opacity disabled:opacity-50"
                   style={{ backgroundColor: "#384877" }}
                 >
                   {responding ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                  接受邀请{loggedIn ? "" : " · 需登录"}
+                  接受邀请
                 </button>
                 {!suggestOpen ? (
                   <button
@@ -340,7 +378,7 @@ export default function InviteLanding() {
               </div>
               {!loggedIn && (
                 <p className="mt-3 flex items-center justify-center gap-1 text-[10px]" style={{ color: "#8a867e" }}>
-                  <Clock3 className="h-3 w-3" /> 回应需登录
+                  <Clock3 className="h-3 w-3" /> 可先查看协同内容，参与操作时再登录
                 </p>
               )}
             </>

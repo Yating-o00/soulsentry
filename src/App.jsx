@@ -24,6 +24,7 @@ const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const SharePage = Pages.Share;
 const InviteLanding = React.lazy(() => import("./pages/InviteLanding"));
+const InviteCollabPreview = React.lazy(() => import("./pages/InviteCollabPreview"));
 
 setupIframeMessaging();
 
@@ -79,6 +80,7 @@ const AuthenticatedApp = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<MainPage />} />
         <Route path="/share/:token" element={<SharePage />} />
+        <Route path="/invite/:code/collab" element={<React.Suspense fallback={null}><InviteCollabPreview /></React.Suspense>} />
         <Route path="/invite/:code" element={<React.Suspense fallback={null}><InviteLanding /></React.Suspense>} />
         {Object.entries(Pages).flatMap(([path, Page]) => {
           const normalizedPath = createPageUrl(path);

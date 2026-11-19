@@ -218,7 +218,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
       height: card.scrollHeight,
       windowWidth: card.scrollWidth,
       windowHeight: card.scrollHeight,
-      backgroundColor: "#384877",
+      backgroundColor: "#F8F5ED",
       logging: false,
       useCORS: true,
       // 导出的克隆节点去掉弹窗祖先的高度/滚动裁剪，长标题或长留言才能完整落进图片
@@ -545,7 +545,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
 
             {cardInvite && inviteUrl ? (
               <>
-                {/* 卡片本体：品牌深蓝为主色调（白字），星球图标 + 二维码；
+                {/* 卡片本体：品牌蓝页眉 + 米白内容区，星球图标 + 二维码；
                     纯 DOM + 同源图片 + dataURL 二维码，文字全部普通流式排版（不用 -webkit-box 截断），
                     保证 html2canvas 导出后字样完整 */}
                 <div className="flex justify-center py-1">
@@ -556,13 +556,14 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                       width: 330,
                       borderRadius: 22,
                       overflow: "hidden",
+                      border: "1px solid #E6E0D3",
                       fontFamily: "inherit",
-                      background: "linear-gradient(160deg,#3D4763 0%,#384877 55%,#2E3A62 100%)",
-                      color: "#FFFFFF",
+                      background: "#F8F5ED",
+                      color: "#2C2A26",
                     }}
                   >
-                    {/* 品牌头 */}
-                    <div style={{ padding: "18px 20px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    {/* 品牌蓝页眉 */}
+                    <div style={{ background: "linear-gradient(135deg,#3D4763 0%,#384877 100%)", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <img
                           src={assistantPlanet}
@@ -579,59 +580,59 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                       </span>
                     </div>
 
-                    <div style={{ padding: "14px 20px 20px" }}>
+                    <div style={{ padding: "18px 20px 20px" }}>
                       {/* 邀请对象与目的 */}
-                      <p style={{ fontSize: 10, color: "rgba(255,255,255,0.60)", wordBreak: "break-word" }}>致 {cardInvite?.invitee_name || "伙伴"}</p>
-                      <p style={{ marginTop: 6, fontSize: 19, fontWeight: 700, color: "#FFFFFF", lineHeight: 1.45, wordBreak: "break-word" }}>
+                      <p style={{ fontSize: 10, color: "#9A9488", wordBreak: "break-word" }}>致 {cardInvite?.invitee_name || "伙伴"}</p>
+                      <p style={{ marginTop: 6, fontSize: 18, fontWeight: 700, color: "#2C2A26", lineHeight: 1.45, wordBreak: "break-word" }}>
                         {task?.title || "未命名约定"}
                       </p>
-                      <p style={{ marginTop: 6, fontSize: 11, color: "rgba(255,255,255,0.78)", lineHeight: 1.65, wordBreak: "break-word" }}>
+                      <p style={{ marginTop: 6, fontSize: 11, color: "#6F6A61", lineHeight: 1.65, wordBreak: "break-word" }}>
                         {task?.metadata?.collab?.goal || task?.description || "一起把这件事推进下去"}
                       </p>
 
                       {/* 邀请人留言：二维码落地页会展示同一句；完整展示，不截断 */}
-                      <div style={{ marginTop: 12, padding: "10px 12px", borderLeft: "2px solid rgba(255,255,255,0.85)", background: "rgba(255,255,255,0.10)", borderRadius: "0 10px 10px 0" }}>
-                        <p style={{ fontSize: 11, color: "rgba(255,255,255,0.92)", lineHeight: 1.65, wordBreak: "break-word" }}>
+                      <div style={{ marginTop: 12, padding: "10px 12px", borderLeft: "2px solid #384877", background: "#FFFFFF", borderRadius: "0 10px 10px 0" }}>
+                        <p style={{ fontSize: 11, color: "#57534D", lineHeight: 1.65, wordBreak: "break-word" }}>
                           {cardInvite?.note || "邀请你加入这个协同约定。"}
                         </p>
                       </div>
 
                       {/* 轻量进展 + Agent 协调说明 */}
                       <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        <span style={{ fontSize: 9, color: "#FFFFFF", background: "rgba(255,255,255,0.16)", borderRadius: 999, padding: "3px 8px" }}>
+                        <span style={{ fontSize: 9, color: "#384877", background: "#E9EDF7", borderRadius: 999, padding: "3px 8px" }}>
                           {members.length} 人协作
                         </span>
                         {confirmedSubtasks.length > 0 && (
-                          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.85)", background: "rgba(255,255,255,0.10)", borderRadius: 999, padding: "3px 8px" }}>
+                          <span style={{ fontSize: 9, color: "#57534D", background: "#F0ECE2", borderRadius: 999, padding: "3px 8px" }}>
                             已完成 {completedCount}/{confirmedSubtasks.length} 项子约定
                           </span>
                         )}
-                        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.85)", background: "rgba(255,255,255,0.10)", borderRadius: 999, padding: "3px 8px" }}>
+                        <span style={{ fontSize: 9, color: "#57534D", background: "#F0ECE2", borderRadius: 999, padding: "3px 8px" }}>
                           {BUDDY_NAMES[task?.metadata?._extraFields?.buddy_id] || "Agent"} 全程协调
                         </span>
                       </div>
 
-                      <div style={{ height: 1, background: "rgba(255,255,255,0.18)", margin: "16px 0" }} />
+                      <div style={{ height: 1, background: "#E6E0D3", margin: "16px 0" }} />
 
                       {/* 邀请人 + 二维码 */}
                       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12 }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#FFFFFF", color: "#384877", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#384877", color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700 }}>
                               {getInitials(cardInvite?.inviter_name || inviterName)}
                             </div>
                             <div style={{ minWidth: 0 }}>
-                              <p style={{ fontSize: 9, color: "rgba(255,255,255,0.60)" }}>邀请人</p>
-                              <p style={{ fontSize: 11, fontWeight: 600, color: "#FFFFFF", wordBreak: "break-word" }}>
+                              <p style={{ fontSize: 9, color: "#9A9488" }}>邀请人</p>
+                              <p style={{ fontSize: 11, fontWeight: 600, color: "#2C2A26", wordBreak: "break-word" }}>
                                 {cardInvite?.inviter_name || inviterName}
                               </p>
                             </div>
                           </div>
-                          <p style={{ fontSize: 9, color: "rgba(255,255,255,0.60)", marginTop: 10, lineHeight: 1.5 }}>
+                          <p style={{ fontSize: 9, color: "#9A9488", marginTop: 10, lineHeight: 1.5 }}>
                             微信扫码查看完整邀请<br />与当前进展
                           </p>
                         </div>
-                        <div style={{ background: "#fff", borderRadius: 12, padding: 6, flexShrink: 0, boxShadow: "0 4px 14px rgba(20,28,52,0.35)" }}>
+                        <div style={{ background: "#fff", border: "1px solid #E6E0D3", borderRadius: 12, padding: 6, flexShrink: 0, boxShadow: "0 2px 8px rgba(61,71,99,0.10)" }}>
                           <QRCodeImage value={inviteUrl} size={88} className="w-[88px] h-[88px] block" alt="邀请二维码" />
                         </div>
                       </div>

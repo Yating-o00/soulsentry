@@ -169,7 +169,7 @@ companionRouter.post("/messages", async (req, res) => {
         excludeIds: [...history.map(({ id }) => id), ...memoryContext.recap.map(({ sourceId }) => sourceId)],
       });
     }
-    const startedAt = Date.now();
+    const startedAt = performance.now();
     const planRun = { signal: AbortSignal.timeout(90000), status: "chat", chatCalls: 0, plannerCalls: 0 };
     let result;
     if (localMove) {
@@ -229,7 +229,7 @@ companionRouter.post("/messages", async (req, res) => {
         chatCalls: planRun.chatCalls, plannerCalls: planRun.plannerCalls,
         repairCount: Math.max(0, planRun.plannerCalls - 1), firstValidation: planRun.firstValidation,
         validation: planRun.validation, durationSource: planRun.constraints?.durationSource,
-        memoryId: planRun.constraints?.durationMemoryId, elapsedMs: Date.now() - startedAt,
+        memoryId: planRun.constraints?.durationMemoryId, elapsedMs: Math.round(performance.now() - startedAt),
         proposalId: planDraft ? assistantMsg.id : undefined,
       }));
     }

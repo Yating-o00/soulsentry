@@ -135,6 +135,35 @@ function windowsOverlap(a, b) {
   return a.begins < b.ends && b.begins < a.ends;
 }
 
+// Offer a feasible weekly schedule as an example. The final plan is still
+// checked against all constraints and existing commitments.
+export function suggestWeeklySlots(constraints, now = Date.now()) {
+  const { startDate, horizonDays, sessionsPerWeek, sessionMinutes, maxSessionMinutes, busy = [] } = constraints;
+  if (!constraints.checkWindows || !sessionsPerWeek || !startDate || horizonDays !== 7) return [];
+  const dates = [];
+  const duration = sessionMinutes ?? maxSessionMinutes;
+  if (!duration) return [];
+  for (let offset = 0; offset < horizonDays; offset += 1) {
+    const day = new Date(Date.parse(startDate) + offset * DAY_MS);
+    const date = day.toISOString().slice(0, 10);
+    const dayOfWeek = day.getUTCDay();
+    const weekday = dayOfWeek > 0 && dayOfWeek < 6;
+    if (constraints.weekdayEveningsOnly && !weekday) continue;
+    const clocks = constraints.weekdayEveningsOnly ? ["19:00", "20:30"] : ["10:00", "14:00", "16:30", "19:00", "20:30"];
+    const clock = clocks.find((time) => {
+      const begins = Date.parse(`${date}T${time}:00+08:00`);
+      const ends = begins + duration * 60000;
+      return begins >= now + 30 * 60000
+        && (!constraints.noWeekdayEvenings || !weekday || ends <= Date.parse(`${date}T18:00:00+08:00`))
+        && !busy.some((block) => windowsOverlap({ begins, ends }, block));
+    });
+    if (clock) dates.push({ weekday: "日一二三四五六"[dayOfWeek], clock });
+  }
+  if (dates.length < sessionsPerWeek) return [];
+  if (sessionsPerWeek === 1) return dates.slice(0, 1);
+  return Array.from({ length: sessionsPerWeek }, (_, i) => dates[Math.round(i * (dates.length - 1) / (sessionsPerWeek - 1))]);
+}
+
 function checkWindows(children, constraints) {
   const start = Date.parse(`${constraints.startDate}T00:00:00+08:00`);
   const end = start + constraints.horizonDays * DAY_MS;

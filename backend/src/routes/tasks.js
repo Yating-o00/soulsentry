@@ -529,7 +529,7 @@ async function saveTaskPlan(req, res, { proposalKey, parent, children, memoryPro
       checkTextSecurityAsync(`${task.title || ""}\n${task.description || ""}`, req.user.id, () => {
         prisma.task.update({ where: { id: task.id }, data: { deletedAt: new Date() } }).catch(() => {});
       });
-      void maybeAutoExecute(task, req.user.id, prisma);
+      if (!draft) void maybeAutoExecute(task, req.user.id, prisma);
       logBehavior(req.user.id, "task_created", { taskId: task.id, category: task.category, metadata: { via: task.parentTaskId ? "subtask" : "top" } });
     }
     return res.status(201).json({ parent: serializeTask(created.task), child_count: children.length });

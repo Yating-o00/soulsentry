@@ -53,12 +53,16 @@ before(async () => {
     return delay >= 35000 ? timer.unref() : timer;
   });
   mock.method(globalThis, "fetch", async (url, options) => {
-    assert.equal(String(url), "https://api.deepseek.com/chat/completions", "external network is disabled");
+    assert.ok([
+      "https://api.deepseek.com/chat/completions",
+      "https://api.moonshot.cn/v1/chat/completions",
+    ].includes(String(url)), "external network is disabled");
     const body = JSON.parse(options.body);
     const phase = body.messages[0].content.startsWith("你是约定规划师") ? "planner" : "chat";
-    calls.push({ phase, prompt: body.messages[1].content });
+    calls.push({ phase, model: body.model, prompt: body.messages[1].content });
     const next = answers.shift();
     if (!next || next.phase !== phase) return new Response("unexpected fixture call", { status: 500 });
+    if (next.timeout) throw new DOMException("synthetic timeout", "TimeoutError");
     if (next.status) return new Response("fixture provider error", { status: next.status });
     return Response.json({ choices: [{ message: { content: next.raw ?? JSON.stringify(next.data) } }] });
   });
@@ -276,10 +280,10 @@ test("adjusts a Saturday proposal locally and keeps the original sessions intact
   intent();
   draft();
   const first = await send(study);
-  chatOnly();
   const changed = await send("周六早上11点", first.extracted);
   assertSchedule(changed, 20, ["10:00", "10:00", "11:00"]);
   assert.deepEqual(mainSessions(changed).slice(0, 2), mainSessions(first).slice(0, 2));
+  assert.equal(calls.filter(({ phase }) => phase === "chat").length, 1);
   assert.equal(plannerCalls().length, 1);
   assert.deepEqual(await tasks(), []);
 });
@@ -331,4 +335,84 @@ test("retains the legacy idempotent task plan endpoint for generic task creation
   assert.deepEqual([first.status, second.status], [201, 200]);
   assert.equal(first.data.parent.id, second.data.parent.id);
   assert.equal((await tasks()).length, 2);
+});
+
+test("asks for an unspecified duration even if the chat model supplies a guess", async () => {
+  intent();
+  const result = await send("帮我做一周英语词汇练习计划，每周三次");
+  assert.match(result.reply.content, /分钟/);
+  assert.equal(result.extracted, null);
+  assert.equal(plannerCalls().length, 0);
+});
+
+test("times out promptly without calling a repair", async () => {
+  intent();
+  answers.push({ phase: "planner", timeout: true });
+  const result = await send(study);
+  assert.equal(result.extracted, null);
+  assert.match(result.reply.content, /超时/);
+  assert.equal(plannerCalls().length, 1);
+  assert.deepEqual(await tasks(), []);
+});
+
+test("keeps the main duration when a model adds an unnecessary recovery template", async () => {
+  intent();
+  draft();
+  answers.at(-1).data.patterns.unshift({
+    plan_group: "休息", session_type: "recovery", applies_to: "周一", start_time: "09:00",
+    duration_minutes: 15, title: "提前休息", description: "放松",
+  });
+  const result = await send(study);
+  assertSchedule(result, 20);
+  assert.equal(result.extracted.plan.children.length, 3);
+  assert.equal(plannerCalls().length, 1);
+});
+
+test("checks only the owner's busy periods and accepts an adjacent time slot", async () => {
+  await busy("2026-11-16T10:00:00", "2026-11-16T10:30:00", other);
+  await busy("2026-11-18T09:30:00", "2026-11-18T10:00:00");
+  intent();
+  draft();
+  assertSchedule(await send(study), 20);
+  assert.equal(plannerCalls().length, 1);
+});
+
+test("legacy homepage confirmation uses the canonical proposal and shares its idempotency key", async () => {
+  intent();
+  draft();
+  const { extracted } = await send(study);
+  const old = await post("/api/tasks/plan", {
+    proposal_id: randomUUID(), memory_proposal_id: extracted.memory_proposal_id,
+    parent: { title: "客户端替换" }, children: [{ title: "客户端替换" }],
+  });
+  assert.equal(old.status, 201);
+  assert.equal(old.data.parent.title, extracted.plan.parent.title);
+  const modern = await confirm(extracted.plan_proposal_id);
+  assert.equal(modern.status, 200);
+  assert.equal(modern.data.parent.id, old.data.parent.id);
+  const saved = await tasks();
+  assert.equal(saved.length, extracted.plan.children.length + 1);
+  assert.deepEqual(saved.slice(1).map(({ reminderTime }) => reminderTime.toISOString()), [
+    "2026-11-16T02:00:00.000Z", "2026-11-18T02:00:00.000Z", "2026-11-21T02:00:00.000Z",
+  ]);
+  assert.equal(await db.taskExecution.count({ where: { userId: user.id } }), 0);
+});
+
+test("defaults to Kimi and sends one HTTP invocation to repair invalid model JSON", async (t) => {
+  const original = process.env.CHAT_AI_PROVIDER;
+  delete process.env.CHAT_AI_PROVIDER;
+  process.env.KIMI_API_KEY = "local-test";
+  process.env.KIMI_BASE_URL = "https://api.moonshot.cn/v1";
+  t.after(() => {
+    process.env.CHAT_AI_PROVIDER = original;
+    process.env.KIMI_API_KEY = "";
+    delete process.env.KIMI_BASE_URL;
+  });
+  intent();
+  answers.push({ phase: "planner", raw: "{broken" });
+  draft();
+  assertSchedule(await send(study), 20);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every(({ model }) => model.startsWith("kimi-")));
+  assert.equal(plannerCalls().length, 2);
 });

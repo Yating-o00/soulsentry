@@ -1,5 +1,5 @@
 import { invokeDashboardAi } from "../lib/dashboardAi.js";
-import { runTaskHarness, validateScheduledSessions } from "./taskHarness.js";
+import { runTaskHarness, suggestWeeklySlots, validateScheduledSessions } from "./taskHarness.js";
 import { renderMemoryContext } from "./memoryContext.js";
 
 // 智能约定规划：把「一类要做的事」（如"两周的健身计划"）落成母约定 + 逐日子约定。
@@ -164,7 +164,7 @@ function normalizePatterns(raw, ctx) {
 
 // 日型模板 → 逐日子约定。预算/今日顺延/每周进阶都在本地完成。
 export function expandPatterns(patterns, ctx) {
-  const { horizonDays, dailyMinutes } = ctx;
+  const { horizonDays, dailyMinutes, fixedSessions } = ctx;
   const today = chinaToday();
   const minStartMs = Date.now() + MIN_SLOT_MS;
   const matchers = patterns.map((p) => ({ p, match: appliesToMatcher(p.applies_to), step: parseWeeklyProgression(p.weekly_progression) }));
@@ -176,10 +176,13 @@ export function expandPatterns(patterns, ctx) {
     const [yy, mm, dd] = date.split("-").map(Number);
     const dayOfWeek = new Date(Date.UTC(yy, mm - 1, dd)).getUTCDay();
     const weekIndex = Math.floor(i / 7);
-    const dayItems = matchers
+    let dayItems = matchers
       .filter(({ match }) => match(dayOfWeek))
       .map(({ p, step }) => ({ p, step }))
       .sort((a, b) => a.p.start_time.localeCompare(b.p.start_time));
+    if (fixedSessions && dayItems.some(({ p }) => p.session_type === "session")) {
+      dayItems = dayItems.filter(({ p }) => p.session_type === "session");
+    }
     // 缓冲日固定对齐周日，但只在该周没有为周日安排内容时才留白——周末模板明确覆盖周日就不能悄悄吃掉
     if (horizonDays > 6 && dayOfWeek === 0 && date !== today && dayItems.length === 0) continue;
 
@@ -210,7 +213,7 @@ export function expandPatterns(patterns, ctx) {
       });
     }
     // 覆盖兜底：模型返回的模板适用日可能漏天，非缓冲日没有任何条目时给一条轻量恢复安排，保证每天都看得见
-    if (dayItems.length === 0) {
+    if (dayItems.length === 0 && !fixedSessions) {
       const restMs = new Date(`${date}T20:00:00+08:00`).getTime();
       const startMs = date === today && restMs < minStartMs ? roundUp5(minStartMs) : restMs;
       children.push({
@@ -785,7 +788,8 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
   const ctx = {
     goal: String(goal || "").trim().slice(0, 80),
     horizonDays: clampInt(horizonDays, 2, 30, 7),
-    dailyMinutes: clampInt(dailyMinutes, constraints.checkWindows ? 10 : 15, 180, 30)
+    dailyMinutes: clampInt(dailyMinutes, constraints.checkWindows ? 10 : 15, 180, 30),
+    fixedSessions: Boolean(constraints.checkWindows && constraints.sessionsPerWeek),
   };
   if (!ctx.goal) {
     throw new Error("请先说明计划目标");
@@ -807,7 +811,7 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
       },
       patterns: {
         type: "array",
-        description: "日型模板 2-5 条：把计划按内容归类（如工作日训练/周末强化/饮食配合），同类项共用一个模板，不要逐日展开",
+        description: "日型模板 1-5 条：把计划按内容归类（如工作日训练/周末强化/饮食配合），同类项共用一个模板，不要逐日展开",
         items: {
           type: "object",
           properties: {
@@ -844,9 +848,14 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
   if (busyBlocks.length > 0) {
     bits.push(`已有安排（避开这些时段）：${JSON.stringify(busyBlocks).slice(0, 300)}`);
   }
+  const suggested = suggestWeeklySlots(constraints);
+  const slotInstruction = suggested.length ? `服务端已验证这组时段可用：${suggested.map(({ weekday, clock }) => `周${weekday} ${clock}`).join("、")}。可以直接用这组星期和时间。` : "";
   const frequencyInstruction = constraints.sessionsPerWeek
     ? `每个完整的七天周期安排恰好 ${constraints.sessionsPerWeek} 次主要活动。使用适用日为具体星期的模板，主要活动日只安排一条主要活动，休息日可以不安排。不要安排其他项目占用主要活动日的时间。`
     : "所有模板的适用日合起来覆盖规划期，未安排的日期留作休息。";
+  const templateInstruction = ctx.fixedSessions
+    ? "只输出主要活动模板。applies_to 必须枚举具体星期，如 周二,周四,周六。每个星期只能出现于一条主要活动模板。相同时间和内容可共用一条模板，略过休息日。"
+    : "按工作日、周末或具体星期组织日型模板。";
   const durationInstruction = constraints.maxSessionMinutes != null
     ? `每次主要活动不得超过 ${constraints.maxSessionMinutes} 分钟，可以安排较短的时长。`
     : constraints.sessionMinutes != null || constraints.sessionsPerWeek
@@ -857,11 +866,13 @@ ${memoryContext ? renderMemoryContext(memoryContext) : ""}
 ${bits.join("\n")}
 ${frequencyInstruction}
 ${durationInstruction}
+${slotInstruction}
+${templateInstruction}
 ${constraints.noWeekdayEvenings ? "硬约束：周一至周五所有主要活动必须在18:00前结束。请安排工作日白天或周末，检查开始时刻加活动时长，避免任何跨过18:00的工作日安排。" : ""}
 ${constraints.weekdayEveningsOnly ? "硬约束：主要活动只可以在周一至周五18:00之后安排。" : ""}
 ${constraints.dumbbellOnly ? "器械限制：用户只有哑铃。只安排哑铃或徒手动作。" : ""}
 ${constraints.training ? "训练日的 description 必须列出具体动作及各自的组数和每组次数（例如深蹲3组12次、划船3组10次），确保适合用户的器械与经验。" : ""}
-不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（含具体执行步骤和量化标准）、note（可选）、weekly_progression（可选）。直接输出 JSON。`;
+不要逐日展开，只输出「日型模板」patterns（1-5 条），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（含具体执行步骤和量化标准）、note（可选）、weekly_progression（可选）。直接输出 JSON。`;
 
   const outcome = await runTaskHarness({
     maxRepairs,
@@ -874,7 +885,7 @@ ${constraints.training ? "训练日的 description 必须列出具体动作及�
       try {
         ({ data, usage } = await invoke({
           prompt: `${prompt}\n每条模板必须包含 session_type，主要训练或学习填 session，休息恢复填 recovery。${errors.length ? `上一版存在问题，请修正：${errors.join("；")}` : ""}`,
-          systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，不要长篇思考。",
+          systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 1-5 个日型模板。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,
           model: "kimi-k3",
           maxTokens: 8000,

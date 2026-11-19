@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createHash } from "node:crypto";
+import { ownedMemoryProposal } from "../services/memoryStore.js";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -443,12 +444,13 @@ tasksRouter.get("/:id", async (req, res) => {
 tasksRouter.post("/plan", async (req, res) => {
   const schema = z.object({
     proposal_id: z.string().uuid(),
+    memory_proposal_id: z.string().min(1).max(100).optional(),
     parent: taskInputSchema,
     children: z.array(taskInputSchema).min(1).max(100),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
-  const { proposal_id, parent, children } = parsed.data;
+  const { proposal_id, parent, children, memory_proposal_id } = parsed.data;
   if (parent.parent_task_id) return res.status(400).json({ error: "INVALID_INPUT", message: "计划必须是顶层约定" });
   const taskId = createHash("sha256").update(`${req.user.id}:${proposal_id}`).digest("hex");
   const payloadHash = createHash("sha256").update(JSON.stringify({ parent, children })).digest("hex");
@@ -466,6 +468,10 @@ tasksRouter.post("/plan", async (req, res) => {
       const parentData = buildTaskCreateData(req.user.id, parent);
       const task = await tx.task.create({ data: { ...parentData, id: taskId, metadata: { ...(parentData.metadata || {}), planPayloadHash: payloadHash } } });
       await createTaskChangeLog(req.user.id, task, "created", parent, null, tx);
+      const proposal = await ownedMemoryProposal(tx, req.user.id, memory_proposal_id);
+      if (proposal?.meta.planTitle === parent.title) await tx.memoryTaskSignal.create({
+        data: { userId: req.user.id, kind: "confirmed_plan", evidenceId: task.id, proposalMessageId: proposal.id },
+      });
       const createdChildren = [];
       for (const child of children) {
         const payload = { ...child, parent_task_id: taskId };

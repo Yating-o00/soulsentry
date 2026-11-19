@@ -52,14 +52,31 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   const [memoryError, setMemoryError] = useState("");
   const [editingMemory, setEditingMemory] = useState(null);
   const [memoryText, setMemoryText] = useState("");
+  const [memoryHistory, setMemoryHistory] = useState(null);
+  const [revisionSource, setRevisionSource] = useState(null);
+  const [memoryLearning, setMemoryLearning] = useState(null);
+  const [showArchivedMemories, setShowArchivedMemories] = useState(false);
 
-  const loadMemories = async () => {
+  const loadMemories = async (showArchived = showArchivedMemories) => {
     try {
-      const records = await httpRequest("/api/memory-records?limit=300");
+      const [records, learning] = await Promise.all([
+        httpRequest("/api/memory-records?limit=300" + (showArchived ? "" : "&active=true")),
+        httpRequest("/api/memory-records/learning").catch(() => null),
+      ]);
       setMemories(records);
+      setMemoryLearning(learning);
       setMemoryError("");
     } catch {
       setMemoryError("记忆加载失败，请重试。");
+    }
+  };
+
+  const changeMemoryLearning = async (enabled) => {
+    try {
+      setMemoryLearning(await httpRequest("/api/memory-records/learning", { method: "PUT", body: { enabled } }));
+      setMemoryError("");
+    } catch {
+      setMemoryError("自动学习设置未能保存。");
     }
   };
 
@@ -67,20 +84,63 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     const content = memoryText.trim();
     if (!content) return;
     try {
-      await httpRequest(`/api/memory-records/${editingMemory}`, { method: "PATCH", body: { title: content.slice(0, 200), content } });
+      await httpRequest(`/api/memory-records/${editingMemory.id}`, {
+        method: "PATCH",
+        body: { title: content.slice(0, 200), content, expected_version: editingMemory.version },
+      });
       setEditingMemory(null);
+      setMemoryHistory(null);
       await loadMemories();
     } catch {
-      setMemoryError("记忆更新失败，请重试。");
+      setMemoryError("记忆未能更新，请重新打开记忆面板查看当前版本。");
     }
   };
 
   const deleteMemory = async (id) => {
+    if (!window.confirm("忘记后将清除这条记忆的历史版本。原对话仍可在聊天记录查看。是否继续？")) return;
     try {
       await httpRequest(`/api/memory-records/${id}`, { method: "DELETE" });
+      setMemoryHistory(null);
+      setRevisionSource(null);
       await loadMemories();
     } catch {
       setMemoryError("记忆删除失败，请重试。");
+    }
+  };
+
+  const loadMemoryHistory = async (id, before) => {
+    setRevisionSource(null);
+    try {
+      const history = await httpRequest(`/api/memory-records/${id}/revisions${before ? `?before=${before}` : ""}`);
+      setMemoryHistory((previous) => ({
+        id, version: history.version,
+        revisions: before && previous?.id === id ? [...previous.revisions, ...history.revisions] : history.revisions,
+        hasMore: history.revisions.length === 30,
+      }));
+      setMemoryError("");
+    } catch {
+      setMemoryError("记忆历史加载失败，请重试。");
+    }
+  };
+
+  const viewRevisionSource = async (id, version, messageId) => {
+    try {
+      const source = await httpRequest(`/api/memory-records/${id}/revisions/${version}/source/${messageId}`);
+      setRevisionSource({ ...source, memoryId: id, version });
+    } catch {
+      setMemoryError("这条来源已不可用。");
+    }
+  };
+
+  const restoreRevision = async (id, version, expectedVersion) => {
+    try {
+      await httpRequest(`/api/memory-records/${id}/restore`, {
+        method: "POST", body: { version, expected_version: expectedVersion },
+      });
+      await loadMemories();
+      await loadMemoryHistory(id);
+    } catch {
+      setMemoryError("记忆未能恢复，请刷新历史后重试。");
     }
   };
   const supportedRef = useRef(true);
@@ -302,6 +362,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           method: "POST",
           body: {
             proposal_id: pending.proposal_id,
+            memory_proposal_id: pending.memory_proposal_id,
             parent: {
               title: p.title,
               description: p.description || undefined,
@@ -449,10 +510,21 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
       </div>
       {memoryOpen && <div className="max-h-52 overflow-auto bg-white px-4 py-3 text-sm border-b border-slate-200">
         <p className="text-xs text-slate-500 mb-2">对小助手说“记住我……”可以添加记忆。</p>
+        {memoryLearning?.available && <label className="mb-2 flex items-center gap-2">
+          <input type="checkbox" checked={memoryLearning.enabled} onChange={(event) => changeMemoryLearning(event.target.checked)} />
+          从对话中自动学习
+        </label>}
+        <label className="mb-2 flex items-center gap-2">
+          <input type="checkbox" checked={showArchivedMemories} onChange={(event) => {
+            setShowArchivedMemories(event.target.checked);
+            loadMemories(event.target.checked);
+          }} />
+          显示已停用的记忆
+        </label>
         {memoryError && <p role="alert" className="text-red-600">{memoryError}</p>}
         {memories.length === 0 && !memoryError && <p className="text-slate-500">暂无记忆</p>}
         {memories.map((memory) => <div key={memory.id} className="py-2 border-b border-slate-100">
-          {editingMemory === memory.id ? (
+          {editingMemory?.id === memory.id ? (
             <>
               <textarea aria-label="编辑记忆" value={memoryText} onChange={(event) => setMemoryText(event.target.value)} className="w-full border rounded p-1" />
               <button type="button" onClick={saveMemoryEdit}>保存</button>{" "}
@@ -461,14 +533,33 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           ) : (
             <>
               <p>{memory.content || memory.title}</p>
+              {memory.memory_status === "superseded" && <p className="text-xs text-slate-500">已被新记忆替代</p>}
+              {memory.memory_status === "expired" && <p className="text-xs text-slate-500">已过期</p>}
               {memory.ai_insight?.sourceMessageId && <p className="text-xs text-slate-500">
                 来自对话{memory.ai_insight.editedAt ? "，已编辑" : ""} · {fmtTime(memory.created_date)}
                 {messages.find((message) => message.id === memory.ai_insight.sourceMessageId)?.content && (
                   <span className="block">原话：{messages.find((message) => message.id === memory.ai_insight.sourceMessageId).content}</span>
                 )}
               </p>}
-              <button type="button" onClick={() => { setEditingMemory(memory.id); setMemoryText(memory.content || memory.title); }} className="mr-3 text-blue-700">编辑</button>
-              <button type="button" onClick={() => deleteMemory(memory.id)} className="text-red-700">删除</button>
+              <button type="button" onClick={() => { setEditingMemory(memory); setMemoryText(memory.content || memory.title); }} className="mr-3 text-blue-700">编辑</button>
+              <button type="button" onClick={() => memoryHistory?.id === memory.id ? setMemoryHistory(null) : loadMemoryHistory(memory.id)} className="mr-3 text-blue-700">版本历史</button>
+              <button type="button" onClick={() => deleteMemory(memory.id)} className="text-red-700">忘记</button>
+              {memoryHistory?.id === memory.id && <div className="mt-2 border-l border-slate-200 pl-3">
+                {memoryHistory.revisions.map((revision) => (
+                  <div className="mb-2" key={revision.version}>
+                    <p className="text-xs text-slate-500">版本 {revision.version} · {fmtTime(revision.createdAt)} · {{ legacy: "旧记录", user: "你", worker: "自动更新" }[revision.actor] || revision.actor}</p>
+                    <p>{revision.content || revision.title}</p>
+                    {revision.sourceMessageIds.map((source, index) => (
+                      <button type="button" key={source} onClick={() => viewRevisionSource(memory.id, revision.version, source)} className="mr-3 text-xs text-blue-700">查看来源 {index + 1}</button>
+                    ))}
+                    {revision.version !== memoryHistory.version && <button type="button" onClick={() => restoreRevision(memory.id, revision.version, memoryHistory.version)} className="text-xs text-blue-700">恢复此版本</button>}
+                    {revisionSource?.memoryId === memory.id && revisionSource.version === revision.version && (
+                      <p className="mt-1 text-xs text-slate-500">原话：{revisionSource.content}</p>
+                    )}
+                  </div>
+                ))}
+                {memoryHistory.hasMore && <button type="button" onClick={() => loadMemoryHistory(memory.id, memoryHistory.revisions.at(-1).version)} className="text-xs text-blue-700">更早版本</button>}
+              </div>}
             </>
           )}
         </div>)}

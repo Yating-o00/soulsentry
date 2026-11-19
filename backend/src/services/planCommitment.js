@@ -637,8 +637,9 @@ export function extractAdjustmentsFromText(text) {
     }
   }
   const clock = /(周末|周六和周日|周[一二三四五六日天]|工作日|周一到周五|每天|日常|全部|所有)?[^。！？\n]{0,10}?(调整到|调整至|改到|调到|放到|挪到)\s*((?:(?:早上|上午|中午|下午|晚上|晚间|睡前)\s*)?[0-9]{1,2}\s*(?:[-—~～到至]\s*[0-9]{1,2}\s*)?(?:[:：点]\s*(?:[0-5]\d|半)|[:：点])?|早上|上午|中午|下午|晚上|晚间|睡前)/.exec(t);
-  if (clock) {
-    out.push({ target: clock[1] || pinnedTarget || "全部", field: "start_time", value: clock[3] });
+  const bareClock = !clock && /^(周[一二三四五六日天])\s*((?:早上|上午|中午|下午|晚上)\s*[0-9]{1,2}(?:点(?:半|[0-5]\d分?)?|[:：][0-5]\d))\s*[。！!]?$/.exec(t.trim());
+  if (clock || bareClock) {
+    out.push({ target: clock ? clock[1] || pinnedTarget || "全部" : bareClock[1], field: "start_time", value: clock ? clock[3] : bareClock[2] });
   }
   // 「把跑步换成游泳」「把自重训练改成瑜伽」→ 内容替换（值若是时长数字则不按内容处理）
   const swap = /把(.{1,12}?)(?:换成|改成|替换成|变为)(.{1,24})/.exec(t);
@@ -677,6 +678,35 @@ export function extractAdjustmentsFromText(text) {
     }
   }
   return out.length > 0 ? out : null;
+}
+
+/** Move only the requested weekday in a trusted, already expanded proposal. */
+export function moveProposalWeekday(plan, text, now = Date.now()) {
+  if (!Array.isArray(plan?.patterns) || !Array.isArray(plan.children)) return null;
+  const changes = extractAdjustmentsFromText(text);
+  if (changes?.length !== 1) return null;
+  const [change] = changes;
+  if (change.field !== "start_time" || !/^周[一二三四五六日天]$/.test(change.target)) return null;
+  const days = explicitDaySet(change.target);
+  const { clock } = normalizeClockPhrase(change.value);
+  if (!clock) return null;
+
+  let moved = 0;
+  const children = plan.children.map((child) => {
+    if (child.session_type !== "session" || !days.has(new Date(`${child.date}T00:00:00Z`).getUTCDay())) return child;
+    moved += 1;
+    const start = Date.parse(`${child.date}T${clock}:00+08:00`);
+    if (start < now) return null;
+    return { ...child, start_time: clock, end_time: hm(start + child.duration_minutes * 60000) };
+  });
+  if (!moved) return null;
+  if (children.some((child) => child === null)) return { error: "这个时段已经过去，请选一个之后的时间。" };
+  const adjustable = plan.patterns.filter(({ session_type }) => session_type === "session");
+  const adjusted = applyPlanAdjustments(adjustable, changes);
+  return {
+    plan: { ...plan, children, patterns: [...adjusted.patterns, ...plan.patterns.filter(({ session_type }) => session_type !== "session")] },
+    clock,
+  };
 }
 
 // 多轮调整时模型调整与本地提取的取舍：新增项以本地对原话的解析为准（模型常丢适用日→铺成"每天"出 12 条）；// 模型给的新增项若适用日与原话里的星期词对不上，直接丢弃，不静默铺开。
@@ -751,11 +781,11 @@ export function rebuildPatternsFromChildren(children) {
   return patterns;
 }
 
-export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, memoryContext, existing = [], insights = null, now = new Date(), constraints = {}, invoke = invokeDashboardAi, maxRepairs = 1 } = {}) {
+export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, memoryContext, existing = [], insights = null, now = new Date(), constraints = {}, invoke = invokeDashboardAi, maxRepairs = 1, signal, onAttempt } = {}) {
   const ctx = {
     goal: String(goal || "").trim().slice(0, 80),
     horizonDays: clampInt(horizonDays, 2, 30, 7),
-    dailyMinutes: clampInt(dailyMinutes, 15, 180, 30)
+    dailyMinutes: clampInt(dailyMinutes, constraints.checkWindows ? 10 : 15, 180, 30)
   };
   if (!ctx.goal) {
     throw new Error("请先说明计划目标");
@@ -815,31 +845,49 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
     bits.push(`已有安排（避开这些时段）：${JSON.stringify(busyBlocks).slice(0, 300)}`);
   }
   const frequencyInstruction = constraints.sessionsPerWeek
-    ? `每个完整的七天周期安排恰好 ${constraints.sessionsPerWeek} 次主要活动，每次 ${constraints.sessionMinutes ?? ctx.dailyMinutes} 分钟。使用适用日为具体星期的模板，主要活动日只安排一条主要活动，休息日可以不安排。不要安排其他项目占用主要活动日的时间。`
+    ? `每个完整的七天周期安排恰好 ${constraints.sessionsPerWeek} 次主要活动。使用适用日为具体星期的模板，主要活动日只安排一条主要活动，休息日可以不安排。不要安排其他项目占用主要活动日的时间。`
     : "所有模板的适用日合起来覆盖规划期，未安排的日期留作休息。";
+  const durationInstruction = constraints.maxSessionMinutes != null
+    ? `每次主要活动不得超过 ${constraints.maxSessionMinutes} 分钟，可以安排较短的时长。`
+    : constraints.sessionMinutes != null || constraints.sessionsPerWeek
+      ? `每次主要活动恰好 ${constraints.sessionMinutes ?? ctx.dailyMinutes} 分钟。`
+      : "";
   const prompt = `用户想规划：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。偏好：${String(preferences || "无").slice(0, 100)}
 ${memoryContext ? renderMemoryContext(memoryContext) : ""}
 ${bits.join("\n")}
 ${frequencyInstruction}
+${durationInstruction}
 ${constraints.noWeekdayEvenings ? "硬约束：周一至周五所有主要活动必须在18:00前结束。请安排工作日白天或周末，检查开始时刻加活动时长，避免任何跨过18:00的工作日安排。" : ""}
+${constraints.weekdayEveningsOnly ? "硬约束：主要活动只可以在周一至周五18:00之后安排。" : ""}
+${constraints.dumbbellOnly ? "器械限制：用户只有哑铃。只安排哑铃或徒手动作。" : ""}
 ${constraints.training ? "训练日的 description 必须列出具体动作及各自的组数和每组次数（例如深蹲3组12次、划船3组10次），确保适合用户的器械与经验。" : ""}
 不要逐日展开，只输出「日型模板」patterns（2-5 条，如工作日训练/周末强化/饮食配合），每条含：plan_group（组名≤8字）、kind（每日坚持做完要打卡的项填 checkin，其余 task）、applies_to（weekday/weekend/daily/周一..周日，可逗号组合）、start_time（HH:MM，避开 23:00-7:00，今天的时刻须晚于 ${chinaNowTime()}）、duration_minutes、title（≤16字）、description（含具体执行步骤和量化标准）、note（可选）、weekly_progression（可选）。直接输出 JSON。`;
 
   const outcome = await runTaskHarness({
     maxRepairs,
+    onAttempt,
     draft: async ({ errors }) => {
-      const { data, usage } = await Promise.race([
-        invoke({
+      signal?.throwIfAborted();
+      let data, usage;
+      const fetchTimeout = 60000;
+      const timeout = AbortSignal.timeout(fetchTimeout);
+      try {
+        ({ data, usage } = await invoke({
           prompt: `${prompt}\n每条模板必须包含 session_type，主要训练或学习填 session，休息恢复填 recovery。${errors.length ? `上一版存在问题，请修正：${errors.join("；")}` : ""}`,
           systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 2-5 个日型模板。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,
           model: "kimi-k3",
           maxTokens: 8000,
-          fetchTimeout: 60000,
-          withUsage: true
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("PLAN_TIMEOUT")), 60000).unref())
-      ]);
+          fetchTimeout,
+          signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+          singleAttempt: Boolean(signal),
+          withUsage: true,
+        }));
+      } catch (error) {
+        if (error.code === "PLAN_JSON" && constraints.checkWindows) return { malformedJson: true };
+        throw error;
+      }
+      signal?.throwIfAborted();
 
       // 主路径：日型模板 → 本地展开
       if (data && typeof data === "object") {
@@ -858,10 +906,11 @@ ${constraints.training ? "训练日的 description 必须列出具体动作及�
       }
       return null;
     },
-    validate: (plan) => validateScheduledSessions(plan, constraints),
+    validate: (plan) => plan?.malformedJson ? ["PLAN_JSON：请只返回符合格式的 JSON"] : validateScheduledSessions(plan, constraints),
   });
   if (outcome.status !== "ready") {
-    throw new Error(outcome.status === "invalid" ? outcome.errors.join("；") : "AI 服务暂不可用，请稍后重试");
+    throw new Error(outcome.status === "invalid" ? outcome.errors.join("；")
+      : outcome.reason === "timeout" ? "规划超时，请稍后重试" : "AI 服务暂不可用，请稍后重试");
   }
   return outcome.result;
 }

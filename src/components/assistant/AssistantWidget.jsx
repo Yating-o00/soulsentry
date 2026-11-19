@@ -365,35 +365,40 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
         if (!pl.parent || !Array.isArray(pl.children) || pl.children.length === 0 || pl.source === "fallback") {
           throw new Error("计划尚未准备好，请重新生成后再确认。");
         }
-        const p = pl.parent || {};
-        const children = Array.isArray(pl.children) ? pl.children : [];
-        await httpRequest("/api/tasks/plan", {
-          method: "POST",
-          body: {
-            proposal_id: pending.proposal_id,
-            memory_proposal_id: pending.memory_proposal_id,
-            parent: {
-              title: p.title,
-              description: p.description || undefined,
-              category: p.category || "personal",
-              priority: p.priority || "medium",
-              status: "pending"
-            },
-            children: children.map((c) => ({
-              title: c.title,
-              description: c.description || undefined,
-              category: p.category || "personal",
-              priority: p.priority || "medium",
-              reminder_time: `${c.date}T${c.start_time}:00+08:00`,
-              end_time: `${c.date}T${c.end_time}:00+08:00`,
-              plan_kind: c.kind,
-              plan_group: c.plan_group,
-              session_type: c.session_type,
-              note: c.note || undefined,
-              tags: ["智能规划"]
-            }))
-          }
-        });
+        const { parent: p, children } = pl;
+        if (pending.plan_proposal_id) {
+          await httpRequest(`/api/tasks/plan-proposals/${encodeURIComponent(pending.plan_proposal_id)}/confirm`, {
+            method: "POST", body: {},
+          });
+        } else {
+          await httpRequest("/api/tasks/plan", {
+            method: "POST",
+            body: {
+              proposal_id: pending.proposal_id,
+              memory_proposal_id: pending.memory_proposal_id,
+              parent: {
+                title: p.title,
+                description: p.description || undefined,
+                category: p.category || "personal",
+                priority: p.priority || "medium",
+                status: "pending"
+              },
+              children: children.map((c) => ({
+                title: c.title,
+                description: c.description || undefined,
+                category: p.category || "personal",
+                priority: p.priority || "medium",
+                reminder_time: `${c.date}T${c.start_time}:00+08:00`,
+                end_time: `${c.date}T${c.end_time}:00+08:00`,
+                plan_kind: c.kind,
+                plan_group: c.plan_group,
+                session_type: c.session_type,
+                note: c.note || undefined,
+                tags: ["智能规划"]
+              }))
+            }
+          });
+        }
         doneLabel = p.title;
         planChildCount = children.length;
       } else {

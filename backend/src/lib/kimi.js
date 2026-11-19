@@ -13,7 +13,7 @@ export const FAST_TEXT_MODELS = String(process.env.FAST_TEXT_MODELS || "kimi-k2.
   .filter(Boolean);
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
 
-function getEndpointConfigs() {
+function getEndpointConfigs(allowDeepSeekFallback) {
   const primaryApiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
   const primaryBaseUrl = (process.env.KIMI_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
   const fallbackApiKey = process.env.KIMI_FALLBACK_API_KEY || process.env.MOONSHOT_FALLBACK_API_KEY;
@@ -44,7 +44,7 @@ function getEndpointConfigs() {
   // DeepSeek 兜底端点：排在最后，Kimi 各端点/模型全部失败后才启用；
   // models 固定在 DeepSeek 自有模型上，不会拿 Kimi 模型名去请求
   const deepseekApiKey = process.env.DEEPSEEK_API_KEY;
-  if (deepseekApiKey) {
+  if (allowDeepSeekFallback && deepseekApiKey) {
     const deepseekModels = String(process.env.DEEPSEEK_MODELS || "deepseek-chat")
       .split(",")
       .map((m) => m.trim())
@@ -58,7 +58,9 @@ function getEndpointConfigs() {
   }
 
   if (endpoints.length === 0) {
-    const error = new Error("KIMI_API_KEY / MOONSHOT_API_KEY / DEEPSEEK_API_KEY 均未配置");
+    const error = new Error(allowDeepSeekFallback
+      ? "KIMI_API_KEY / MOONSHOT_API_KEY / DEEPSEEK_API_KEY 均未配置"
+      : "Kimi 未配置 API Key");
     error.status = 500;
     throw error;
   }
@@ -118,9 +120,10 @@ export async function callKimiChat({
   temperature = 0.3,
   maxTokens = 4000,
   tools,
-  fetchTimeout = 30000
+  fetchTimeout = 30000,
+  allowDeepSeekFallback = true
 }) {
-  const endpoints = getEndpointConfigs();
+  const endpoints = getEndpointConfigs(allowDeepSeekFallback);
   const candidateModels = Array.isArray(models) && models.length > 0
     ? models
     : model
@@ -255,7 +258,8 @@ export async function invokeKimiText({
   temperature,
   maxTokens,
   fetchTimeout,
-  withUsage = false
+  withUsage = false,
+  allowDeepSeekFallback = true
 }) {
   const messages = [];
   if (systemPrompt) {
@@ -270,7 +274,8 @@ export async function invokeKimiText({
     models,
     temperature,
     maxTokens,
-    fetchTimeout
+    fetchTimeout,
+    allowDeepSeekFallback
   });
 
   const usage = result.raw?.usage || null;

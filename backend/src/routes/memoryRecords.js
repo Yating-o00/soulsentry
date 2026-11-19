@@ -162,7 +162,10 @@ memoryRecordsRouter.patch("/:id", async (req, res) => {
       people: payload.data.people,
       locations: payload.data.locations,
       tags: payload.data.tags,
-      aiInsight: payload.data.ai_insight,
+      aiInsight: payload.data.ai_insight !== undefined ? payload.data.ai_insight :
+        (payload.data.content !== undefined || payload.data.title !== undefined) && existing.aiInsight?.sourceMessageId
+          ? { ...existing.aiInsight, editedAt: new Date().toISOString() }
+          : undefined,
       sourceTaskId: payload.data.source_task_id === undefined ? undefined : (payload.data.source_task_id || null),
       sourceNoteId: payload.data.source_note_id === undefined ? undefined : (payload.data.source_note_id || null),
       isPinned: payload.data.is_pinned

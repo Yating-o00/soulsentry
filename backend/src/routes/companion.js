@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runFlowChat } from "../services/flowChat.js";
 import { extractActions, executeActions } from "../services/assistantActions.js";
+import { retrievePersonalMemories } from "../services/personalMemory.js";
 
 export const companionRouter = Router();
 
@@ -76,6 +77,24 @@ companionRouter.post("/messages", async (req, res) => {
     data: { userId: req.user.id, role: "user", content, kind: "chat" }
   });
 
+  const explicitMemory = content.match(/^(?:请)?(?:帮我)?记住[：:,，\s]*(.+)$/s);
+  if (explicitMemory) {
+    const memoryText = explicitMemory[1].trim().slice(0, 1000);
+    if (memoryText) {
+      const [, reply] = await prisma.$transaction([
+        prisma.memoryRecord.create({ data: {
+          userId: req.user.id, title: memoryText.slice(0, 200), content: memoryText,
+          memoryType: /^(?:我)?(?:以后|今后|始终|永远|每次)/.test(memoryText) ? "instruction" : "preference",
+          aiInsight: { sourceMessageId: userMsg.id },
+        } }),
+        prisma.companionMessage.create({ data: {
+          userId: req.user.id, role: "assistant", content: `好的，我记住了：${memoryText}`, kind: "chat",
+        } }),
+      ]);
+      return res.json({ message: serialize(userMsg), reply: serialize(reply), extracted: null, actions: null });
+    }
+  }
+
   // 从持久化时间线取最近上下文，保证跨端/重进后语境连续
   const history = await prisma.companionMessage.findMany({
     where: { userId: req.user.id },
@@ -108,16 +127,19 @@ companionRouter.post("/messages", async (req, res) => {
       console.warn("[companion] 动作提取失败（继续走对话引擎）:", err?.message || err);
     }
 
+    const memories = await retrievePersonalMemories({ prisma, userId: req.user.id, query: content });
     const result = await Promise.race([
       runFlowChat({
         messages,
         lastExtracted: payload.data.last_extracted || null,
         userId: req.user.id,
-        prisma
+        prisma,
+        memories
       }),
       new Promise((_, reject) => setTimeout(() => reject(new Error("CHAT_HANDLER_TIMEOUT")), 90000))
     ]);
-    const reply = String(result?.reply || "").trim() || "我在听，你继续说～";
+    const replyText = String(result?.reply || "").trim() || "我在听，你继续说～";
+    const reply = memories.length ? `${replyText}\n\n参考记忆：${memories.map((memory) => memory.title).join("；")}` : replyText;
     const assistantMsg = await prisma.companionMessage.create({
       data: { userId: req.user.id, role: "assistant", content: reply, kind: "chat" }
     });
@@ -126,7 +148,8 @@ companionRouter.post("/messages", async (req, res) => {
       reply: serialize(assistantMsg),
       extracted: result?.extracted || null,
       agent: result?.agent || null,
-      actions: null
+      actions: null,
+      memories: memories.map(({ id, title }) => ({ id, title }))
     });
   } catch (err) {
     console.error("[companion] 对话处理失败:", err?.message || err);

@@ -47,6 +47,42 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   const [actions, setActions] = useState(null); // 动作提案
   const [acting, setActing] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [memories, setMemories] = useState([]);
+  const [memoryError, setMemoryError] = useState("");
+  const [editingMemory, setEditingMemory] = useState(null);
+  const [memoryText, setMemoryText] = useState("");
+
+  const loadMemories = async () => {
+    try {
+      const records = await httpRequest("/api/memory-records?limit=300");
+      setMemories(records);
+      setMemoryError("");
+    } catch {
+      setMemoryError("记忆加载失败，请重试。");
+    }
+  };
+
+  const saveMemoryEdit = async () => {
+    const content = memoryText.trim();
+    if (!content) return;
+    try {
+      await httpRequest(`/api/memory-records/${editingMemory}`, { method: "PATCH", body: { title: content.slice(0, 200), content } });
+      setEditingMemory(null);
+      await loadMemories();
+    } catch {
+      setMemoryError("记忆更新失败，请重试。");
+    }
+  };
+
+  const deleteMemory = async (id) => {
+    try {
+      await httpRequest(`/api/memory-records/${id}`, { method: "DELETE" });
+      await loadMemories();
+    } catch {
+      setMemoryError("记忆删除失败，请重试。");
+    }
+  };
   const supportedRef = useRef(true);
   const messagesRef = useRef([]);
   const scrollRef = useRef(null);
@@ -127,7 +163,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     });
     const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
     appendMessage({ id: `local-a-${Date.now()}`, role: "assistant", content: reply, kind: "chat", created_date: new Date().toISOString() });
-    setPending(res?.extracted || null);
+    setPending(res?.extracted?.type === "plan" ? { ...res.extracted, proposal_id: crypto.randomUUID() } : res?.extracted || null);
     setActions(null);
     scrollToBottom();
     return true;
@@ -154,7 +190,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             setMessages(next);
             lastIdRef.current = res.reply.id;
           }
-          setPending(res?.extracted || null);
+          setPending(res?.extracted?.type === "plan" ? { ...res.extracted, proposal_id: crypto.randomUUID() } : res?.extracted || null);
           setActions(Array.isArray(res?.actions) && res.actions.length > 0 ? res.actions : null);
           scrollToBottom();
           return true;
@@ -257,34 +293,37 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         collabCreated = true;
       } else if (pending.type === "plan") {
         const pl = pending.plan || {};
+        if (!pl.parent || !Array.isArray(pl.children) || pl.children.length === 0 || pl.source === "fallback") {
+          throw new Error("计划尚未准备好，请重新生成后再确认。");
+        }
         const p = pl.parent || {};
         const children = Array.isArray(pl.children) ? pl.children : [];
-        const parentTask = await httpRequest("/api/tasks", {
+        await httpRequest("/api/tasks/plan", {
           method: "POST",
           body: {
-            title: p.title,
-            description: p.description || undefined,
-            category: p.category || "personal",
-            priority: p.priority || "medium",
-            status: "pending"
-          }
-        });
-        const parentId = parentTask?.id || parentTask?.data?.id;
-        for (const c of children) {
-          await httpRequest("/api/tasks", {
-            method: "POST",
-            body: {
+            proposal_id: pending.proposal_id,
+            parent: {
+              title: p.title,
+              description: p.description || undefined,
+              category: p.category || "personal",
+              priority: p.priority || "medium",
+              status: "pending"
+            },
+            children: children.map((c) => ({
               title: c.title,
               description: c.description || undefined,
               category: p.category || "personal",
               priority: p.priority || "medium",
-              parent_task_id: parentId,
               reminder_time: `${c.date}T${c.start_time}:00+08:00`,
               end_time: `${c.date}T${c.end_time}:00+08:00`,
+              plan_kind: c.kind,
+              plan_group: c.plan_group,
+              session_type: c.session_type,
+              note: c.note || undefined,
               tags: ["智能规划"]
-            }
-          }).catch(() => {});
-        }
+            }))
+          }
+        });
         doneLabel = p.title;
         planChildCount = children.length;
       } else {
@@ -405,6 +444,35 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         </button>
       </div>
       )}
+      <div className="flex justify-end px-4 py-2">
+        <button type="button" onClick={() => { const next = !memoryOpen; setMemoryOpen(next); if (next) loadMemories(); }} className="text-xs text-slate-600">我的记忆</button>
+      </div>
+      {memoryOpen && <div className="max-h-52 overflow-auto bg-white px-4 py-3 text-sm border-b border-slate-200">
+        <p className="text-xs text-slate-500 mb-2">对小助手说“记住我……”可以添加记忆。</p>
+        {memoryError && <p role="alert" className="text-red-600">{memoryError}</p>}
+        {memories.length === 0 && !memoryError && <p className="text-slate-500">暂无记忆</p>}
+        {memories.map((memory) => <div key={memory.id} className="py-2 border-b border-slate-100">
+          {editingMemory === memory.id ? (
+            <>
+              <textarea aria-label="编辑记忆" value={memoryText} onChange={(event) => setMemoryText(event.target.value)} className="w-full border rounded p-1" />
+              <button type="button" onClick={saveMemoryEdit}>保存</button>{" "}
+              <button type="button" onClick={() => setEditingMemory(null)}>取消</button>
+            </>
+          ) : (
+            <>
+              <p>{memory.content || memory.title}</p>
+              {memory.ai_insight?.sourceMessageId && <p className="text-xs text-slate-500">
+                来自对话{memory.ai_insight.editedAt ? "，已编辑" : ""} · {fmtTime(memory.created_date)}
+                {messages.find((message) => message.id === memory.ai_insight.sourceMessageId)?.content && (
+                  <span className="block">原话：{messages.find((message) => message.id === memory.ai_insight.sourceMessageId).content}</span>
+                )}
+              </p>}
+              <button type="button" onClick={() => { setEditingMemory(memory.id); setMemoryText(memory.content || memory.title); }} className="mr-3 text-blue-700">编辑</button>
+              <button type="button" onClick={() => deleteMemory(memory.id)} className="text-red-700">删除</button>
+            </>
+          )}
+        </div>)}
+      </div>}
 
       {/* 消息流 */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto py-4" style={{ minHeight: 0 }}>
@@ -506,7 +574,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
 
       {/* 动作提案卡片 */}
       {actions && actions.length > 0 && (
-        <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
+        <div className="mx-3 mb-3 rounded-2xl p-4 shrink-0 max-h-80 overflow-y-auto" style={{ background: "#fff", border: "1.5px solid #4a5d8f", boxShadow: "0 4px 16px rgba(56,72,119,0.10)" }}>
           <div className="text-[12px] font-semibold mb-2" style={{ color: "#384877" }}>✋ 确认后我将执行这些修改</div>
           {actions.map((a) => (
             <div key={a.id} className="text-[13px] py-1" style={{ color: "#1c1c1e" }}>· {a.label}</div>
@@ -545,6 +613,15 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
               <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>
                 共 {(pending.plan?.children || []).length} 条子约定，按天排好具体时刻
               </div>
+              <ul className="mt-2 max-h-56 overflow-auto space-y-2">
+                {(pending.plan?.children || []).map((child, index) => (
+                  <li key={`${child.date}-${child.start_time}-${index}`} className="rounded-lg bg-slate-50 p-2">
+                    <div>{child.date} {child.start_time}–{child.end_time} · {child.title} {child.session_type === "recovery" ? "（恢复）" : child.session_type === "session" ? "（主要活动）" : ""} · {child.duration_minutes} 分钟</div>
+                    {child.description && <p className="mt-1 text-xs text-slate-600 whitespace-pre-wrap">{child.description}</p>}
+                    {child.note && <p className="mt-1 text-xs text-slate-500">{child.note}</p>}
+                  </li>
+                ))}
+              </ul>
             </div>
           ) : (
             <div className="text-[13px]" style={{ color: "#1c1c1e" }}>
@@ -566,7 +643,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             <button
               type="button"
               onClick={confirmCreate}
-              disabled={acting}
+              disabled={acting || (pending.type === "plan" && (!pending.plan?.children?.length || pending.plan?.source === "fallback"))}
               className="rounded-full py-2 text-[12.5px] font-semibold text-white"
               style={{ flex: 1.4, background: "#384877", border: "none", cursor: "pointer", opacity: acting ? 0.6 : 1 }}
             >

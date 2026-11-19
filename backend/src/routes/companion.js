@@ -7,7 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runFlowChat } from "../services/flowChat.js";
 import { extractActions, executeActions } from "../services/assistantActions.js";
-import { retrievePersonalMemories } from "../services/personalMemory.js";
+import { retrievePersonalMemories, searchMemoryTranscript } from "../services/personalMemory.js";
 import { createMemory, ownedMemoryProposal, recallableMessageScope } from "../services/memoryStore.js";
 import { enqueueMemoryMessage } from "../services/memoryWorker.js";
 import { buildMemoryTopicSummary, loadMemoryContext, loadRememberedCommitments, RECENT_CHAT_WINDOW } from "../services/memoryContext.js";
@@ -141,14 +141,24 @@ companionRouter.post("/messages", async (req, res) => {
       console.warn("[companion] 动作提取失败（继续走对话引擎）:", err?.message || err);
     }
 
+    const hybridEnabled = process.env.MEMORY_HYBRID_ENABLED === "1";
     const [retrieved, memoryContext] = await Promise.all([
-      retrievePersonalMemories({ prisma, userId: req.user.id, query: content }),
+      retrievePersonalMemories({
+        prisma, userId: req.user.id, query: content,
+        mode: hybridEnabled ? "hybrid" : "lexical",
+      }),
       loadMemoryContext(prisma, req.user.id),
     ]);
     const profileIds = new Set(memoryContext.profile.map(({ id }) => id));
     const memories = retrieved.filter(({ id }) => !profileIds.has(id));
     memoryContext.commitments = await loadRememberedCommitments(prisma, req.user.id, content);
     if (process.env.MEMORY_TOPIC_SUMMARY_ENABLED === "1") memoryContext.topicSummary = buildMemoryTopicSummary(memories);
+    if (hybridEnabled && memories.length < 2) {
+      memoryContext.transcript = await searchMemoryTranscript({
+        prisma, userId: req.user.id, query: content,
+        excludeIds: [...history.map(({ id }) => id), ...memoryContext.recap.map(({ sourceId }) => sourceId)],
+      });
+    }
     const result = await Promise.race([
       runFlowChat({
         messages,

@@ -6,6 +6,8 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runFlowChat } from "../services/flowChat.js";
+import { moveProposalWeekday } from "../services/planCommitment.js";
+import { loadPlanningBusy, resolvePlanningRequest, validateScheduledSessions } from "../services/taskHarness.js";
 import { extractActions, executeActions } from "../services/assistantActions.js";
 import { retrievePersonalMemories, searchMemoryTranscript } from "../services/personalMemory.js";
 import { createMemory, ownedMemoryProposal, recallableMessageScope } from "../services/memoryStore.js";
@@ -21,7 +23,7 @@ const serialize = (m) => ({
   role: m.role,
   content: m.content,
   kind: m.kind,
-  meta: m.meta || null,
+  meta: m.meta ? Object.fromEntries(Object.entries(m.meta).filter(([key]) => key !== "planDraft")) : null,
   read_at: m.readAt,
   created_date: m.createdAt
 });
@@ -120,10 +122,18 @@ companionRouter.post("/messages", async (req, res) => {
     .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
 
   try {
+    const supplied = payload.data.last_extracted;
+    const previousId = supplied?.plan_proposal_id || supplied?.memory_proposal_id;
+    const previous = previousId ? await ownedMemoryProposal(prisma, req.user.id, previousId) : null;
+    const lastExtracted = previous?.meta.planDraft?.extracted
+      ?? (supplied?.plan_proposal_id || (previousId && !previous) ? null : supplied);
+
+    const prior = previous?.meta.planDraft;
+    const localMove = prior && moveProposalWeekday(prior.extracted.plan, content);
     // 动作意图优先：「勾掉/改/删现有约定心签」的指令先走动作提取，
     // 避免被对话引擎误当成心签/新约定（用户确认后才真正落库）
     try {
-      const actionResult = await extractActions({ messages, userId: req.user.id });
+      const actionResult = !localMove && await extractActions({ messages, userId: req.user.id });
       if (actionResult?.actions?.length > 0) {
         const reply = actionResult.reply || "好的，我整理了一下要做的修改，确认后我就动手～";
         const assistantMsg = await prisma.companionMessage.create({
@@ -159,20 +169,47 @@ companionRouter.post("/messages", async (req, res) => {
         excludeIds: [...history.map(({ id }) => id), ...memoryContext.recap.map(({ sourceId }) => sourceId)],
       });
     }
-    const result = await Promise.race([
-      runFlowChat({
-        messages,
-        lastExtracted: payload.data.last_extracted?.memory_proposal_id
-          && !await ownedMemoryProposal(prisma, req.user.id, payload.data.last_extracted.memory_proposal_id)
-          ? null : payload.data.last_extracted || null,
-        userId: req.user.id,
-        prisma,
-        memories,
-        memoryContext
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("CHAT_HANDLER_TIMEOUT")), 90000))
-    ]);
-    const replyText = String(result?.reply || "").trim() || "我在听，你继续说～";
+    const startedAt = Date.now();
+    const planRun = { signal: AbortSignal.timeout(90000), status: "chat", chatCalls: 0, plannerCalls: 0 };
+    let result;
+    if (localMove) {
+      planRun.status = localMove.error ? "invalid" : "local_adjustment";
+      planRun.constraints = prior.constraints;
+      result = localMove.error ? { reply: localMove.error } : {
+        extracted: { ...prior.extracted, plan: localMove.plan },
+        reply: `已把那天的主要安排调到 ${localMove.clock}，看看新安排～`,
+      };
+    } else {
+      result = await runFlowChat({
+        messages, lastExtracted, userId: req.user.id, prisma, memories, memoryContext, planRun,
+      });
+    }
+    let extracted = result?.extracted || null;
+    let replyText = String(result?.reply || "").trim() || "我在听，你继续说～";
+    let planDraft;
+    if (extracted?.type === "plan" && extracted.plan && extracted.plan.source !== "fallback") {
+      // Fallback adjustment paths must also pass the service's window checks before
+      // the assistant reply becomes a confirmable version.
+      const constraints = planRun.constraints || resolvePlanningRequest(
+        extracted.plan_request ?? {},
+        messages.filter(({ role }) => role === "user").map(({ content }) => content),
+        [...memoryContext.profile, ...memories],
+      ).constraints;
+      constraints.busy ??= await loadPlanningBusy(prisma, req.user.id, constraints);
+      const errors = validateScheduledSessions(extracted.plan, constraints);
+      if (errors.length || planRun.signal.aborted) {
+        extracted = null;
+        planRun.status = planRun.signal.aborted ? "timeout" : "invalid";
+        planRun.validation = errors.map((error) => error.match(/^([A-Z_]+)：/)?.[1] || "DOMAIN_RULE");
+        replyText = errors.length ? `这份计划还不符合要求：${errors.join("；")}。请调整后再试。` : "规划超时，请稍后重试。";
+      } else {
+        const { busy: _busy, ...snapshot } = constraints;
+        planDraft = { extracted, constraints: snapshot };
+        planRun.status = "ready";
+      }
+    } else if (extracted?.type === "plan") {
+      extracted = null;
+    }
     const reply = memories.length ? `${replyText}\n\n参考记忆：${memories.map((memory) => memory.title).join("；")}` : replyText;
     const assistantMsg = await prisma.companionMessage.create({
       data: {
@@ -181,16 +218,25 @@ companionRouter.post("/messages", async (req, res) => {
           memoryIds: [...profileIds, ...memories.map(({ id }) => id)],
           memorySourceIds: [...memoryContext.recap.map(({ sourceId }) => sourceId), ...(memoryContext.transcript || []).map(({ id }) => id)],
           recentUserIds: history.slice(-RECENT_CHAT_WINDOW).filter(({ role }) => role === "user").map(({ id }) => id),
-          ...(result?.extracted?.type === "plan" && result.extracted.plan ? { planProposal: true, planTitle: result.extracted.plan?.parent?.title } : {}),
+          ...(planDraft ? { planProposal: true, planTitle: extracted.plan.parent?.title, planDraft } : {}),
         },
       }
     });
+    if (planRun.status !== "chat" || planRun.plannerCalls) {
+      console.info("[planHarness]", JSON.stringify({
+        runId: userMsg.id, status: planRun.status, provider: process.env.CHAT_AI_PROVIDER?.trim() || "kimi",
+        route: localMove ? "local_adjustment" : "chat",
+        chatCalls: planRun.chatCalls, plannerCalls: planRun.plannerCalls,
+        repairCount: Math.max(0, planRun.plannerCalls - 1), firstValidation: planRun.firstValidation,
+        validation: planRun.validation, durationSource: planRun.constraints?.durationSource,
+        memoryId: planRun.constraints?.durationMemoryId, elapsedMs: Date.now() - startedAt,
+        proposalId: planDraft ? assistantMsg.id : undefined,
+      }));
+    }
     return res.json({
       message: serialize(userMsg),
       reply: serialize(assistantMsg),
-      extracted: result?.extracted?.type === "plan" && result.extracted.plan
-        ? { ...result.extracted, memory_proposal_id: assistantMsg.id }
-        : result?.extracted || null,
+      extracted: planDraft ? { ...extracted, plan_proposal_id: assistantMsg.id, memory_proposal_id: assistantMsg.id } : extracted,
       agent: result?.agent || null,
       actions: null,
       memories: memories.map(({ id, title }) => ({ id, title }))

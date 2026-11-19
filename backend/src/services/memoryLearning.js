@@ -62,20 +62,25 @@ function buildObservation({ sourceId, quote, topic, attribute, aliases = [], exp
   return { title: quote.slice(0, 100), content: quote, sourceIds: [sourceId], fact, slot: memorySlot(fact), isCorrection: correction.test(source) };
 }
 
+const TOPICS = [
+  { topic: "english_vocabulary", terms: /词汇|单词|生词|背词/, session: true },
+  { topic: "reading", terms: /读书|阅读/, session: true },
+  { topic: "podcast", terms: /播客/, session: true },
+  { topic: "commute", terms: /上班|下班|通勤|去公司|到公司/ },
+  { topic: "fitness", terms: /锻炼|训练|练背|健身|在家练/ },
+];
+
+export function memoryTopicFor(text) {
+  return TOPICS.find(({ terms }) => terms.test(text))?.topic;
+}
+
 // Preserve verbatim, high-confidence statements even when the model elects not
 // to write. Leave uncertain, sensitive, and time-limited language to review.
 function explicitPersonalObservation({ id, content }) {
   if (containsSensitiveMemory(content) || temporary.test(content) || otherSubject.test(content)
       || /(?:可能|也许|比如|例如|假设|如果|想试试|听说|是不是)/.test(content)) return null;
   const duration = /(?:\d{1,3}|[一二两三四五六七八九十]{1,4})\s*(?:分钟|小时)|半小时/;
-  const topics = [
-    { topic: "english_vocabulary", terms: /词汇|单词|生词|背词/, session: true },
-    { topic: "reading", terms: /读书|阅读/, session: true },
-    { topic: "podcast", terms: /播客/, session: true },
-    { topic: "commute", terms: /上班|下班|通勤|去公司|到公司/ },
-    { topic: "fitness", terms: /锻炼|训练|练背|健身|在家练/ },
-  ];
-  const topic = topics.find(({ terms }) => terms.test(content));
+  const topic = TOPICS.find(({ terms }) => terms.test(content));
   const choose = (attribute, scope, aliases = [], quote = content) =>
     buildObservation({ sourceId: id, topic: scope, attribute, aliases, quote: quote.trim().slice(0, 280) }, content);
   if (topic?.session && /(?:每次|一次|单次|一轮).{0,16}(?:最多|只能|不超过|上限)/.test(content) && duration.test(content)) {

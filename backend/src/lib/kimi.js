@@ -129,6 +129,8 @@ export async function callKimiChat({
   maxTokens = 4000,
   tools,
   fetchTimeout = 30000,
+  signal,
+  singleAttempt = false,
   allowDeepSeekFallback = true
 }) {
   const endpoints = getEndpointConfigs(allowDeepSeekFallback);
@@ -144,12 +146,12 @@ export async function callKimiChat({
 
   console.log(`[callKimiChat] start: models=${candidateModels.join(",")}, endpoints=${endpoints.map((e) => e.label).join(",")}, timeout=${fetchTimeout}ms, msgCount=${messages?.length || 0}`);
 
-  for (let endpointIndex = 0; endpointIndex < endpoints.length; endpointIndex += 1) {
-    const endpoint = endpoints[endpointIndex];
+  for (const endpoint of singleAttempt ? endpoints.slice(0, 1) : endpoints) {
     // DeepSeek 等兜底端点自带模型列表，不沿用 Kimi 候选模型
     const modelsForEndpoint = Array.isArray(endpoint.models) && endpoint.models.length > 0 ? endpoint.models : candidateModels;
 
-    for (const candidateModel of modelsForEndpoint) {
+    for (const candidateModel of singleAttempt ? modelsForEndpoint.slice(0, 1) : modelsForEndpoint) {
+      signal?.throwIfAborted();
       const body = {
         model: candidateModel,
         messages,
@@ -180,7 +182,7 @@ export async function callKimiChat({
             Authorization: `Bearer ${endpoint.apiKey}`
           },
           body: JSON.stringify(body),
-          signal: controller.signal
+          signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
         });
 
         const duration = Date.now() - startAt;
@@ -242,6 +244,7 @@ export async function callKimiChat({
 
   console.log(`[callKimiChat] exhausted all attempts, lastStatus=${lastStatus}, lastError=${lastErrorText.slice(0, 200)}`);
 
+  signal?.throwIfAborted();
   if (lastError?.status && !shouldTryFallback(lastError.status, lastError.message || "")) {
     throw lastError;
   }
@@ -254,6 +257,7 @@ export async function callKimiChat({
         : `Kimi API error ${lastStatus}: ${lastErrorText}`
   );
   error.status = 502;
+  if (lastStatus === 200 && /RESPONSE_(?:EMPTY|NOT_JSON)/.test(lastErrorText)) error.code = "PLAN_JSON";
   throw error;
 }
 
@@ -266,6 +270,8 @@ export async function invokeKimiText({
   temperature,
   maxTokens,
   fetchTimeout,
+  signal,
+  singleAttempt,
   withUsage = false,
   allowDeepSeekFallback = true
 }) {
@@ -283,6 +289,8 @@ export async function invokeKimiText({
     temperature,
     maxTokens,
     fetchTimeout,
+    signal,
+    singleAttempt,
     allowDeepSeekFallback
   });
 

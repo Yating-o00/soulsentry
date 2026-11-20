@@ -4,6 +4,7 @@ import { FileText, Loader2, Paperclip, Users2, X } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { BuddyMsg, useBuddyAgent, useBuddyState, todayKey } from "./shared";
+import { PERSONAS, DEFAULT_PERSONA } from "@/lib/buddies";
 import {
   activeInjuries,
   computeRunningStats,
@@ -26,9 +27,14 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
   const [creatingProposal, setCreatingProposal] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [switchingPersona, setSwitchingPersona] = useState(null);
   const scrollRef = useRef(null);
   const fileRef = useRef(null);
   const greetedRef = useRef(false);
+
+  // 每颗搭子独立人格：未单独设置时用搭子类型的默认人格
+  const activePersonaKey = profile?.persona || buddy.defaultPersona || DEFAULT_PERSONA;
+  const activePersona = PERSONAS.find((p) => p.key === activePersonaKey) || PERSONAS[0];
 
   const chat = useMemo(() => (Array.isArray(state.chat) ? state.chat : []), [state.chat]);
   const today = todayKey();
@@ -159,6 +165,29 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
     }
   };
 
+  // 切换这颗搭子的陪伴人格：只影响本搭子，不动全局小助手人格
+  const switchPersona = async (key) => {
+    if (!key || key === activePersonaKey || switchingPersona) return;
+    setSwitchingPersona(key);
+    try {
+      await httpRequest(`/api/buddies/${buddy.id}/persona`, { method: "POST", body: { persona: key } });
+      queryClient.setQueryData(["buddies", "mine"], (old) => {
+        if (!old?.buddies?.[buddy.id]) return old;
+        return {
+          ...old,
+          buddies: { ...old.buddies, [buddy.id]: { ...old.buddies[buddy.id], persona: key } },
+        };
+      });
+      queryClient.invalidateQueries({ queryKey: ["buddies", "mine"] });
+      const label = PERSONAS.find((p) => p.key === key)?.name || "新的陪伴方式";
+      toast.success(`${buddy.name}已切换为${label}`);
+    } catch (error) {
+      toast.error(error?.message || "切换人格失败，再试一次");
+    } finally {
+      setSwitchingPersona(null);
+    }
+  };
+
   // 对话里的协同小组提案：确认后直接创建一场归属本搭子的协同约定
   const createGroup = async (proposal, index) => {
     if (!proposal || creatingProposal) return;
@@ -201,6 +230,37 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       <div className="flex items-baseline justify-between px-1">
         <span className="text-[11px] tracking-widest text-stone-400">问{buddy.name}</span>
         <span className="text-[10px] text-stone-300">专业问题，随时问</span>
+      </div>
+
+      {/* 陪伴人格：对话前先设定，后续对话与协同都按它来 */}
+      <div className="mt-2.5 rounded-xl bg-[#FAF9F7] px-2.5 py-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 text-[10px] tracking-widest text-stone-400">陪伴方式</span>
+          {PERSONAS.map((p) => {
+            const active = p.key === activePersonaKey;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => switchPersona(p.key)}
+                disabled={!!switchingPersona}
+                aria-pressed={active}
+                title={p.desc}
+                className={`inline-flex min-h-[28px] items-center gap-1 rounded-full px-2.5 text-[11px] transition-colors disabled:opacity-60 ${
+                  active
+                    ? "bg-[#384877] font-medium text-white"
+                    : "border border-stone-200 bg-white text-stone-500 hover:border-stone-300 hover:text-stone-700"
+                }`}
+              >
+                {switchingPersona === p.key && <Loader2 className="h-3 w-3 animate-spin" />}
+                {p.short || p.name}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1.5 text-[10px] leading-relaxed text-stone-400">
+          {activePersona.desc} · 只影响这颗搭子
+        </p>
       </div>
 
       {chat.length > 0 && (

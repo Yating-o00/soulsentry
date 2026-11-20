@@ -35,6 +35,7 @@ export default function BuddyCompanions() {
         {active.map((b) => {
           const tint = BUDDY_TINTS[b.id];
           const profile = profiles[b.id];
+          const cardPersona = profile?.persona || b.defaultPersona || persona;
           return (
             <Link
               key={b.id}
@@ -48,7 +49,7 @@ export default function BuddyCompanions() {
                   <span className="text-[11px] text-[#a8a29e]">{b.duration}</span>
                 </div>
                 <div className="mt-0.5 truncate text-sm text-[#57534e]">
-                  {profile?.plan_title || b.greeting[persona] || b.greeting.gentle}
+                  {profile?.plan_title || b.greeting[cardPersona] || b.greeting.gentle}
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 shrink-0 text-[#a8a29e]" />

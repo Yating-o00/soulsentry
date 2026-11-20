@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
 import Orb from "@/components/buddy/Orb";
-import { BUDDIES, BUDDY_TINTS } from "@/lib/buddies";
+import { BUDDIES, BUDDY_TINTS, personaName } from "@/lib/buddies";
 
 // 搭子Store —— 货架上卖的不是一次性 Agent，而是一段长期关系（六要素知情认领）
 export default function BuddyStore() {
@@ -81,6 +81,10 @@ export default function BuddyStore() {
                   <div className="flex items-center justify-between border-t border-[#e7e5e4] pt-2.5">
                     <span className="text-[11px] tracking-widest text-stone-400">关系时长</span>
                     <span className="text-[13px] font-medium text-stone-600">{buddy.duration}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-[#e7e5e4] pt-2.5">
+                    <span className="text-[11px] tracking-widest text-stone-400">{claimed ? "当前陪伴方式" : "默认陪伴方式"}</span>
+                    <span className="text-[13px] font-medium text-stone-600">{personaName(profile?.persona || buddy.defaultPersona)}</span>
                   </div>
                 </div>
                 <blockquote

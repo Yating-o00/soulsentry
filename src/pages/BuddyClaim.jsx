@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
 import Orb from "@/components/buddy/Orb";
-import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy } from "@/lib/buddies";
+import { BUDDY_TINTS, DEFAULT_PERSONA, PERSONAS, getBuddy } from "@/lib/buddies";
 
 // 通用认领流 —— 同一套对话引擎，由每颗搭子的配置驱动（问题 → 弹性计划卡 → 项目制绑定）
 export default function BuddyClaim() {
@@ -17,11 +17,9 @@ export default function BuddyClaim() {
   const buddy = getBuddy(buddyId);
   const tint = BUDDY_TINTS[buddyId] || BUDDY_TINTS.study;
 
-  const { data: mine } = useQuery({
-    queryKey: ["buddies", "mine"],
-    queryFn: () => httpRequest("/api/buddies/mine"),
-  });
-  const persona = mine?.persona || DEFAULT_PERSONA;
+  // 认领前先按搭子类型给出默认人格；用户可在计划卡上改，认领时一起写入
+  const [persona, setPersona] = useState(() => buddy?.defaultPersona || DEFAULT_PERSONA);
+  const activePersona = PERSONAS.find((p) => p.key === persona) || PERSONAS[0];
 
   const questions = useMemo(() => buddy?.questions || [], [buddy]);
   const [step, setStep] = useState(0);
@@ -48,8 +46,7 @@ export default function BuddyClaim() {
       }, 1800),
     ];
     return () => timersRef.current.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buddyId, persona]);
+  }, [buddyId]);
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -101,6 +98,7 @@ export default function BuddyClaim() {
         method: "POST",
         body: {
           answers,
+          persona,
           plan_title: buddy.planTitle(answers),
           plan_lines: buddy.planLines(answers),
         },
@@ -224,10 +222,37 @@ export default function BuddyClaim() {
                 </li>
               ))}
             </ul>
+            <div className="mt-5 rounded-2xl bg-white/10 p-3">
+              <div className="text-[11px] tracking-widest opacity-70">选择陪伴方式</div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {PERSONAS.map((p) => {
+                  const active = p.key === persona;
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setPersona(p.key)}
+                      aria-pressed={active}
+                      title={p.desc}
+                      className={`min-h-[34px] rounded-full px-3 text-[12px] transition-colors ${
+                        active
+                          ? "bg-[#FAF9F7] font-medium text-stone-900"
+                          : "border border-white/30 text-[#FAF9F7]/80 hover:border-white/60"
+                      }`}
+                    >
+                      {p.short || p.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[10px] leading-relaxed opacity-60">
+                {activePersona.desc}；进入空间后还可以随时调整
+              </p>
+            </div>
             <button
               onClick={claim}
               disabled={claiming}
-              className="mt-5 min-h-[48px] w-full rounded-full bg-[#FAF9F7] px-4 font-medium text-stone-900 transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+              className="mt-3 min-h-[48px] w-full rounded-full bg-[#FAF9F7] px-4 font-medium text-stone-900 transition-transform duration-200 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
             >
               {claiming ? "正在开启…" : "开启这段陪伴"}
             </button>

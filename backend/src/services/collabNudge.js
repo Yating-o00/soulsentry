@@ -7,6 +7,7 @@ import { AI_CALL_COSTS } from "../config/aiCosts.js";
 import { collectSubtasks, logCollabChange } from "./collabSpace.js";
 import { buildSystem, formatSpaceData, loadSpaceSnapshot, postAgentMessage } from "./collabAgent.js";
 import { callKimiChat } from "../lib/kimi.js";
+import { loadOwnerBuddyPersona } from "./buddyPersona.js";
 
 const STALE_MS = 24 * 3600 * 1000;       // 成员多久没发言算停滞
 const NODE_WINDOW_MS = 48 * 3600 * 1000; // 节点临期窗口
@@ -22,10 +23,16 @@ function displayName(u) {
   return u?.displayName || u?.email || u?.phone || "成员";
 }
 
-// 模板兜底：LLM 不可用/余额不足时也能推动（不扣点）
-function fallbackNudge({ task, members, stuckDrafts, dueSoonNodes }) {
+// 模板兜底：LLM 不可用/余额不足时也能推动（不扣点），同样带一点人格语气
+function fallbackNudge({ task, members, stuckDrafts, dueSoonNodes, persona }) {
   const names = members.map((m) => m.name).join("、");
-  const lines = [`@${names} 我们的「${task.title}」有一会儿没有新进展了，一起往前推一步：`];
+  const opener =
+    persona === "strict"
+      ? `@${names} 「${task.title}」该往前推了。先对齐卡点，再定负责人和时间：`
+      : persona === "buddy"
+        ? `@${names} 来，我们把「${task.title}」往前拱一步：`
+        : `@${names} 我们的「${task.title}」有一会儿没有新进展了，不用急，一起往前挪一小步：`;
+  const lines = [opener];
   if (stuckDrafts.length > 0) lines.push(`· 子约定草案「${stuckDrafts[0].title}」还待确认，谁方便先看一下？`);
   if (dueSoonNodes.length > 0) lines.push(`· 节点「${dueSoonNodes[0].title}」快到期了，需要定下来。`);
   if (stuckDrafts.length === 0 && dueSoonNodes.length === 0) lines.push("· 在讨论里说一句最新进展，或 @我 整理下一步。");
@@ -119,13 +126,19 @@ async function maybeNudgeTask(task) {
   ].filter((p, idx, arr) => arr.findIndex((x) => x.userId === p.userId) === idx);
 
   // 先尝试扣点走 LLM 推动；余额不足则模板推动（不扣点、不失败）
+  // 协同创建者在这颗搭子下的人格，决定推动消息的表达方式
+  const ownerPersona = await loadOwnerBuddyPersona({
+    prisma,
+    userId: taskWithMembers.userId,
+    buddyId: taskWithMembers.metadata?._extraFields?.buddy_id || null,
+  });
   let content;
   let usedLLM = false;
   try {
     await assertAICredits(taskWithMembers.userId, COST(), "collab_agent");
     const snapshot = await loadSpaceSnapshot(taskWithMembers);
-    const system = buildSystem(collab.scenario, collab.agent);
-    const prompt = `${formatSpaceData(taskWithMembers, snapshot)}\n\n你是这个空间的推动者。空间进展停滞了：成员已有一段时间没有新发言，或有草案久未确认 / 节点临近。请写一条「推动消息」发到讨论：\n1. 自然点名相关成员（${parties.map((p) => p.name).join("、")}），指出卡住的具体事项（待确认草案、临期节点、久未推进的子约定）；\n2. 给出可立刻执行的下一步建议（谁、做什么、什么时候前）；\n3. 语气鼓励、不指责、不评判对错；200 字以内；不要用"Agent："开头。`;
+    const system = buildSystem(collab.scenario, collab.agent, ownerPersona);
+    const prompt = `${formatSpaceData(taskWithMembers, snapshot)}\n\n你是这个空间的推动者。空间进展停滞了：成员已有一段时间没有新发言，或有草案久未确认 / 节点临近。请写一条「推动消息」发到讨论：\n1. 自然点名相关成员（${parties.map((p) => p.name).join("、")}），指出卡住的具体事项（待确认草案、临期节点、久未推进的子约定）；\n2. 给出可立刻执行的下一步建议（谁、做什么、什么时候前）；\n3. 表达方式严格遵循 system 里的人格设定（严格但不指责、温柔但不催促、战友但不轻佻）；不评判对错；200 字以内；不要用"Agent："开头。`;
     const result = await callKimiChat({
       messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
       temperature: 0.5,
@@ -145,7 +158,7 @@ async function maybeNudgeTask(task) {
   } catch (error) {
     console.warn(`[collabNudge] LLM 推动失败（${task.id}），退回模板:`, error?.message || error);
   }
-  if (!content) content = fallbackNudge({ task: taskWithMembers, members: parties, stuckDrafts, dueSoonNodes });
+  if (!content) content = fallbackNudge({ task: taskWithMembers, members: parties, stuckDrafts, dueSoonNodes, persona: ownerPersona });
 
   await postAgentMessage(task.id, {
     content,

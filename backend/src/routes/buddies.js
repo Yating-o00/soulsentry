@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { invokeKimiText, FAST_TEXT_MODELS } from "../lib/kimi.js";
 import { readAttachmentText } from "../services/readAttachment.js";
+import { BUDDY_DEFAULT_PERSONA, pickBuddyPersona } from "../services/buddyPersona.js";
 
 /**
  * 搭子（Buddy）L1 底座：
@@ -25,6 +26,8 @@ const claimSchema = z.object({
     .default({}),
   plan_title: z.string().trim().max(60).optional(),
   plan_lines: z.array(z.string().trim().max(120)).max(8).optional(),
+  // 认领时可以先为这颗搭子选一个陪伴人格；缺省用搭子类型的默认人格
+  persona: z.enum(["gentle", "strict", "buddy"]).optional(),
 });
 
 function getExtra(pref) {
@@ -219,6 +222,8 @@ buddiesRouter.post("/:id/claim", async (req, res) => {
     answers: parsed.data.answers,
     plan_title: parsed.data.plan_title || null,
     plan_lines: Array.isArray(parsed.data.plan_lines) ? parsed.data.plan_lines : [],
+    // 每颗搭子独立人格：认领时选定的 > 搭子类型默认 > 全局人格
+    persona: parsed.data.persona || BUDDY_DEFAULT_PERSONA[buddyId] || extra.persona || "gentle",
     project_task_id: task.id,
     claimed_at: new Date().toISOString(),
     graduated_at: null,
@@ -445,6 +450,25 @@ buddiesRouter.post("/:id/state", async (req, res) => {
   profiles[buddyId] = { ...profile, state };
   await writeExtraFields(req.user.id, pref, { buddy_profiles: profiles });
   return res.json({ state });
+});
+
+// POST /api/buddies/:id/persona —— 单独切换某颗搭子的陪伴人格（不影响全局小助手人格）
+buddiesRouter.post("/:id/persona", async (req, res) => {
+  const buddyId = req.params.id;
+  if (!BUDDY_IDS.has(buddyId)) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
+  }
+  const persona = String(req.body?.persona || "");
+  if (!["gentle", "strict", "buddy"].includes(persona)) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "未知的人格类型" });
+  }
+  const { pref, profiles, profile } = await getActiveProfile(req.user.id, buddyId);
+  if (!profile) {
+    return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
+  }
+  profiles[buddyId] = { ...profile, persona };
+  await writeExtraFields(req.user.id, pref, { buddy_profiles: profiles });
+  return res.json({ persona });
 });
 
 /* ---------- 搭子 Agent：领域技能（引导式解题 / 弹性行程 / 周报小结 / 讲书回应） ---------- */
@@ -726,7 +750,8 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
   if (!profile) {
     return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
   }
-  const personaTone = PERSONA_TONES[extra.persona] || PERSONA_TONES.gentle;
+  const buddyPersona = pickBuddyPersona(profile, extra.persona, buddyId);
+  const personaTone = PERSONA_TONES[buddyPersona] || PERSONA_TONES.gentle;
   let payload = parsed.data.payload || {};
   const lastUserText = Array.isArray(payload.messages)
     ? [...payload.messages].reverse().find((m) => m?.role === "user" && typeof m.content === "string")?.content || ""

@@ -11,6 +11,7 @@ import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js"
 import { collectSubtasks, logCollabChange } from "../services/collabSpace.js";
 import { syncParentProgress } from "./tasks.js";
 import { loadSpaceSnapshot, buildSystem, postAgentMessage } from "../services/collabAgent.js";
+import { loadOwnerBuddyPersona } from "../services/buddyPersona.js";
 import { callKimiChat, FAST_TEXT_MODELS } from "../lib/kimi.js";
 import { assertAICredits, chargeAICredits } from "../services/aiCredits.js";
 import { AI_CALL_COSTS } from "../config/aiCosts.js";
@@ -70,7 +71,12 @@ async function generateInviteSummary({ task, user, inviteeName = "", note = "", 
   }
   try {
     const snapshot = await loadSpaceSnapshot(task);
-    const system = buildSystem(task.metadata?.collab?.scenario, task.metadata?.collab?.agent);
+    const ownerPersona = await loadOwnerBuddyPersona({
+      prisma,
+      userId: task.userId,
+      buddyId: task.metadata?._extraFields?.buddy_id || null,
+    });
+    const system = buildSystem(task.metadata?.collab?.scenario, task.metadata?.collab?.agent, ownerPersona);
     const collab = task.metadata?.collab || {};
     const memberNames = [task.user, ...task.members.map((m) => m.user)]
       .filter(Boolean).map((u) => actorName(u));

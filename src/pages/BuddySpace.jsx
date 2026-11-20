@@ -8,7 +8,7 @@ import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
 import { cn } from "@/lib/utils";
 import Orb from "@/components/buddy/Orb";
-import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy } from "@/lib/buddies";
+import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy, personaName } from "@/lib/buddies";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
 import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
 import BuddyCollabPanel from "@/components/collab/BuddyCollabPanel";
@@ -47,8 +47,9 @@ export default function BuddySpace() {
     queryKey: ["buddies", "mine"],
     queryFn: () => httpRequest("/api/buddies/mine"),
   });
-  const persona = mine?.persona || DEFAULT_PERSONA;
   const profile = mine?.buddies?.[buddyId];
+  // 每颗搭子独立人格：先看用户在这颗搭子下的设置，再用该搭子类型的默认人格
+  const persona = profile?.persona || buddy?.defaultPersona || mine?.persona || DEFAULT_PERSONA;
 
   const { data: allTasks = [] } = useQuery({
     queryKey: ["tasks", "with-subs"],
@@ -358,6 +359,7 @@ export default function BuddySpace() {
           <CollabSection
             buddy={buddy}
             tint={tint}
+            persona={persona}
             projectTask={projectTask}
             allTasks={allTasks}
             selectedCollabId={selectedCollabId}
@@ -645,7 +647,7 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
    以专业 Agent 为协调者（拉齐共识、化解分歧、推进讨论、总结沉淀、外部信息支援）；
    讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
    其他搭子的协同约定不出现在这里。 */
-function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onDeleteCollab }) {
+function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onDeleteCollab }) {
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
   const [createdCollabId, setCreatedCollabId] = useState(null);
@@ -773,6 +775,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
         <div className="flex items-center gap-2 text-xs tracking-widest opacity-70">
           <Users2 className="w-4 h-4" /> 协同约定里的{buddy.name}
         </div>
+        <p className="mt-1.5 text-[11px] opacity-60">协同人格：{personaName(persona)}</p>
         <ul className="mt-3 space-y-2 text-sm leading-relaxed">
           <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />协调沟通：讨论跑偏时拉回来，有分歧时给出折中方案</li>
           <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />推动进展：把聊出来的共识变成子约定，进展自动勾划</li>

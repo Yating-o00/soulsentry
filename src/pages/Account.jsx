@@ -751,7 +751,7 @@ function PersonaMemorySection() {
           {/* 人格切换 */}
           <div>
             <p className="text-sm text-slate-500 mb-3">
-              心栈怎么说话——切换后，心栈与所有搭子立即用新方式陪你。
+              心栈小助手的默认说话方式——切换后全局生效；每颗搭子还可以在自己的对话框里单独设置人格。
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {PERSONAS.map((p) => {
@@ -791,7 +791,7 @@ function PersonaMemorySection() {
               <div className="rounded-2xl bg-[#f2efe9] p-4">
                 <div className="text-[11px] tracking-widest text-stone-400">主档案（共享）</div>
                 <p className="mt-1 text-[13px] text-stone-600">
-                  人格偏好：{PERSONAS.find((p) => p.key === persona)?.name || "温柔陪伴型"}
+                  全局人格偏好：{PERSONAS.find((p) => p.key === persona)?.name || "温柔陪伴型"}（每颗搭子可在空间内单独调整）
                   {mine?.id_profile ? ` · ${mine.id_profile.age || ""} · ${(mine.id_profile.likes || []).join("、")}` : " · 身份识别画像将在注册引导中完善"}
                 </p>
               </div>

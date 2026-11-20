@@ -7,18 +7,21 @@ export const PERSONAS = [
   {
     key: "gentle",
     name: "温柔陪伴型",
+    short: "温柔",
     desc: "轻声细语，永远先接住你的情绪",
     sample: "没关系，我们慢慢来，今天只完成一点点也很好。",
   },
   {
     key: "strict",
     name: "严格督学型",
+    short: "严格",
     desc: "目标导向，盯进度也盯质量",
     sample: "计划就是承诺。今天的任务没完成，我们来找原因。",
   },
   {
     key: "buddy",
     name: "战友互卷型",
+    short: "战友",
     desc: "并肩作战，互相卷也互相扛",
     sample: "我也准备好了，今天谁先完成谁请奶茶（记账上）。",
   },
@@ -49,6 +52,7 @@ export const BUDDIES = [
   {
     id: "study",
     name: "学习搭子",
+    defaultPersona: "strict",
     slogan: "拆目标、排计划，每天陪你往前挪一步",
     forWhom: "有明确考试或学习目标的人（考研 / 四六级 / 考证 / 技能）",
     actions: [
@@ -80,6 +84,7 @@ export const BUDDIES = [
   {
     id: "travel",
     name: "旅游搭子",
+    defaultPersona: "gentle",
     slogan: "从「想去」到「出发」，行程我陪你排",
     forWhom: "想做攻略却越看越乱、想要弹性行程而非军训表的人",
     actions: [
@@ -130,6 +135,7 @@ export const BUDDIES = [
   {
     id: "reading",
     name: "读书搭子",
+    defaultPersona: "gentle",
     slogan: "把「想读」变成「读完」",
     forWhom: "买书如山倒、读书如抽丝，想读完还想有输出的人",
     actions: [
@@ -161,6 +167,7 @@ export const BUDDIES = [
   {
     id: "morning",
     name: "早起搭子",
+    defaultPersona: "buddy",
     slogan: "轻量陪伴，帮你赢回早晨",
     forWhom: "想早起却总败给「再睡 5 分钟」的人",
     actions: [
@@ -196,6 +203,7 @@ export const BUDDIES = [
   {
     id: "running",
     name: "跑步搭子",
+    defaultPersona: "buddy",
     slogan: "不催你跑快，陪你跑久",
     forWhom: "想开始跑却三分钟热度、备赛半马/全马，或想减脂和管好健康的人",
     actions: [

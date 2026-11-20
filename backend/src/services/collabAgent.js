@@ -10,6 +10,7 @@ import { collectSubtasks, logCollabChange, nestSubtasks } from "./collabSpace.js
 import { syncParentProgress } from "../routes/tasks.js";
 import { notifyTaskParties } from "./taskSharing.js";
 import { findAgentTemplate } from "./agentStore.js";
+import { COLLAB_PERSONA_TAILS, loadOwnerBuddyPersona } from "./buddyPersona.js";
 
 const COST = () => AI_CALL_COSTS.collab_agent || 2;
 const MAX_SUBTASKS_PER_RUN = 10;
@@ -128,8 +129,15 @@ const SCENARIO_TAILS = {
   custom: "当前是自定义约定空间：语气中性平和、清晰高效。"
 };
 
-export function buildSystem(scenario, agentMeta) {
-  const base = `${TRUST_RULES}\n\n${SCENARIO_TAILS[scenario] || SCENARIO_TAILS.custom}`;
+export function buildSystem(scenario, agentMeta, persona = null) {
+  // 人格是表达方式，优先级高于场景默认语气，但不改变中立、不评判、不替人做决定的底线
+  const personaTail = COLLAB_PERSONA_TAILS[persona] || "";
+  const base = [
+    TRUST_RULES,
+    SCENARIO_TAILS[scenario] || SCENARIO_TAILS.custom,
+    personaTail,
+    personaTail ? "以上人格只决定表达方式；事实、安全边界与「不替成员做决定」的底线不变。" : "",
+  ].filter(Boolean).join("\n\n");
   // 启用了 Agent 市场的专业方案：注入该领域的专业身份
   const template = agentMeta?.templateId ? findAgentTemplate(agentMeta.templateId) : null;
   if (!template) return base;
@@ -1510,7 +1518,13 @@ async function runCollabAgentLocked({ taskId, action, user, commentId = null }) 
     // 最短间隔守卫以「开始时间」为准，而不是结束时间（LLM 一轮可能跑 1-2 分钟）
     await touchLastDriveAt(taskId);
   }
-  const system = buildSystem(collab.scenario, collab.agent);
+  // 协同 Agent 沿用协同创建者在这颗搭子下的人格设定
+  const ownerPersona = await loadOwnerBuddyPersona({
+    prisma,
+    userId: task.userId,
+    buddyId: task.metadata?._extraFields?.buddy_id || null,
+  });
+  const system = buildSystem(collab.scenario, collab.agent, ownerPersona);
   const result = await runAction({ action, task, snapshot, system, user, commentId });
 
   // 结算：竞态余额不足只告警放行（沿用 functions.js settleCredits 惯例）

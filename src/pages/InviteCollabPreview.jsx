@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { httpRequest } from "@/api/httpClient";
 
-const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
+const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子", running: "跑步搭子" };
 const SCENARIO_LABELS = { couple: "情侣", friends: "朋友", colleagues: "同事", custom: "协同" };
 
 const fmtTime = (iso) => {

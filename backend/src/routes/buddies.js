@@ -15,7 +15,7 @@ import { readAttachmentText } from "../services/readAttachment.js";
 
 export const buddiesRouter = Router();
 
-const BUDDY_IDS = new Set(["study", "travel", "reading", "morning"]);
+const BUDDY_IDS = new Set(["study", "travel", "reading", "morning", "running"]);
 
 const claimSchema = z.object({
   answers: z
@@ -74,6 +74,18 @@ function buildProjectTaskData(buddyId, answers = {}) {
         category: "checkin",
         extra: { repeat_rule: "daily", buddy_id: "morning" },
       };
+    case "running": {
+      const goal = a("goal", "首个 5K");
+      const weeks = goal.includes("全马") ? 16 : goal.includes("半马") ? 12 : goal.includes("10K") || goal.includes("10k") ? 10 : 8;
+      const injury = a("injury", "没有伤");
+      const injuryLine = injury && !/没有|无伤|暂无/.test(injury) ? `需要特别留意：${injury}，疼痛时立即停跑并改交叉训练。` : "目前没有伤病记录，出现持续疼痛先停跑。";
+      return {
+        title: `${goal} · ${weeks} 周跑步计划`,
+        description: `跑步搭子周期化计划：目标「${goal}」，每周 ${a("days", "每周 3 天")}，首选${a("time", "晨跑")}；基础「${a("level", "能连续跑 30 分钟")}」。周跑量增幅不超过 10%，每第 4 周减量；缺跑不补课。${injuryLine}`,
+        category: "personal",
+        extra: { buddy_id: "running" },
+      };
+    }
     case "travel":
       return {
         title: `${a("dest", "下一趟旅行")} · 行前清单核对`,
@@ -273,7 +285,7 @@ buddiesRouter.post("/:id/stop", async (req, res) => {
 
 /* ---------- 板块状态持久化：每个搭子空间的模块数据（清单勾选/阅读分钟/行程/习惯链…） ---------- */
 
-export const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
+export const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子", running: "跑步搭子" };
 
 /**
  * 结束一段陪伴时，把这段关系的真实内容按主题沉淀成一条心签：
@@ -444,7 +456,7 @@ const PERSONA_TONES = {
 };
 
 const agentSchema = z.object({
-  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "inspiration", "weekly", "talk", "chat", "greeting"]),
+  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "inspiration", "weekly", "talk", "chat", "greeting", "run_parse"]),
   payload: z.record(z.any()).optional().default({}),
 });
 
@@ -458,11 +470,13 @@ const BUDDY_EXPERTISE = {
     "你是阅读方法专家，也是共读者：擅长选书建议、阅读节奏、讲书式提问、笔记沉淀。聊书时有自己的观点，能和用户真正讨论内容。",
   morning:
     "你是睡眠与作息科学专家：擅长渐进式早起、睡眠卫生、习惯链设计、破功后的温柔修复。懂生理节律，给的建议科学且可执行。",
+  running:
+    "你是耐力跑步教练，风格是「陪跑型教练」而不是严厉教官：擅长周期化训练、轻松跑/间歇/节奏跑/长距离配比、配速与心率区间、伤痛预防与交叉训练。严守安全红线：周跑量增幅不超过 10%，每第 4 周减量，缺跑不补课，疼痛先停跑。绝不鼓励带伤硬练或补偿性加量。",
 };
 
 // 搭子对话里的「成立小组 / 拉伙伴一起做」意图：本地快速识别并给出可确认的协同小组提案，
 // 不把这类明确诉求交给慢模型自由发挥，避免超时后落到通用兜底话术。
-const GROUP_TOPICS = ["考公", "考研", "英语", "数学", "四六级", "雅思", "托福", "法考", "教资", "CPA", "高考", "中考", "编程", "健身", "减脂", "读书", "早起"];
+const GROUP_TOPICS = ["考公", "考研", "英语", "数学", "四六级", "雅思", "托福", "法考", "教资", "CPA", "高考", "中考", "编程", "健身", "减脂", "跑步", "马拉松", "半马", "全马", "跑团", "越野", "读书", "早起"];
 
 function detectBuddyGroupIntent(text) {
   const t = String(text || "").trim();
@@ -547,10 +561,23 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
         prompt: `用户的目的地是「${dest || "云南大理"}」。推荐 6 个当地灵感（体验/美食/景点各约 2 个，全部必须在「${dest || "云南大理"}」本地或当日往返可达），只输出 JSON：{"ideas":[{"kind":"体验","name":"名称（12字内）","desc":"一句话实操提示（40字内，含最佳时间/预约/避坑）"}]}`,
       };
     }
+    case "run_parse": {
+      const typed = String(payload.text || "").trim().slice(0, 800);
+      const attachmentText = String(payload.attachment_text || "").trim().slice(0, 4000);
+      const source = [typed, attachmentText ? `截图/附件识别内容：\n${attachmentText}` : ""].filter(Boolean).join("\n\n");
+      return {
+        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}你现在只做运动数据提取：忠实转写，不评价、不编造、看不清就留空。`,
+        prompt: `从下面这条跑步记录（截图文字或用户手输）中提取数据：\n「${source || "（没有可识别的内容）"}」\n\n只输出 JSON：{"distance_km":数字或null,"duration_min":数字或null,"pace":"分'秒\\""或null,"avg_hr":数字或null,"date":"YYYY-MM-DD"或null,"confidence":0到1}。duration_min 用分钟，可含小数；pace 是每公里配速；看不清的字段填 null，绝不猜。`,
+      };
+    }
     case "weekly": {
       const stats = String(payload.stats || "").slice(0, 800);
+      const runningHint =
+        buddyId === "running"
+          ? "这是跑步周复盘：重点看周跑量、完成率、配速与恢复信号（疲劳、睡眠、疼痛）；宁可保守，绝不鼓励冒进或补偿性加量。"
+          : "";
       return {
-        systemPrompt: `${base}你在写本周复盘。低谷时先接住情绪再谈改进，高光时具体指出哪做对了。`,
+        systemPrompt: `${base}${runningHint}你在写本周复盘。低谷时先接住情绪再谈改进，高光时具体指出哪做对了。`,
         prompt: `用户本周的真实数据：${stats}\n\n写一段心栈小结 + 下周弹性计划，只输出 JSON：{"summary":"小结（100字内，第二人称，有温度）","strongest":"本周最强项（10字内）","weakest":"需要关注的点（10字内）","next_week":["下周建议1（20字内）","下周建议2","下周建议3"]}`,
       };
     }
@@ -627,6 +654,34 @@ async function loadBuddyLiveContext(userId, buddyId, profile) {
       }
     }
 
+    if (buddyId === "running" && profile?.state && typeof profile.state === "object") {
+      const st = profile.state;
+      const logs = Array.isArray(st.logs)
+        ? [...st.logs].sort((a, b) => String(b?.date || "").localeCompare(String(a?.date || "")))
+        : [];
+      const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      const week = logs.filter((l) => String(l?.date || "") >= since);
+      const km7 = week.reduce((sum, l) => sum + (Number(l?.distance_km) || 0), 0);
+      const bits = [`近 7 天跑步 ${week.length} 次，合计 ${Math.round(km7 * 10) / 10} km`];
+      const last = logs[0];
+      if (last) {
+        bits.push(
+          `最近一次：${last.date || "未知日期"} ${last.title || "跑步"} ${last.distance_km || "?"} km${last.duration_min ? ` / ${last.duration_min} 分钟` : ""}`
+        );
+      }
+      const injuries = (Array.isArray(st.injuries) ? st.injuries : []).filter((i) => i?.status !== "recovered");
+      if (injuries.length > 0) bits.push(`在跟踪的伤病：${injuries.map((i) => i.area || "未注明").slice(0, 3).join("、")}`);
+      const body = (Array.isArray(st.body) ? [...st.body] : [])
+        .sort((a, b) => String(b?.date || "").localeCompare(String(a?.date || "")))[0];
+      if (body) {
+        bits.push(`最近身体状态：睡眠 ${body.sleep_h || "?"} 小时，疲劳 ${body.fatigue || "?"}/5`);
+      }
+      const shoes = Array.isArray(st.gear?.shoes) ? st.gear.shoes : [];
+      const defaultShoe = shoes.find((s) => s.id === st.gear?.default_shoe_id) || shoes[0];
+      if (defaultShoe) bits.push(`默认跑鞋 ${defaultShoe.name || "未命名"} 已跑 ${Math.round(Number(defaultShoe.km) || 0)} km`);
+      lines.push(`跑步档案：${bits.join("；")}`);
+    }
+
     const notes = await prisma.note.findMany({
       where: { userId, deletedAt: null },
       orderBy: { createdAt: "desc" },
@@ -681,7 +736,7 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
   // 搭子对话/解题支持图片与文件：先提取图片 OCR / 文件文本，再交给领域提示词
   const attachments = Array.isArray(payload.attachments) ? payload.attachments.slice(0, 3) : [];
   const hasAttachments = attachments.some((att) => att?.url || att?.file_url);
-  if (hasAttachments && (parsed.data.mode === "chat" || parsed.data.mode === "solve_locate")) {
+  if (hasAttachments && ["chat", "solve_locate", "run_parse"].includes(parsed.data.mode)) {
     const parts = [];
     for (const att of attachments) {
       const text = await readAttachmentText({
@@ -705,7 +760,7 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
   const isComplex =
     hasAttachments ||
     lastUserText.length > 60 ||
-    /(小组|协同|计划|规划|方案|目标|考公|考研|英语|数学|复习|安排|成立|创建)/.test(lastUserText);
+    /(小组|协同|计划|规划|方案|目标|考公|考研|英语|数学|复习|安排|成立|创建|跑步|跑量|配速|半马|全马|马拉松|伤痛|膝盖)/.test(lastUserText);
   const useFast = isInteractive && !isComplex;
 
   if (isInteractive) {

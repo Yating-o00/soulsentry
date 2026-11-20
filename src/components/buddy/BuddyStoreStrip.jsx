@@ -46,7 +46,7 @@ export default function BuddyStoreStrip() {
           className="mx-1 mt-3 flex items-center gap-3 rounded-2xl border border-dashed border-[#e7e5e4] bg-[#FFFFFF] p-4 transition-colors hover:border-[#384877]"
         >
           <div className="flex -space-x-2">
-            {claimed.slice(0, 4).map((b) => (
+            {claimed.slice(0, 5).map((b) => (
               <Orb key={b.id} size={30} tint={BUDDY_TINTS[b.id]} />
             ))}
           </div>

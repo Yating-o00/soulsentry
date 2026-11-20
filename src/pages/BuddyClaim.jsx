@@ -213,7 +213,7 @@ export default function BuddyClaim() {
         {showPlan && (
           <div className="ml-11 rounded-2xl bg-[#384877] p-5 text-[#FAF9F7]">
             <div className="text-xs tracking-widest" style={{ color: tint[1] }}>
-              弹性计划 · 留白 20%
+              {buddy.planBadge || "弹性计划 · 留白 20%"}
             </div>
             <div className="mt-1.5 text-lg font-semibold">{buddy.planTitle(answers)}</div>
             <ul className="mt-4 space-y-2.5">

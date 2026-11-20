@@ -4,6 +4,12 @@ import { FileText, Loader2, Paperclip, Users2, X } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { BuddyMsg, useBuddyAgent, useBuddyState, todayKey } from "./shared";
+import {
+  activeInjuries,
+  computeRunningStats,
+  getRunningStatus,
+  latestBody,
+} from "@/lib/running";
 
 /**
  * 问搭子（每颗搭子空间的专业对话）：不是模板——
@@ -40,6 +46,17 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
     if (buddy.id === "reading" && state.mins?.[today]) bits.push(`今日已读 ${state.mins[today]} 分钟`);
     if (buddy.id === "travel" && state.itinerary?.days) bits.push(`行程已排好 ${state.itinerary.days.length} 天`);
     if (buddy.id === "study" && state.weekly?.done_count != null) bits.push(`本周已打卡 ${state.weekly.done_count}/7 天`);
+    if (buddy.id === "running") {
+      const rs = getRunningStatus(profile?.answers || {}, profile, state);
+      const stats = computeRunningStats(state);
+      const injuries = activeInjuries(state);
+      const body = latestBody(state);
+      bits.push(
+        `今天课表：${rs.todaySession.title}${rs.todaySession.km ? ` ${rs.todaySession.km} km` : ""}；本周完成 ${rs.doneDays.length}/${rs.runDays.length} 次，累计 ${Math.round(stats.totalKm)} km`
+      );
+      if (injuries.length > 0) bits.push(`在跟踪伤病：${injuries.map((i) => i.area).join("、")}`);
+      if (body?.fatigue) bits.push(`最近疲劳 ${body.fatigue}/5，睡眠 ${body.sleep_h || "未记录"} 小时`);
+    }
     return bits.filter(Boolean).join("；");
   }, [buddy.id, profile, projectTask, state, today]);
 
@@ -353,4 +370,5 @@ const QUICK_ASKS = {
   travel: ["当地有什么坑要避？", "帮我看看行程合理吗", "预算大概要多少？"],
   reading: ["这本书值不值得读？", "读不进去怎么办？", "给我抛个问题吧"],
   morning: ["总是赖床怎么办？", "几点睡才够？", "周末要不要补觉？"],
+  running: ["今天状态一般，怎么调课？", "膝盖有点疼怎么办？", "帮我看看这周跑量合理吗"],
 };

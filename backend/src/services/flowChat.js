@@ -642,7 +642,7 @@ async function loadPersonaTone({ userId, prisma }) {
   }
 }
 
-const BUDDY_NAME_ZH = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
+const BUDDY_NAME_ZH = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子", running: "跑步搭子" };
 
 /**
  * 小助手对话的真实数据上下文：主档案 + 在岗搭子 + 未完成约定 + 最近心签。

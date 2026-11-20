@@ -38,7 +38,7 @@ import html2canvas from "html2canvas";
 import { toast } from "sonner";
 
 // 搭子归属展示名（协同约定挂在某颗搭子下时，邀请卡片标注「XX搭子全程协调」）
-const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子" };
+const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子", running: "跑步搭子" };
 
 const getInitials = (name) => {
   if (!name || typeof name !== "string") return "?";

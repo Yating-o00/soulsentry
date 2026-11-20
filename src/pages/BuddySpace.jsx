@@ -17,6 +17,13 @@ import WeekPanel from "@/components/buddy/panels/WeekPanel";
 import { ItineraryPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
 import { ReadingNowPanel, ShelfPanel, ReadingNotesPanel } from "@/components/buddy/panels/ReadingPanels";
 import { MorningCheckPanel, HabitChainPanel } from "@/components/buddy/panels/MorningPanels";
+import {
+  RunningTodayPanel,
+  RunningLogPanel,
+  RunningBodyPanel,
+  RunningGearPanel,
+  RunningProfilePanel,
+} from "@/components/buddy/panels/RunningPanels";
 import BuddyChatPanel from "@/components/buddy/panels/BuddyChatPanel";
 import { useBuddyState } from "@/components/buddy/panels/shared";
 import { useListSubtasks } from "@/components/buddy/useListSubtasks";
@@ -324,8 +331,24 @@ export default function BuddySpace() {
             />
           </div>
         )}
+        {activeTab === sections[0] && buddyId === "running" && (
+          <div className="space-y-4">
+            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+            <RunningTodayPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
+            <BuddyProjectsSection
+              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
+              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
+              onCreateProject={() => setNewProjectOpen(true)}
+              onCreateCollab={() => setNewCollabOpen(true)}
+              onDeleteCollab={setDeleteCollabTarget}
+            />
+          </div>
+        )}
         {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}
         {activeTab === "周报" && <WeekPanel tint={tint} projectTask={projectTask} />}
+        {activeTab === "记录" && buddyId === "running" && <RunningLogPanel profile={profile} tint={tint} />}
+        {activeTab === "身体" && buddyId === "running" && <RunningBodyPanel profile={profile} tint={tint} />}
+        {activeTab === "装备与知识" && buddyId === "running" && <RunningGearPanel profile={profile} tint={tint} />}
         {activeTab === "灵感" && (
           <InspirationPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
         )}
@@ -343,16 +366,18 @@ export default function BuddySpace() {
             onDeleteCollab={setDeleteCollabTarget}
           />
         )}
-        {activeTab === "画像" && (
+        {activeTab === "画像" && (buddyId === "running" ? (
+          <RunningProfilePanel profile={profile} tint={tint} />
+        ) : (
           <ProfileSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-        )}
+        ))}
         {activeTab === "清单" && buddy.extras?.checklist && (
           <ChecklistSection items={buddy.extras.checklist} tint={tint} projectTask={projectTask} />
         )}
         {activeTab === "习惯" && buddy.extras?.habitChain && (
           <HabitChainPanel chain={buddy.extras.habitChain} tint={tint} />
         )}
-        {!["协同", "画像", "清单", "习惯", "解题", "周报", "灵感", "书架", "笔记"].includes(activeTab) &&
+        {!["协同", "画像", "清单", "习惯", "解题", "周报", "灵感", "书架", "笔记", "记录", "身体", "装备与知识"].includes(activeTab) &&
           activeTab !== sections[0] && <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />}
       </div>
 

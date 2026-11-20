@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
-import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js";
+import { assertTaskAccess, notifyTaskParties, notifyMentions } from "../services/taskSharing.js";
 import { serializeTask, syncParentProgress } from "./tasks.js";
 import { serializeComment } from "./comments.js";
 import { runCollabAgent, postAgentMessage, cascadeNodeCompletion } from "../services/collabAgent.js";
@@ -982,6 +982,7 @@ const messageSchema = z.object({
   parentId: z.string().max(64).optional().nullable(),
   topic: z.string().max(50).optional().nullable(),
   mark: z.enum(["consensus", "dispute", "pending"]).optional().nullable(),
+  mentions: z.array(z.string().max(64)).max(20).optional().nullable(),
   attachments: z.array(z.object({
     url: z.string().max(500),
     name: z.string().max(200).optional().nullable(),
@@ -1016,7 +1017,7 @@ collabRouter.post("/:taskId/messages", async (req, res) => {
       userId: req.user.id,
       taskId: task.id,
       content: payload.data.content,
-      mentions: [],
+      mentions: payload.data.mentions || [],
       parentId,
       topic: payload.data.topic || null,
       mark: payload.data.mark || null,
@@ -1029,6 +1030,11 @@ collabRouter.post("/:taskId/messages", async (req, res) => {
     type: "collab_message",
     title: "协同约定有新讨论",
     body: `${actorName(req.user)} 在「${task.title}」说：${payload.data.content.slice(0, 80)}`
+  });
+  await notifyMentions(task, req.user, {
+    commentId: comment.id,
+    content: payload.data.content,
+    mentionedUserIds: payload.data.mentions || [],
   });
 
   res.status(201).json(serializeComment(comment));

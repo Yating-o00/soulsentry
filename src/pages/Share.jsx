@@ -98,11 +98,11 @@ function getVisitorToken(token) {
   try {
     const stored = window.localStorage.getItem(key);
     if (stored) return stored;
-  } catch (e) {}
+  } catch (e) { /* ignore */ }
   const generated = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
   try {
     window.localStorage.setItem(key, generated);
-  } catch (e) {}
+  } catch (e) { /* ignore */ }
   return generated;
 }
 
@@ -117,7 +117,7 @@ function getVisitorName() {
 function setVisitorName(name) {
   try {
     window.localStorage.setItem("ss_visitor_name", name);
-  } catch (e) {}
+  } catch (e) { /* ignore */ }
 }
 
 function api(path, options = {}) {
@@ -256,7 +256,7 @@ export default function Share() {
               setTimeout(() => setImportConfirmOpen(true), 0);
             }
           }
-        } catch (e) {}
+        } catch (e) { /* ignore */ }
       })
       .catch(() => setCurrentUser(null));
   }, []);
@@ -406,19 +406,12 @@ export default function Share() {
     }
   };
 
-  const handleAddToCalendar = () => {
-    if (!item) return;
-    const icsUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/public/share/${token}/ics`;
-    openCalendar(icsUrl);
-    toast.success("正在打开日历…");
-  };
-
   const handleImportToMine = () => {
     if (!currentUser || isDemoUser(currentUser)) {
       // Remember the share so we can import after login.
       try {
         window.localStorage.setItem("ss_pending_import_share", JSON.stringify({ token, type: data?.type }));
-      } catch (e) {}
+      } catch (e) { /* ignore */ }
       setImportDialogOpen(true);
       return;
     }
@@ -500,6 +493,11 @@ export default function Share() {
   const checkinTotal = data?.checkin_total ?? 0;
   // 心签配图：分享落地页随签文一并展示
   const noteImage = !isTask && item ? noteFirstImage(item) : "";
+  const noteBody = !isTask && item
+    ? (item.plain_text || String(item.content || "").replace(/<[^>]+>/g, "").trim() || "（这条心签没有文字内容）")
+    : "";
+  const noteReply = !isTask && item ? (item.metadata?.ai_analysis?.emotional_response || "") : "";
+  const noteTitle = isTask ? (item?.title || "未命名") : (item?.title || "一条心签");
   const comments = data?.comments || [];
   // 拥有者本人（登录后访问自己的分享链接）：可删除/回复任何评论
   const isOwnerView = data?.is_owner === true;
@@ -627,7 +625,7 @@ export default function Share() {
           </Avatar>
           <div>
             <p className="text-sm font-medium text-slate-800">{data?.owner_name || "分享者"}</p>
-            <p className="text-xs text-slate-500">邀请你一起参与</p>
+            <p className="text-xs text-slate-500">{isTask ? "邀请你一起参与" : "分享了一条心签"}</p>
           </div>
         </div>
 
@@ -651,7 +649,7 @@ export default function Share() {
                 </Badge>
               )}
             </div>
-            <CardTitle className="text-xl text-slate-900 leading-snug">{item.title || "未命名"}</CardTitle>
+            <CardTitle className="text-xl text-slate-900 leading-snug">{noteTitle}</CardTitle>
             {isTask && item.description && (
               <CardDescription className="text-sm text-slate-600 whitespace-pre-line mt-2">
                 {item.description}
@@ -659,8 +657,14 @@ export default function Share() {
             )}
             {!isTask && (
               <CardDescription className="text-sm text-slate-600 whitespace-pre-line mt-2">
-                {item.plain_text || item.content?.replace?.(/<[^>]+>/g, "") || ""}
+                {noteBody}
               </CardDescription>
+            )}
+            {!isTask && noteReply && (
+              <div className="mt-3 rounded-xl border border-[#dbe3f7] border-l-2 border-l-[#384877] bg-[#EEF2FF]/60 px-3.5 py-3">
+                <div className="text-[10px] tracking-widest text-[#384877]/70">另一个你的回应</div>
+                <p className="mt-1 text-sm leading-relaxed text-slate-600">{noteReply}</p>
+              </div>
             )}
             {!isTask && noteImage && (
               <img
@@ -787,7 +791,7 @@ export default function Share() {
                 maxLength={50}
               />
               <p className="text-xs text-blue-600 mt-1.5">
-                {isCheckinTask ? "不注册也可以帮 TA 打卡、留言，对方会立刻收到。" : "不注册也可以勾选进度、留言，对方会立刻收到。"}
+                {isTask ? (isCheckinTask ? "不注册也可以帮 TA 打卡、留言，对方会立刻收到。" : "不注册也可以勾选进度、留言，对方会立刻收到。") : "不注册也可以留言，对方会立刻收到。"}
               </p>
             </div>
           </CardContent>
@@ -856,6 +860,8 @@ export default function Share() {
           </CardContent>
         </Card>
 
+        {isTask && (
+        <>
         {/* 操作入口 */}
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="py-4 space-y-4">
@@ -987,6 +993,9 @@ export default function Share() {
             </div>
           </CardContent>
         </Card>
+
+        </>
+        )}
 
         {/* 登录/导入提示 */}
         <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>

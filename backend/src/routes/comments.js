@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { rejectIfRisky } from "../services/contentSecurity.js";
-import { assertTaskAccess, notifyTaskParties } from "../services/taskSharing.js";
+import { assertTaskAccess, notifyTaskParties, notifyMentions } from "../services/taskSharing.js";
 import { visitorLabelOf } from "../lib/visitorLabel.js";
 
 export const commentsRouter = Router();
@@ -142,6 +142,11 @@ commentsRouter.post("/", async (req, res) => {
     type: "shared_task_comment",
     title: "共有约定有新评论",
     body: `${req.user.displayName || req.user.email || "对方"} 评论了「${result.task.title}」：${payload.data.content.slice(0, 60)}`
+  });
+  await notifyMentions(result.task, req.user, {
+    commentId: comment.id,
+    content: payload.data.content,
+    mentionedUserIds: payload.data.mentions || [],
   });
 
   return res.status(201).json(serializeComment(comment));

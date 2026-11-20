@@ -136,7 +136,7 @@ function MessageActions({ message, canDelete, onConvert, onMark, onReply, onDele
 
 // ──────────────────────────── 讨论视图 ────────────────────────────
 
-function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, compact = false, savedTopics = [] }) {
+function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, compact = false, savedTopics = [], members = [] }) {
   const queryClient = useQueryClient();
   const [topicFilter, setTopicFilter] = useState("all");
   const [createdTopics, setCreatedTopics] = useState([]);
@@ -153,6 +153,14 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
   const streamRef = useRef(null);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
+
+  // 可 @ 的协同成员（不含自己；Agent 单独展示）
+  const mentionableMembers = useMemo(
+    () => (Array.isArray(members) ? members : []).filter(
+      (m) => m?.user_id && m.user_id !== currentUserId && (m.display_name || m.name)
+    ),
+    [members, currentUserId]
+  );
 
   // 只滚动消息流内部，避免 scrollIntoView 连带滚动页面祖先（手机端会导致整个版面上移）
   const scrollStreamToBottom = (behavior = "smooth") => {
@@ -250,12 +258,12 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     setMentionOpen(/@[^\s@]{0,20}$/.test(before));
   };
 
-  const insertMention = () => {
+  const insertMention = (label = "@心栈 Agent") => {
     const el = inputRef.current;
     const pos = el?.selectionStart ?? content.length;
     const before = content.slice(0, pos);
     const after = content.slice(pos);
-    const replaced = before.replace(/@[^\s@]{0,20}$/, "@心栈 Agent ");
+    const replaced = before.replace(/@[^\s@]{0,20}$/, `${label} `);
     setContent(replaced + after);
     setMentionOpen(false);
     window.requestAnimationFrame(() => {
@@ -324,6 +332,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     const text = content.trim();
     if ((!text && attachments.length === 0) || uploading) return;
     const mentionAgent = /@\s*(agent|心栈)/i.test(text);
+    const mentionedUserIds = [...new Set(
+      mentionableMembers
+        .filter((m) => text.includes(`@${m.display_name || m.name}`))
+        .map((m) => m.user_id)
+    )];
     try {
       await httpRequest(`/api/collab/${taskId}/messages`, {
         method: "POST",
@@ -331,6 +344,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           content: text || "（分享附件）",
           parent_id: replyTo?.id || undefined,
           topic: topicFilter === "all" ? undefined : topicFilter,
+          ...(mentionedUserIds.length > 0 ? { mentions: mentionedUserIds } : {}),
           attachments: attachments.length > 0 ? attachments : undefined,
         },
       });
@@ -581,7 +595,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               type="button"
               role="option"
               aria-selected="true"
-              onClick={insertMention}
+              onClick={() => insertMention()}
               className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-[#eef2ff]"
             >
               <AgentAvatar size="sm" />
@@ -596,6 +610,27 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               </span>
               <span className="shrink-0 font-mono text-[9px]" style={{ color: "#b8b4ab" }}>Enter</span>
             </button>
+            {mentionableMembers.map((member) => (
+              <button
+                key={member.user_id}
+                type="button"
+                role="option"
+                aria-selected="false"
+                onClick={() => insertMention(`@${member.display_name || member.name}`)}
+                className="flex w-full items-center gap-3 border-t px-3.5 py-2.5 text-left transition-colors hover:bg-[#eef2ff]"
+                style={{ borderColor: C.lineSoft }}
+              >
+                <MemberAvatar name={member.display_name || member.name} seed={member.user_id} size="sm" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-xs font-medium" style={{ color: "#302c2a" }}>
+                    {member.display_name || member.name}
+                  </span>
+                  <span className="mt-0.5 block text-[10px]" style={{ color: "#77736c" }}>
+                    @ 提醒这位成员
+                  </span>
+                </span>
+              </button>
+            ))}
           </div>
         )}
 
@@ -771,7 +806,7 @@ function ActivityView({ taskId }) {
 // ──────────────────────────── 会话窗（右栏） ────────────────────────────
 
 export default function ConversationPane({
-  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId, compact = false, savedTopics = [],
+  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId, compact = false, savedTopics = [], members = [],
 }) {
   return (
     <section
@@ -835,7 +870,7 @@ export default function ConversationPane({
       </div>
       )}
       {view === "discussion"
-        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} compact={compact} savedTopics={savedTopics} />
+        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} compact={compact} savedTopics={savedTopics} members={members} />
         : <ActivityView taskId={taskId} />}
     </section>
   );

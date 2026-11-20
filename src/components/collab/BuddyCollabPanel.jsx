@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowUpRight, CheckCircle2, Circle, Loader2, Plus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
@@ -43,7 +43,16 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
   const [busyId, setBusyId] = useState(null);
   // Agent 从讨论里新整理出约定/沉淀时，在对应切换上点一个未读点，不弹提示
   const [fresh, setFresh] = useState({ pacts: false, knowledge: false });
+  const [highlightMessageId, setHighlightMessageId] = useState(null);
   const lastCountsRef = useRef(null);
+  const [searchParams] = useSearchParams();
+  // 通知深链：?messageId=... 打开搭子协同后直接定位到被 @ 的讨论
+  const messageIdParam = searchParams.get("messageId");
+  useEffect(() => {
+    if (!messageIdParam) return;
+    setView("chat");
+    setHighlightMessageId(messageIdParam);
+  }, [messageIdParam]);
 
   const { data: summary, isLoading, error } = useQuery({
     queryKey: ["collab", taskId],
@@ -251,12 +260,13 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
             taskId={taskId}
             view="discussion"
             onViewChange={() => {}}
-            highlightId={null}
-            onClearHighlight={() => {}}
+            highlightId={highlightMessageId}
+            onClearHighlight={() => setHighlightMessageId(null)}
             onOpenAgent={() => navigate(fullSpaceUrl)}
             messageCount={0}
             currentUserId={currentUser?.id}
             savedTopics={collab?.topics || []}
+            members={members}
             compact
           />
         </div>

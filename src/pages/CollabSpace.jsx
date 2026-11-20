@@ -1,7 +1,7 @@
 // 共创空间：人 + 人 + Agent 协同 Group 的统一双栏工作区
 // 左栏内容区（Agreement 头卡 → 子约定 → 执行节点 → 沉淀），右栏会话窗（讨论/动态）
 // 桌面 ≥900px 双栏等高；移动端单栏 + 底部四格导航。数据：GET /api/collab/:taskId/summary 聚合，15s 轮询
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
@@ -184,6 +184,13 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
     }
   };
 
+  // 通知深链：/collabspace?taskId=...&messageId=... 直接定位到被 @ 的那条讨论
+  const messageIdParam = searchParams.get("messageId");
+  useEffect(() => {
+    if (!messageIdParam) return;
+    jumpToDiscussion(messageIdParam);
+  }, [messageIdParam]);
+
   const showContent = () => {
     setMobileNavActive("content");
     const pane = document.getElementById("content-pane");
@@ -334,6 +341,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
           messageCount={messageCount}
           currentUserId={currentUser?.id}
           savedTopics={collab?.topics || []}
+          members={members}
         />
       </aside>
       )}

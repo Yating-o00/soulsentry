@@ -6,7 +6,7 @@ import {
   DialogTitle } from
 "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, Copy, Share2, ImagePlus, RotateCcw, X } from "lucide-react";
+import { Download, Copy, Share2, ImagePlus, RotateCcw, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 import { httpRequest } from "@/api/httpClient";
@@ -45,12 +45,20 @@ function wrapLines(ctx, text, maxW, maxLines) {
   return lines;
 }
 
-// 远程图片载到 canvas：失败返回 null，不阻塞签卡主体
-const loadImage = (url) => new Promise((resolve) => {
+// 远程图片载到 canvas：失败或超时都返回 null，绝不让一张慢图把整张签卡卡成白板
+const loadImage = (url, timeoutMs = 3000) => new Promise((resolve) => {
   if (!url) return resolve(null);
   const img = new Image();
-  img.onload = () => resolve(img);
-  img.onerror = () => resolve(null);
+  let settled = false;
+  const finish = (value) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    resolve(value);
+  };
+  const timer = setTimeout(() => finish(null), timeoutMs);
+  img.onload = () => finish(img);
+  img.onerror = () => finish(null);
   img.src = url;
 });
 
@@ -58,6 +66,7 @@ const loadImage = (url) => new Promise((resolve) => {
 export default function HeartSignShareCard({ note, text, open, onClose }) {
   const canvasRef = useRef(null);
   const [generating, setGenerating] = useState(false);
+  const [drawing, setDrawing] = useState(false);
   // 公开分享链接（/share/<token>）：扫码者无需登录即可查看与评论
   const [shareUrl, setShareUrl] = useState("");
   // 签卡头像：默认取账号头像，也支持本地上传/移除
@@ -92,30 +101,26 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
   };
 
   // 头像画到卡片上：圆形裁切 + 细线圆环
-  const drawAvatar = (ctx, cx, cy, r) => new Promise((resolve) => {
-    if (!avatar) return resolve();
-    const img = new Image();
-    img.onload = () => {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      // cover 裁切
-      const scale = Math.max((r * 2) / img.width, (r * 2) / img.height);
-      const w = img.width * scale, h = img.height * scale;
-      ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
-      ctx.restore();
-      ctx.strokeStyle = "rgba(56,72,119,0.4)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
-      ctx.stroke();
-      resolve();
-    };
-    img.onerror = () => resolve();
-    img.src = avatar;
-  });
+  const drawAvatar = async (ctx, cx, cy, r) => {
+    if (!avatar) return;
+    const img = await loadImage(avatar, 3000);
+    if (!img) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    // cover 裁切
+    const scale = Math.max((r * 2) / img.width, (r * 2) / img.height);
+    const w = img.width * scale, h = img.height * scale;
+    ctx.drawImage(img, cx - w / 2, cy - h / 2, w, h);
+    ctx.restore();
+    ctx.strokeStyle = "rgba(56,72,119,0.4)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+    ctx.stroke();
+  };
 
   const content = (text || "").trim();
   // 五类签色作丝带点缀，无分类时回落哨兵蓝
@@ -170,7 +175,7 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
     if (!ctx) return;
 
     const draw = async () => {
-      const noteImg = await loadImage(noteImgUrl);
+      const noteImg = await loadImage(noteImgUrl, 3000);
 
       // —— 先排版测量：内容长时自动加高画布，避免签文与 AI 回应/底栏重叠 ——
       const fontSize = 34;
@@ -321,12 +326,8 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
           const qrSize = 110;
           const qrX = W - 90 - qrSize;
           const qrY = canvasH - 172;
-          await new Promise((resolve) => {
-            const img = new Image();
-            img.onload = () => { ctx.drawImage(img, qrX, qrY, qrSize, qrSize); resolve(); };
-            img.onerror = () => resolve();
-            img.src = qrUrl;
-          });
+          const qrImg = await loadImage(qrUrl, 3000);
+          if (qrImg) ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
           ctx.fillStyle = "#b0b0b5";
           ctx.font = `400 18px ${SANS}`;
           ctx.textAlign = "right";
@@ -337,7 +338,31 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
       }
     };
 
-    draw().catch(() => {});
+    setDrawing(true);
+    draw().catch((error) => {
+      console.warn("[HeartSignShareCard] draw failed, fallback preview:", error?.message || error);
+      // 兜底：至少画出签文与底纹，避免用户只看到一块白板
+      try {
+        const ctx2 = canvasRef.current?.getContext("2d");
+        if (!ctx2) return;
+        canvasRef.current.height = H;
+        ctx2.fillStyle = "#fbfaf7";
+        ctx2.fillRect(0, 0, W, H);
+        ctx2.strokeStyle = "rgba(56,72,119,0.28)";
+        ctx2.lineWidth = 1;
+        ctx2.strokeRect(30, 30, W - 60, H - 60);
+        ctx2.fillStyle = "#2c3244";
+        ctx2.font = `400 34px ${SERIF}`;
+        ctx2.textAlign = "center";
+        const fallbackLines = wrapLines(ctx2, content || "心签", 760, 20);
+        fallbackLines.forEach((line, i) => ctx2.fillText(line, W / 2, 520 + i * 64));
+        ctx2.fillStyle = "#8e8e93";
+        ctx2.font = `400 20px ${SANS}`;
+        ctx2.fillText("S O U L S E N T R Y", W / 2, 244);
+      } catch {
+        // 忽略兜底绘制失败
+      }
+    }).finally(() => setDrawing(false));
   }, [open, note, content, replyText, noteUrl, dateStr, typeColor, avatar, noteImgUrl]);
 
   const handleDownload = async () => {
@@ -413,7 +438,14 @@ export default function HeartSignShareCard({ note, text, open, onClose }) {
 
         <div className="space-y-4">
           {/* 预览区：窄屏占满、大屏加大 */}
-          <div className="flex justify-center p-3 sm:p-4 rounded-2xl bg-slate-50">
+          <div className="relative flex justify-center p-3 sm:p-4 rounded-2xl bg-slate-50">
+            {drawing && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-[#fbfaf7]/80">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs text-slate-500 shadow-sm">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[#384877]" /> 正在生成签卡…
+                </span>
+              </div>
+            )}
             <canvas
               ref={canvasRef}
               width={W}

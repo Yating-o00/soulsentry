@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
-import { invokeKimiText, invokeKimiWebSearch, callKimiChat, parseModelJson } from "../lib/kimi.js";
+import { invokeKimiText, invokeKimiWebSearch, callKimiChat, parseModelJson, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
 import { env } from "../config/env.js";
 import { analyzeIntentWithKimi } from "../services/analyzeIntent.js";
 import { analyzeImage, buildImageContentPart, VISION_MODELS } from "../services/analyzeImage.js";
@@ -3150,8 +3150,10 @@ functionsRouter.post("/:name", async (req, res) => {
 
       const existingAi = note.metadata?.ai_analysis;
       // 已分析且有回应的才跳过；早期 bug 导致部分签 analyzed 但回应为空，放行重跑自愈。
+      // 本地模板兜底（source=local_fallback）不算完成品：下次进入自动重跑，让回应回到个性化 AI 版本。
       // force_category（用户刚纠正分类）必须重跑，让回应按新类型重新生成
-      if (!forceCategory && note.aiStatus === "completed" && existingAi?.analyzed_at && existingAi?.emotional_response) {
+      const existingIsLocalFallback = existingAi?.source === "local_fallback";
+      if (!forceCategory && !existingIsLocalFallback && note.aiStatus === "completed" && existingAi?.analyzed_at && existingAi?.emotional_response) {
         return res.json({ ok: true, skipped: true, ai_analysis: existingAi });
       }
       if (note.aiStatus === "processing") {
@@ -3354,7 +3356,10 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
                   prompt: `用户的心签包含一张图片（当前回应浓度：${density}）。${materialText ? `附言：${materialText}\n\n` : ""}【图片中的文字内容】\n${ocrText}\n\n请结合图片文字分析这条心签并回应。`,
                   systemPrompt: systemPrompt + `\n- 这条心签的文字来自用户上传图片的识别结果，回应要结合图中内容。`,
                   responseJsonSchema: schema,
-                  temperature: 0.9
+                  temperature: 0.9,
+                  models: DASHBOARD_TEXT_MODELS,
+                  maxTokens: 3000,
+                  fetchTimeout: 20000
                 });
               } catch (ocrErr) {
                 // 图中没有文字（风景/物品照片）：以「分享了一张照片」为线索走文本分析，
@@ -3364,7 +3369,10 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
                     prompt: `用户上传了一张图片作为心签（当前回应浓度：${density}），但图中没有可识别的文字，可能是一张生活照片、风景、手绘或物品照片${materialText ? `。用户的附言：${materialText}` : ""}。请像真的看到了这张照片一样回应：接纳用户分享此刻的心情，并轻轻邀请用户说说这张照片背后的故事或当时的心情。`,
                     systemPrompt: systemPrompt + `\n- 用户分享了一张没有文字的图片，你看不到它，回应要承认这份分享、表达接纳，并好奇地邀请用户讲讲照片背后的故事，不要假装知道图里具体是什么。`,
                     responseJsonSchema: schema,
-                    temperature: 0.9
+                    temperature: 0.9,
+                    models: DASHBOARD_TEXT_MODELS,
+                    maxTokens: 3000,
+                    fetchTimeout: 20000
                   });
                 }
                 throw lastErr || ocrErr;
@@ -3374,10 +3382,15 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
               prompt: analysisPrompt,
               systemPrompt,
               responseJsonSchema: schema,
-              temperature: 0.9
+              temperature: 0.9,
+              // 与今日对话一致：K3 主用，失败自动切 DeepSeek；给足推理与输出预算
+              models: DASHBOARD_TEXT_MODELS,
+              maxTokens: 3000,
+              fetchTimeout: 25000
             });
-        // 图片心签可能走 OCR 降级链（识图+文本分析），超时放宽到 25 秒
-        const timeoutMs = hasImage ? 25000 : 12000;
+        // 图片心签可能走 OCR 降级链（识图+文本分析），超时放宽；
+        // 文本心签给 K3 留 25 秒单次 + DeepSeek 兜底的时间，避免过早落回模板回应
+        const timeoutMs = hasImage ? 55000 : 35000;
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error("TIMEOUT")), timeoutMs)
         );

@@ -82,7 +82,10 @@ export default function NotificationsPage() {
 
   const markReadMutation = useMutation({
     mutationFn: (id) => base44.entities.Notification.update(id, { is_read: true }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'mention-unread'] });
+    },
   });
 
   const markAllReadMutation = useMutation({
@@ -92,7 +95,10 @@ export default function NotificationsPage() {
         await base44.entities.Notification.update(n.id, { is_read: true });
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications', 'mention-unread'] });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -413,7 +419,7 @@ export default function NotificationsPage() {
                             />
                           ) : (
                           <div className="flex items-center gap-2">
-                            {fixedLink && <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild><Link to={fixedLink}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link></Button>}
+                            {fixedLink && <Button variant="outline" size="sm" className="h-6 text-[11px]" asChild><Link to={fixedLink} onClick={() => { if (!n.is_read) markReadMutation.mutate(n.id); }}>查看 <ExternalLink className="w-3 h-3 ml-1" /></Link></Button>}
                             {!n.is_read && <Button variant="ghost" size="sm" onClick={() => markReadMutation.mutate(n.id)} className="h-6 text-[11px] text-blue-600"><Check className="w-3 h-3 mr-1" />已读</Button>}
                             <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(n.id)} className="h-6 text-[11px] text-slate-400 hover:text-red-500 ml-auto"><Trash2 className="w-3 h-3" /></Button>
                           </div>

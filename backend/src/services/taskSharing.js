@@ -95,6 +95,44 @@ export async function notifyTaskParties(task, actor, { type, title, body }) {
   }
 }
 
+// 协同讨论 @成员：只通知被点名且确实在该约定里的成员（排除操作者自己）。
+// payload.type=mention 会让左侧栏「消息通知」的未读 @ 红点自动亮起。
+export async function notifyMentions(task, actor, { commentId, content, mentionedUserIds = [] }) {
+  try {
+    const requested = [...new Set((mentionedUserIds || []).map(String).filter(Boolean))].filter((id) => id !== actor.id);
+    if (!task || requested.length === 0) return;
+    const members = await prisma.taskMember.findMany({ where: { taskId: task.id }, select: { userId: true } });
+    const allowed = new Set([task.userId, ...members.map((m) => m.userId)]);
+    const recipients = requested.filter((id) => allowed.has(id));
+    if (recipients.length === 0) return;
+    const buddyId = task.metadata?._extraFields?.buddy_id || null;
+    const link = buddyId
+      ? `/buddyspace?buddy=${encodeURIComponent(buddyId)}&tab=${encodeURIComponent("协同")}&collab=${task.id}&messageId=${commentId}`
+      : `/collabspace?taskId=${task.id}&messageId=${commentId}`;
+    const plain = String(content || "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 100);
+    for (const userId of recipients) {
+      await prisma.notification.create({
+        data: {
+          userId,
+          title: `${actorName(actor)} 在「${task.title}」@了你`,
+          body: plain || "在协同讨论里提到了你",
+          channel: "in_app",
+          status: "SENT",
+          payload: {
+            type: "mention",
+            taskId: task.id,
+            commentId,
+            actor: actorName(actor),
+            link,
+          },
+        },
+      });
+    }
+  } catch (error) {
+    console.error("[taskSharing] notifyMentions failed:", error);
+  }
+}
+
 export function describeTaskChange(actor, task, payload) {
   const name = actorName(actor);
   const status = String(payload.status || "").toUpperCase();

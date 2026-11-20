@@ -211,16 +211,20 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
   };
 
   // 渲染卡片为 PNG blob（保存/分享 与 复制卡片 共用）
-  // 显式使用卡片自身的完整宽高，避免长标题/留言在导出时被视口高度裁掉
+  // 用卡片的实际布局宽高导出：右侧装饰圆环溢出会撑大 scrollWidth，
+  // 若按 scrollWidth 导出，图片右侧会多出一条空白，卡片就无法独立完整呈现
   const renderCardBlob = async () => {
     const card = cardRef.current;
     if (!card) throw new Error("卡片尚未准备好");
+    const rect = card.getBoundingClientRect();
+    const width = Math.ceil(rect.width);
+    const height = Math.ceil(rect.height);
     const canvas = await html2canvas(card, {
       scale: 2,
-      width: card.scrollWidth,
-      height: card.scrollHeight,
-      windowWidth: card.scrollWidth,
-      windowHeight: card.scrollHeight,
+      width,
+      height,
+      windowWidth: width,
+      windowHeight: height,
       backgroundColor: "#FFFFFF",
       logging: false,
       useCORS: true,
@@ -574,7 +578,8 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                     data-invite-card="true"
                     style={{
                       position: "relative",
-                      width: 330,
+                      width: "100%",
+                      maxWidth: 330,
                       borderRadius: 22,
                       overflow: "hidden",
                       border: "1px solid #E6EAF4",

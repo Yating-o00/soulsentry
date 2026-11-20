@@ -12,23 +12,25 @@ export function resolveDashboardAiProvider(provider) {
 
 export async function invokeDashboardAi(options, { provider: internalProvider, model: internalModel } = {}) {
   const provider = resolveDashboardAiProvider(internalProvider);
-  if (provider === "kimi") return invokeKimiText({ ...options, allowDeepSeekFallback: false });
+  // Kimi 主用，DeepSeek 兜底：Kimi 欠费/超时/空内容时由 callKimiChat 自动切换，
+  // 不再直接把失败抛给 flowChat 去走本地模板话术
+  if (provider === "kimi") return invokeKimiText({ ...options, allowDeepSeekFallback: true });
 
   const key = process.env.DEEPSEEK_API_KEY?.trim();
   if (!key) throw new Error("DEEPSEEK_API_KEY is not configured");
-  const model = internalModel ?? (process.env.DEEPSEEK_MODEL?.trim() || "deepseek-flash");
+  const model = internalModel ?? (process.env.DEEPSEEK_MODEL?.trim() || "deepseek-chat");
+  const baseUrl = (process.env.DEEPSEEK_BASE_URL?.trim() || "https://api.deepseek.com/v1").replace(/\/+$/, "");
   const messages = [];
   if (options.systemPrompt) messages.push({ role: "system", content: options.systemPrompt });
   messages.push({ role: "user", content: options.prompt });
 
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model,
       messages,
       response_format: { type: "json_object" },
-      thinking: { type: "disabled" },
       temperature: options.temperature,
       max_tokens: options.maxTokens,
     }),

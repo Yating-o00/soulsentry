@@ -1,5 +1,5 @@
 import { invokeDashboardAi } from "../lib/dashboardAi.js";
-import { FAST_TEXT_MODELS } from "../lib/kimi.js";
+import { DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
 import { chargeAICredits, usageCost } from "./aiCredits.js";
 import { startStandaloneBrowserExecution } from "./autoAutomation.js";
 import { respondToAgent } from "./browserAgent.js";
@@ -20,7 +20,9 @@ import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
 
 const CATEGORIES = ["work", "personal", "health", "study", "family", "shopping", "finance", "checkin", "other"];
 const PRIORITIES = ["high", "medium", "low"];
-const PRESSURE_WORDS = /必须|赶紧|马上做|再不|来不及了|惩罚|后果|你已经/;
+// 只拦截真正带压迫感的表达；「你已经」本身常出现在肯定句里（如「你已经做得很好了」），
+// 不能算违规，否则会把本来合理的回答误判成失败
+const PRESSURE_WORDS = /必须|赶紧|马上做|再不|来不及了|惩罚|后果/;
 const URL_RE = /https?:\/\/[^\s"'，。）)]+/i;
 
 function chinaNow() {
@@ -771,9 +773,11 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
 人格引擎（语气最高优先级，覆盖第 5 条的默认温柔）：用户当前人格为「${personaTone}」按这个人格的方式说话，但心栈的克制、真诚、不制造焦虑始终保留。`,
     responseJsonSchema: RESPONSE_SCHEMA,
     temperature: 0.7,
-    models: FAST_TEXT_MODELS,
-    maxTokens: 1500,
-    fetchTimeout: 25000,
+    models: DASHBOARD_TEXT_MODELS,
+    // 给 K3 留足输出预算：Kimi 的推理 token 也计入 max_tokens，
+    // 预算过小时 JSON 会被截断成空内容，对话就会退化成兜底话术
+    maxTokens: 2500,
+    fetchTimeout: 30000,
     withUsage: true
   });
 
@@ -781,15 +785,27 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   if (!result || typeof result !== "object" || typeof result.reply !== "string") {
     throw new Error("invalid chat response");
   }
-  if (PRESSURE_WORDS.test(result.reply)) {
-    throw new Error("reply failed tone check");
+  // 语气词只做轻量修正，不丢弃模型已经给出的有效回答；
+  // 之前直接 throw 会让一次成功的模型调用退化成固定兜底话术，反而破坏连续对话
+  let safeReply = String(result.reply || "");
+  if (PRESSURE_WORDS.test(safeReply)) {
+    const before = safeReply;
+    safeReply = safeReply
+      .replace(/你必须/g, "你可以")
+      .replace(/赶紧/g, "不用急，")
+      .replace(/马上做/g, "先做一点")
+      .replace(/再不/g, "如果")
+      .replace(/来不及了/g, "时间还够")
+      .replace(/惩罚/g, "约束")
+      .replace(/后果/g, "影响");
+    console.log("[flowChat] reply tone softened:", before.slice(0, 80), "->", safeReply.slice(0, 80));
   }
   const agentGoal = trim(result.agent_goal, 200) || null;
   // 同一件事不要重复：agent_goal 已覆盖的请求，不再出同名约定提案
   let extracted = agentGoal && result.extracted?.type === "task"
     ? null
     : sanitizeExtracted(result.extracted);
-  let reply = trim(result.reply, 120);
+  let reply = trim(safeReply, 120);
   // 协同约定强兜底：「建立/创建…协同约定」模式明确，Kimi 未出提案（去追问）时用本地识别补上，
   // 话术同步换成提案口吻，避免「卡片在、回复却在追问」的割裂感
   if (!extracted) {
@@ -911,7 +927,9 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     const userContext = await loadDialogueContext({ userId, prisma });
     const out = await Promise.race([
       chatWithKimi({ messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx, personaTone, userContext, memories, memoryContext }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 35000))
+      // 外层必须比 Kimi 单次超时更宽，才能等到 DeepSeek 兜底完成；
+      // 否则 Kimi 刚超时、还没来得及切 DeepSeek，整轮对话就被判失败
+      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 45000))
     ]);
 
     // 协同约定强意图优先：「建立/创建…协同约定」明确要的是多人共创卡片，

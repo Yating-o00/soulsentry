@@ -11,6 +11,13 @@ export const FAST_TEXT_MODELS = String(process.env.FAST_TEXT_MODELS || "kimi-k2.
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
+// 今日页小助手对话：只走 Kimi K3 旗舰，再由 callKimiChat 自动切 DeepSeek 兜底。
+// 不把 K2.6 放进这条链——它在本项目的 JSON 对话里多次出现超时/空内容，
+// 会拖长等待时间，最后仍要落到 DeepSeek，反而损害连续对话体验。
+export const DASHBOARD_TEXT_MODELS = String(process.env.DASHBOARD_TEXT_MODELS || "kimi-k3")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
 const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1";
 
 function getEndpointConfigs(allowDeepSeekFallback) {
@@ -69,16 +76,17 @@ function getEndpointConfigs(allowDeepSeekFallback) {
 }
 
 function shouldTryFallback(status, errorText = "") {
-  // 401/403 是鉴权错误，重试无用，直接失败
+  // 401/403 对同一 Kimi 账号重试无用，但换到独立配置的 DeepSeek 端点仍可继续对话；
+  // 不能直接判死整条模型链，否则 Kimi Key 失效时今日对话会退化成固定兜底话术
   if ([401, 403].includes(status)) {
-    return false;
+    return true;
   }
   // 402 欠费/余额不足：换下一个模型/端点（如 DeepSeek 兜底）继续尝试
-  if ([402, 404, 408, 409, 429, 500, 502, 503, 504].includes(status)) {
+  if ([400, 402, 404, 408, 409, 429, 500, 502, 503, 504].includes(status)) {
     return true;
   }
 
-  return /resource_not_found|rate limit|overload|timeout|aborted|insufficient/i.test(errorText);
+  return /resource_not_found|model_not_found|invalid model|unsupported model|rate limit|overload|timeout|aborted|insufficient/i.test(errorText);
 }
 
 function normalizeTemperature(model, temperature) {

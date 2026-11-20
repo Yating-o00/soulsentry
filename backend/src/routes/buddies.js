@@ -780,8 +780,10 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
         systemPrompt: built.systemPrompt,
         responseJsonSchema: true,
         models: useFast ? FAST_TEXT_MODELS : undefined,
-        maxTokens: useFast ? 700 : 1200,
-        fetchTimeout: useFast ? 15000 : 45000,
+        // Kimi K3 的推理 token 也占输出预算，预算太小会返回空内容；
+        // 留足预算，失败时再由 callKimiChat 切 DeepSeek
+        maxTokens: useFast ? 1500 : 2500,
+        fetchTimeout: useFast ? 20000 : 45000,
       }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("AGENT_TIMEOUT")), useFast ? 28000 : 60000)

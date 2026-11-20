@@ -27,5 +27,25 @@ export default defineConfig({
       targets: ["chrome >= 60", "ios >= 10", "android >= 5", "safari >= 10"],
       additionalLegacyPolyfills: ["regenerator-runtime/runtime"]
     })
-  ]
+  ],
+  build: {
+    rollupOptions: {
+      output: {
+        // 大包在网络中间层（公司代理/VPN）里容易卡住单文件下载；
+        // 把公共依赖拆成多个较小的 chunk，首屏可以并行拿到，且避免单个 JS 超过中间层阈值。
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          // 只拆核心公共依赖；其余交给 Vite 自动分包，避免把懒加载页面的大依赖
+          // 强行聚成一个大 vendor 包，也避免 vendor 之间的循环依赖。
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/") || id.includes("node_modules/scheduler/")) return "vendor-react";
+          if (id.includes("node_modules/react-router") || id.includes("node_modules/@remix-run")) return "vendor-router";
+          if (id.includes("node_modules/@tanstack")) return "vendor-query";
+          if (id.includes("node_modules/@radix-ui")) return "vendor-radix";
+          if (id.includes("node_modules/lucide-react")) return "vendor-icons";
+          if (id.includes("node_modules/framer-motion")) return "vendor-motion";
+          return undefined;
+        }
+      }
+    }
+  }
 });

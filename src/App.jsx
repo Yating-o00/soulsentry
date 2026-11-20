@@ -15,14 +15,14 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth, isPublicSharePage } from '@/lib/AuthContext';
 import { isStandaloneMode } from '@/api/platformConfig';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
-import OnboardingHost from '@/components/onboarding/OnboardingHost';
-import AssistantWidget from '@/components/assistant/AssistantWidget';
 import { createPageUrl } from '@/utils';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
 const SharePage = Pages.Share;
+const OnboardingHost = React.lazy(() => import("@/components/onboarding/OnboardingHost"));
+const AssistantWidget = React.lazy(() => import("@/components/assistant/AssistantWidget"));
 const InviteLanding = React.lazy(() => import("./pages/InviteLanding"));
 const InviteCollabPreview = React.lazy(() => import("./pages/InviteCollabPreview"));
 
@@ -108,9 +108,11 @@ const AuthenticatedApp = () => {
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       </React.Suspense>
-      <OnboardingHost />
+      <React.Suspense fallback={null}><OnboardingHost /></React.Suspense>
       {/* 心栈小助手：右下角机器人入口（公开分享页不显示；首页已内嵌对话框，不重复出现） */}
-      {isAuthenticated && !isPublicSharePage() && !isHomePage && <AssistantWidget />}
+      {isAuthenticated && !isPublicSharePage() && !isHomePage && (
+        <React.Suspense fallback={null}><AssistantWidget /></React.Suspense>
+      )}
     </LayoutWrapper>
   );
 };

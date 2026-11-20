@@ -6,16 +6,6 @@ import { LayoutDashboard, ListTodo, Calendar, User, Bell, StickyNote, Users, Lan
 import { TranslationProvider, useTranslation } from "@/components/TranslationContext";
 import MobileNavigation from "./components/mobile/MobileNavigation";
 import { useOfflineManager } from "./components/offline/OfflineManager";
-import PWAInstallPrompt from "./components/pwa/PWAInstallPrompt";
-import PWAUpdateNotification from "./components/pwa/PWAUpdateNotification";
-import NotificationManager from "./components/notifications/NotificationManager";
-import PushNotificationPrompt from "./components/notifications/PushNotificationPrompt";
-import GlobalTextTranslator from "@/components/GlobalTextTranslator";
-import GeofenceTracker from "./components/location/GeofenceTracker";
-import SentinelGeoWatcher from "./components/location/SentinelGeoWatcher";
-import OnTheWayReminderHost from "./components/location/OnTheWayReminderHost";
-import OverdueFeedbackHost from "./components/feedback/OverdueFeedbackHost";
-import DeviceHeartbeat from "./components/devices/DeviceHeartbeat";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
 import { useQuery } from "@tanstack/react-query";
@@ -36,10 +26,21 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Trash2, MessageSquarePlus, Search, WifiOff } from "lucide-react";
-import FeedbackDialog from "@/components/feedback/FeedbackDialog";
-import GlobalSearch from "@/components/search/GlobalSearch";
 import CreditsBadge from "@/components/credits/CreditsBadge";
 import xinzhanLogo from "./assets/xinzhan-logo.png";
+
+// 首屏只加载应用壳；后台能力/弹窗按需加载，避免主包过大被网络中间层卡住
+const PWAInstallPrompt = React.lazy(() => import("./components/pwa/PWAInstallPrompt"));
+const PWAUpdateNotification = React.lazy(() => import("./components/pwa/PWAUpdateNotification"));
+const NotificationManager = React.lazy(() => import("./components/notifications/NotificationManager"));
+const PushNotificationPrompt = React.lazy(() => import("./components/notifications/PushNotificationPrompt"));
+const GlobalTextTranslator = React.lazy(() => import("@/components/GlobalTextTranslator"));
+const GeofenceTracker = React.lazy(() => import("./components/location/GeofenceTracker"));
+const SentinelGeoWatcher = React.lazy(() => import("./components/location/SentinelGeoWatcher"));
+const OnTheWayReminderHost = React.lazy(() => import("./components/location/OnTheWayReminderHost"));
+const DeviceHeartbeat = React.lazy(() => import("./components/devices/DeviceHeartbeat"));
+const FeedbackDialog = React.lazy(() => import("@/components/feedback/FeedbackDialog"));
+const GlobalSearch = React.lazy(() => import("@/components/search/GlobalSearch"));
 
 const getNavigationItems = (t) => [
   {
@@ -388,18 +389,19 @@ function LayoutContent({ children }) {
         
         <AppSidebar setSearchOpen={setSearchOpen} setFeedbackOpen={setFeedbackOpen} />
 
-        <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
-        <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
-        <PWAInstallPrompt />
-        <PWAUpdateNotification />
-        <NotificationManager />
-        <PushNotificationPrompt />
-        <GlobalTextTranslator />
-        <GeofenceTracker />
-        <SentinelGeoWatcher />
-        <OnTheWayReminderHost />
-        <DeviceHeartbeat />
-        {/* <OverdueFeedbackHost />  暂时禁用：避免反馈窗口打扰用户 */}
+        <React.Suspense fallback={null}>
+          <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
+          <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+          <PWAInstallPrompt />
+          <PWAUpdateNotification />
+          <NotificationManager />
+          <PushNotificationPrompt />
+          <GlobalTextTranslator />
+          <GeofenceTracker />
+          <SentinelGeoWatcher />
+          <OnTheWayReminderHost />
+          <DeviceHeartbeat />
+        </React.Suspense>
 
         {/* 离线状态提示 */}
         {!isOnline && (

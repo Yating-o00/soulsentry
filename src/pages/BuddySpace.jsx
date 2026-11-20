@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles, Trash2 } from "lucide-react";
+import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
@@ -563,6 +563,38 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
 
 /* ---------- 项目与小组：同一颗搭子下并行多个子项目 / 协同小组 ---------- */
 function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCollab, onCreateProject, onCreateCollab, onDeleteCollab }) {
+  const queryClient = useQueryClient();
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [renaming, setRenaming] = useState(false);
+
+  const openRename = (task) => {
+    setRenameTarget(task);
+    setRenameTitle(task.title || "");
+  };
+
+  const submitRename = async () => {
+    const title = renameTitle.trim();
+    if (!renameTarget || !title || renaming) return;
+    if (title === renameTarget.title) {
+      setRenameTarget(null);
+      return;
+    }
+    setRenaming(true);
+    try {
+      await httpRequest(`/api/tasks/${renameTarget.id}`, { method: "PATCH", body: { title } });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["buddies", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["collab"] });
+      toast.success(`已改名为「${title}」`);
+      setRenameTarget(null);
+    } catch (error) {
+      toast.error(error?.data?.message || error?.message || "改名失败，再试一次");
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   return (
     <section className="rounded-2xl border border-stone-200 bg-white p-5">
       <div className="flex items-baseline justify-between gap-3">
@@ -606,6 +638,14 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
                   进入协同 →
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => openRename(t)}
+                title={isCollab ? "重命名协同小组" : "重命名项目"}
+                className="shrink-0 text-stone-300 transition-colors hover:text-[#384877]"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
               {isCollab && !isPrimary && !t.shared_role && (
                 <button
                   type="button"
@@ -639,6 +679,51 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
           ＋ 新建协同小组
         </button>
       </div>
+
+      {renameTarget && (
+        <div
+          className="fixed inset-0 z-[75] flex items-center justify-center bg-[#384877]/45 p-5"
+          onClick={() => { if (!renaming) setRenameTarget(null); }}
+        >
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-stone-900">
+              重命名{renameTarget.metadata?.collab ? "协同小组" : "项目"}
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed text-stone-400">
+              只改变显示名称，讨论、子约定和进度都会保留。
+            </p>
+            <input
+              autoFocus
+              value={renameTitle}
+              onChange={(e) => setRenameTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  submitRename();
+                }
+              }}
+              maxLength={60}
+              className="mt-4 w-full rounded-xl border border-stone-200 px-3.5 py-2.5 text-sm outline-none focus:border-[#384877]"
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setRenameTarget(null)}
+                disabled={renaming}
+                className="flex-1 rounded-full border border-stone-200 py-2.5 text-sm text-stone-600 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={submitRename}
+                disabled={!renameTitle.trim() || renaming}
+                className="flex-1 rounded-full bg-[#384877] py-2.5 text-sm text-white disabled:opacity-50"
+              >
+                {renaming ? "保存中…" : "保存"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

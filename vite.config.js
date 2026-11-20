@@ -13,6 +13,12 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3001",
         changeOrigin: true
+      },
+      // 上传后的图片由后端 /uploads 静态目录提供；本地开发也需要代理，
+      // 否则 <img src="/uploads/..."> 会落到 SPA 的 index.html，图片显示成裂图
+      "/uploads": {
+        target: "http://localhost:3001",
+        changeOrigin: true
       }
     }
   },

@@ -214,8 +214,12 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {(m.attachments || []).map((att, ai) =>
                         (att.type || "").startsWith("image/") ? (
-                          <a key={att.url || ai} href={att.url} target="_blank" rel="noreferrer" className="block">
-                            <img src={att.url} alt={att.name || "图片"} className="h-20 w-20 rounded-lg object-cover" />
+                          <a key={att.url || ai} href={att.url} target="_blank" rel="noreferrer" className="block" title="点击查看原图">
+                            <img
+                              src={att.url}
+                              alt={att.name || "图片"}
+                              className="max-h-60 w-auto max-w-full rounded-lg border border-white/20 bg-white/10 object-contain"
+                            />
                           </a>
                         ) : (
                           <a
@@ -292,7 +296,13 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
           {attachments.map((att, index) => (
             <div key={`${att.url}-${index}`} className="relative">
               {(att.type || "").startsWith("image/") ? (
-                <img src={att.url} alt={att.name || "图片"} className="h-12 w-12 rounded-xl border border-stone-200 object-cover" />
+                <a href={att.url} target="_blank" rel="noreferrer" className="block" title="点击查看原图">
+                  <img
+                    src={att.url}
+                    alt={att.name || "图片"}
+                    className="h-28 w-28 rounded-xl border border-stone-200 bg-[#FAF9F7] object-contain"
+                  />
+                </a>
               ) : (
                 <span className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full border border-stone-200 bg-[#FAF9F7] px-2.5 py-1.5 text-[11px] text-stone-600">
                   <FileText className="h-3.5 w-3.5 shrink-0" />

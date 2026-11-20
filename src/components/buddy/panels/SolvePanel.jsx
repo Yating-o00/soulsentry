@@ -99,7 +99,7 @@ export default function SolvePanel({ tint, persona, projectTask = null }) {
         toast.error("没识别到题目文字，换一张清晰一点的图片，或直接输入题目");
         return;
       }
-      setAttachments([]);
+      // 保留题目图片：解题过程中用户仍需要看到原题的样子，不能只剩 OCR 文本
       setLocated(data);
       setStage("located");
     });
@@ -247,6 +247,21 @@ export default function SolvePanel({ tint, persona, projectTask = null }) {
               </button>
             }
           >
+            {attachments.length > 0 && (
+              <a
+                href={attachments[0].url}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2.5 block"
+                title="点击查看原图"
+              >
+                <img
+                  src={attachments[0].url}
+                  alt={attachments[0].name || "题目图片"}
+                  className="max-h-64 w-full rounded-xl border border-stone-200 bg-[#FAF9F7] object-contain"
+                />
+              </a>
+            )}
             <p className="mt-2.5 text-[15px] leading-relaxed text-stone-800 whitespace-pre-wrap">{problem}</p>
           </PanelCard>
 

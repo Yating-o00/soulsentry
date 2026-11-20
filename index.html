@@ -96,7 +96,7 @@
           var ua = navigator.userAgent || 'unknown';
           var modern = window.__vite_is_modern_browser;
           var info = [
-            '页面加载时间较长，应用还没有完成启动。',
+            '网络较慢，应用仍在加载。可以继续等待，或点击下方重新加载。',
             '',
             'UA: ' + ua,
             'Modern bundle: ' + (modern === true ? 'yes' : (modern === false ? 'no' : 'unknown')),
@@ -131,7 +131,7 @@
           };
           diag.appendChild(document.createElement('br'));
           diag.appendChild(btn);
-        }, 10000);
+        }, 30000);
       })();
     </script>
   </head>

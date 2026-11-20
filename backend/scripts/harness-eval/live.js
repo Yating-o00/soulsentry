@@ -9,16 +9,20 @@ import { DatabaseSync } from "node:sqlite";
 import { mock } from "node:test";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
+import { firstDay, fixtures, gradePlan, stamp } from "./live-cases.js";
 
-const { values } = parseArgs({ options: { checkout: { type: "string" }, out: { type: "string" } }, strict: true });
+const { values } = parseArgs({ options: { checkout: { type: "string" }, repeats: { type: "string", default: "2" }, out: { type: "string" }, repeats: { type: "string", default: "2" } }, strict: true });
 if (!values.checkout || !values.out || !process.env.DEEPSEEK_API_KEY?.trim()) {
   throw new Error("Supply --checkout <repo>, --out <report>, and DEEPSEEK_API_KEY.");
 }
 const checkout = resolve(values.checkout);
 const backend = join(checkout, "backend");
 const model = process.env.DEEPSEEK_MODEL?.trim() || "deepseek-flash";
-const MAX_CALLS = 18;
-const now = new Date("2026-11-16T00:00:00.000Z");
+const repeats = Number(values.repeats);
+if (![1, 2].includes(repeats)) throw new Error("--repeats must be 1 or 2");
+const callsPerTurn = 3;
+const maxCalls = repeats * callsPerTurn * fixtures.reduce((sum, fixture) => sum + (fixture.followUp ? 2 : 1), 0);
+const now = new Date(firstDay + "T00:00:00.000Z");
 const nativeFetch = globalThis.fetch;
 const nativeSetTimeout = globalThis.setTimeout;
 const dir = mkdtempSync(join(tmpdir(), "soulsentry-live-"));
@@ -35,33 +39,9 @@ Object.assign(process.env, {
   MEMORY_LEARNING_ENABLED: "0",
   MEMORY_HYBRID_ENABLED: "0",
 });
-const fixtures = [
-  {
-    id: "reading_busy",
-    text: "帮我安排一周阅读练习，每周三次，每次正好25分钟，工作日晚上没空，请避开已有安排。",
-    minutes: 25,
-    busy: ["2026-11-16T08:30:00+08:00", "2026-11-16T18:00:00+08:00"],
-  },
-  {
-    id: "vocabulary_limit",
-    text: "想做一个为期7天的英语词汇复习计划，每周三次，单次按我平常的上限，每次请用纸质词卡。",
-    minutes: 25,
-    max: true,
-    memory: "英语词汇复习每次最多25分钟",
-    content: /纸质|纸卡|词卡|单词卡/,
-  },
-  {
-    id: "dumbbell_training",
-    text: "想做一周居家练背计划，每周三次，每次正好35分钟。我是新手，在家只有一副哑铃。",
-    minutes: 35,
-    content: /\d+\s*组.*\d+\s*(次|秒)|[一二三四五六七八九十]+组.*\d+\s*(次|秒)/,
-    forbidden: /高位下拉机|史密斯机|跑步机|引体向上杆|杠铃|坐姿划船机/,
-  },
-];
-
 const totals = { calls: 0, inputTokens: 0, outputTokens: 0 };
 const trials = [];
-let db, server, callTrace = [];
+let db, server, callTrace = [], activeFixture, turnLimit;
 const imported = (name) => import(pathToFileURL(join(backend, name)).href);
 
 try {
@@ -85,9 +65,15 @@ try {
   });
   mock.method(globalThis, "fetch", async (url, options) => {
     if (String(url) !== "https://api.deepseek.com/chat/completions") throw new Error("Unexpected external request");
-    if (totals.calls >= MAX_CALLS || callTrace.length >= 3) throw new Error("Harness live model budget exhausted");
-    const { messages: [system] } = JSON.parse(options.body);
-    const call = { phase: system.content.startsWith("你是约定规划师") ? "planner" : "chat" };
+    if (totals.calls >= maxCalls || callTrace.length >= turnLimit) {
+      totals.budgetBlocks = (totals.budgetBlocks || 0) + 1;
+      throw new Error("Harness live model budget exhausted");
+    }
+    const { messages } = JSON.parse(options.body);
+    const call = { phase: messages[0].content.startsWith("你是约定规划师") ? "planner" : "chat" };
+    if (activeFixture.privateText && messages.some(({ content }) => content.includes(activeFixture.privateText))) {
+      call.foreignMemoryInPrompt = true;
+    }
     callTrace.push(call);
     totals.calls += 1;
     const started = performance.now();
@@ -112,72 +98,48 @@ try {
   const origin = "http://127.0.0.1:" + server.address().port;
 
   for (const fixture of fixtures) {
-    for (let repeat = 1; repeat <= 2; repeat += 1) {
-      if (totals.calls >= MAX_CALLS) break;
+    for (let repeat = 1; repeat <= repeats; repeat += 1) {
       const account = await db.user.create({ data: {} });
-      if (fixture.busy) {
-        await db.task.create({ data: {
-          userId: account.id, title: "读者的既有约定",
-          reminderTime: new Date(fixture.busy[0]), endTime: new Date(fixture.busy[1]),
-        } });
+      const stranger = fixture.mode === "confirm_parallel" || fixture.memories?.some(({ foreign }) => foreign)
+        ? await db.user.create({ data: {} }) : null;
+      for (const [from, to] of fixture.busy || []) {
+        await seedBusy(account.id, from + "+08:00", to + "+08:00");
       }
-      if (fixture.memory) {
+      for (const { text, topic, subject = "self", expires, foreign } of fixture.memories || []) {
+        const userId = foreign ? stranger.id : account.id;
         await db.memoryRecord.create({ data: {
-          userId: account.id, title: fixture.memory, content: fixture.memory, memoryType: "preference",
-          fact: { create: { userId: account.id, subject: "self", topic: "english_vocabulary", attribute: "session_limit", aliases: [] } },
+          userId, title: text, content: text, memoryType: "preference",
+          fact: { create: { userId, subject, topic, attribute: "session_limit", aliases: [], expiresAt: expires ? new Date(expires) : undefined } },
         } });
       }
-      const countTasks = (where = {}) => db.task.count({ where: { userId: account.id, ...where } });
       const started = performance.now();
+      activeFixture = fixture;
       callTrace = [];
-      const post = async (path, body) => {
+      turnLimit = 0;
+      const post = async (path, body, as = account) => {
         const response = await nativeFetch(origin + path, {
           method: "POST",
-          headers: { authorization: "Bearer " + signAccessToken(account), "content-type": "application/json" },
+          headers: { authorization: "Bearer " + signAccessToken(as), "content-type": "application/json" },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(100000),
         });
         return { status: response.status, data: await response.json() };
       };
-      const errors = [];
-      const trial = { id: fixture.id, repeat, calls: callTrace, errors };
+      const trial = { id: fixture.id, repeat, calls: callTrace, turns: [], errors: [] };
       try {
-        const { data, status } = await post("/api/companion/messages", { content: fixture.text });
-        trial.chatStatus = status;
-        trial.reply = data.reply?.content;
-        const expectedBefore = fixture.busy ? 1 : 0;
-        if (await countTasks() !== expectedBefore) errors.push("wrote_before_confirmation");
-        const extracted = data.extracted;
-        const plan = extracted?.plan;
-        if (!plan || plan.source === "fallback") {
-          errors.push("no_confirmable_proposal");
-        } else {
-          const { sessions, problems } = grade(plan, fixture);
-          trial.sessions = sessions;
-          errors.push(...problems);
-          // Confirm only cards that independently meet the reference requirements.
-          if (!errors.length) {
-            const confirmed = await (extracted.plan_proposal_id
-              ? post("/api/tasks/plan-proposals/" + extracted.plan_proposal_id + "/confirm", {})
-              : post("/api/tasks/plan", legacyPayload(extracted)));
-            trial.confirmStatus = confirmed.status;
-            const parentId = confirmed.data.parent?.id;
-            const children = parentId ? await db.task.findMany({ where: { userId: account.id, parentTaskId: parentId } }) : [];
-            const key = (title, time, end) => [title, new Date(time).toISOString(), new Date(end).toISOString()].join("|");
-            const expected = plan.children.map((child) => key(child.title, stamp(child, "start_time"), stamp(child, "end_time"))).sort();
-            const actual = children.map((child) => key(child.title, child.reminderTime, child.endTime)).sort();
-            if (confirmed.status !== 201 || JSON.stringify(actual) !== JSON.stringify(expected)
-              || await countTasks() !== expectedBefore + plan.children.length + 1) errors.push("incorrect_saved_state");
-          }
-        }
+        await runScenario(fixture, trial, post, account, stranger);
+        if (fixture.privateText && (
+          callTrace.some(({ foreignMemoryInPrompt }) => foreignMemoryInPrompt)
+          || trial.turns.some(({ reply }) => reply?.includes(fixture.privateText))
+        )) trial.errors.push("foreign_memory_exposed");
       } catch (error) {
-        errors.push("eval_request_failure");
-        trial.error = error.name;
+        trial.errors.push("eval_request_failure");
+        trial.error = { type: error.name, message: error.message };
       }
       trial.ms = Math.round(performance.now() - started);
-      trial.pass = errors.length === 0;
+      trial.pass = trial.errors.length === 0;
       trials.push(trial);
-      console.info(JSON.stringify({ id: trial.id, repeat, pass: trial.pass, calls: callTrace.length, errors }));
+      console.info(JSON.stringify({ id: trial.id, repeat, pass: trial.pass, calls: callTrace.length, errors: trial.errors }));
     }
   }
 } finally {
@@ -186,46 +148,133 @@ try {
   rmSync(dir, { recursive: true, force: true });
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: checkout, encoding: "utf8" }).trim();
   writeFileSync(values.out, JSON.stringify({
-    sha, model, totals, trials, passed: trials.filter(({ pass }) => pass).length,
-    pass2: fixtures.filter(({ id }) => trials.filter((item) => item.id === id && item.pass).length === 2).length,
+    sha, model, maxCalls, repeats, expectedTrials: fixtures.length * repeats, totals, trials,
+    passed: trials.filter(({ pass }) => pass).length,
+    pass2: repeats === 2 ? fixtures.filter(({ id }) => trials.filter((item) => item.id === id && item.pass).length === 2).length : null,
   }, null, 2) + "\n");
 }
 
-function stamp(child, field) {
-  return child.date + "T" + child[field] + ":00+08:00";
+async function seedBusy(userId, from, to) {
+  await db.task.create({ data: {
+    userId, title: "已存在的约定",
+    reminderTime: new Date(from), endTime: new Date(to),
+  } });
 }
 
-function grade(plan, fixture) {
-  const sessions = plan.children.filter((entry) => entry.session_type === "session");
-  const problems = [];
-  if (sessions.length !== 3 || new Set(sessions.map(({ date }) => date)).size !== 3) problems.push("wrong_frequency");
-  if (sessions.some((child) => {
-    const minutes = (Date.parse(stamp(child, "end_time")) - Date.parse(stamp(child, "start_time"))) / 60000;
-    return !(minutes > 0 && (fixture.max ? minutes <= fixture.minutes : minutes === fixture.minutes));
-  })) problems.push("wrong_duration");
-  if (plan.children.some(({ date }) => date < "2026-11-16" || date > "2026-11-22")) problems.push("out_of_horizon");
-  if (fixture.busy) {
-    const [from, to] = fixture.busy.map(Date.parse);
-    if (plan.children.some((child) => Date.parse(stamp(child, "start_time")) < to && Date.parse(stamp(child, "end_time")) > from)) problems.push("busy_conflict");
-    if (sessions.some((child) => {
-      const day = new Date(child.date).getUTCDay();
-      return day >= 1 && day <= 5 && child.end_time > "18:00";
-    })) problems.push("weekday_evening");
+async function runScenario(fixture, trial, post, account, stranger) {
+  const { errors } = trial;
+  const expectedBefore = fixture.busy?.length || 0;
+  const countTasks = (userId = account.id) => db.task.count({ where: { userId } });
+  async function chat(content, lastExtracted) {
+    const before = callTrace.length;
+    turnLimit = before + callsPerTurn;
+    const { status, data } = await post("/api/companion/messages", { content, last_extracted: lastExtracted });
+    // A completed reply must not leave the provider budget open during confirmation.
+    turnLimit = callTrace.length;
+    const plannerCalls = callTrace.slice(before).filter(({ phase }) => phase === "planner").length;
+    const reply = data.reply?.content;
+    trial.turns.push({ status, reply, calls: callTrace.length - before, plannerCalls });
+    if (status !== 200) errors.push("chat_status_" + status);
+    if (await countTasks() !== expectedBefore) errors.push("wrote_before_confirmation");
+    return { extracted: data.extracted, reply, plannerCalls };
   }
-  if (fixture.content && sessions.some(({ title, description }) => !fixture.content.test(title + " " + description))) problems.push("missing_activity_detail");
-  if (fixture.forbidden && sessions.some(({ title, description }) => fixture.forbidden.test(title + " " + description))) problems.push("unavailable_equipment");
-  return { sessions, problems };
+
+  let turn = await chat(fixture.text);
+  if (fixture.mode === "clarify" || fixture.mode === "clarify_then_plan") {
+    if (turn.extracted?.plan || turn.plannerCalls !== 0) errors.push("planned_before_clarification");
+    // The question must solicit a duration instead of only presenting one.
+    if (!/(?:多少|多长|多久|几分钟|几小时|多大|能用多久|上限.{0,10}[？?])/.test(turn.reply || "")
+      || !/分钟|时长|时间|多久|上限/.test(turn.reply || "")) errors.push("missing_duration_question");
+    if (fixture.mode === "clarify") {
+      trial.terminal = "clarification";
+      return;
+    }
+    if (errors.length) return;
+    turn = await chat(fixture.followUp);
+  }
+
+  let extracted = turn.extracted;
+  const plan = extracted?.plan;
+  if (!plan || plan.source === "fallback") {
+    errors.push("no_confirmable_proposal");
+    return;
+  }
+  const firstGrade = gradePlan(plan, fixture);
+  trial.sessions = firstGrade.sessions;
+  errors.push(...firstGrade.problems);
+  if (errors.length) return;
+  if (fixture.mode === "adjust") {
+    turn = await chat(fixture.followUp, extracted);
+    if (turn.plannerCalls !== 0) errors.push("adjustment_called_planner");
+    const revised = turn.extracted?.plan;
+    if (!revised || revised.source === "fallback") {
+      errors.push("missing_adjusted_proposal");
+      return;
+    }
+    const revisedGrade = gradePlan(revised, fixture, { adjusted: true });
+    trial.adjustedSessions = revisedGrade.sessions;
+    errors.push(...revisedGrade.problems);
+    const otherRows = (draft) => draft.children.filter(({ date }) => date !== fixture.adjustment.date)
+      .map((child) => [child.date, child.start_time, child.end_time, child.title, child.description, child.session_type].join("|")).sort();
+    if (JSON.stringify(otherRows(plan)) !== JSON.stringify(otherRows(revised))) errors.push("unrequested_changes");
+    if (errors.length) return;
+    extracted = turn.extracted;
+  }
+
+  const { path, body } = confirmation(extracted);
+  if (fixture.mode === "late_conflict") {
+    const first = firstGrade.sessions[0];
+    await seedBusy(account.id, stamp(first, "start_time"), stamp(first, "end_time"));
+    const result = await post(path, body);
+    trial.confirmStatuses = [result.status];
+    if (result.status !== 409 || result.data.error !== "PLAN_CONFLICT") errors.push("late_conflict_not_rejected");
+    if (await countTasks() !== expectedBefore + 1) errors.push("late_conflict_wrote_tasks");
+    trial.terminal = "late_conflict";
+    return;
+  }
+
+  let confirmed;
+  if (fixture.mode === "confirm_parallel") {
+    const foreign = await post(path, body, stranger);
+    trial.foreignConfirmStatus = foreign.status;
+    if (![403, 404].includes(foreign.status) || await countTasks(stranger.id) !== 0) errors.push("foreign_confirmation_accepted");
+    const pair = await Promise.all([post(path, body), post(path, body)]);
+    trial.confirmStatuses = pair.map(({ status }) => status);
+    const [first, replay] = pair.sort((a, b) => b.status - a.status);
+    if (first.status !== 201 || replay.status !== 200 || first.data.parent?.id !== replay.data.parent?.id) errors.push("confirmation_not_idempotent");
+    confirmed = first;
+  } else {
+    confirmed = await post(path, body);
+    trial.confirmStatuses = [confirmed.status];
+  }
+  const parentId = confirmed.data.parent?.id;
+  const children = parentId ? await db.task.findMany({ where: { userId: account.id, parentTaskId: parentId } }) : [];
+  const key = (title, time, end) => [title, new Date(time).toISOString(), new Date(end).toISOString()].join("|");
+  const expected = extracted.plan.children.map((child) => key(child.title, stamp(child, "start_time"), stamp(child, "end_time"))).sort();
+  const actual = children.map(({ title, reminderTime, endTime }) => key(title, reminderTime, endTime)).sort();
+  if (confirmed.status !== 201 || confirmed.data.parent?.title !== extracted.plan.parent.title
+    || JSON.stringify(actual) !== JSON.stringify(expected)
+    || await countTasks() !== expectedBefore + extracted.plan.children.length + 1) errors.push("incorrect_saved_state");
+  trial.terminal = "confirmation";
 }
 
-function legacyPayload({ plan, memory_proposal_id }) {
+function confirmation(extracted) {
+  if (extracted.plan_proposal_id) return {
+    path: "/api/tasks/plan-proposals/" + extracted.plan_proposal_id + "/confirm",
+    body: {},
+  };
+  const { plan, memory_proposal_id } = extracted;
   return {
-    proposal_id: randomUUID(),
-    memory_proposal_id,
-    parent: { title: plan.parent.title, description: plan.parent.description },
-    children: plan.children.map((child) => ({
-      title: child.title, description: child.description,
-      reminder_time: stamp(child, "start_time"), end_time: stamp(child, "end_time"),
-      plan_kind: child.kind, plan_group: child.plan_group, session_type: child.session_type,
-    })),
+    path: "/api/tasks/plan",
+    body: {
+      proposal_id: randomUUID(),
+      memory_proposal_id,
+      parent: { title: plan.parent.title, description: plan.parent.description },
+      children: plan.children.map((child) => ({
+        title: child.title, description: child.description,
+        reminder_time: stamp(child, "start_time"), end_time: stamp(child, "end_time"),
+        plan_kind: child.kind, plan_group: child.plan_group, session_type: child.session_type,
+      })),
+    },
   };
 }

@@ -47,26 +47,28 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
-import Account from './pages/Account';
-import AdminStats from './pages/AdminStats.jsx';
-import AgentIntro from './pages/AgentIntro.jsx';
-import BuddyClaim from './pages/BuddyClaim.jsx';
-import BuddySpace from './pages/BuddySpace.jsx';
-import BuddyStore from './pages/BuddyStore.jsx';
-import CollabSpace from './pages/CollabSpace.jsx';
-import Onboarding from './pages/Onboarding.jsx';
-import Dashboard from './pages/Dashboard';
-import HeartSign from './pages/HeartSign.jsx';
-import KnowledgeBase from './pages/KnowledgeBase';
-import LockScreenTodo from './pages/LockScreenTodo.jsx';
-import Notes from './pages/Notes';
-import NotificationSettings from './pages/NotificationSettings';
-import Notifications from './pages/Notifications';
-import Pricing from './pages/Pricing';
-import Share from './pages/Share';
-import Tasks from './pages/Tasks';
-import Teams from './pages/Teams';
-import Trash from './pages/Trash';
+import React from 'react';
+
+const Account = React.lazy(() => import('./pages/Account'));
+const AdminStats = React.lazy(() => import('./pages/AdminStats.jsx'));
+const AgentIntro = React.lazy(() => import('./pages/AgentIntro.jsx'));
+const BuddyClaim = React.lazy(() => import('./pages/BuddyClaim.jsx'));
+const BuddySpace = React.lazy(() => import('./pages/BuddySpace.jsx'));
+const BuddyStore = React.lazy(() => import('./pages/BuddyStore.jsx'));
+const CollabSpace = React.lazy(() => import('./pages/CollabSpace.jsx'));
+const Onboarding = React.lazy(() => import('./pages/Onboarding.jsx'));
+const Dashboard = React.lazy(() => import('./pages/Dashboard'));
+const HeartSign = React.lazy(() => import('./pages/HeartSign.jsx'));
+const KnowledgeBase = React.lazy(() => import('./pages/KnowledgeBase'));
+const LockScreenTodo = React.lazy(() => import('./pages/LockScreenTodo.jsx'));
+const Notes = React.lazy(() => import('./pages/Notes'));
+const NotificationSettings = React.lazy(() => import('./pages/NotificationSettings'));
+const Notifications = React.lazy(() => import('./pages/Notifications'));
+const Pricing = React.lazy(() => import('./pages/Pricing'));
+const Share = React.lazy(() => import('./pages/Share'));
+const Tasks = React.lazy(() => import('./pages/Tasks'));
+const Teams = React.lazy(() => import('./pages/Teams'));
+const Trash = React.lazy(() => import('./pages/Trash'));
 import __Layout from './Layout.jsx';
 
 

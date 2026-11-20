@@ -32,6 +32,12 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
+const RouteFallback = () => (
+  <div className="flex min-h-[50vh] items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-[#384877]" />
+  </div>
+);
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
   const location = useLocation();
@@ -76,6 +82,7 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <LayoutWrapper currentPageName={mainPageKey}>
+      <React.Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<MainPage />} />
@@ -100,6 +107,7 @@ const AuthenticatedApp = () => {
         })}
         <Route path="*" element={<PageNotFound />} />
       </Routes>
+      </React.Suspense>
       <OnboardingHost />
       {/* 心栈小助手：右下角机器人入口（公开分享页不显示；首页已内嵌对话框，不重复出现） */}
       {isAuthenticated && !isPublicSharePage() && !isHomePage && <AssistantWidget />}

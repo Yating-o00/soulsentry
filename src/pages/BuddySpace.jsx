@@ -763,9 +763,10 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
           <ul className="mt-3 space-y-2">
             {myCollabs.map((t) => (
               <li key={t.id}>
-                <Link
-                  to={`/collabspace?taskId=${t.id}`}
-                  className="flex items-center gap-3 rounded-xl bg-[#FAF9F7] px-4 py-3 transition-colors hover:bg-stone-100"
+                <button
+                  type="button"
+                  onClick={() => onSelectCollab?.(t.id)}
+                  className="flex w-full items-center gap-3 rounded-xl bg-[#FAF9F7] px-4 py-3 text-left transition-colors hover:bg-stone-100"
                 >
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white text-xs" style={{ background: tint[2] }}>协</span>
                   <span className="min-w-0 flex-1">
@@ -773,7 +774,7 @@ function CollabSection({ buddy, tint, projectTask, allTasks = [], selectedCollab
                     <span className="text-xs text-stone-400">多人共创中</span>
                   </span>
                   <span className="text-stone-400">→</span>
-                </Link>
+                </button>
               </li>
             ))}
           </ul>

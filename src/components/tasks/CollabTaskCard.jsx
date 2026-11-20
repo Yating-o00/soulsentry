@@ -92,7 +92,21 @@ export default function CollabTaskCard({ task }) {
 
   const agentActive = collab?.agent?.enabled && !collab?.agent?.paused;
 
-  const openSpace = () => navigate(`/collabspace?taskId=${task.id}`);
+  // 搭子空间里创建的协同约定，进入时保持简洁的搭子协同视图；
+  // 从今日对话/约定对话创建的协同约定仍进入完整协同空间。
+  const openSpace = () => {
+    const buddyId = task?.metadata?._extraFields?.buddy_id || task?.buddy_id;
+    if (buddyId) {
+      const params = new URLSearchParams({
+        buddy: buddyId,
+        tab: "协同",
+        collab: task.id,
+      });
+      navigate(`/buddyspace?${params.toString()}`);
+      return;
+    }
+    navigate(`/collabspace?taskId=${task.id}`);
+  };
 
   // 卡片上直接勾选/确认子约定（阻止冒泡到卡片跳转）
   const [togglingId, setTogglingId] = useState(null);

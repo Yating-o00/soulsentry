@@ -211,8 +211,10 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
   };
 
   // 渲染卡片为 PNG blob（保存/分享 与 复制卡片 共用）
-  // 用卡片的实际布局宽高导出：右侧装饰圆环溢出会撑大 scrollWidth，
-  // 若按 scrollWidth 导出，图片右侧会多出一条空白，卡片就无法独立完整呈现
+  // 导出尺寸必须与卡片实际布局严格一致：
+  // ① 右侧装饰圆环溢出不参与画布尺寸，否则图片右侧会多出空白；
+  // ② html2canvas 克隆时的视口宽度不能压到卡片自身，否则响应式 width:100%
+  //    会在克隆文档里被挤窄，卡片同样无法铺满导出的图片。
   const renderCardBlob = async () => {
     const card = cardRef.current;
     if (!card) throw new Error("卡片尚未准备好");
@@ -223,14 +225,20 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
       scale: 2,
       width,
       height,
-      windowWidth: width,
-      windowHeight: height,
+      windowWidth: Math.max(window.innerWidth || 0, width),
+      windowHeight: Math.max(window.innerHeight || 0, height),
       backgroundColor: "#FFFFFF",
       logging: false,
       useCORS: true,
-      // 导出的克隆节点去掉弹窗祖先的高度/滚动裁剪，长标题或长留言才能完整落进图片
+      // 克隆节点固定为实际卡片宽度；同时去掉弹窗祖先的高度/滚动裁剪，
+      // 长标题或长留言才能完整落进图片
       onclone: (clonedDoc) => {
         const clonedCard = clonedDoc.querySelector('[data-invite-card="true"]');
+        if (clonedCard) {
+          clonedCard.style.width = `${width}px`;
+          clonedCard.style.maxWidth = "none";
+          clonedCard.style.flex = "0 0 auto";
+        }
         let node = clonedCard?.parentElement;
         while (node && node !== clonedDoc.body) {
           node.style.overflow = "visible";

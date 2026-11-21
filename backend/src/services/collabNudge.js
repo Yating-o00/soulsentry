@@ -12,7 +12,7 @@ import { loadOwnerBuddyPersona } from "./buddyPersona.js";
 const STALE_MS = 24 * 3600 * 1000;       // 成员多久没发言算停滞
 const NODE_WINDOW_MS = 48 * 3600 * 1000; // 节点临期窗口
 const AGENT_QUIET_MS = 12 * 3600 * 1000; // Agent 自己刚说过话就闭嘴
-const NUDGE_COOLDOWN_MS = 24 * 3600 * 1000; // 同一空间推动冷却
+const NUDGE_COOLDOWN_MS = 48 * 3600 * 1000; // 同一空间推动冷却：不每天催，至少隔两天
 const REPLY_REMINDER_MS = Number(process.env.COLLAB_REPLY_REMINDER_HOURS || 4) * 3600 * 1000;
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
 const NUDGE_TOPICS = new Set(["推进", "提醒"]);
@@ -33,10 +33,10 @@ function fallbackNudge({ task, members, stuckDrafts, dueSoonNodes, persona }) {
         ? `@${names} 来，我们把「${task.title}」往前拱一步：`
         : `@${names} 我们的「${task.title}」有一会儿没有新进展了，不用急，一起往前挪一小步：`;
   const lines = [opener];
-  if (stuckDrafts.length > 0) lines.push(`· 子约定草案「${stuckDrafts[0].title}」还待确认，谁方便先看一下？`);
-  if (dueSoonNodes.length > 0) lines.push(`· 节点「${dueSoonNodes[0].title}」快到期了，需要定下来。`);
-  if (stuckDrafts.length === 0 && dueSoonNodes.length === 0) lines.push("· 在讨论里说一句最新进展，或 @我 整理下一步。");
-  lines.push("有任何新想法直接发在讨论里，我会持续跟着整理。");
+  if (stuckDrafts.length > 0) lines.push(`「${stuckDrafts[0].title}」还差一个确认，谁方便先看一眼？`);
+  if (dueSoonNodes.length > 0) lines.push(`节点「${dueSoonNodes[0].title}」快到了，我们定个时间？`);
+  if (stuckDrafts.length === 0 && dueSoonNodes.length === 0) lines.push("在讨论里说一句最新进展就好，或者 @我 帮你整理下一步。");
+  lines.push("看到回一句就行，不着急。");
   return lines.join("\n");
 }
 
@@ -116,6 +116,17 @@ async function maybeNudgeTask(task) {
   const nodeNeedsPush = dueSoonNodes.length > 0 && now - lastMemberAt >= AGENT_QUIET_MS;
   if (!((stale && unfinished) || draftAged || nodeNeedsPush)) return;
 
+  // 空间状态没变就不要重复同一条推动：卡住的草案/临近节点还是同一批时，
+  // 七天内不再发一模一样的提醒，避免像每天催促成员。
+  const nudgeSignature = JSON.stringify({
+    drafts: stuckDrafts.map((s) => s.title).sort(),
+    nodes: dueSoonNodes.map((n) => n.title).sort(),
+  });
+  const lastNudgeAt = agentMeta.lastNudgeAt ? new Date(agentMeta.lastNudgeAt).getTime() : 0;
+  if (agentMeta.lastNudgeSignature === nudgeSignature && lastNudgeAt && now - lastNudgeAt < 7 * 86400000) {
+    return;
+  }
+
   const taskWithMembers = await prisma.task.findUnique({
     where: { id: task.id },
     include: { members: { include: { user: true } }, user: true }
@@ -138,7 +149,7 @@ async function maybeNudgeTask(task) {
     await assertAICredits(taskWithMembers.userId, COST(), "collab_agent");
     const snapshot = await loadSpaceSnapshot(taskWithMembers);
     const system = buildSystem(collab.scenario, collab.agent, ownerPersona);
-    const prompt = `${formatSpaceData(taskWithMembers, snapshot)}\n\n你是这个空间的推动者。空间进展停滞了：成员已有一段时间没有新发言，或有草案久未确认 / 节点临近。请写一条「推动消息」发到讨论：\n1. 自然点名相关成员（${parties.map((p) => p.name).join("、")}），指出卡住的具体事项（待确认草案、临期节点、久未推进的子约定）；\n2. 给出可立刻执行的下一步建议（谁、做什么、什么时候前）；\n3. 表达方式严格遵循 system 里的人格设定（严格但不指责、温柔但不催促、战友但不轻佻）；不评判对错；200 字以内；不要用"Agent："开头。`;
+    const prompt = `${formatSpaceData(taskWithMembers, snapshot)}\n\n你是这个空间的推动者。空间进展停滞了：成员已有一段时间没有新发言，或有草案久未确认 / 节点临近。请写一条「推动消息」发到讨论：\n1. 自然点名相关成员（${parties.map((p) => p.name).join("、")}），指出卡住的具体事项（待确认草案、临期节点、久未推进的子约定）；\n2. 只给一个最小的下一步（谁、做什么，必要时说什么时候），说完就停；不说「你们怎么还没…」，不列罪状、不连问；\n3. 表达方式严格遵循 system 里的人格设定（严格但不指责、温柔但不催促、战友但不轻佻）；不评判对错；像朋友发一条微信，120 字以内；不要用"Agent："开头。`;
     const result = await callKimiChat({
       messages: [{ role: "system", content: system }, { role: "user", content: prompt }],
       temperature: 0.5,
@@ -170,7 +181,7 @@ async function maybeNudgeTask(task) {
 
   const nextMeta = {
     ...task.metadata,
-    collab: { ...collab, agent: { ...(collab.agent || {}), lastNudgeAt: new Date().toISOString() } }
+    collab: { ...collab, agent: { ...(collab.agent || {}), lastNudgeAt: new Date().toISOString(), lastNudgeSignature: nudgeSignature } }
   };
   await prisma.task.update({ where: { id: task.id }, data: { metadata: nextMeta } });
   await logCollabChange(taskWithMembers.userId, taskWithMembers, "collab_agent_action", [

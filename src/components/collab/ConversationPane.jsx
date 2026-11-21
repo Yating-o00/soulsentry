@@ -328,9 +328,10 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const handleSend = async () => {
-    const text = content.trim();
-    if ((!text && attachments.length === 0) || uploading) return;
+  const handleSend = async (overrideText) => {
+    const text = String(overrideText ?? content).trim();
+    const sendingAttachments = overrideText ? [] : attachments;
+    if ((!text && sendingAttachments.length === 0) || uploading) return;
     const mentionAgent = /@\s*(agent|心栈)/i.test(text);
     const mentionedUserIds = [...new Set(
       mentionableMembers
@@ -345,12 +346,14 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           parent_id: replyTo?.id || undefined,
           topic: topicFilter === "all" ? undefined : topicFilter,
           ...(mentionedUserIds.length > 0 ? { mentions: mentionedUserIds } : {}),
-          attachments: attachments.length > 0 ? attachments : undefined,
+          attachments: sendingAttachments.length > 0 ? sendingAttachments : undefined,
         },
       });
-      setContent("");
-      setReplyTo(null);
-      setAttachments([]);
+      if (!overrideText) {
+        setContent("");
+        setReplyTo(null);
+        setAttachments([]);
+      }
       setMentionOpen(false);
       invalidateAll();
       if (mentionAgent) {
@@ -368,6 +371,67 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
 
   const renderMessage = (message, isReply = false) => {
     const isAgent = !!message.agent;
+    const attachmentsAndCards = (
+      <>
+        <AttachmentView attachments={message.attachments} />
+        {(message.attachments || [])
+          .filter((a) => a?.type === "option_card")
+          .map((card, i) => (
+            <OptionCardView
+              key={`${message.id}-card-${i}`}
+              taskId={taskId}
+              commentId={message.id}
+              card={card}
+              currentUserId={currentUserId}
+            />
+          ))}
+      </>
+    );
+
+    // 搭子空间里的人聊天：用普通聊天窗口的气泡（自己靠右、成员/搭子靠左），
+    // 不显示“整理建议”“共识/分歧”这类工作台标签，也不把操作按钮塞进每条消息。
+    if (compact) {
+      const mine = message.created_by_id === currentUserId;
+      return (
+        <div
+          key={message.id}
+          id={`collab-msg-${message.id}`}
+          className={cn("py-1.5", isReply && "ml-9", flashingId === message.id && "collab-msg-flash")}
+        >
+          <div className={cn("flex gap-2", mine ? "justify-end" : "items-start pr-6")}>
+            {!mine && (isAgent
+              ? <AgentAvatar size="sm" />
+              : <MemberAvatar name={message.created_by_name || "成员"} seed={message.created_by} size="sm" className="border-white" />)}
+            <div className={cn("min-w-0 max-w-[84%]", mine && "flex flex-col items-end")}>
+              {!mine && (
+                <div className="mb-0.5 px-1 text-[10px]" style={{ color: "#8a867e" }}>
+                  {isAgent ? "心栈 Agent" : message.created_by_name || "成员"}
+                </div>
+              )}
+              <div
+                className={cn(
+                  "whitespace-pre-wrap break-words px-3.5 py-2.5 text-[14px] leading-relaxed",
+                  mine
+                    ? "rounded-2xl rounded-tr-sm bg-[#384877] text-[#FAF9F7]"
+                    : isAgent
+                      ? "rounded-2xl rounded-tl-sm border border-[#E6EAF4] bg-[#F5F7FC] text-[#4B5565]"
+                      : "rounded-2xl rounded-tl-sm border border-stone-200 bg-white text-stone-700 shadow-[0_1px_2px_rgba(36,36,36,0.04)]"
+                )}
+              >
+                {message.content}
+              </div>
+              <div className={cn("mt-1 px-1 text-[9px]", mine ? "text-right" : "")} style={{ color: "#a8a29e" }}>
+                {formatTime(message.created_date)}
+                {message.topic ? ` · ${message.topic}` : ""}
+              </div>
+              <div className={cn("w-full", mine && "flex flex-col items-end")}>{attachmentsAndCards}</div>
+            </div>
+          </div>
+          {!isReply && (message.replies || []).map((reply) => renderMessage(reply, true))}
+        </div>
+      );
+    }
+
     return (
       <div
         key={message.id}
@@ -411,18 +475,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             >
               {message.content}
             </p>
-            <AttachmentView attachments={message.attachments} />
-            {(message.attachments || [])
-              .filter((a) => a?.type === "option_card")
-              .map((card, i) => (
-                <OptionCardView
-                  key={`${message.id}-card-${i}`}
-                  taskId={taskId}
-                  commentId={message.id}
-                  card={card}
-                  currentUserId={currentUserId}
-                />
-              ))}
+            {attachmentsAndCards}
 
             {!isAgent && !isReply && (
               <MessageActions
@@ -554,17 +607,33 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           </div>
         ) : filteredMessages.length === 0 ? (
           <EmptyState
-            title={topicFilter === "all" ? "还没有讨论" : "该主题下暂无讨论"}
+            title={topicFilter === "all" ? (compact ? "还没有人说话" : "还没有讨论") : "该主题下暂无讨论"}
             description={
               topicFilter === "all"
                 ? compact
-                  ? "先聊起来，Agent 会从讨论里整理约定和沉淀。"
+                  ? "先打个招呼，或说说这次想一起推进什么。"
                   : "写下第一条想法，共同约定会从这里开始。输入 @ 可以召唤心栈 Agent 总结、查资料或转化内容。"
                 : `在「${topicFilter}」里开始讨论。`
             }
           />
         ) : (
           filteredMessages.map((m) => renderMessage(m))
+        )}
+
+        {/* 聊天快捷回应：只在最后一条是搭子时出现，点一下就能继续聊 */}
+        {compact && !agentPendingSince && filteredMessages[filteredMessages.length - 1]?.agent && (
+          <div className="flex flex-wrap gap-2 px-1 pb-2 pt-1">
+            {["收到，我来跟进", "这一步再商量一下", "帮我整理成约定"].map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => handleSend(label)}
+                className="min-h-[32px] rounded-full border border-[#d8d6cf] bg-white px-3 text-[12px] text-stone-600 transition-colors hover:border-[#384877] hover:text-[#384877]"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         )}
 
         {/* @Agent 打字指示器 */}
@@ -696,7 +765,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               placeholder={
                 topicFilter === "all"
                   ? compact
-                    ? "@ 召唤 Agent · 讨论会自动整理"
+                    ? "说点什么…输入 @ 可以叫上搭子"
                     : "写下想法，输入 @ 召唤心栈 Agent…"
                   : `在「${topicFilter}」里说…`
               }
@@ -723,7 +792,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             />
             <Button
               size="sm"
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={(!content.trim() && attachments.length === 0) || uploading}
               className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
               style={{ backgroundColor: C.ink }}

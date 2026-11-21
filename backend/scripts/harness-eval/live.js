@@ -32,6 +32,7 @@ Object.assign(process.env, {
   JWT_SECRET: "harness-live-synthetic-only",
   CHAT_AI_PROVIDER: "deepseek",
   DEEPSEEK_MODEL: model,
+  DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
   KIMI_API_KEY: "",
   MOONSHOT_API_KEY: "",
   WECHAT_APPID: "",
@@ -64,7 +65,10 @@ try {
     return delay >= 35000 ? timer.unref() : timer;
   });
   mock.method(globalThis, "fetch", async (url, options) => {
-    if (String(url) !== "https://api.deepseek.com/chat/completions") throw new Error("Unexpected external request");
+    if (![
+      "https://api.deepseek.com/chat/completions",
+      "https://api.deepseek.com/v1/chat/completions",
+    ].includes(String(url))) throw new Error("Unexpected external request");
     if (totals.calls >= maxCalls || callTrace.length >= turnLimit) {
       totals.budgetBlocks = (totals.budgetBlocks || 0) + 1;
       throw new Error("Harness live model budget exhausted");

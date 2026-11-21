@@ -229,6 +229,7 @@ companionRouter.post("/messages", async (req, res) => {
         chatCalls: planRun.chatCalls, plannerCalls: planRun.plannerCalls,
         repairCount: Math.max(0, planRun.plannerCalls - 1), firstValidation: planRun.firstValidation,
         validation: planRun.validation, durationSource: planRun.constraints?.durationSource,
+        clarificationField: planRun.clarificationField, clarificationSource: planRun.clarificationSource,
         memoryId: planRun.constraints?.durationMemoryId, elapsedMs: Math.round(performance.now() - startedAt),
         proposalId: planDraft ? assistantMsg.id : undefined,
       }));

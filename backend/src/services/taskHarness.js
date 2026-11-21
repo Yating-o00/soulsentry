@@ -76,11 +76,17 @@ export function resolvePlanningRequest(request, messages, memories, now = new Da
     .filter(({ minutes, mode }) => minutes && mode === "max") : [];
   const values = new Set(remembered.map(({ minutes }) => minutes));
   const selected = asksForMemory && !explicit ? (values.size === 1 ? remembered[0] : null) : explicit;
-  let question = null;
-  if (!request.horizon_days) question = "这个计划想坚持多少天？比如 7 天、14 天或 21 天～";
-  else if (asksForMemory && !selected) question = "这项安排每次最多能用多少分钟？我按你的上限来排～";
-  else if (!selected) question = "每次大概能投入多少分钟？";
-  else if (selected && (selected.minutes < 10 || selected.minutes > 180)) question = "每次可以安排 10 到 180 分钟，你想用多少分钟？";
+  let clarification = null;
+  if (!request.horizon_days) {
+    clarification = { field: "horizon_days", fallback: "这个计划想坚持多少天？比如 7 天、14 天或 21 天～" };
+  } else if (!selected) {
+    clarification = {
+      field: "daily_minutes",
+      fallback: asksForMemory ? "这项安排每次最多能用多少分钟？我按你的上限来排～" : "每次大概能投入多少分钟？",
+    };
+  } else if (selected.minutes < 10 || selected.minutes > 180) {
+    clarification = { fallback: "每次可以安排 10 到 180 分钟，你想用多少分钟？" };
+  }
   const resolved = { ...request, daily_minutes: selected?.minutes ?? request.daily_minutes };
   const availability = current.filter(({ fact }) => fact.topic === "calendar" && fact.attribute === "availability");
   const constraints = planningConstraints({
@@ -105,9 +111,9 @@ export function resolvePlanningRequest(request, messages, memories, now = new Da
   }
   constraints.weekdayEveningsOnly = WEEKDAY_EVENINGS_ONLY.test(context);
   if (constraints.weekdayEveningsOnly && (constraints.noWeekdayEvenings || constraints.sessionsPerWeek > 5)) {
-    question = "工作日晚间与当前次数或禁排条件冲突，你还可以在哪些时段安排？";
+    clarification = { fallback: "工作日晚间与当前次数或禁排条件冲突，你还可以在哪些时段安排？" };
   }
-  return { request: resolved, constraints, question };
+  return { request: resolved, constraints, clarification };
 }
 
 function planWindow(day, start, end) {

@@ -25,8 +25,12 @@ before(async () => {
     JWT_SECRET: "harness-eval-synthetic-only",
     CHAT_AI_PROVIDER: "deepseek",
     DEEPSEEK_API_KEY: "local-test",
+    DEEPSEEK_BASE_URL: "https://api.deepseek.com/v1",
+    DEEPSEEK_MODELS: "deepseek-chat",
     KIMI_API_KEY: "",
+    KIMI_FALLBACK_API_KEY: "",
     MOONSHOT_API_KEY: "",
+    MOONSHOT_FALLBACK_API_KEY: "",
     WECHAT_APPID: "",
     WECHAT_APP_SECRET: "",
     MEMORY_LEARNING_ENABLED: "0",
@@ -55,6 +59,7 @@ before(async () => {
   mock.method(globalThis, "fetch", async (url, options) => {
     assert.ok([
       "https://api.deepseek.com/chat/completions",
+      "https://api.deepseek.com/v1/chat/completions",
       "https://api.moonshot.cn/v1/chat/completions",
     ].includes(String(url)), "external network is disabled");
     const body = JSON.parse(options.body);
@@ -464,4 +469,22 @@ test("replays the same invalid first draft with zero repairs and with one repair
   assert.equal(prompts.length, 2);
   assert.match(prompts[1], /SESSION_COUNT/);
   assertSchedule({ extracted: { plan: result } }, 20);
+});
+
+test("keeps Kimi K3 and DeepSeek fallback for the upstream today chat route", async (t) => {
+  const original = process.env.CHAT_AI_PROVIDER;
+  delete process.env.CHAT_AI_PROVIDER;
+  process.env.KIMI_API_KEY = "local-test";
+  process.env.KIMI_BASE_URL = "https://api.moonshot.cn/v1";
+  t.after(() => {
+    process.env.CHAT_AI_PROVIDER = original;
+    process.env.KIMI_API_KEY = "";
+    delete process.env.KIMI_BASE_URL;
+  });
+  answers.push({ phase: "chat", status: 401 });
+  chatOnly();
+  const result = await post("/api/chat", { messages: [{ role: "user", content: "今天想整理一下思路。" }] });
+  assert.equal(result.status, 200);
+  assert.equal(result.data.reply, "我听着呢。");
+  assert.deepEqual(calls.map(({ model }) => model), ["kimi-k3", "deepseek-chat"]);
 });

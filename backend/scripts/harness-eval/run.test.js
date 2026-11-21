@@ -91,9 +91,10 @@ after(async () => {
   if (dir) rmSync(dir, { recursive: true, force: true });
 });
 
-function intent({ goal = "英语词汇复习", days = 7, minutes = 20 } = {}) {
+function intent({ goal = "英语词汇复习", days = 7, minutes = 20, reply = "我来帮你安排。", clarificationField } = {}) {
   answers.push({ phase: "chat", data: {
-    reply: "我来帮你安排。",
+    reply,
+    clarification_field: clarificationField,
     extracted: { type: "plan", plan_request: { goal, horizon_days: days, daily_minutes: minutes } },
   } });
 }
@@ -186,15 +187,57 @@ test("routes a complete home workout through the same workflow", async () => {
 });
 
 test("asks for a missing duration and continues with the user's second turn", async () => {
-  intent({ minutes: null });
+  const question = "每次背单词，你想留多长时间？";
+  intent({ minutes: null, reply: question, clarificationField: "daily_minutes" });
   const first = await send("帮我规划一周英语词汇复习，每周三次");
-  assert.match(first.reply.content, /分钟/);
+  assert.equal(first.reply.content, question);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(await tasks(), []);
   assert.equal(first.extracted, null);
   assert.equal(plannerCalls().length, 0);
   intent({ minutes: 20 });
   draft();
   assertSchedule(await send("每次20分钟"), 20);
   assert.equal(plannerCalls().length, 1);
+});
+
+test("uses the model's contextual question when the planning horizon is missing", async () => {
+  const question = "你想先定多长的词汇复习周期呢？";
+  intent({ days: null, reply: question });
+  const result = await send("帮我做个英语词汇复习计划，每次20分钟");
+  assert.equal(result.reply.content, question);
+  assert.equal(result.extracted, null);
+  assert.equal(calls.length, 1);
+  assert.equal(plannerCalls().length, 0);
+  assert.deepEqual(await tasks(), []);
+});
+
+test("rejects a model question aimed at the wrong missing field", async () => {
+  intent({ days: null, reply: "你想为每次背词留多久？", clarificationField: "daily_minutes" });
+  const result = await send("帮我做个英语词汇复习计划，每次20分钟");
+  assert.match(result.reply.content, /计划想坚持多少天/);
+  assert.equal(result.extracted, null);
+  assert.equal(calls.length, 1);
+  assert.equal(plannerCalls().length, 0);
+});
+
+test("keeps only the question that matches the missing field", async () => {
+  const question = "那单次跟读想留多长时间呢？";
+  intent({ goal: "西语跟读", minutes: null, reply: "七天跟读，每周三次，我记下了。" + question + "另外你更喜欢早上还是晚上？" });
+  const result = await send("帮我安排一周西语跟读计划，每周三次");
+  assert.equal(result.reply.content, question);
+  assert.equal(result.extracted, null);
+  assert.equal(calls.length, 1);
+  assert.equal(plannerCalls().length, 0);
+});
+
+test("uses a safe follow-up when the model labels unrelated wording as a duration question", async () => {
+  intent({ minutes: null, reply: "你是想安排到周几？", clarificationField: "daily_minutes" });
+  const result = await send("帮我规划一周英语词汇复习，每周三次");
+  assert.equal(result.reply.content, "每次大概能投入多少分钟？");
+  assert.equal(result.extracted, null);
+  assert.equal(calls.length, 1);
+  assert.equal(plannerCalls().length, 0);
 });
 
 test("does not plan in response to ordinary chat", async () => {
@@ -216,11 +259,26 @@ test("ignores wrong-topic and expired durations and applies the current study ca
 
 test("asks for the remembered duration when retrieved evidence belongs only to another activity", async () => {
   await memoryLimit("reading", "英语阅读每次最多45分钟");
-  intent({ minutes: 45 }); // The chat model guesses. The harness must clarify.
+  const question = "结合你这周的节奏，背词一回最多能留多少分钟？";
+  intent({ minutes: 45, reply: question, clarificationField: "daily_minutes" });
   const result = await send("帮我规划一周英语词汇复习，每周三次，按我平常的上限");
-  assert.match(result.reply.content, /分钟|上限/);
+  assert.ok(result.reply.content.startsWith(question));
+  assert.equal(calls.length, 1);
   assert.equal(result.extracted, null);
   assert.equal(plannerCalls().length, 0);
+});
+
+test("allows a natural question about competing duration limits without a provider field tag", async () => {
+  await memoryLimit("english_vocabulary", "英语词汇复习每次最多20分钟");
+  await memoryLimit("english_vocabulary", "英语词汇复习每次最多45分钟");
+  const question = "单次时长我看到20分钟和45分钟，你现在想按哪个来安排？";
+  intent({ minutes: null, reply: question });
+  const result = await send("帮我规划一周英语词汇复习，每周三次，按我平常的上限");
+  assert.ok(result.reply.content.startsWith(question));
+  assert.equal(result.extracted, null);
+  assert.equal(calls.length, 1);
+  assert.equal(plannerCalls().length, 0);
+  assert.deepEqual(await tasks(), []);
 });
 
 test("prefers this turn's explicit cap to a saved limit or model guess", async () => {

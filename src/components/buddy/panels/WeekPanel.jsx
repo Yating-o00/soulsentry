@@ -19,8 +19,17 @@ export default function WeekPanel({ tint, projectTask }) {
   // 近 7 天赴约情况（0/1）与连续天数
   const days = useMemo(() => {
     const items = checkinData?.items || [];
+    // 打卡 API 返回的时间字段是 created_at（snake_case）；兼容旧字段并跳过无效时间，
+    // 否则一条坏数据就会让 Date.toISOString 抛 RangeError，整个周报白屏
     const byDay = new Set(
-      items.map((it) => new Date(new Date(it.created_date || it.createdAt).getTime() + 8 * 3600000).toISOString().slice(0, 10))
+      items
+        .map((it) => {
+          const raw = it.created_at || it.created_date || it.createdAt;
+          const t = new Date(raw);
+          if (!raw || Number.isNaN(t.getTime())) return null;
+          return new Date(t.getTime() + 8 * 3600000).toISOString().slice(0, 10);
+        })
+        .filter(Boolean)
     );
     const arr = [];
     for (let i = 6; i >= 0; i--) {

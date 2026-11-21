@@ -28,7 +28,10 @@ export function MorningCheckPanel({ profile, tint, persona, projectTask }) {
     const items = checkinData?.items || [];
     const byDay = new Map();
     items.forEach((it) => {
-      const t = new Date(it.created_date || it.createdAt);
+      const raw = it.created_at || it.created_date || it.createdAt;
+      const t = new Date(raw);
+      // 跳过无效时间，避免一条脏打卡记录让整个早起面板白屏
+      if (!raw || Number.isNaN(t.getTime())) return;
       const key = new Date(t.getTime() + 8 * 3600000).toISOString().slice(0, 10);
       if (!byDay.has(key)) byDay.set(key, t);
     });

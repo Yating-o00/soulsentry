@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { Check, ChevronLeft, FileText, Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
@@ -10,11 +10,79 @@ import Orb from "@/components/buddy/Orb";
 import { BUDDY_TINTS, personaName } from "@/lib/buddies";
 
 const EXAMPLES = [
+  "厨房搭子：帮我规划一周健康饮食，教我用手头食材做菜，最好能一步步指导",
   "摄影搭子：帮我从随手拍开始，每周一个主题，慢慢拍出自己的风格",
   "写作搭子：陪我每天写 200 字，卡住时给我一个开头，不催我",
   "理财搭子：帮我看清每月支出，先养成记账习惯，不做投资建议",
   "健身搭子：每周练三次，根据我的状态调整强度，别让我硬撑",
 ];
+
+const MATERIAL_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.html,.htm,.xlsx,.xls,.png,.jpg,.jpeg,.webp";
+const MATERIAL_LIMIT = 5;
+const MATERIAL_MAX_SIZE = 20 * 1024 * 1024;
+
+function DesignMaterials({ materials, existingCount = 0, uploading, onAdd, onRemove }) {
+  const inputRef = useRef(null);
+  const total = existingCount + materials.length;
+  const full = total >= MATERIAL_LIMIT;
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-stone-600">
+          <FileText className="h-3.5 w-3.5 text-stone-400" />
+          给它几份参考资料（可选）
+        </div>
+        <span className="text-[10px] tabular-nums text-stone-400">{total}/{MATERIAL_LIMIT}</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-relaxed text-stone-400">
+        比如菜谱、营养笔记、你的做菜心得。心栈会先读一遍，把里面的方法和标准融进它的专业能力。
+      </p>
+      {existingCount > 0 && (
+        <p className="mt-1.5 text-[10px] text-[#384877]">这颗搭子已有 {existingCount} 份资料，会一起用于本次调整。</p>
+      )}
+      {materials.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {materials.map((item, index) => (
+            <li key={`${item.file_url}-${index}`} className="flex items-center gap-2 rounded-xl bg-[#FAF9F7] px-2.5 py-2">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-stone-400" />
+              <span className="min-w-0 flex-1 truncate text-[11px] text-stone-600">{item.name}</span>
+              <span className="shrink-0 text-[9px] text-stone-400">{item.chars} 字</span>
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-stone-400 hover:bg-white hover:text-stone-600"
+                aria-label={`移除 ${item.name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={MATERIAL_ACCEPT}
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          const files = event.target.files;
+          onAdd(files);
+          event.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={uploading || full}
+        className="mt-2 flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-stone-300 text-[11px] text-stone-500 hover:border-[#384877] hover:text-[#384877] disabled:opacity-50"
+      >
+        {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+        {uploading ? "正在读资料…" : full ? `最多 ${MATERIAL_LIMIT} 份资料` : "添加资料"}
+      </button>
+    </div>
+  );
+}
 
 /**
  * 设计搭子：
@@ -29,8 +97,10 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
   const [adjustment, setAdjustment] = useState("");
   const [buddy, setBuddy] = useState(null);
   const [savedBuddy, setSavedBuddy] = useState(null);
-  const [usage, setUsage] = useState(null);
-  const [credits, setCredits] = useState(null);
+  const [savedMaterialCount, setSavedMaterialCount] = useState(0);
+  const [materials, setMaterials] = useState([]);
+  const [existingMaterials, setExistingMaterials] = useState([]);
+  const [materialUploading, setMaterialUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -38,21 +108,60 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
     if (!open) return;
     setAdjustment("");
     setSavedBuddy(null);
-    setUsage(null);
+    setSavedMaterialCount(0);
+    setMaterials([]);
+    setExistingMaterials([]);
     setLoading(false);
     setSaving(false);
+    setMaterialUploading(false);
     if (editingBuddy?.id) {
       // 已上架的搭子：直接进入预览，继续用自然语言调整，保存时走 PUT 覆盖原配置
       setDescription(editingBuddy.description || "");
       setBuddy(editingBuddy);
+      httpRequest(`/api/buddies/${editingBuddy.id}/materials`)
+        .then((data) => setExistingMaterials(data?.materials || []))
+        .catch(() => setExistingMaterials([]));
     } else {
       setDescription("");
       setBuddy(null);
     }
-    httpRequest("/api/credits/balance")
-      .then((data) => setCredits(data?.ai_credits ?? null))
-      .catch(() => setCredits(null));
   }, [open, editingBuddy]);
+
+  const addMaterials = async (fileList) => {
+    const room = MATERIAL_LIMIT - existingMaterials.length - materials.length;
+    if (room <= 0) {
+      toast.info(`最多 ${MATERIAL_LIMIT} 份参考资料`);
+      return;
+    }
+    const files = Array.from(fileList || []).slice(0, room);
+    if (files.length === 0) return;
+    setMaterialUploading(true);
+    const added = [];
+    for (const file of files) {
+      if (file.size > MATERIAL_MAX_SIZE) {
+        toast.error(`「${file.name}」超过 20MB，换个小一点的文件`);
+        continue;
+      }
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const uploaded = await httpRequest("/api/uploads", { method: "POST", body: formData });
+        const inspected = await httpRequest("/api/buddies/custom/materials/inspect", {
+          method: "POST",
+          body: {
+            file_url: uploaded.file_url,
+            name: uploaded.file_name || file.name,
+            type: uploaded.file_type || file.type,
+          },
+        });
+        if (inspected?.material) added.push(inspected.material);
+      } catch (error) {
+        toast.error(error?.message || `「${file.name}」没能读出来`);
+      }
+    }
+    if (added.length > 0) setMaterials((current) => [...current, ...added].slice(0, MATERIAL_LIMIT));
+    setMaterialUploading(false);
+  };
 
   if (!open) return null;
 
@@ -69,31 +178,28 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
         method: "POST",
         body: {
           description: text,
+          materials,
           ...(feedback.trim() ? { feedback: feedback.trim(), current: buddy } : {}),
         },
       });
       if (result?.buddy) {
         setAdjustment("");
-        setUsage(result.usage || null);
+        // 左侧点数由全局余额自动刷新，不在设计流程里提示扣费
         if (result.usage?.balance != null) {
-          setCredits(result.usage.balance);
           updateCachedUser({ ai_credits: result.usage.balance });
           window.dispatchEvent(new CustomEvent("credits-updated", { detail: { credits: result.usage.balance } }));
         }
         if (result.degraded && buddy) {
           // 调整失败时不能拿兜底版覆盖用户已经满意的搭子
-          toast.info("AI 暂时有点忙，这次调整没有生效，原来的设定保留着；本次不扣点数");
+          toast.info("AI 暂时有点忙，这次调整没有生效，原来的设定保留着");
           return;
         }
         setBuddy(result.buddy);
         if (result.degraded) {
-          toast.info("AI 暂时有点忙，先给你一个可用版本，你可以继续描述调整；本次不扣点数");
-        } else if (result.usage?.charged > 0) {
-          toast.success(`已按实际用量扣 ${result.usage.charged} AI 点数`);
+          toast.info("AI 暂时有点忙，先给你一个可用版本，你可以继续描述调整");
         }
       }
     } catch (error) {
-      if (error?.data?.balance != null) setCredits(error.data.balance);
       toast.error(error?.message || "设计搭子失败了，再试一次");
     } finally {
       setLoading(false);
@@ -108,11 +214,14 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
         isEditing ? `/api/buddies/custom/${editingBuddy.id}` : "/api/buddies/custom",
         {
           method: isEditing ? "PUT" : "POST",
-          body: { buddy, description },
+          body: { buddy, description, materials },
         }
       );
       queryClient.invalidateQueries({ queryKey: ["buddies", "mine"] });
       if (isEditing) queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["buddy", result.buddy?.id || editingBuddy?.id, "materials"] });
+      setSavedMaterialCount(result.materials_added || 0);
+      setMaterials([]);
       setSavedBuddy(result.buddy);
       toast.success(
         isEditing
@@ -177,7 +286,7 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
               onChange={(e) => setDescription(e.target.value)}
               rows={5}
               maxLength={1200}
-              placeholder="比如：我想要一个摄影搭子，陪我从随手拍开始，每周一个主题，慢慢拍出自己的风格。不催我，但每次都能给我一个具体的小练习。"
+              placeholder="比如：我想要一个厨房搭子，帮我规划一周健康饮食，教我用冰箱里现有的食材做菜；我有些菜谱和营养笔记，也可以给它参考。"
               className="w-full resize-none rounded-2xl border border-stone-200 bg-white p-4 text-sm leading-relaxed text-stone-800 outline-none focus:border-[#384877]"
             />
             <div className="flex flex-wrap gap-1.5">
@@ -192,6 +301,13 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
                 </button>
               ))}
             </div>
+            <DesignMaterials
+              materials={materials}
+              existingCount={existingMaterials.length}
+              uploading={materialUploading}
+              onAdd={addMaterials}
+              onRemove={(index) => setMaterials((current) => current.filter((_, i) => i !== index))}
+            />
             <button
               type="button"
               onClick={() => design("")}
@@ -202,7 +318,7 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
               {loading ? "正在理解你的想法…" : "让心栈设计"}
             </button>
             <p className="text-center text-[10px] leading-relaxed text-stone-400">
-              {credits != null ? `当前余额 ${credits} 点；` : ""}会参考现在搭子的六要素结构；每次生成或调整按实际 token 扣 AI 点数（1 点 / 1000 token），AI 不可用时本次不扣点。生成后可以继续调整，确认后才上架。
+              心栈会按这个领域真正要做的事，设计它的专业能力、计划和对话方式；生成后可以继续调整，确认后才上架。
             </p>
           </div>
         )}
@@ -227,6 +343,19 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
                   <span className="text-[10px] tracking-widest text-stone-400">适合谁</span>
                   <p className="mt-0.5 text-stone-600">{buddy.forWhom}</p>
                 </div>
+                {(buddy.abilities || []).length > 0 && (
+                  <div>
+                    <span className="text-[10px] tracking-widest text-stone-400">它能帮你</span>
+                    <ul className="mt-1 space-y-1">
+                      {(buddy.abilities || []).map((ability) => (
+                        <li key={ability} className="flex items-start gap-1.5 text-stone-700">
+                          <span className="mt-[6px] h-1 w-1 shrink-0 rounded-full" style={{ background: tint[1] }} />
+                          {ability}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div>
                   <span className="text-[10px] tracking-widest text-stone-400">陪伴动作</span>
                   <ul className="mt-1 space-y-1">
@@ -277,6 +406,17 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
               </div>
             </div>
 
+            <DesignMaterials
+              materials={materials}
+              existingCount={existingMaterials.length}
+              uploading={materialUploading}
+              onAdd={addMaterials}
+              onRemove={(index) => setMaterials((current) => current.filter((_, i) => i !== index))}
+            />
+            <p className="text-center text-[10px] text-stone-400">
+              新加的资料会随保存留在搭子里；如果想让它们也融入能力设计，再加一句调整让它重读一遍。
+            </p>
+
             <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-3">
               <div className="text-[11px] text-stone-500">想改哪里？继续用自然语言说</div>
               <textarea
@@ -298,15 +438,6 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
               </button>
             </div>
 
-            {usage && (
-              <p className="text-center text-[10px] text-stone-400">
-                {usage.charged > 0
-                  ? `本次消耗 ${usage.charged} AI 点数（${usage.billable_tokens || 0} token）${usage.balance != null ? `，余额 ${usage.balance} 点` : ""}`
-                  : usage.billable_tokens > 0
-                    ? "本次生成已完成，余额不足未扣点"
-                    : "本次 AI 暂不可用，未扣点数"}
-              </p>
-            )}
             <button
               type="button"
               onClick={save}
@@ -317,7 +448,7 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
               {saving ? (isEditing ? "正在保存…" : "正在上架…") : (isEditing ? "保存修改" : "确认生成，上架到我的 Store")}
             </button>
             <p className="text-center text-[10px] text-stone-400">
-              {isEditing ? "保存不消耗 AI 点数；只有继续让 AI 调整时才按 token 扣点。" : "上架后仍需认领，回答几个问题就会开始陪伴。"}
+              {isEditing ? "保存后，下一次对话就会按新的设定来。" : "上架后仍需认领，回答几个问题就会开始陪伴。"}
             </p>
           </div>
         )}
@@ -333,6 +464,7 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
               {isEditing
                 ? "新的设定已经保存。已上传的资料、项目和协同都保留着，下一次对话会按新的设定来。"
                 : "已经出现在你的搭子 Store。现在认领它，回答几个问题就能开始使用，也可以随时在 Store 里找到它。"}
+              {savedMaterialCount > 0 ? ` 你给的 ${savedMaterialCount} 份参考资料也收进它的「资料」里了。` : ""}
             </p>
             <div className="mt-4 flex gap-2">
               <button

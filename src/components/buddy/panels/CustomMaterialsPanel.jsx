@@ -164,7 +164,7 @@ export default function CustomMaterialsPanel({ buddy, tint }) {
           {uploading ? "正在读这份资料…" : full ? `已满 ${MAX_MATERIALS} 份` : "上传一份资料"}
         </button>
         <p className="mt-2 text-center text-[10px] leading-relaxed text-stone-400">
-          资料只供你这颗搭子使用；在你发起的协同里，Agent 会按它给出建议，但不会把原文展示给伙伴。上传和删除不消耗 AI 点数。
+          资料只供你这颗搭子使用；在你发起的协同里，Agent 会按它给出建议，但不会把原文展示给伙伴。
         </p>
       </section>
 

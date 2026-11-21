@@ -584,6 +584,19 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
           )}
         </section>
       )}
+      {(buddy.abilities || []).length > 0 && (
+        <section className="rounded-2xl border border-stone-200 bg-white p-5">
+          <div className="text-[11px] tracking-widest text-stone-400">它能帮你</div>
+          <ul className="mt-2.5 space-y-2">
+            {(buddy.abilities || []).map((ability) => (
+              <li key={ability} className="flex items-start gap-2 text-[13px] leading-relaxed text-stone-600">
+                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint[1] }} />
+                {ability}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
     </div>
   );

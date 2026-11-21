@@ -37,6 +37,7 @@ export function normalizeCustomBuddy(raw) {
       buddy: greeting.buddy || "来，今天一起把这件事往前拱一点。",
     },
     actions: Array.isArray(raw.actions) ? raw.actions : [],
+    abilities: Array.isArray(raw.abilities) ? raw.abilities : [],
     questions: Array.isArray(raw.questions) ? raw.questions : [],
     quickAsks: Array.isArray(raw.quickAsks) ? raw.quickAsks : [],
     planTitle: (answers) => fillPlan(raw.plan?.title, answers) || `${name} · 陪伴计划`,

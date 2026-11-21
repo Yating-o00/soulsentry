@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
-import { Sparkles, Plus, Pencil } from "lucide-react";
+import { Sparkles, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import Orb from "@/components/buddy/Orb";
 import { BUDDY_TINTS, personaName } from "@/lib/buddies";
 import { getAllBuddies } from "@/lib/customBuddies";
@@ -12,11 +13,35 @@ import CustomBuddyDesigner from "@/components/buddy/CustomBuddyDesigner";
 // 搭子Store —— 货架上卖的不是一次性 Agent，而是一段长期关系（六要素知情认领）
 export default function BuddyStore() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [designerOpen, setDesignerOpen] = useState(false);
   const [editingBuddy, setEditingBuddy] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const closeDesigner = () => {
     setDesignerOpen(false);
     setEditingBuddy(null);
+  };
+  const deleteBuddy = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    try {
+      const result = await httpRequest(`/api/buddies/custom/${deleteTarget.id}`, { method: "DELETE" });
+      queryClient.invalidateQueries({ queryKey: ["buddies", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["buddies"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["buddy", deleteTarget.id, "materials"] });
+      toast.success(
+        result?.detached_tasks > 0
+          ? `${deleteTarget.name} 已删除，原来的项目和协同已转为普通内容保留`
+          : `${deleteTarget.name} 已删除`
+      );
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error(error?.message || "删除失败，再试一次");
+    } finally {
+      setDeleting(false);
+    }
   };
   const { data: mine } = useQuery({
     queryKey: ["buddies", "mine"],
@@ -77,6 +102,19 @@ export default function BuddyStore() {
                   <div className="text-[11px] tracking-widest text-stone-400">适合谁</div>
                   <p className="mt-1 leading-relaxed text-stone-600">{buddy.forWhom}</p>
                 </div>
+                {(buddy.abilities || []).length > 0 && (
+                  <div>
+                    <div className="text-[11px] tracking-widest text-stone-400">专业能力</div>
+                    <ul className="mt-1.5 space-y-1.5">
+                      {(buddy.abilities || []).map((ability) => (
+                        <li key={ability} className="flex items-start gap-2 leading-relaxed text-stone-700">
+                          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint[1] }} />
+                          {ability}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div>
                   <div className="text-[11px] tracking-widest text-stone-400">陪伴动作</div>
                   <ul className="mt-1.5 space-y-1.5">
@@ -112,17 +150,28 @@ export default function BuddyStore() {
 
               <div className="px-5 pb-5">
                 {buddy.custom && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingBuddy(buddy);
-                      setDesignerOpen(true);
-                    }}
-                    className="mb-2 flex w-full items-center justify-center gap-1.5 py-1 text-[12px] text-stone-400 transition-colors hover:text-[#384877]"
-                  >
-                    <Pencil className="h-3 w-3" />
-                    调整设计
-                  </button>
+                  <div className="mb-2 flex items-center justify-center gap-4 py-1 text-[12px] text-stone-400">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingBuddy(buddy);
+                        setDesignerOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 transition-colors hover:text-[#384877]"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      调整设计
+                    </button>
+                    <span className="h-3 w-px bg-stone-200" />
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(buddy)}
+                      className="flex items-center gap-1.5 transition-colors hover:text-rose-500"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      删除搭子
+                    </button>
+                  </div>
                 )}
                 {claimed ? (
                   <button
@@ -160,7 +209,7 @@ export default function BuddyStore() {
                 设计我的搭子 <Plus className="h-3.5 w-3.5 text-stone-300 transition-colors group-hover:text-[#384877]" />
               </div>
               <p className="mt-0.5 text-[12px] leading-relaxed text-stone-500">
-                用自然语言描述你想要一个怎样的搭子，心栈帮你生成六要素、计划和对话方式；可以反复调整，满意后上架到自己的 Store。
+                用自然语言描述你想要一个怎样的搭子，心栈会按这个领域真正要做的事，设计它的专业能力、计划和对话方式；可以反复调整，满意后上架到自己的 Store。
               </p>
             </div>
           </div>
@@ -172,6 +221,47 @@ export default function BuddyStore() {
       </div>
 
       <CustomBuddyDesigner open={designerOpen} editingBuddy={editingBuddy} onClose={closeDesigner} />
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-[96] flex items-end justify-center bg-[#231f20]/45 p-4 sm:items-center"
+          onClick={() => { if (!deleting) setDeleteTarget(null); }}
+        >
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6" onClick={(event) => event.stopPropagation()}>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-500">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <h2 className="mt-3 text-lg font-semibold text-stone-900">删除「{deleteTarget.name}」？</h2>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-stone-500">
+              它会从你的 Store 消失，专属资料也会一并删除。已经创建的项目和协同会保留下来，变成普通内容，不会丢数据。此操作不能撤销。
+            </p>
+            {profiles[deleteTarget.id]?.status === "active" && (
+              <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-700">
+                这颗搭子正在陪伴中，删除后它的空间入口会消失。
+              </p>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 rounded-full border border-stone-200 py-2.5 text-sm text-stone-600 disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={deleteBuddy}
+                disabled={deleting}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-rose-500 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                {deleting ? "正在删除…" : "删除搭子"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

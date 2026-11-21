@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildCustomBuddyPrompt,
   buildFallbackCustomBuddy,
   getCustomBuddy,
   sanitizeCustomBuddy,
@@ -30,4 +31,28 @@ test("只读取属于当前账号的自定义搭子配置", () => {
   };
   assert.equal(getCustomBuddy(extra, "custom_1")?.name, "摄影搭子");
   assert.equal(getCustomBuddy(extra, "study"), null);
+});
+
+test("自定义搭子保留专业能力，厨房兜底也按领域设计", () => {
+  const buddy = sanitizeCustomBuddy({
+    name: "厨房搭子",
+    abilities: ["按健康目标规划一周菜单", "根据现有食材给菜谱", "分步骤教做菜"],
+  });
+  assert.equal(buddy.abilities.length, 3);
+
+  const kitchen = buildFallbackCustomBuddy("我想要一个厨房搭子，教我用手头食材做菜");
+  assert.equal(kitchen.name, "厨房搭子");
+  assert.ok(kitchen.abilities.some((item) => item.includes("菜单")));
+  assert.ok(kitchen.quickAsks.some((item) => item.includes("冰箱")));
+});
+
+test("设计提示词要求领域能力，并吸收上传的参考资料", () => {
+  const built = buildCustomBuddyPrompt({
+    description: "厨房搭子，帮我规划健康饮食并教我做法",
+    materialContext: "【我的菜谱笔记】少油少盐，先备菜再开火",
+  });
+  assert.match(built.prompt, /"abilities"/);
+  assert.match(built.prompt, /真实工作流/);
+  assert.match(built.prompt, /我的菜谱笔记/);
+  assert.match(built.systemPrompt, /不要套用/);
 });

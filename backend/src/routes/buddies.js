@@ -70,7 +70,7 @@ function buildProjectTaskData(buddyId, answers = {}, customBuddy = null) {
     const planTitle = fillPlanTemplate(customBuddy.plan?.title, answers) || `${customBuddy.name} · 陪伴计划`;
     return {
       title: planTitle.slice(0, 60),
-      description: `${customBuddy.name}：${customBuddy.slogan || ""}。${(customBuddy.actions || []).slice(0, 2).join("；")}`.slice(0, 500),
+      description: `${customBuddy.name}：${customBuddy.slogan || ""}。能帮你：${(customBuddy.abilities || customBuddy.actions || []).slice(0, 2).join("；")}`.slice(0, 500),
       category: "personal",
       extra: { buddy_id: buddyId, buddy_name: customBuddy.name },
     };
@@ -183,6 +183,117 @@ buddiesRouter.post("/profile", async (req, res) => {
   return res.json({ ok: true, ...patch });
 });
 
+const materialSchema = z.object({
+  file_url: z.string().min(1).max(600),
+  name: z.string().min(1).max(200),
+  type: z.string().max(100).optional().nullable(),
+});
+
+const DESIGN_MATERIAL_LIMIT = 5;
+
+function readableMaterialText(value) {
+  const extracted = String(value || "").trim();
+  if (!extracted) return "";
+  if (/不支持的文件类型|文件内容为空|文件内容提取失败|文件过大/.test(extracted)) return "";
+  return extracted.slice(0, 12000);
+}
+
+// 设计阶段允许用户先喂参考资料：这里只提取文字，不落库；确认上架时才写入 BuddyMaterial
+buddiesRouter.post("/custom/materials/inspect", async (req, res) => {
+  const parsed = materialSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
+  }
+  const text = await readAttachmentText({
+    url: parsed.data.file_url,
+    name: parsed.data.name,
+    type: parsed.data.type,
+  }).catch(() => "");
+  const extracted = readableMaterialText(text);
+  if (!extracted) {
+    return res.status(400).json({
+      error: "EMPTY_CONTENT",
+      message: "没有从这份资料里读到可用的文字；扫描件可以先转成文字，或换一份 PDF/Word/文本",
+    });
+  }
+  return res.json({
+    material: {
+      file_url: parsed.data.file_url,
+      name: parsed.data.name.slice(0, 200),
+      type: parsed.data.type || null,
+      text: extracted,
+      chars: extracted.length,
+    },
+  });
+});
+
+// 设计/保存时读取用户随请求带来的资料，统一成注入提示词的上下文
+async function collectMaterialContext(items = []) {
+  const list = Array.isArray(items) ? items.slice(0, DESIGN_MATERIAL_LIMIT) : [];
+  const parts = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    let text = readableMaterialText(item.text);
+    if (!text && item.file_url) {
+      text = readableMaterialText(await readAttachmentText({
+        url: item.file_url,
+        name: item.name || "资料",
+        type: item.type || item.file_type,
+      }).catch(() => ""));
+    }
+    if (!text) continue;
+    parts.push(`【${String(item.name || "资料").slice(0, 200)}】\n${text}`);
+  }
+  return parts.join("\n\n").slice(0, 6000);
+}
+
+async function persistCustomMaterials(userId, buddyId, items = []) {
+  const list = Array.isArray(items) ? items.slice(0, DESIGN_MATERIAL_LIMIT) : [];
+  if (list.length === 0) return { added: 0, skipped: 0 };
+  const existingRows = await prisma.buddyMaterial.findMany({
+    where: { userId, buddyId },
+    select: { fileUrl: true },
+  });
+  const seenUrls = new Set(existingRows.map((row) => row.fileUrl).filter(Boolean));
+  let count = existingRows.length;
+  let added = 0;
+  let skipped = 0;
+  for (const item of list) {
+    if (!item || typeof item !== "object" || count >= DESIGN_MATERIAL_LIMIT) {
+      skipped += 1;
+      continue;
+    }
+    const fileUrl = String(item.file_url || "").slice(0, 600);
+    if (fileUrl && seenUrls.has(fileUrl)) continue;
+    let text = readableMaterialText(item.text);
+    if (!text && fileUrl) {
+      text = readableMaterialText(await readAttachmentText({
+        url: fileUrl,
+        name: item.name || "资料",
+        type: item.type || item.file_type,
+      }).catch(() => ""));
+    }
+    if (!text) {
+      skipped += 1;
+      continue;
+    }
+    await prisma.buddyMaterial.create({
+      data: {
+        userId,
+        buddyId,
+        name: String(item.name || "资料").slice(0, 200),
+        fileUrl: fileUrl || null,
+        fileType: item.type || item.file_type || null,
+        text,
+      },
+    });
+    if (fileUrl) seenUrls.add(fileUrl);
+    count += 1;
+    added += 1;
+  }
+  return { added, skipped };
+}
+
 // POST /api/buddies/custom/design —— 自然语言描述 → 生成/调整一颗自定义搭子（只预览，不上架）
 buddiesRouter.post("/custom/design", async (req, res) => {
   const description = String(req.body?.description || "").trim().slice(0, 1200);
@@ -201,7 +312,29 @@ buddiesRouter.post("/custom/design", async (req, res) => {
       required: error?.required,
     });
   }
-  const built = buildCustomBuddyPrompt({ description, feedback, current });
+  const newMaterialContext = await collectMaterialContext(req.body?.materials);
+  let existingMaterialContext = "";
+  if (current?.id) {
+    try {
+      const { extra } = await readExtraFields(req.user.id);
+      if (getCustomBuddy(extra, current.id)) {
+        const rows = await prisma.buddyMaterial.findMany({
+          where: { userId: req.user.id, buddyId: current.id },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: { name: true, text: true },
+        });
+        existingMaterialContext = rows
+          .map((item) => `【${item.name}】\n${item.text}`)
+          .join("\n\n")
+          .slice(0, 6000);
+      }
+    } catch (error) {
+      console.warn("[buddies/custom] 读取已有资料失败:", error?.message || error);
+    }
+  }
+  const materialContext = [newMaterialContext, existingMaterialContext].filter(Boolean).join("\n\n").slice(0, 6000);
+  const built = buildCustomBuddyPrompt({ description, feedback, current, materialContext });
   try {
     const result = await invokeKimiText({
       prompt: built.prompt,
@@ -264,7 +397,13 @@ buddiesRouter.post("/custom", async (req, res) => {
   config.createdAt = new Date().toISOString();
   existing[id] = config;
   await writeExtraFields(req.user.id, pref, { custom_buddies: existing });
-  return res.status(201).json({ buddy: config });
+  let materials = { added: 0, skipped: 0 };
+  try {
+    materials = await persistCustomMaterials(req.user.id, id, req.body?.materials);
+  } catch (error) {
+    console.warn("[buddies/custom] 保存设计资料失败:", error?.message || error);
+  }
+  return res.status(201).json({ buddy: config, materials_added: materials.added, materials_skipped: materials.skipped });
 });
 
 // PUT /api/buddies/custom/:id —— 持续调整已上架的自定义搭子
@@ -313,16 +452,64 @@ buddiesRouter.put("/custom/:id", async (req, res) => {
       }
     }
   }
-  return res.json({ buddy: config });
+  let materials = { added: 0, skipped: 0 };
+  try {
+    materials = await persistCustomMaterials(req.user.id, customId, req.body?.materials);
+  } catch (error) {
+    console.warn("[buddies/custom] 保存设计资料失败:", error?.message || error);
+  }
+  return res.json({ buddy: config, materials_added: materials.added, materials_skipped: materials.skipped });
+});
+
+// DELETE /api/buddies/custom/:id —— 删除自己设计的搭子（项目和协同保留，转为普通内容）
+buddiesRouter.delete("/custom/:id", async (req, res) => {
+  const customId = req.params.id;
+  const { pref, extra } = await readExtraFields(req.user.id);
+  const existing = extra.custom_buddies && typeof extra.custom_buddies === "object" ? { ...extra.custom_buddies } : {};
+  if (!existing[customId]) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗自定义搭子不存在" });
+  }
+  const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? { ...extra.buddy_profiles } : {};
+  const profile = profiles[customId];
+  delete existing[customId];
+  delete profiles[customId];
+  await writeExtraFields(req.user.id, pref, { custom_buddies: existing, buddy_profiles: profiles });
+  await prisma.buddyMaterial.deleteMany({ where: { userId: req.user.id, buddyId: customId } }).catch((error) => {
+    console.warn("[buddies/custom] 删除搭子资料失败:", error?.message || error);
+  });
+
+  // 关联的项目/协同保留下来，但摘掉已删除搭子的绑定，避免卡片继续跳到不存在的搭子空间
+  let detachedTasks = 0;
+  try {
+    const tasks = await prisma.task.findMany({
+      where: { userId: req.user.id },
+      select: { id: true, metadata: true },
+    });
+    for (const task of tasks) {
+      const extraFields = task.metadata?._extraFields;
+      if (!extraFields || extraFields.buddy_id !== customId) continue;
+      const nextExtraFields = { ...extraFields };
+      delete nextExtraFields.buddy_id;
+      delete nextExtraFields.buddy_name;
+      await prisma.task.update({
+        where: { id: task.id },
+        data: {
+          metadata: {
+            ...(task.metadata && typeof task.metadata === "object" ? task.metadata : {}),
+            _extraFields: nextExtraFields,
+          },
+        },
+      });
+      detachedTasks += 1;
+    }
+  } catch (error) {
+    console.warn("[buddies/custom] 解除项目/协同绑定失败:", error?.message || error);
+  }
+
+  return res.json({ ok: true, had_profile: Boolean(profile), detached_tasks: detachedTasks });
 });
 
 /* ---------- 专属搭子资料：让自定义搭子在特定方向更专业 ---------- */
-
-const materialSchema = z.object({
-  file_url: z.string().min(1).max(600),
-  name: z.string().min(1).max(200),
-  type: z.string().max(100).optional().nullable(),
-});
 
 async function assertCustomBuddy(req, res) {
   const buddyId = req.params.id;
@@ -796,7 +983,7 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
       ? `关于这位用户，${buddyName}记住的领域档案：${Object.values(answers).join("；")}。`
       : "";
   const customLine = buddyMeta.custom
-    ? `这颗搭子由用户自己设计：主张「${buddyMeta.slogan || ""}」，陪伴动作是${(buddyMeta.actions || []).join("；")}；记忆范围：${buddyMeta.memory || "用户的目标与进展"}。`
+    ? `这颗搭子由用户自己设计：主张「${buddyMeta.slogan || ""}」；专业能力是${(buddyMeta.abilities || buddyMeta.actions || []).join("；") || "围绕用户目标给具体指导"}；陪伴动作是${(buddyMeta.actions || []).join("；")}；记忆范围：${buddyMeta.memory || "用户的目标与进展"}。回答专业问题时必须用上这些能力，给出具体步骤、方法或示范，不能只做空泛陪伴。`
     : "";
   const materialLine = buddyMeta.materialContext
     ? `\n用户给这颗搭子上传了专属资料。回答时优先依据这些资料，给出具体的专业判断；资料没有覆盖的内容就说「资料里没写到，我按一般经验说说」，不要编造：\n${buddyMeta.materialContext}\n`
@@ -1037,6 +1224,7 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
     expertise: customBuddy.expertise,
     custom: true,
     slogan: customBuddy.slogan,
+    abilities: customBuddy.abilities,
     actions: customBuddy.actions,
     memory: customBuddy.memory,
     materialContext,

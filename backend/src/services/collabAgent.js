@@ -153,8 +153,9 @@ export function buildSystem(scenario, agentMeta, persona = null) {
   // 协同空间属于用户自定义搭子时，沿用它的专业身份与上传的专属资料
   const custom = agentMeta?.customBuddy;
   if (custom) {
+    const abilities = Array.isArray(custom.abilities) ? custom.abilities.slice(0, 5).join("；") : "";
     layers.push(
-      `这颗协同空间属于用户自己设计的「${custom.name}」，专业方向：${custom.expertise || custom.slogan || "围绕共同目标提供具体陪伴"}。回答时保持这个身份，不要变成通用助手。`
+      `这颗协同空间属于用户自己设计的「${custom.name}」，专业方向：${custom.expertise || custom.slogan || "围绕共同目标提供具体陪伴"}${abilities ? `；能实际交付：${abilities}` : ""}。回答时保持这个身份，给具体方法、步骤或示范，不要变成通用助手。`
     );
   }
   if (agentMeta?.materialContext) {

@@ -60,6 +60,7 @@ model User {
   collabDocs        CollabDoc[]
   collabInvites     CollabInvite[]
   companionMessages CompanionMessage[]
+  buddyMaterials    BuddyMaterial[]
 }
 
 // 小助手陪伴对话：用户消息与助手回复都落库（巡检主动消息 kind=proactive），跨端/重进可读
@@ -981,4 +982,19 @@ enum CreditTransactionType {
   GIFT
   REFUND
   SUBSCRIPTION_BONUS
+}
+
+
+model BuddyMaterial {
+  id        String   @id @default(cuid())
+  userId    String
+  buddyId   String
+  name      String
+  fileUrl   String?
+  fileType  String?
+  text      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, buddyId])
 }

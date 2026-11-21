@@ -1,19 +1,29 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
+import { Sparkles, Plus, Pencil } from "lucide-react";
 import Orb from "@/components/buddy/Orb";
-import { BUDDIES, BUDDY_TINTS, personaName } from "@/lib/buddies";
+import { BUDDY_TINTS, personaName } from "@/lib/buddies";
+import { getAllBuddies } from "@/lib/customBuddies";
+import CustomBuddyDesigner from "@/components/buddy/CustomBuddyDesigner";
 
 // 搭子Store —— 货架上卖的不是一次性 Agent，而是一段长期关系（六要素知情认领）
 export default function BuddyStore() {
   const navigate = useNavigate();
+  const [designerOpen, setDesignerOpen] = useState(false);
+  const [editingBuddy, setEditingBuddy] = useState(null);
+  const closeDesigner = () => {
+    setDesignerOpen(false);
+    setEditingBuddy(null);
+  };
   const { data: mine } = useQuery({
     queryKey: ["buddies", "mine"],
     queryFn: () => httpRequest("/api/buddies/mine"),
   });
   const profiles = mine?.buddies || {};
+  const buddies = useMemo(() => getAllBuddies(mine), [mine]);
 
   return (
     <div className="max-w-3xl lg:max-w-5xl mx-auto px-4 py-6 md:py-10">
@@ -24,8 +34,8 @@ export default function BuddyStore() {
       </p>
 
       <div className="mt-6 space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0 lg:items-start">
-        {BUDDIES.map((buddy) => {
-          const tint = BUDDY_TINTS[buddy.id];
+        {buddies.map((buddy) => {
+          const tint = buddy.tint || BUDDY_TINTS[buddy.id] || BUDDY_TINTS.study;
           const profile = profiles[buddy.id];
           const claimed = profile?.status === "active";
           return (
@@ -45,6 +55,11 @@ export default function BuddyStore() {
                         style={{ background: tint[2] }}
                       >
                         陪伴中
+                      </span>
+                    )}
+                    {buddy.custom && (
+                      <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[10px] font-medium text-[#384877]">
+                        我的设计
                       </span>
                     )}
                     {profile?.status === "graduated" && (
@@ -96,6 +111,19 @@ export default function BuddyStore() {
               </div>
 
               <div className="px-5 pb-5">
+                {buddy.custom && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingBuddy(buddy);
+                      setDesignerOpen(true);
+                    }}
+                    className="mb-2 flex w-full items-center justify-center gap-1.5 py-1 text-[12px] text-stone-400 transition-colors hover:text-[#384877]"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    调整设计
+                  </button>
+                )}
                 {claimed ? (
                   <button
                     onClick={() => navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}`)}
@@ -115,10 +143,35 @@ export default function BuddyStore() {
             </article>
           );
         })}
+        <button
+          type="button"
+          onClick={() => {
+            setEditingBuddy(null);
+            setDesignerOpen(true);
+          }}
+          className="group w-full rounded-3xl border border-dashed border-stone-300 bg-white/70 p-5 text-left transition-colors hover:border-[#384877] hover:bg-[#eef2ff]/30 lg:col-span-2"
+        >
+          <div className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877]">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 text-[15px] font-semibold text-stone-900">
+                设计我的搭子 <Plus className="h-3.5 w-3.5 text-stone-300 transition-colors group-hover:text-[#384877]" />
+              </div>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-stone-500">
+                用自然语言描述你想要一个怎样的搭子，心栈帮你生成六要素、计划和对话方式；可以反复调整，满意后上架到自己的 Store。
+              </p>
+            </div>
+          </div>
+        </button>
+
         <p className="px-2 pt-1 text-center text-xs leading-relaxed text-stone-400">
-          更多搭子在路上：健身搭子、求职搭子、记账搭子……
+          更多搭子在路上：健身搭子、求职搭子、记账搭子……也可以自己设计一颗。
         </p>
       </div>
+
+      <CustomBuddyDesigner open={designerOpen} editingBuddy={editingBuddy} onClose={closeDesigner} />
     </div>
   );
 }

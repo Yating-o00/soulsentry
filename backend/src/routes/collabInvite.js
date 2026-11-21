@@ -282,17 +282,20 @@ collabInviteRouter.get("/invite/:code", optionalAuth, async (req, res) => {
     created_date: comment.createdAt
   }));
   const buddyId = task.metadata?._extraFields?.buddy_id || null;
+  const buddyName = task.metadata?._extraFields?.buddy_name || null;
   return res.json({
     invite: serializeInvite(invite),
     task_id: task.id,
     buddy_id: buddyId,
+    buddy_name: buddyName,
     pact: {
       title: task.title,
       goal: collab.goal || "",
       scenario: collab.scenario || "custom",
       member_count: memberIds.size,
       task_id: task.id,
-      buddy_id: buddyId
+      buddy_id: buddyId,
+      buddy_name: buddyName
     },
     pacts,
     discussion,
@@ -406,7 +409,8 @@ collabInviteRouter.post("/invite/:code/respond", requireAuth, async (req, res) =
   return res.json({
     invite: serializeInvite(updated),
     task_id: task.id,
-    buddy_id: task.metadata?._extraFields?.buddy_id || null
+    buddy_id: task.metadata?._extraFields?.buddy_id || null,
+    buddy_name: task.metadata?._extraFields?.buddy_name || null
   });
 });
 

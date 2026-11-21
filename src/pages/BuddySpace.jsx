@@ -8,11 +8,13 @@ import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
 import { cn } from "@/lib/utils";
 import Orb from "@/components/buddy/Orb";
-import { BUDDY_TINTS, DEFAULT_PERSONA, getBuddy, personaName } from "@/lib/buddies";
+import { BUDDY_TINTS, DEFAULT_PERSONA, personaName } from "@/lib/buddies";
+import { getBuddyFromMine } from "@/lib/customBuddies";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
 import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
 import BuddyCollabPanel from "@/components/collab/BuddyCollabPanel";
 import SolvePanel from "@/components/buddy/panels/SolvePanel";
+import CustomMaterialsPanel from "@/components/buddy/panels/CustomMaterialsPanel";
 import WeekPanel from "@/components/buddy/panels/WeekPanel";
 import { ItineraryPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
 import { ReadingNowPanel, ShelfPanel, ReadingNotesPanel } from "@/components/buddy/panels/ReadingPanels";
@@ -40,13 +42,13 @@ export default function BuddySpace() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const buddyId = new URLSearchParams(location.search).get("buddy") || "";
-  const buddy = getBuddy(buddyId);
-  const tint = BUDDY_TINTS[buddyId] || BUDDY_TINTS.study;
 
   const { data: mine, isLoading } = useQuery({
     queryKey: ["buddies", "mine"],
     queryFn: () => httpRequest("/api/buddies/mine"),
   });
+  const buddy = getBuddyFromMine(buddyId, mine);
+  const tint = buddy?.tint || BUDDY_TINTS[buddyId] || BUDDY_TINTS.study;
   const profile = mine?.buddies?.[buddyId];
   // 每颗搭子独立人格：先看用户在这颗搭子下的设置，再用该搭子类型的默认人格
   const persona = profile?.persona || buddy?.defaultPersona || mine?.persona || DEFAULT_PERSONA;
@@ -109,6 +111,15 @@ export default function BuddySpace() {
   const [creatingProject, setCreatingProject] = useState(false);
   const [deleteCollabTarget, setDeleteCollabTarget] = useState(null);
   const [deletingCollab, setDeletingCollab] = useState(false);
+
+  if (!buddy && isLoading) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center text-stone-400">
+        <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+        <p className="mt-2 text-sm">正在打开搭子空间…</p>
+      </div>
+    );
+  }
 
   if (!buddy) {
     return (
@@ -278,6 +289,19 @@ export default function BuddySpace() {
 
       {/* 板块内容 */}
       <div className="mt-5">
+        {activeTab === sections[0] && buddy?.custom && (
+          <div className="space-y-4">
+            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+            <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
+            <BuddyProjectsSection
+              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
+              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
+              onCreateProject={() => setNewProjectOpen(true)}
+              onCreateCollab={() => setNewCollabOpen(true)}
+              onDeleteCollab={setDeleteCollabTarget}
+            />
+          </div>
+        )}
         {activeTab === sections[0] && buddyId === "study" && (
           <div className="space-y-4">
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
@@ -355,6 +379,9 @@ export default function BuddySpace() {
         )}
         {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
         {activeTab === "笔记" && <ReadingNotesPanel tint={tint} />}
+        {activeTab === "资料" && buddy.custom && (
+          <CustomMaterialsPanel buddy={buddy} tint={tint} />
+        )}
         {activeTab === "协同" && (
           <CollabSection
             buddy={buddy}
@@ -379,7 +406,7 @@ export default function BuddySpace() {
         {activeTab === "习惯" && buddy.extras?.habitChain && (
           <HabitChainPanel chain={buddy.extras.habitChain} tint={tint} />
         )}
-        {!["协同", "画像", "清单", "习惯", "解题", "周报", "灵感", "书架", "笔记", "记录", "身体", "装备与知识"].includes(activeTab) &&
+        {!["协同", "资料", "画像", "清单", "习惯", "解题", "周报", "灵感", "书架", "笔记", "记录", "身体", "装备与知识"].includes(activeTab) &&
           activeTab !== sections[0] && <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />}
       </div>
 
@@ -388,6 +415,7 @@ export default function BuddySpace() {
         open={newCollabOpen}
         existingTask={null}
         buddyId={buddy.id}
+        buddyName={buddy.name}
         onClose={() => setNewCollabOpen(false)}
         onCreated={(id) => {
           setNewCollabOpen(false);
@@ -793,7 +821,7 @@ function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selec
             category: "collab",
             status: "pending",
             priority: "medium",
-            metadata: { collab: collabMeta(`和伙伴一起推进`), _extraFields: { buddy_id: buddy.id } },
+            metadata: { collab: collabMeta(`和伙伴一起推进`), _extraFields: { buddy_id: buddy.id, buddy_name: buddy.name } },
           },
         });
         if (created?.id) {

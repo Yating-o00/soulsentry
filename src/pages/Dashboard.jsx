@@ -9,7 +9,8 @@ import AssistantWidget from "@/components/assistant/AssistantWidget";
 import BuddyCompanions from "@/components/buddy/BuddyCompanions";
 import BuddyStoreStrip from "@/components/buddy/BuddyStoreStrip";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
-import { PERSONAS, DEFAULT_PERSONA, BUDDIES } from "@/lib/buddies";
+import { PERSONAS, DEFAULT_PERSONA } from "@/lib/buddies";
+import { getAllBuddies } from "@/lib/customBuddies";
 
 /**
  * 首页：通用 Agent 对话层（与样例一致）
@@ -62,7 +63,7 @@ export default function Dashboard() {
   }, [allTasks, notesList]);
 
   const activeBuddies = useMemo(
-    () => BUDDIES.filter((b) => mine?.buddies?.[b.id]?.status === "active"),
+    () => getAllBuddies(mine).filter((b) => mine?.buddies?.[b.id]?.status === "active"),
     [mine]
   );
 

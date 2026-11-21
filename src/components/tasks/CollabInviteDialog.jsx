@@ -644,7 +644,7 @@ export default function CollabInviteDialog({ task, members = [], subtasks = [], 
                           </span>
                         )}
                         <span style={{ fontSize: 9, color: "#5B6475", background: "#F3F5FA", borderRadius: 999, padding: "3px 8px" }}>
-                          {BUDDY_NAMES[task?.metadata?._extraFields?.buddy_id] || "Agent"} 全程协调
+                          {task?.metadata?._extraFields?.buddy_name || BUDDY_NAMES[task?.metadata?._extraFields?.buddy_id] || "Agent"} 全程协调
                         </span>
                       </div>
 

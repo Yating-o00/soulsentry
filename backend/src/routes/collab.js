@@ -682,9 +682,9 @@ collabRouter.post("/:taskId/docs/:docId/confirm", async (req, res) => {
           ...(buddyId
             ? {
                 buddy_id: buddyId,
-                buddy_name: BUDDY_NAMES[buddyId] || "搭子",
+                buddy_name: task.metadata?._extraFields?.buddy_name || BUDDY_NAMES[buddyId] || "搭子",
                 source_buddy: buddyId,
-                source_buddy_name: BUDDY_NAMES[buddyId] || "搭子",
+                source_buddy_name: task.metadata?._extraFields?.buddy_name || BUDDY_NAMES[buddyId] || "搭子",
                 source_scene: "协同沉淀",
                 source_task_id: task.id,
                 source_task_title: task.title

@@ -112,7 +112,7 @@ const TRUST_RULES = [
   "你是「心栈」协同约定空间的 Agent 助手，兼具「整理」与「沟通」两种能力，服务对象是该约定的全体成员。",
   "",
   "严格约束：",
-  "1. 只能使用消息中给出的空间数据（共同目标、子约定、讨论、执行节点、沉淀文档），不得臆测或引用成员的私人记录、其他约定、心签等空间外信息。",
+  "1. 只能使用消息中给出的空间数据（共同目标、子约定、讨论、执行节点、沉淀文档），以及创建者主动提供给这颗搭子的「专属资料」；不得臆测或引用其他成员的私人记录、其他约定、心签等未被提供的信息。",
   "2. 中性呈现各方观点，不评判谁对谁错，不替任何人做决定或承诺；数据不足就明说，不要编造。",
   "3. 你生成的子约定只是草案，必须经成员确认后才生效；但讨论中已达成共识、且完成标准已被满足的事项，你可以标记为自动完成（completed），成员可随时手动改回。",
   "4. 情侣/朋友场景不做关系评分、不说教。",
@@ -140,16 +140,29 @@ export function buildSystem(scenario, agentMeta, persona = null) {
     personaTail,
     personaTail ? "以上人格只决定表达方式；事实、安全边界与「不替成员做决定」的底线不变。" : "",
   ].filter(Boolean).join("\n\n");
+  const layers = [base];
   // 启用了 Agent 市场的专业方案：注入该领域的专业身份
   const template = agentMeta?.templateId ? findAgentTemplate(agentMeta.templateId) : null;
-  if (!template) return base;
-  return [
-    base,
-    "",
-    `专业身份：当前以「${template.name}」（${template.domain}领域）身份协同。${template.expertise}`,
-    "回应时主动运用该领域的专业知识、常见流程与坑点，让建议更专业、更可落地；",
-    "涉及法律/医疗/财务等高风险事项时，提醒成员「仅供参考，必要时咨询持证专业人士」。"
-  ].join("\n");
+  if (template) {
+    layers.push(
+      `专业身份：当前以「${template.name}」（${template.domain}领域）身份协同。${template.expertise}`,
+      "回应时主动运用该领域的专业知识、常见流程与坑点，让建议更专业、更可落地；",
+      "涉及法律/医疗/财务等高风险事项时，提醒成员「仅供参考，必要时咨询持证专业人士」。"
+    );
+  }
+  // 协同空间属于用户自定义搭子时，沿用它的专业身份与上传的专属资料
+  const custom = agentMeta?.customBuddy;
+  if (custom) {
+    layers.push(
+      `这颗协同空间属于用户自己设计的「${custom.name}」，专业方向：${custom.expertise || custom.slogan || "围绕共同目标提供具体陪伴"}。回答时保持这个身份，不要变成通用助手。`
+    );
+  }
+  if (agentMeta?.materialContext) {
+    layers.push(
+      `创建者给这颗搭子上传了专属资料。优先依据这些资料给出专业建议；不要把资料原文整段复述给成员，只提炼成可执行的建议。资料没有覆盖的内容就明说「资料里没写到」，不要编造：\n${agentMeta.materialContext}`
+    );
+  }
+  return layers.filter(Boolean).join("\n\n");
 }
 
 // ── 子约定编号与树：空间数据展示与 parentHint 解析共用同一套标签（S1、S1-1…），保证对齐 ──
@@ -1491,6 +1504,42 @@ export async function runCollabAgent(params) {
   }
 }
 
+// 自定义搭子的协同上下文：沿用它的专业身份 + 创建者上传的专属资料。
+// 资料只用于生成建议，不把原文回显给其他成员。
+async function loadOwnerCustomBuddyContext(userId, buddyId) {
+  if (!userId || !buddyId) return null;
+  try {
+    const pref = await prisma.userPreference.findUnique({
+      where: { userId },
+      select: { metadata: true },
+    });
+    const extra = pref?.metadata?._extraFields || {};
+    const custom = extra.custom_buddies && typeof extra.custom_buddies === "object"
+      ? extra.custom_buddies[buddyId]
+      : null;
+    if (!custom) return null;
+    let materialContext = "";
+    try {
+      const materials = await prisma.buddyMaterial.findMany({
+        where: { userId, buddyId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { name: true, text: true },
+      });
+      materialContext = materials
+        .map((item) => `【${item.name}】\n${item.text}`)
+        .join("\n\n")
+        .slice(0, 6000);
+    } catch (error) {
+      console.warn("[collabAgent] 读取搭子专属资料失败:", error?.message || error);
+    }
+    return { customBuddy: custom, materialContext };
+  } catch (error) {
+    console.warn("[collabAgent] 读取自定义搭子上下文失败:", error?.message || error);
+    return null;
+  }
+}
+
 async function runCollabAgentLocked({ taskId, action, user, commentId = null }) {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -1520,13 +1569,17 @@ async function runCollabAgentLocked({ taskId, action, user, commentId = null }) 
     // 最短间隔守卫以「开始时间」为准，而不是结束时间（LLM 一轮可能跑 1-2 分钟）
     await touchLastDriveAt(taskId);
   }
-  // 协同 Agent 沿用协同创建者在这颗搭子下的人格设定
-  const ownerPersona = await loadOwnerBuddyPersona({
-    prisma,
-    userId: task.userId,
-    buddyId: task.metadata?._extraFields?.buddy_id || null,
-  });
-  const system = buildSystem(collab.scenario, collab.agent, ownerPersona);
+  // 协同 Agent 沿用协同创建者在这颗搭子下的人格设定与自定义搭子的专业资料
+  const buddyId = task.metadata?._extraFields?.buddy_id || null;
+  const [ownerPersona, customContext] = await Promise.all([
+    loadOwnerBuddyPersona({ prisma, userId: task.userId, buddyId }),
+    loadOwnerCustomBuddyContext(task.userId, buddyId),
+  ]);
+  const agentMeta = {
+    ...(collab.agent && typeof collab.agent === "object" ? collab.agent : {}),
+    ...(customContext || {}),
+  };
+  const system = buildSystem(collab.scenario, agentMeta, ownerPersona);
   const result = await runAction({ action, task, snapshot, system, user, commentId });
 
   // 结算：竞态余额不足只告警放行（沿用 functions.js settleCredits 惯例）

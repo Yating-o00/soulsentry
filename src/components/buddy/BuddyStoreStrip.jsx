@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
 import Orb from "@/components/buddy/Orb";
-import { BUDDIES, BUDDY_TINTS } from "@/lib/buddies";
+import { BUDDY_TINTS } from "@/lib/buddies";
+import { getAllBuddies } from "@/lib/customBuddies";
 
 // 首页「搭子Store」常驻入口：未认领的横滑货架；全部在岗时给「都在岗」提示卡
 export default function BuddyStoreStrip() {
@@ -14,8 +15,9 @@ export default function BuddyStoreStrip() {
     queryFn: () => httpRequest("/api/buddies/mine"),
   });
   const profiles = mine?.buddies || {};
-  const claimed = BUDDIES.filter((b) => profiles[b.id]?.status === "active");
-  const unclaimed = BUDDIES.filter((b) => profiles[b.id]?.status !== "active");
+  const allBuddies = useMemo(() => getAllBuddies(mine), [mine]);
+  const claimed = allBuddies.filter((b) => profiles[b.id]?.status === "active");
+  const unclaimed = allBuddies.filter((b) => profiles[b.id]?.status !== "active");
 
   return (
     <section className="mt-8">
@@ -34,7 +36,7 @@ export default function BuddyStoreStrip() {
               to={`${createPageUrl("BuddyClaim")}?buddy=${b.id}`}
               className="w-[150px] shrink-0 rounded-2xl border border-[#e7e5e4] bg-[#FFFFFF] p-4 transition-transform duration-200 hover:scale-[1.02] active:scale-95"
             >
-              <Orb size={40} tint={BUDDY_TINTS[b.id]} />
+              <Orb size={40} tint={b.tint || BUDDY_TINTS[b.id] || BUDDY_TINTS.study} />
               <div className="mt-2.5 font-medium text-[#1c1917]">{b.name}</div>
               <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-[#a8a29e]">{b.slogan}</div>
             </Link>
@@ -47,7 +49,7 @@ export default function BuddyStoreStrip() {
         >
           <div className="flex -space-x-2">
             {claimed.slice(0, 5).map((b) => (
-              <Orb key={b.id} size={30} tint={BUDDY_TINTS[b.id]} />
+              <Orb key={b.id} size={30} tint={b.tint || BUDDY_TINTS[b.id] || BUDDY_TINTS.study} />
             ))}
           </div>
           <div className="flex-1 text-sm text-[#57534e]">

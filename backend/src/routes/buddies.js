@@ -2,9 +2,12 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
-import { invokeKimiText, FAST_TEXT_MODELS } from "../lib/kimi.js";
+import crypto from "node:crypto";
+import { invokeKimiText, FAST_TEXT_MODELS, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
 import { readAttachmentText } from "../services/readAttachment.js";
+import { assertAICredits, chargeAICredits, usageCost } from "../services/aiCredits.js";
 import { BUDDY_DEFAULT_PERSONA, pickBuddyPersona } from "../services/buddyPersona.js";
+import { buildCustomBuddyPrompt, buildFallbackCustomBuddy, getCustomBuddy, isKnownBuddyId, sanitizeCustomBuddy } from "../services/customBuddies.js";
 
 /**
  * 搭子（Buddy）L1 底座：
@@ -52,9 +55,26 @@ async function writeExtraFields(userId, pref, patch) {
   return prisma.userPreference.create({ data: { userId, metadata } });
 }
 
+// 计划模板里的 {key} 用认领答案替换；缺的字段用「待定」，不让占位符露给用户
+function fillPlanTemplate(template, answers = {}) {
+  return String(template || "").replace(/\{([a-z0-9_]+)\}/gi, (_, key) => {
+    const value = String(answers[key] || "").trim().slice(0, 40);
+    return value || "待定";
+  });
+}
+
 // 项目约定模板（认领即立项目）：标题与形态由服务端定型
-function buildProjectTaskData(buddyId, answers = {}) {
+function buildProjectTaskData(buddyId, answers = {}, customBuddy = null) {
   const a = (k, d = "") => String(answers[k] || d).slice(0, 60);
+  if (customBuddy) {
+    const planTitle = fillPlanTemplate(customBuddy.plan?.title, answers) || `${customBuddy.name} · 陪伴计划`;
+    return {
+      title: planTitle.slice(0, 60),
+      description: `${customBuddy.name}：${customBuddy.slogan || ""}。${(customBuddy.actions || []).slice(0, 2).join("；")}`.slice(0, 500),
+      category: "personal",
+      extra: { buddy_id: buddyId, buddy_name: customBuddy.name },
+    };
+  }
   switch (buddyId) {
     case "study":
       return {
@@ -119,6 +139,8 @@ buddiesRouter.get("/mine", async (req, res) => {
     persona: extra.persona || "gentle",
     id_profile: extra.id_profile || null,
     buddies: extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? extra.buddy_profiles : {},
+    // 用户自己设计的搭子：只在自己的 Store 上架，定义随账号持久化
+    custom_buddies: extra.custom_buddies && typeof extra.custom_buddies === "object" ? extra.custom_buddies : {},
   });
 });
 
@@ -161,10 +183,242 @@ buddiesRouter.post("/profile", async (req, res) => {
   return res.json({ ok: true, ...patch });
 });
 
+// POST /api/buddies/custom/design —— 自然语言描述 → 生成/调整一颗自定义搭子（只预览，不上架）
+buddiesRouter.post("/custom/design", async (req, res) => {
+  const description = String(req.body?.description || "").trim().slice(0, 1200);
+  const feedback = String(req.body?.feedback || "").trim().slice(0, 600);
+  const current = req.body?.current && typeof req.body.current === "object" ? req.body.current : null;
+  if (description.length < 4) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "先说说你想要一个什么样的搭子" });
+  }
+  try {
+    await assertAICredits(req.user.id, 1, "custom_buddy_design");
+  } catch (error) {
+    return res.status(402).json({
+      error: "INSUFFICIENT_CREDITS",
+      message: error?.message || "AI 点数不足",
+      balance: error?.balance,
+      required: error?.required,
+    });
+  }
+  const built = buildCustomBuddyPrompt({ description, feedback, current });
+  try {
+    const result = await invokeKimiText({
+      prompt: built.prompt,
+      systemPrompt: built.systemPrompt,
+      responseJsonSchema: true,
+      models: DASHBOARD_TEXT_MODELS,
+      maxTokens: 2500,
+      fetchTimeout: 30000,
+      withUsage: true,
+    });
+    // 先校验/整理模型输出，再按真实用量扣点，避免输出异常时白扣
+    const buddy = sanitizeCustomBuddy(result.data, { description });
+    const { cost, billableTokens } = usageCost(result.usage);
+    let charged = 0;
+    let balance = null;
+    try {
+      const settled = await chargeAICredits({
+        userId: req.user.id,
+        cost,
+        feature: "custom_buddy_design",
+        description: `设计搭子 · ${description.slice(0, 24)}`,
+      });
+      charged = cost;
+      balance = settled.balance;
+    } catch (chargeError) {
+      if (chargeError?.code === "INSUFFICIENT_CREDITS") {
+        console.warn(`[buddies/custom] 设计完成但结算余额不足（${chargeError.balance} < ${chargeError.required}），本次放行`);
+      } else {
+        console.error("[buddies/custom] 设计扣点失败:", chargeError?.message || chargeError);
+      }
+    }
+    return res.json({
+      buddy,
+      usage: { cost, billable_tokens: billableTokens, charged, balance },
+    });
+  } catch (error) {
+    console.warn("[buddies/custom] AI 设计失败，使用可用兜底:", error?.message || error);
+    return res.json({
+      buddy: buildFallbackCustomBuddy(description),
+      degraded: true,
+      usage: { cost: 0, billable_tokens: 0, charged: 0 },
+    });
+  }
+});
+
+// POST /api/buddies/custom —— 确认上架一颗自定义搭子到自己的 Store
+buddiesRouter.post("/custom", async (req, res) => {
+  const raw = req.body?.buddy;
+  if (!raw || typeof raw !== "object") {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "缺少搭子配置" });
+  }
+  const { pref, extra } = await readExtraFields(req.user.id);
+  const existing = extra.custom_buddies && typeof extra.custom_buddies === "object" ? { ...extra.custom_buddies } : {};
+  if (Object.keys(existing).length >= 20) {
+    return res.status(400).json({ error: "LIMIT_REACHED", message: "最多上架 20 颗自己设计的搭子" });
+  }
+  const id = `custom_${crypto.randomBytes(4).toString("hex")}`;
+  const config = sanitizeCustomBuddy(raw, { description: raw.description || String(req.body?.description || "") });
+  config.id = id;
+  config.createdAt = new Date().toISOString();
+  existing[id] = config;
+  await writeExtraFields(req.user.id, pref, { custom_buddies: existing });
+  return res.status(201).json({ buddy: config });
+});
+
+// PUT /api/buddies/custom/:id —— 持续调整已上架的自定义搭子
+buddiesRouter.put("/custom/:id", async (req, res) => {
+  const customId = req.params.id;
+  const raw = req.body?.buddy;
+  if (!raw || typeof raw !== "object") {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "缺少搭子配置" });
+  }
+  const { pref, extra } = await readExtraFields(req.user.id);
+  const existing = extra.custom_buddies && typeof extra.custom_buddies === "object" ? { ...extra.custom_buddies } : {};
+  const previous = existing[customId];
+  if (!previous) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗自定义搭子不存在" });
+  }
+  const config = sanitizeCustomBuddy(raw, { description: raw.description || previous.description || "" });
+  config.id = customId;
+  config.createdAt = previous.createdAt || new Date().toISOString();
+  config.updatedAt = new Date().toISOString();
+  existing[customId] = config;
+
+  // 已认领时同步档案里的搭子名；配置与档案一次性写入，避免用旧 metadata 覆盖刚保存的配置
+  const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? { ...extra.buddy_profiles } : {};
+  const profile = profiles[customId];
+  const patch = { custom_buddies: existing };
+  if (profile) {
+    profiles[customId] = { ...profile, buddy_name: config.name };
+    patch.buddy_profiles = profiles;
+  }
+  await writeExtraFields(req.user.id, pref, patch);
+
+  if (profile) {
+    if (profile.project_task_id) {
+      try {
+        const task = await prisma.task.findUnique({ where: { id: profile.project_task_id }, select: { metadata: true } });
+        if (task) {
+          const metadata = task.metadata && typeof task.metadata === "object" ? { ...task.metadata } : {};
+          const extraFields = metadata._extraFields && typeof metadata._extraFields === "object" ? { ...metadata._extraFields } : {};
+          await prisma.task.update({
+            where: { id: profile.project_task_id },
+            data: { metadata: { ...metadata, _extraFields: { ...extraFields, buddy_name: config.name } } },
+          });
+        }
+      } catch (error) {
+        console.warn("[buddies/custom] 同步项目搭子名失败:", error?.message || error);
+      }
+    }
+  }
+  return res.json({ buddy: config });
+});
+
+/* ---------- 专属搭子资料：让自定义搭子在特定方向更专业 ---------- */
+
+const materialSchema = z.object({
+  file_url: z.string().min(1).max(600),
+  name: z.string().min(1).max(200),
+  type: z.string().max(100).optional().nullable(),
+});
+
+async function assertCustomBuddy(req, res) {
+  const buddyId = req.params.id;
+  const { pref, extra } = await readExtraFields(req.user.id);
+  const buddy = getCustomBuddy(extra, buddyId);
+  if (!buddy) {
+    res.status(404).json({ error: "NOT_FOUND", message: "只有自己设计的搭子可以上传专属资料" });
+    return null;
+  }
+  return { pref, extra, buddyId, buddy };
+}
+
+buddiesRouter.get("/:id/materials", async (req, res) => {
+  const ctx = await assertCustomBuddy(req, res);
+  if (!ctx) return;
+  const rows = await prisma.buddyMaterial.findMany({
+    where: { userId: req.user.id, buddyId: ctx.buddyId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, fileUrl: true, fileType: true, text: true, createdAt: true },
+  });
+  return res.json({
+    materials: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      file_url: row.fileUrl,
+      file_type: row.fileType,
+      chars: String(row.text || "").length,
+      created_at: row.createdAt,
+    })),
+    limit: 5,
+  });
+});
+
+buddiesRouter.post("/:id/materials", async (req, res) => {
+  const ctx = await assertCustomBuddy(req, res);
+  if (!ctx) return;
+  const parsed = materialSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
+  }
+  const count = await prisma.buddyMaterial.count({ where: { userId: req.user.id, buddyId: ctx.buddyId } });
+  if (count >= 5) {
+    return res.status(400).json({ error: "LIMIT_REACHED", message: "最多上传 5 份专属资料，先删掉旧的再加" });
+  }
+  const text = await readAttachmentText({
+    url: parsed.data.file_url,
+    name: parsed.data.name,
+    type: parsed.data.type,
+  }).catch(() => "");
+  const extracted = String(text || "").trim();
+  if (!extracted || /不支持的文件类型|文件内容为空|文件内容提取失败|文件过大/.test(extracted)) {
+    return res.status(400).json({
+      error: "EMPTY_CONTENT",
+      message: "没有从这份资料里读到可用的文字；扫描件可以先转成文字，或换一份 PDF/Word/文本",
+    });
+  }
+  const material = await prisma.buddyMaterial.create({
+    data: {
+      userId: req.user.id,
+      buddyId: ctx.buddyId,
+      name: parsed.data.name.slice(0, 200),
+      fileUrl: parsed.data.file_url,
+      fileType: parsed.data.type || null,
+      text: String(text).slice(0, 12000),
+    },
+  });
+  return res.status(201).json({
+    material: {
+      id: material.id,
+      name: material.name,
+      file_url: material.fileUrl,
+      file_type: material.fileType,
+      chars: material.text.length,
+      created_at: material.createdAt,
+    },
+  });
+});
+
+buddiesRouter.delete("/:id/materials/:materialId", async (req, res) => {
+  const ctx = await assertCustomBuddy(req, res);
+  if (!ctx) return;
+  const deleted = await prisma.buddyMaterial.deleteMany({
+    where: { id: req.params.materialId, userId: req.user.id, buddyId: ctx.buddyId },
+  });
+  if (deleted.count === 0) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "资料不存在" });
+  }
+  return res.json({ ok: true });
+});
+
 // POST /api/buddies/:id/claim —— 认领：写领域档案 + 创建项目约定（项目制绑定）
 buddiesRouter.post("/:id/claim", async (req, res) => {
   const buddyId = req.params.id;
-  if (!BUDDY_IDS.has(buddyId)) {
+  const { pref, extra } = await readExtraFields(req.user.id);
+  const customBuddy = getCustomBuddy(extra, buddyId);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
     return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
   }
   const parsed = claimSchema.safeParse(req.body || {});
@@ -172,14 +426,13 @@ buddiesRouter.post("/:id/claim", async (req, res) => {
     return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
   }
 
-  const { pref, extra } = await readExtraFields(req.user.id);
   const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? { ...extra.buddy_profiles } : {};
   const existing = profiles[buddyId];
   if (existing && existing.status === "active") {
     return res.status(409).json({ error: "ALREADY_CLAIMED", message: "这颗搭子已经在陪你啦" });
   }
 
-  const taskData = buildProjectTaskData(buddyId, parsed.data.answers);
+  const taskData = buildProjectTaskData(buddyId, parsed.data.answers, customBuddy);
   const task = await prisma.task.create({
     data: {
       userId: req.user.id,
@@ -223,7 +476,9 @@ buddiesRouter.post("/:id/claim", async (req, res) => {
     plan_title: parsed.data.plan_title || null,
     plan_lines: Array.isArray(parsed.data.plan_lines) ? parsed.data.plan_lines : [],
     // 每颗搭子独立人格：认领时选定的 > 搭子类型默认 > 全局人格
-    persona: parsed.data.persona || BUDDY_DEFAULT_PERSONA[buddyId] || extra.persona || "gentle",
+    persona: parsed.data.persona || customBuddy?.defaultPersona || BUDDY_DEFAULT_PERSONA[buddyId] || extra.persona || "gentle",
+    buddy_name: customBuddy?.name || BUDDY_NAMES[buddyId] || null,
+    custom: Boolean(customBuddy),
     project_task_id: task.id,
     claimed_at: new Date().toISOString(),
     graduated_at: null,
@@ -236,10 +491,10 @@ buddiesRouter.post("/:id/claim", async (req, res) => {
 // POST /api/buddies/:id/graduate —— 毕业：关系归档，约定保留，搭子回货架
 buddiesRouter.post("/:id/graduate", async (req, res) => {
   const buddyId = req.params.id;
-  if (!BUDDY_IDS.has(buddyId)) {
+  const { pref, extra } = await readExtraFields(req.user.id);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
     return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
   }
-  const { pref, extra } = await readExtraFields(req.user.id);
   const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? { ...extra.buddy_profiles } : {};
   const profile = profiles[buddyId];
   if (!profile || profile.status !== "active") {
@@ -263,10 +518,10 @@ buddiesRouter.post("/:id/graduate", async (req, res) => {
 // 再让搭子回货架；约定、心签、子约定全部保留，下次可以重新认领接着用。
 buddiesRouter.post("/:id/stop", async (req, res) => {
   const buddyId = req.params.id;
-  if (!BUDDY_IDS.has(buddyId)) {
+  const { pref, extra } = await readExtraFields(req.user.id);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
     return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
   }
-  const { pref, extra } = await readExtraFields(req.user.id);
   const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? { ...extra.buddy_profiles } : {};
   const profile = profiles[buddyId];
   if (!profile || profile.status !== "active") {
@@ -298,7 +553,7 @@ export const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", read
  * 约定/心签本身不删除；下次重新认领还能接着用。
  */
 async function createBuddySediment(userId, buddyId, profile, scene) {
-  const buddyName = BUDDY_NAMES[buddyId] || "搭子";
+  const buddyName = profile?.buddy_name || BUDDY_NAMES[buddyId] || "搭子";
   const planTitle = profile?.plan_title ? String(profile.plan_title) : "";
   let projectTask = null;
   let childStats = null;
@@ -432,9 +687,6 @@ async function getActiveProfile(userId, buddyId) {
 // POST /api/buddies/:id/state —— 合并写入本搭子的板块状态（领域档案隔离：只动本搭子的 state）
 buddiesRouter.post("/:id/state", async (req, res) => {
   const buddyId = req.params.id;
-  if (!BUDDY_IDS.has(buddyId)) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
-  }
   const patch = req.body?.patch;
   if (!isPlainObject(patch)) {
     return res.status(400).json({ error: "INVALID_INPUT", message: "patch 必须是对象" });
@@ -442,7 +694,10 @@ buddiesRouter.post("/:id/state", async (req, res) => {
   if (JSON.stringify(patch).length > 60000) {
     return res.status(413).json({ error: "TOO_LARGE", message: "板块状态过大，请联系心栈" });
   }
-  const { pref, profiles, profile } = await getActiveProfile(req.user.id, buddyId);
+  const { pref, profiles, profile, extra } = await getActiveProfile(req.user.id, buddyId);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
+  }
   if (!profile) {
     return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
   }
@@ -455,14 +710,14 @@ buddiesRouter.post("/:id/state", async (req, res) => {
 // POST /api/buddies/:id/persona —— 单独切换某颗搭子的陪伴人格（不影响全局小助手人格）
 buddiesRouter.post("/:id/persona", async (req, res) => {
   const buddyId = req.params.id;
-  if (!BUDDY_IDS.has(buddyId)) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
-  }
   const persona = String(req.body?.persona || "");
   if (!["gentle", "strict", "buddy"].includes(persona)) {
     return res.status(400).json({ error: "INVALID_INPUT", message: "未知的人格类型" });
   }
-  const { pref, profiles, profile } = await getActiveProfile(req.user.id, buddyId);
+  const { pref, profiles, profile, extra } = await getActiveProfile(req.user.id, buddyId);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
+  }
   if (!profile) {
     return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
   }
@@ -533,13 +788,20 @@ function detectBuddyGroupIntent(text) {
   };
 }
 
-function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
-  const buddyName = BUDDY_NAMES[buddyId] || "搭子";
+function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMeta = {}) {
+  const buddyName = buddyMeta.name || BUDDY_NAMES[buddyId] || "搭子";
+  const expertise = buddyMeta.expertise || BUDDY_EXPERTISE[buddyId] || "";
   const profileLine =
     answers && Object.keys(answers).length > 0
       ? `关于这位用户，${buddyName}记住的领域档案：${Object.values(answers).join("；")}。`
       : "";
-  const base = `你是心栈 SoulSentry 里的「${buddyName}」，人格：${personaTone}${profileLine}说话用简体中文，语气像朋友，不要列表式说教。`;
+  const customLine = buddyMeta.custom
+    ? `这颗搭子由用户自己设计：主张「${buddyMeta.slogan || ""}」，陪伴动作是${(buddyMeta.actions || []).join("；")}；记忆范围：${buddyMeta.memory || "用户的目标与进展"}。`
+    : "";
+  const materialLine = buddyMeta.materialContext
+    ? `\n用户给这颗搭子上传了专属资料。回答时优先依据这些资料，给出具体的专业判断；资料没有覆盖的内容就说「资料里没写到，我按一般经验说说」，不要编造：\n${buddyMeta.materialContext}\n`
+    : "";
+  const base = `你是心栈 SoulSentry 里的「${buddyName}」，人格：${personaTone}${profileLine}${customLine}${materialLine}说话用简体中文，语气像朋友，不要列表式说教。`;
 
   switch (mode) {
     case "solve_locate": {
@@ -590,7 +852,7 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
       const attachmentText = String(payload.attachment_text || "").trim().slice(0, 4000);
       const source = [typed, attachmentText ? `截图/附件识别内容：\n${attachmentText}` : ""].filter(Boolean).join("\n\n");
       return {
-        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}你现在只做运动数据提取：忠实转写，不评价、不编造、看不清就留空。`,
+        systemPrompt: `${base}${expertise}你现在只做运动数据提取：忠实转写，不评价、不编造、看不清就留空。`,
         prompt: `从下面这条跑步记录（截图文字或用户手输）中提取数据：\n「${source || "（没有可识别的内容）"}」\n\n只输出 JSON：{"distance_km":数字或null,"duration_min":数字或null,"pace":"分'秒\\""或null,"avg_hr":数字或null,"date":"YYYY-MM-DD"或null,"confidence":0到1}。duration_min 用分钟，可含小数；pace 是每公里配速；看不清的字段填 null，绝不猜。`,
       };
     }
@@ -616,7 +878,7 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
     case "greeting": {
       const context = String(payload.context || "").slice(0, 600);
       return {
-        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}开场白必须落在真实进度上，给出一个具体可执行的提醒，不说套话。`,
+        systemPrompt: `${base}${expertise}开场白必须落在真实进度上，给出一个具体可执行的提醒，不说套话。`,
         prompt: `用户此刻的真实状态：${context}\n\n以${buddyName}的身份写一句今日开场白（60字内）：结合ta当下的真实状态，给一句具体、有专业含量的提醒或鼓励。不许用「今天也要加油」之类的套话，每次都要不一样。只输出 JSON：{"text":"..."}`,
       };
     }
@@ -630,7 +892,7 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers) {
             .join("\n")
         : "";
       return {
-        systemPrompt: `${base}${BUDDY_EXPERTISE[buddyId] || ""}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。如果用户想成立小组、拉伙伴一起做某件事（如「成立一个专门考公的学习小组」），不要只给建议：在 proposal 里给出可确认的协同小组提案（type=create_collab，title=小组名，goal=一句话目标，scenario=friends），reply 里说明确认后会创建；普通问题 proposal 为 null。用户可能随消息发来图片或文件，附件会以识别后的文本提供给你，必须结合附件内容回答。`,
+        systemPrompt: `${base}${expertise}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。如果用户想成立小组、拉伙伴一起做某件事（如「成立一个专门考公的学习小组」），不要只给建议：在 proposal 里给出可确认的协同小组提案（type=create_collab，title=小组名，goal=一句话目标，scenario=friends），reply 里说明确认后会创建；普通问题 proposal 为 null。用户可能随消息发来图片或文件，附件会以识别后的文本提供给你，必须结合附件内容回答。`,
         prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n${attachmentText ? `\n用户这条消息附带的图片/文件内容（已识别）：\n${attachmentText}\n` : ""}\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。只输出 JSON：{"reply":"...","proposal":null}；需要创建小组时输出 {"reply":"...","proposal":{"type":"create_collab","title":"...","goal":"...","scenario":"friends"}}。`,
       };
     }
@@ -739,19 +1001,46 @@ async function loadBuddyLiveContext(userId, buddyId, profile) {
 // POST /api/buddies/:id/agent —— 领域技能调用（人格 + 领域档案注入，服务端定型提示词防跑偏）
 buddiesRouter.post("/:id/agent", async (req, res) => {
   const buddyId = req.params.id;
-  if (!BUDDY_IDS.has(buddyId)) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
-  }
   const parsed = agentSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
   }
   const { profiles, profile, extra } = await getActiveProfile(req.user.id, buddyId);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
+  }
   if (!profile) {
     return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
   }
   const buddyPersona = pickBuddyPersona(profile, extra.persona, buddyId);
   const personaTone = PERSONA_TONES[buddyPersona] || PERSONA_TONES.gentle;
+  const customBuddy = getCustomBuddy(extra, buddyId);
+  let materialContext = "";
+  if (customBuddy) {
+    try {
+      const materials = await prisma.buddyMaterial.findMany({
+        where: { userId: req.user.id, buddyId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { name: true, text: true },
+      });
+      materialContext = materials
+        .map((item) => `【${item.name}】\n${item.text}`)
+        .join("\n\n")
+        .slice(0, 6000);
+    } catch (error) {
+      console.warn("[buddies/agent] 读取专属资料失败:", error?.message || error);
+    }
+  }
+  const buddyMeta = customBuddy ? {
+    name: customBuddy.name,
+    expertise: customBuddy.expertise,
+    custom: true,
+    slogan: customBuddy.slogan,
+    actions: customBuddy.actions,
+    memory: customBuddy.memory,
+    materialContext,
+  } : {};
   let payload = parsed.data.payload || {};
   const lastUserText = Array.isArray(payload.messages)
     ? [...payload.messages].reverse().find((m) => m?.role === "user" && typeof m.content === "string")?.content || ""
@@ -794,7 +1083,7 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
       payload = { ...payload, context: [payload.context, liveContext].filter(Boolean).join("；") };
     }
   }
-  const built = buildAgentPrompt(buddyId, parsed.data.mode, payload, personaTone, profile.answers);
+  const built = buildAgentPrompt(buddyId, parsed.data.mode, payload, personaTone, profile.answers, buddyMeta);
   if (!built) {
     return res.status(400).json({ error: "INVALID_INPUT", message: "未知的技能模式" });
   }

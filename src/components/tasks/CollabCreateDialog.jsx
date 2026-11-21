@@ -45,7 +45,7 @@ const SCENARIOS = [
   },
 ];
 
-export default function CollabCreateDialog({ open, onClose, existingTask = null, prefill = null, onCreated, buddyId = null }) {
+export default function CollabCreateDialog({ open, onClose, existingTask = null, prefill = null, onCreated, buddyId = null, buddyName = null }) {
   const [title, setTitle] = useState("");
   const [scenario, setScenario] = useState("couple");
   const [goal, setGoal] = useState("");
@@ -94,7 +94,7 @@ export default function CollabCreateDialog({ open, onClose, existingTask = null,
             category: "collab",
             status: "pending",
             priority: "medium",
-            metadata: { collab: collabMeta, ...(buddyId ? { _extraFields: { buddy_id: buddyId } } : {}) },
+            metadata: { collab: collabMeta, ...(buddyId ? { _extraFields: { buddy_id: buddyId, ...(buddyName ? { buddy_name: buddyName } : {}) } } : {}) },
           },
         });
         toast.success("协同约定已创建");

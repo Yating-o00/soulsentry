@@ -17,7 +17,8 @@ import CreditHistoryDialog from "@/components/credits/CreditHistoryDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { httpRequest } from "@/api/httpClient";
 import Orb from "@/components/buddy/Orb";
-import { PERSONAS, DEFAULT_PERSONA, BUDDIES, BUDDY_TINTS } from "@/lib/buddies";
+import { PERSONAS, DEFAULT_PERSONA, BUDDY_TINTS } from "@/lib/buddies";
+import { getAllBuddies } from "@/lib/customBuddies";
 import ProductInsights from "@/components/memory/ProductInsights";
 import PersonalProfileCard from "@/components/insights/PersonalProfileCard";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
@@ -722,7 +723,7 @@ function PersonaMemorySection() {
   });
   const persona = mine?.persona || DEFAULT_PERSONA;
   const profiles = mine?.buddies || {};
-  const claimedBuddies = BUDDIES.filter((b) => profiles[b.id]?.status === "active");
+  const claimedBuddies = getAllBuddies(mine).filter((b) => profiles[b.id]?.status === "active");
 
   const switchPersona = async (key) => {
     if (switching || key === persona) return;
@@ -805,7 +806,7 @@ function PersonaMemorySection() {
                 </p>
               ) : (
                 claimedBuddies.map((b) => {
-                  const tint = BUDDY_TINTS[b.id];
+                  const tint = b.tint || BUDDY_TINTS[b.id] || BUDDY_TINTS.study;
                   return (
                     <div key={b.id} className="flex items-center gap-3 rounded-2xl border border-stone-200 bg-white p-4">
                       <Orb size={36} tint={tint} />

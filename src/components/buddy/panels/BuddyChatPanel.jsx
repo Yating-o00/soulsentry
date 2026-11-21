@@ -37,6 +37,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
   const activePersona = PERSONAS.find((p) => p.key === activePersonaKey) || PERSONAS[0];
 
   const chat = useMemo(() => (Array.isArray(state.chat) ? state.chat : []), [state.chat]);
+  const quickAsks = QUICK_ASKS[buddy.id] || (Array.isArray(buddy.quickAsks) ? buddy.quickAsks : []);
   const today = todayKey();
 
   // 搭子此刻掌握的真实上下文（每日问候与回答都基于它，而不是套话）
@@ -208,7 +209,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
               agent: { enabled: true, paused: false },
               confirmRule: proposal.scenario === "couple" ? "all" : "owner",
             },
-            _extraFields: { buddy_id: buddy.id },
+            _extraFields: { buddy_id: buddy.id, buddy_name: buddy.name },
           },
         },
       });
@@ -337,7 +338,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
 
       {chat.length === 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {(QUICK_ASKS[buddy.id] || []).map((q) => (
+          {quickAsks.map((q) => (
             <button
               key={q}
               onClick={() => {
@@ -410,7 +411,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                 handleFiles(files);
               }
             }}
-            placeholder={`问点专业的，也可以粘贴图片/文件，比如「${QUICK_ASKS[buddy.id]?.[0] || "怎么坚持下去"}」`}
+            placeholder={`问点专业的，也可以粘贴图片/文件，比如「${quickAsks[0] || "怎么坚持下去"}」`}
             className="min-w-0 flex-1 bg-transparent py-2 text-[14px] text-stone-800 placeholder:text-stone-400 focus:outline-none"
           />
         </div>

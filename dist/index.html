@@ -53,6 +53,13 @@
           if (document.body) document.body.appendChild(pre);
           else document.addEventListener('DOMContentLoaded', function() { document.body.appendChild(pre); });
         }
+        // 启动壳本身就在 #root 里，不能用「root 非空」判断应用已挂载；
+        // 只有启动壳被 React 替换后才算真正渲染，否则超时提示会被瞬间误删。
+        function appMounted() {
+          var r = document.getElementById('root');
+          if (!r || r.querySelector('#ss-splash')) return false;
+          return (r.innerHTML || '').replace(/\s/g, '').length > 0;
+        }
         // 应用渲染出内容后自动移除诊断层，否则慢加载先触发超时提示、页面渲染后提示层仍永久遮罩，形成假白屏
         function hideDiag() {
           var el = document.getElementById('__ss_diag__');
@@ -61,8 +68,7 @@
           dismissed = true;
         }
         var mo = new MutationObserver(function() {
-          var r = document.getElementById('root');
-          if (r && (r.innerHTML || '').replace(/\s/g, '').length > 0) hideDiag();
+          if (appMounted()) hideDiag();
         });
         mo.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
         function append(msg) {
@@ -85,39 +91,69 @@
           show('Unhandled: ' + (r && r.message ? r.message : String(r)), r && r.stack);
         });
         setTimeout(function() {
+          if (appMounted()) return;
           var root = document.getElementById('root');
-          var hasContent = root && (root.innerHTML || '').replace(/\s/g, '').length > 0;
-          if (!hasContent) {
-            var ua = navigator.userAgent || 'unknown';
-            var modern = window.__vite_is_modern_browser;
-            var info = [
-              'Root still empty after 10s (loading splash should prevent this).',
-              'UA: ' + ua,
-              'Modern bundle: ' + (modern === true ? 'yes' : (modern === false ? 'no' : 'unknown')),
-              'Scripts: ' + Array.prototype.slice.call(document.querySelectorAll('script')).map(function(s) { return s.src || s.getAttribute('data-src') || '[inline]'; }).join(', '),
-              'ReadyState: ' + document.readyState,
-              'Root HTML: ' + (root ? root.outerHTML : 'missing')
-            ].join('\n');
-            show('Timeout: ' + info, '', true);
-          }
-        }, 10000);
+          var ua = navigator.userAgent || 'unknown';
+          var modern = window.__vite_is_modern_browser;
+          var info = [
+            '网络较慢，应用仍在加载。可以继续等待，或点击下方重新加载。',
+            '',
+            'UA: ' + ua,
+            'Modern bundle: ' + (modern === true ? 'yes' : (modern === false ? 'no' : 'unknown')),
+            'Scripts: ' + Array.prototype.slice.call(document.querySelectorAll('script')).map(function(s) { return s.src || s.getAttribute('data-src') || '[inline]'; }).join(', '),
+            'ReadyState: ' + document.readyState,
+            'Root HTML: ' + (root ? root.outerHTML : 'missing')
+          ].join('\n');
+          show(info, '', true);
+          var diag = document.getElementById('__ss_diag__');
+          if (!diag) return;
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = '重新加载';
+          btn.style.cssText = 'margin-top:16px;padding:10px 18px;border:0;border-radius:999px;background:#384877;color:#fff;font-size:14px;';
+          btn.onclick = async function() {
+            btn.disabled = true;
+            btn.textContent = '正在重新加载…';
+            // 卡住时常见原因是旧 Service Worker/缓存；重载前清一次，避免一直卡在旧资源上
+            try {
+              if ('serviceWorker' in navigator) {
+                var regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(function(r) { return r.unregister(); }));
+              }
+            } catch (e) {}
+            try {
+              if ('caches' in window) {
+                var keys = await caches.keys();
+                await Promise.all(keys.map(function(k) { return caches.delete(k); }));
+              }
+            } catch (e) {}
+            location.reload();
+          };
+          diag.appendChild(document.createElement('br'));
+          diag.appendChild(btn);
+        }, 30000);
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-BU5PQTIN.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Dpbw7ta3.css">
+    <script type="module" crossorigin src="/assets/index-BTpCE8RY.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-HTAGxphQ.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-icons-B3nW4ury.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-query-CNh8-5GV.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-router-D593Rdpn.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-radix-CkNuC-tv.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-DlM2wvBo.css">
     <script type="module">import.meta.url;import("_").catch(()=>1);(async function*(){})().next();if(location.protocol!="file:"){window.__vite_is_modern_browser=true}</script>
     <script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy chunks, syntax error above and the same error below should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script>
   </head>
   <body>
     <div id="root">
-      <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fafbfb;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
+      <div id="ss-splash" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fafbfb;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
         <div style="width:36px;height:36px;border-radius:50%;border:3px solid #d4e4f0;border-top-color:#7a9eb8;animation:ss-spin 0.9s linear infinite;"></div>
         <div style="margin-top:14px;font-size:14px;color:#8e8e93;letter-spacing:2px;">心栈</div>
       </div>
       <style>@keyframes ss-spin{to{transform:rotate(360deg);}}</style>
     </div>
     <script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script>
-    <script nomodule crossorigin id="vite-legacy-polyfill" src="/assets/polyfills-legacy-Cfj2ob2B.js"></script>
-    <script nomodule crossorigin id="vite-legacy-entry" data-src="/assets/index-legacy-BmBviiQT.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
+    <script nomodule crossorigin id="vite-legacy-polyfill" src="/assets/polyfills-legacy-BC3QZ-h1.js"></script>
+    <script nomodule crossorigin id="vite-legacy-entry" data-src="/assets/index-legacy-h3ynbZ3P.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script>
   </body>
 </html>

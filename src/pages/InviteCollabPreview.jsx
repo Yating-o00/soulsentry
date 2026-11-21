@@ -111,7 +111,7 @@ export default function InviteCollabPreview() {
     );
   }
 
-  const buddyName = BUDDY_NAMES[data.buddy_id] || "";
+  const buddyName = BUDDY_NAMES[data.buddy_id] || data.buddy_name || "";
   const pact = data.pact || {};
 
   return (

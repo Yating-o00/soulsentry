@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight } from "lucide-react";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
 import Orb from "@/components/buddy/Orb";
-import { BUDDIES, BUDDY_TINTS, DEFAULT_PERSONA } from "@/lib/buddies";
+import { BUDDY_TINTS, DEFAULT_PERSONA } from "@/lib/buddies";
+import { getAllBuddies } from "@/lib/customBuddies";
 
 // 首页「进行中的陪伴」（项目卡）：认领后的搭子住在这里，直到项目走完举行毕业仪式
 export default function BuddyCompanions() {
@@ -15,7 +16,8 @@ export default function BuddyCompanions() {
   });
   const persona = mine?.persona || DEFAULT_PERSONA;
   const profiles = mine?.buddies || {};
-  const active = BUDDIES.filter((b) => profiles[b.id]?.status === "active");
+  const allBuddies = useMemo(() => getAllBuddies(mine), [mine]);
+  const active = allBuddies.filter((b) => profiles[b.id]?.status === "active");
 
   return (
     <section className="mt-8">
@@ -33,7 +35,7 @@ export default function BuddyCompanions() {
           </Link>
         )}
         {active.map((b) => {
-          const tint = BUDDY_TINTS[b.id];
+          const tint = b.tint || BUDDY_TINTS[b.id] || BUDDY_TINTS.study;
           const profile = profiles[b.id];
           const cardPersona = profile?.persona || b.defaultPersona || persona;
           return (

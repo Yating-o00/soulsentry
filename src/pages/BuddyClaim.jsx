@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import { httpRequest } from "@/api/httpClient";
 import Orb from "@/components/buddy/Orb";
-import { BUDDY_TINTS, DEFAULT_PERSONA, PERSONAS, getBuddy } from "@/lib/buddies";
+import { BUDDY_TINTS, DEFAULT_PERSONA, PERSONAS } from "@/lib/buddies";
+import { getBuddyFromMine } from "@/lib/customBuddies";
 
 // 通用认领流 —— 同一套对话引擎，由每颗搭子的配置驱动（问题 → 弹性计划卡 → 项目制绑定）
 export default function BuddyClaim() {
@@ -14,12 +15,22 @@ export default function BuddyClaim() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const buddyId = new URLSearchParams(location.search).get("buddy") || "";
-  const buddy = getBuddy(buddyId);
-  const tint = BUDDY_TINTS[buddyId] || BUDDY_TINTS.study;
+  const { data: mine, isLoading: mineLoading } = useQuery({
+    queryKey: ["buddies", "mine"],
+    queryFn: () => httpRequest("/api/buddies/mine"),
+  });
+  const buddy = getBuddyFromMine(buddyId, mine);
+  const tint = buddy?.tint || BUDDY_TINTS[buddyId] || BUDDY_TINTS.study;
 
   // 认领前先按搭子类型给出默认人格；用户可在计划卡上改，认领时一起写入
   const [persona, setPersona] = useState(() => buddy?.defaultPersona || DEFAULT_PERSONA);
   const activePersona = PERSONAS.find((p) => p.key === persona) || PERSONAS[0];
+  const personaInitRef = useRef(false);
+  useEffect(() => {
+    if (!buddy || personaInitRef.current) return;
+    personaInitRef.current = true;
+    setPersona(buddy.defaultPersona || DEFAULT_PERSONA);
+  }, [buddy]);
 
   const questions = useMemo(() => buddy?.questions || [], [buddy]);
   const [step, setStep] = useState(0);
@@ -32,12 +43,15 @@ export default function BuddyClaim() {
   const scrollRef = useRef(null);
   const timersRef = useRef([]);
 
-  // 开场：搭子按当前人格自我介绍 + 第一个问题
+  // 开场：搭子按默认人格自我介绍 + 第一个问题
+  const greetedIdRef = useRef(null);
   useEffect(() => {
-    if (!buddy || questions.length === 0) return;
+    if (!buddy || questions.length === 0 || greetedIdRef.current === buddy.id) return;
+    greetedIdRef.current = buddy.id;
+    const introPersona = buddy.defaultPersona || DEFAULT_PERSONA;
     timersRef.current = [
       setTimeout(() => {
-        setMsgs([{ who: "buddy", text: `嗨，我是你的${buddy.name}。${buddy.greeting[persona] || buddy.greeting.gentle}` }]);
+        setMsgs([{ who: "buddy", text: `嗨，我是你的${buddy.name}。${buddy.greeting[introPersona] || buddy.greeting.gentle}` }]);
       }, 300),
       setTimeout(() => setTyping(true), 1000),
       setTimeout(() => {
@@ -46,13 +60,21 @@ export default function BuddyClaim() {
       }, 1800),
     ];
     return () => timersRef.current.forEach(clearTimeout);
-  }, [buddyId]);
+  }, [buddy?.id, questions.length]);
 
   useEffect(() => {
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({ top: 999999, behavior: "smooth" });
     });
   }, [msgs, typing, step, showPlan]);
+
+  if (!buddy && mineLoading) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center text-stone-400">
+        <p className="text-sm">正在准备搭子…</p>
+      </div>
+    );
+  }
 
   if (!buddy) {
     return (

@@ -167,11 +167,11 @@ export default function Dashboard() {
           <img src={assistantPlanet} alt="心栈小助手" className="h-9 w-9 rounded-full object-cover md:h-11 md:w-11" />
         </header>
 
-        {/* PC：左列对话层与右列按黄金比例分布；手机：保持纵向流 */}
-        <div className="lg:grid lg:grid-cols-[1.618fr_1fr] lg:gap-8 lg:items-start">
+        {/* PC：左列对话层与右列按黄金比例分布，列宽可控不溢出；手机：保持纵向流 */}
+        <div className="overflow-hidden lg:grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:gap-8 lg:items-start">
           {/* 通用 Agent 对话层：内容输入的第一板块——说事、记事、办事，确认后落库。
               新用户给引导输入，老用户先给今日总结再给模版 */}
-          <section className="mt-4 px-1">
+          <section className="mt-4 min-w-0 px-1">
             <AssistantWidget
               inline
               newUser={isNewUser}
@@ -180,7 +180,7 @@ export default function Dashboard() {
             />
           </section>
 
-          <div className="lg:mt-4">
+          <div className="min-w-0 lg:mt-4">
             {/* 今日印记（真实数据的一行播报；问候语由上方对话层承载，不重复） */}
             <div className="mx-1 mt-3 lg:mt-0 flex items-center gap-3 rounded-2xl bg-[#FFFFFF] px-4 py-3 shadow-[0_1px_2px_rgba(36,36,36,0.06)] border border-stone-200/60">
               <img src={assistantPlanet} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />

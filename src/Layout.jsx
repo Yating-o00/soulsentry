@@ -452,13 +452,13 @@ function LayoutContent({ children }) {
 
         {/* 背景必须是纯色:半透明渐变做滚动容器底色会让 iOS 每帧重合成整个视口,造成滚动卡顿 */}
         <main
-          className={`flex-1 flex flex-col bg-[#FAF9F7] relative w-full min-w-0 overflow-y-auto ${
+          className={`flex-1 min-h-0 flex flex-col bg-[#FAF9F7] relative w-full min-w-0 overflow-hidden ${
             isBareMobilePage || hideGlobalMobileNav ? "pb-0" : "pb-[calc(5rem_+_env(safe-area-inset-bottom))] md:pb-0"
           }`}
         >
           {!isBareMobilePage && <MobileHeader />}
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-h-0 overflow-auto overflow-x-hidden min-w-0 [scrollbar-gutter:stable]">
             {children}
           </div>
           </main>

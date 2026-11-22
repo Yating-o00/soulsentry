@@ -20,7 +20,7 @@ export default function BuddyStoreStrip() {
   const unclaimed = allBuddies.filter((b) => profiles[b.id]?.status !== "active");
 
   return (
-    <section className="mt-8">
+    <section className="mt-6">
       <div className="flex items-baseline justify-between px-1">
         <h2 className="text-base font-semibold text-[#1c1917]">搭子Store</h2>
         <Link to={createPageUrl("BuddyStore")} className="text-xs text-[#384877] hover:underline">

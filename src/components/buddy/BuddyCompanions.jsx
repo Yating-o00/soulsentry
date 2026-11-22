@@ -20,12 +20,12 @@ export default function BuddyCompanions() {
   const active = allBuddies.filter((b) => profiles[b.id]?.status === "active");
 
   return (
-    <section className="mt-8">
+    <section className="mt-6">
       <div className="flex items-baseline justify-between px-1">
         <h2 className="text-base font-semibold text-[#1c1917]">进行中的陪伴</h2>
         <span className="text-xs text-[#a8a29e]">{active.length} 颗搭子在岗</span>
       </div>
-      <div className="mt-3 space-y-3 px-1 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+      <div className="mt-3 space-y-3 px-1">
         {active.length === 0 && (
           <Link
             to={createPageUrl("BuddyStore")}
@@ -42,7 +42,7 @@ export default function BuddyCompanions() {
             <Link
               key={b.id}
               to={`${createPageUrl("BuddySpace")}?buddy=${b.id}`}
-              className="flex items-center gap-3.5 rounded-2xl bg-[#FFFFFF] p-4 shadow-[0_1px_2px_rgba(36,36,36,0.06)] transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
+              className="flex items-center gap-3.5 rounded-2xl border border-stone-100 bg-[#FFFFFF] p-4 shadow-[0_1px_2px_rgba(36,36,36,0.04)] transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
             >
               <Orb size={48} tint={tint} />
               <div className="min-w-0 flex-1">

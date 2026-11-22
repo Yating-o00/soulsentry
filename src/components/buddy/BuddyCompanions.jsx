@@ -9,7 +9,7 @@ import { BUDDY_TINTS, DEFAULT_PERSONA } from "@/lib/buddies";
 import { getAllBuddies } from "@/lib/customBuddies";
 
 // 首页「进行中的陪伴」（项目卡）：认领后的搭子住在这里，直到项目走完举行毕业仪式
-export default function BuddyCompanions() {
+function BuddyCompanions() {
   const { data: mine } = useQuery({
     queryKey: ["buddies", "mine"],
     queryFn: () => httpRequest("/api/buddies/mine"),
@@ -60,3 +60,5 @@ export default function BuddyCompanions() {
     </section>
   );
 }
+
+export default React.memo(BuddyCompanions);

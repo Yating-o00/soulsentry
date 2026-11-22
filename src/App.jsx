@@ -179,7 +179,8 @@ function App() {
             },
           }}
         />
-        <VisualEditAgent />
+        {/* 可视化编辑器代理：只在被父窗口 iframe 嵌入时启用，独立部署不需要这些全局监听器 */}
+        {typeof window !== 'undefined' && window.self !== window.top && <VisualEditAgent />}
       </QueryClientProvider>
     </AuthProvider>
   )

@@ -10,7 +10,7 @@ function hexToRgba(hex, alpha) {
 
 const DEFAULT_TINT = BUDDY_TINTS.study;
 
-export default function Orb({ size = 72, tint = DEFAULT_TINT }) {
+function Orb({ size = 72, tint = DEFAULT_TINT }) {
   const [light, mid, deep] = tint;
   return (
     <div
@@ -40,3 +40,5 @@ export default function Orb({ size = 72, tint = DEFAULT_TINT }) {
     </div>
   );
 }
+
+export default React.memo(Orb);

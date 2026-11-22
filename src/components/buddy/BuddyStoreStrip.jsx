@@ -9,7 +9,7 @@ import { BUDDY_TINTS } from "@/lib/buddies";
 import { getAllBuddies } from "@/lib/customBuddies";
 
 // 首页「搭子Store」常驻入口：未认领的横滑货架；全部在岗时给「都在岗」提示卡
-export default function BuddyStoreStrip() {
+function BuddyStoreStrip() {
   const { data: mine } = useQuery({
     queryKey: ["buddies", "mine"],
     queryFn: () => httpRequest("/api/buddies/mine"),
@@ -62,3 +62,5 @@ export default function BuddyStoreStrip() {
     </section>
   );
 }
+
+export default React.memo(BuddyStoreStrip);

@@ -34,7 +34,7 @@ function detectLedgerLike(t) {
   return false;
 }
 
-export default function AssistantWidget({ inline = false, newUser = false, summary = "", quickAsks = null }) {
+function AssistantWidget({ inline = false, newUser = false, summary = "", quickAsks = null }) {
   const queryClient = useQueryClient();
   // inline 模式：内嵌在首页（通用 Agent 对话层），无浮动按钮、面板常开；
   // 历史对话默认折叠，只保留一条按真实数据生成的今日问候
@@ -456,10 +456,10 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   };
 
   // ── 渲染 ──
-  const renderMessage = (m) => {
+  const MessageItem = React.memo(function MessageItem({ m }) {
     const mine = m.role === "user";
     return (
-      <div key={m.id} className={`flex items-start gap-2 px-4 mb-4 ${mine ? "flex-row-reverse" : ""}`}>
+      <div className={`flex items-start gap-2 px-4 mb-4 ${mine ? "flex-row-reverse" : ""}`}>
         {!mine && (
           <img
             src={assistantPlanet}
@@ -485,33 +485,37 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         </div>
       </div>
     );
-  };
+  });
 
   // 内嵌形态的快捷问句：只保留一行，放进消息流里，不再固定占住输入框上方一大块
-  const inlineQuickItems = (
-    quickAsks && quickAsks.length > 0
-      ? quickAsks
-      : (newUser
-          ? [
-              "提醒我每周日给妈妈打电话",
-              "把「先做最重要的一件事」记成心签",
-              "帮我做一个 7 天晨读计划",
-              "拉个协同约定，和朋友一起背单词",
-              "帮我订一张明天去上海的高铁票",
-              "心里有点乱，陪我聊聊",
-            ]
-          : [
-              "帮我安排今天的计划",
-              "把现在脑子里的事记成心签",
-              "这周我做得怎么样？",
-              "拉个协同约定，和朋友一起推进",
-              "帮我订一张明天去上海的高铁票",
-              "心里有点乱，陪我聊聊",
-            ])
-  ).map((item) => ({
-    label: typeof item === "string" ? item : item.label,
-    prompt: typeof item === "string" ? item : item.prompt,
-  }));
+  const inlineQuickItems = React.useMemo(
+    () =>
+      (
+        quickAsks && quickAsks.length > 0
+          ? quickAsks
+          : newUser
+            ? [
+                "提醒我每周日给妈妈打电话",
+                "把「先做最重要的一件事」记成心签",
+                "帮我做一个 7 天晨读计划",
+                "拉个协同约定，和朋友一起背单词",
+                "帮我订一张明天去上海的高铁票",
+                "心里有点乱，陪我聊聊",
+              ]
+            : [
+                "帮我安排今天的计划",
+                "把现在脑子里的事记成心签",
+                "这周我做得怎么样？",
+                "拉个协同约定，和朋友一起推进",
+                "帮我订一张明天去上海的高铁票",
+                "心里有点乱，陪我聊聊",
+              ]
+      ).map((item) => ({
+        label: typeof item === "string" ? item : item.label,
+        prompt: typeof item === "string" ? item : item.prompt,
+      })),
+    [quickAsks, newUser]
+  );
 
   // 面板主体（浮动与内嵌两种形态共用）
   const panelBody = (
@@ -655,7 +659,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             </div>
           </div>
         )}
-        {(!inline || historyOpen) && messages.map(renderMessage)}
+        {(!inline || historyOpen) && messages.map((m) => <MessageItem key={m.id} m={m} />)}
         {busy && (!inline || historyOpen) && (
           <div className="flex items-center gap-2 px-4 mb-4">
             <img src={assistantPlanet} alt="" className="assistant-avatar assistant-avatar--active w-8 h-8 rounded-full shrink-0 object-cover" />
@@ -842,3 +846,5 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     </>
   );
 }
+
+export default React.memo(AssistantWidget);

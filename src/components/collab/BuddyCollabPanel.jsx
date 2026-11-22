@@ -174,31 +174,31 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
   ];
 
   return (
-    <div className="flex h-[calc(100dvh-190px)] min-h-[540px] max-h-[820px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)]">
-      {/* 极简头：标题 / 进度 / 成员 / 三个切换 */}
-      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-4 pb-2.5 pt-3">
-        <div className="flex items-start justify-between gap-3">
+    <div className="flex h-[calc(100dvh-260px)] min-h-[340px] max-h-[820px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-190px)] md:min-h-[540px]">
+      {/* 极简头：标题 / 进度 / 成员 / 三个切换（手机端压到最小高度，把空间留给对话） */}
+      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-2 pt-2">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="flex items-center gap-1.5 text-[10px] text-stone-400">
-              <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[#384877]">协同中</span>
+            <div className="flex items-center gap-1.5 text-[9px] text-stone-400">
+              <span className="rounded-full bg-[#eef2ff] px-1.5 py-0.5 text-[#384877]">协同中</span>
               <span className="inline-flex items-center gap-1">
-                <Sparkles className="h-3 w-3" /> {agentActive ? "Agent 参与中" : "Agent 未参与"}
+                <Sparkles className="h-2.5 w-2.5" /> {agentActive ? "Agent 参与中" : "Agent 未参与"}
               </span>
             </div>
-            <h3 className="mt-1 truncate text-[16px] font-semibold text-stone-900">{task.title}</h3>
+            <h3 className="mt-0.5 truncate text-[15px] font-semibold text-stone-900">{task.title}</h3>
             {collab?.goal && <p className="mt-0.5 hidden truncate text-[11px] text-stone-400 sm:block">{collab.goal}</p>}
           </div>
           <Link
             to={fullSpaceUrl}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877]"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877]"
             title="完整协同空间"
             aria-label="打开完整协同空间"
           >
-            <ArrowUpRight className="h-4 w-4" />
+            <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
 
-        <div className="mt-2 flex items-center gap-2.5">
+        <div className="mt-1.5 flex items-center gap-2">
           <div
             className="h-1.5 flex-1 overflow-hidden rounded-full bg-stone-200/70"
             role="progressbar"
@@ -208,12 +208,12 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
           >
             <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: tint[2] }} />
           </div>
-          <span className="text-[10px] tabular-nums text-stone-400">{doneCount}/{confirmedPacts.length}</span>
-          <div className="flex -space-x-1.5">
+          <span className="text-[9px] tabular-nums text-stone-400">{doneCount}/{confirmedPacts.length}</span>
+          <div className="flex -space-x-1">
             {members.slice(0, 3).map((member) => (
               <span
                 key={member.user_id || member.id}
-                className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-[#384877] text-[9px] font-medium text-white"
+                className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#384877] text-[8px] font-medium text-white"
                 title={member.display_name}
               >
                 {(member.display_name || "友").slice(0, 1)}
@@ -222,16 +222,16 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
             <button
               type="button"
               onClick={() => setInviteOpen(true)}
-              className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-dashed border-stone-300 bg-white text-stone-400 transition-colors hover:border-[#384877] hover:text-[#384877]"
+              className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-dashed border-stone-300 bg-white text-stone-400 transition-colors hover:border-[#384877] hover:text-[#384877]"
               title="邀请成员"
               aria-label="邀请成员"
             >
-              <Plus className="h-3 w-3" />
+              <Plus className="h-2.5 w-2.5" />
             </button>
           </div>
         </div>
 
-        <div className="mt-2 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-1" role="tablist" aria-label="协同内容">
+        <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-0.5" role="tablist" aria-label="协同内容">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -240,7 +240,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint }) {
               aria-selected={view === tab.key}
               onClick={() => switchView(tab.key)}
               className={cn(
-                "relative min-h-[32px] rounded-full text-[12px] transition-colors",
+                "relative min-h-[28px] rounded-full text-[11px] transition-colors",
                 view === tab.key ? "bg-white font-medium text-stone-900 shadow-sm" : "text-stone-500"
               )}
             >

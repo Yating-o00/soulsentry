@@ -654,14 +654,14 @@ export default function Notes() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-7xl mx-auto min-h-screen">
-      {/* Header Row1：品牌 + 搜索 + 心签/知识库切换 */}
+    <div className="p-4 md:p-8 space-y-3 md:space-y-6 max-w-7xl mx-auto min-h-screen">
+      {/* Header Row1：品牌（桌面）+ 搜索 + 心签/知识库切换 */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-2.5 md:gap-3">
+        className="flex items-center gap-2 md:gap-3">
 
-        <div className="flex items-center gap-2.5 flex-shrink-0">
+        <div className="hidden sm:flex items-center gap-2.5 flex-shrink-0">
           <div className="h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#384877] flex items-center justify-center shadow-sm">
             <StickyNote className="w-4 h-4 md:w-6 md:h-6 text-white" />
           </div>
@@ -673,7 +673,7 @@ export default function Notes() {
           </div>
         </div>
 
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 max-w-md min-w-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
             placeholder="搜索心签…"
@@ -691,7 +691,7 @@ export default function Notes() {
           )}
         </div>
 
-        {/* 心签 / 知识库 分段切换 */}
+        {/* 心签 / 知识库 分段切换：手机端只留图标 */}
         <div className="flex items-center bg-white border border-slate-200 rounded-xl p-0.5 flex-shrink-0 shadow-sm">
           {[
             { key: "notes", label: "心签", icon: StickyNote },
@@ -700,13 +700,14 @@ export default function Notes() {
             <button
               key={t.key}
               onClick={() => setActiveTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-xs md:text-sm transition-colors ${
+              aria-label={t.label}
+              className={`flex h-8 w-9 items-center justify-center gap-1.5 rounded-lg px-0 text-xs transition-colors md:h-auto md:w-auto md:px-4 md:py-2 md:text-sm ${
                 activeTab === t.key
                   ? "bg-[#384877] text-white shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              <t.icon className="w-3.5 h-3.5 md:w-4 md:h-4" />
+              <t.icon className="w-4 h-4 md:w-4 md:h-4" />
               <span className="hidden md:inline">{t.label}</span>
             </button>
           ))}
@@ -715,19 +716,19 @@ export default function Notes() {
 
       {activeTab === "notes" && (
         <>
-          {/* 工具行：手账 / 回顾 / 保险柜，回应浓度在最右 */}
+          {/* 工具行：手机端单行横滑，桌面自动换行 */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.05 }}
-            className="flex items-center gap-1.5 flex-wrap"
+            className="-mx-1 flex items-center gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
           >
             <Button
               onClick={() => setJournalOpen(true)}
               variant="outline"
               size="sm"
               title="心签手账：近 7 天的记录与情绪晴雨"
-              className="h-8 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
+              className="h-8 shrink-0 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
             >
               <BookOpen className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">手账</span>
@@ -737,7 +738,7 @@ export default function Notes() {
               variant="outline"
               size="sm"
               title="抽一签 / 按词回顾，与过去的自己重逢"
-              className="h-8 px-2.5 gap-1.5 border-[#384877]/30 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] text-xs"
+              className="h-8 shrink-0 px-2.5 gap-1.5 border-[#384877]/30 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] text-xs"
             >
               <Dices className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">回顾</span>
@@ -747,92 +748,92 @@ export default function Notes() {
               variant="outline"
               size="sm"
               title="保险柜：密码保护的私密信息，AI 不会阅读"
-              className="h-8 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
+              className="h-8 shrink-0 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
             >
               <Lock className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">保险柜</span>
             </Button>
-            <div className="flex-1" />
-            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+            <div className="hidden flex-1 sm:block" />
+            <div className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500">
               <span className="hidden sm:inline">回应</span>
               <select
                 value={density}
                 onChange={(e) => handleDensityChange(e.target.value)}
                 title="回应浓度：AI 回应你的方式"
-                className="bg-white border border-slate-200 rounded-full px-2.5 py-1.5 text-xs text-slate-600 outline-none focus:border-[#384877]/50"
+                className="h-8 bg-white border border-slate-200 rounded-full px-2.5 text-xs text-slate-600 outline-none focus:border-[#384877]/50"
               >
                 {DENSITY_OPTIONS.map((o) => (
                   <option key={o.key} value={o.key}>{o.label}</option>
                 ))}
               </select>
             </div>
+            <Button
+              onClick={() => setOnlyMine((v) => !v)}
+              variant="outline"
+              size="sm"
+              title={onlyMine ? '当前只显示我自建的内容，点击显示全部' : '只显示我自建的内容，隐藏外部信息'}
+              className={`h-8 shrink-0 px-2 md:px-3 gap-1 md:gap-1.5 text-xs md:text-sm ${
+                onlyMine
+                  ? 'border-transparent bg-[#384877] hover:bg-[#2f3d63] text-white'
+                  : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-700'
+              }`}
+            >
+              <User className="w-3.5 h-3.5 md:w-3.5 md:h-3.5" />
+              <span className="hidden sm:inline">{onlyMine ? '仅我的内容' : '全部内容'}</span>
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  title="AI 工具：问答 / 智能整理 / 扩展视野"
+                  className="h-8 shrink-0 px-2 md:px-3 gap-1 md:gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs md:text-sm"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">工具</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onSelect={() => setShowKnowledgeBase(true)}>
+                  <Brain className="w-3.5 h-3.5 mr-2 text-blue-600" />
+                  AI 问答
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setShowAIOrganizer(true)}>
+                  <Wand2 className="w-3.5 h-3.5 mr-2 text-purple-600" />
+                  智能整理
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setShowExternalHorizon(true)}>
+                  <Globe className="w-3.5 h-3.5 mr-2 text-violet-600" />
+                  扩展视野
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <div className="hidden shrink-0 text-xs text-slate-500 whitespace-nowrap md:block md:text-sm">
+              <span className="font-semibold text-[#384877]">{filteredNotes.length}</span>
+              <span className="hidden md:inline"> 条心签</span>
+            </div>
           </motion.div>
 
-          {/* Filters */}
+          {/* Filters：手机端所有筛选控件合成一条可横滑的工具栏 */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.05 }}
-            className="flex items-center justify-between gap-2 md:gap-3 flex-wrap"
+            className="-mx-1 flex items-center gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:justify-between sm:overflow-visible sm:px-0"
           >
-            <NoteFilters
-              filters={filters}
-              onFiltersChange={setFilters}
-              allTags={allTags}
-              notes={notes.filter((n) => !n.deleted_at)}
-              onCategorySelect={setCategoryFilter}
-              activeCategory={categoryFilter}
-              onTogglePinned={() => setCategoryFilter((v) => (v === 'pinned' ? 'all' : 'pinned'))}
-              activePinned={categoryFilter === 'pinned'}
-            />
-
-            <div className="flex items-center gap-1.5 md:gap-3">
-              <Button
-                onClick={() => setOnlyMine((v) => !v)}
-                variant="outline"
-                size="sm"
-                title={onlyMine ? '当前只显示我自建的内容，点击显示全部' : '只显示我自建的内容，隐藏外部信息'}
-                className={`h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 text-xs md:text-sm ${
-                  onlyMine
-                    ? 'border-transparent bg-[#384877] hover:bg-[#2f3d63] text-white'
-                    : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-700'
-                }`}
-              >
-                <User className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                <span className="hidden sm:inline">{onlyMine ? '仅我的内容' : '全部内容'}</span>
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    title="AI 工具：问答 / 智能整理 / 扩展视野"
-                    className="h-7 md:h-8 px-2 md:px-3 gap-1 md:gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs md:text-sm"
-                  >
-                    <Wand2 className="w-3 h-3 md:w-3.5 md:h-3.5" />
-                    <span className="hidden sm:inline">工具</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-44">
-                  <DropdownMenuItem onSelect={() => setShowKnowledgeBase(true)}>
-                    <Brain className="w-3.5 h-3.5 mr-2 text-blue-600" />
-                    AI 问答
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setShowAIOrganizer(true)}>
-                    <Wand2 className="w-3.5 h-3.5 mr-2 text-purple-600" />
-                    智能整理
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setShowExternalHorizon(true)}>
-                    <Globe className="w-3.5 h-3.5 mr-2 text-violet-600" />
-                    扩展视野
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <div className="text-xs md:text-sm text-slate-500 whitespace-nowrap">
-                <span className="font-semibold text-[#384877]">{filteredNotes.length}</span>
-                <span className="hidden md:inline"> 条心签</span>
-              </div>
+            <div className="shrink-0">
+              <NoteFilters
+                filters={filters}
+                onFiltersChange={setFilters}
+                allTags={allTags}
+                notes={notes.filter((n) => !n.deleted_at)}
+                onCategorySelect={setCategoryFilter}
+                activeCategory={categoryFilter}
+                onTogglePinned={() => setCategoryFilter((v) => (v === 'pinned' ? 'all' : 'pinned'))}
+                activePinned={categoryFilter === 'pinned'}
+              />
             </div>
+
           </motion.div>
 
           {/* 签列表（与小程序一致：无底部大输入框，每条内容一张签，整页滚动） */}

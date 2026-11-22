@@ -611,7 +611,7 @@ ${timeCtx.promptSnippet}
       </AnimatePresence>
 
       {/* 输入区 */}
-      <div className="p-3 flex items-end gap-2">
+      <div className="flex items-end gap-2 p-2 md:p-3">
         <Input
           ref={inputRef}
           value={value}

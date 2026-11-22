@@ -487,6 +487,32 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     );
   };
 
+  // 内嵌形态的快捷问句：只保留一行，放进消息流里，不再固定占住输入框上方一大块
+  const inlineQuickItems = (
+    quickAsks && quickAsks.length > 0
+      ? quickAsks
+      : (newUser
+          ? [
+              "提醒我每周日给妈妈打电话",
+              "把「先做最重要的一件事」记成心签",
+              "帮我做一个 7 天晨读计划",
+              "拉个协同约定，和朋友一起背单词",
+              "帮我订一张明天去上海的高铁票",
+              "心里有点乱，陪我聊聊",
+            ]
+          : [
+              "帮我安排今天的计划",
+              "把现在脑子里的事记成心签",
+              "这周我做得怎么样？",
+              "拉个协同约定，和朋友一起推进",
+              "帮我订一张明天去上海的高铁票",
+              "心里有点乱，陪我聊聊",
+            ])
+  ).map((item) => ({
+    label: typeof item === "string" ? item : item.label,
+    prompt: typeof item === "string" ? item : item.prompt,
+  }));
+
   // 面板主体（浮动与内嵌两种形态共用）
   const panelBody = (
     <>
@@ -610,6 +636,25 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
             </div>
           </div>
         )}
+        {inline && !historyOpen && inlineQuickItems.length > 0 && (
+          /* 快捷问句：单行横滑小胶囊，把纵向空间留给对话 */
+          <div className="px-4 pb-3">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
+              {inlineQuickItems.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => sendText(item.prompt, null)}
+                  disabled={busy}
+                  className="shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] transition-all active:scale-[0.99] disabled:opacity-50"
+                  style={{ border: "1px solid #d8e0f0", color: "#384877", background: "#fff", cursor: "pointer" }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {(!inline || historyOpen) && messages.map(renderMessage)}
         {busy && (!inline || historyOpen) && (
           <div className="flex items-center gap-2 px-4 mb-4">
@@ -620,53 +665,6 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           </div>
         )}
       </div>
-
-      {inline && (
-        /* 案例模版：固定在输入区上方（不随消息滚动、不随历史加载消失），品牌蓝描边 */
-        <div className="shrink-0 px-4 pt-2 pb-1" style={{ background: "#FAF9F7", borderTop: "1px solid #efeae4" }}>
-          <div className="flex items-baseline justify-between">
-            <span className="text-[11px] tracking-widest font-medium" style={{ color: "#384877" }}>和心栈说事</span>
-          </div>
-          <div className="mt-2 flex flex-col gap-2">
-            {(quickAsks && quickAsks.length > 0
-              ? quickAsks
-              : (newUser
-                  ? [
-                      "提醒我每周日给妈妈打电话",
-                      "把「先做最重要的一件事」记成心签",
-                      "帮我做一个 7 天晨读计划",
-                      "拉个协同约定，和朋友一起背单词",
-                      "帮我订一张明天去上海的高铁票",
-                      "心里有点乱，陪我聊聊",
-                    ]
-                  : [
-                      "帮我安排今天的计划",
-                      "把现在脑子里的事记成心签",
-                      "这周我做得怎么样？",
-                      "拉个协同约定，和朋友一起推进",
-                      "帮我订一张明天去上海的高铁票",
-                      "心里有点乱，陪我聊聊",
-                    ]
-                ).map((prompt) => ({ label: prompt, prompt }))
-            ).map((item) => {
-              const label = typeof item === "string" ? item : item.label;
-              const prompt = typeof item === "string" ? item : item.prompt;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => sendText(prompt, null)}
-                  disabled={busy}
-                  className="w-full text-left rounded-full px-4 py-2 text-[13px] transition-all active:scale-[0.99]"
-                  style={{ border: "1px solid #d8e0f0", color: "#384877", background: "#fff", cursor: "pointer" }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* 动作提案卡片 */}
       {actions && actions.length > 0 && (
@@ -794,7 +792,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   if (inline) {
     return (
       <div
-        className="flex flex-col overflow-hidden rounded-3xl h-[min(620px,calc(100dvh-210px))] min-h-[420px] lg:h-[min(720px,calc(100dvh-120px))]"
+        className="flex flex-col overflow-hidden rounded-3xl h-[min(680px,calc(100dvh-160px))] min-h-[480px] lg:h-[min(720px,calc(100dvh-120px))]"
         style={{ background: "#FAF9F7", border: "1px solid #e7e5e4" }}
       >
         {panelBody}

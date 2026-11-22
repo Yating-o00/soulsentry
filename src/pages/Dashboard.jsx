@@ -158,8 +158,8 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#FAF9F7] pb-2 font-sans text-[#1c1917]">
       <div className="max-w-2xl lg:max-w-6xl mx-auto px-4 pt-4 md:pt-10">
-        {/* 页眉：人格模式行 */}
-        <header className="flex items-center justify-between px-1">
+        {/* 页眉：人格模式行（手机端由全局页眉承担，不再重复占高） */}
+        <header className="hidden items-center justify-between px-1 md:flex">
           <div>
             <div className="text-base font-semibold tracking-wide md:text-lg">SoulSentry</div>
             <div className="text-[11px] text-[#a8a29e] md:text-xs">{personaName}模式</div>

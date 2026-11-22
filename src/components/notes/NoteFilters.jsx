@@ -39,13 +39,13 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [], no
     (filters.dateRange?.from ? 1 : 0);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex shrink-0 items-center gap-1.5 sm:flex-wrap">
       {/* 已置顶快捷过滤（与高级筛选同风格） */}
       <Button
         variant={activePinned ? "default" : "outline"}
         size="sm"
         onClick={onTogglePinned}
-        className={`h-8 gap-1.5 ${activePinned ? 'bg-[#384877] text-white' : ''}`}
+        className={`h-8 shrink-0 gap-1.5 ${activePinned ? 'bg-[#384877] text-white' : ''}`}
       >
         <Pin className="w-3.5 h-3.5" />
         已置顶
@@ -56,7 +56,7 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [], no
         variant={activeCategory === "buddy" ? "default" : "outline"}
         size="sm"
         onClick={() => onCategorySelect?.(activeCategory === "buddy" ? "all" : "buddy")}
-        className={`h-8 gap-1.5 ${activeCategory === "buddy" ? 'bg-[#384877] text-white' : ''}`}
+        className={`h-8 shrink-0 gap-1.5 ${activeCategory === "buddy" ? 'bg-[#384877] text-white' : ''}`}
       >
         <Users className="w-3.5 h-3.5" />
         来自搭子（{buddyCount}）
@@ -65,7 +65,7 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [], no
       {/* Advanced Filters Popover */}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 relative">
+          <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 relative">
             <Filter className="w-3.5 h-3.5" />
             高级筛选
             {activeFilterCount > 0 && (

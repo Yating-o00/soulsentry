@@ -515,7 +515,9 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       aria-labelledby={compact ? undefined : "discussion-tab"}
       className="flex min-h-0 flex-1 flex-col"
     >
-      {/* 主题窗口：每个主题是一间独立讨论；全部窗口汇总所有主题 */}
+      {/* 主题窗口：每个主题是一间独立讨论；全部窗口汇总所有主题。
+          搭子空间内的紧凑模式在没有任何主题时不显示这一行，把空间留给对话。 */}
+      {(!compact || topics.length > 0 || addingTopic) && (
       <div
         className={cn(
           "flex shrink-0 items-center gap-1.5 overflow-x-auto border-b",
@@ -606,6 +608,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           </button>
         )}
       </div>
+      )}
 
       {/* 消息流：可被输入区挤压（多行输入/附件时），保证输入框始终在视口内；滚动仅限流内部 */}
       <div ref={streamRef} className="min-h-20 flex-1 overflow-y-auto px-4 py-2 sm:px-6">

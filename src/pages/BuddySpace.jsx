@@ -242,8 +242,9 @@ export default function BuddySpace() {
 
   return (
     <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 pt-4 md:pt-10 pb-4 md:pb-10">
-      {/* 页眉：搭子头 + 人格化问候（手机端返回按钮由全局页眉提供，不重复） */}
-      <header className="flex items-center gap-3">
+      {/* 页眉：搭子头 + 人格化问候（手机端返回按钮由全局页眉提供；
+          协同页把空间让给对话框，手机端隐藏这一行） */}
+      <header className={cn("items-center gap-3", activeTab === "协同" ? "hidden md:flex" : "flex")}>
         <button
           onClick={() => navigate(createPageUrl("Dashboard"))}
           aria-label="返回"
@@ -783,8 +784,10 @@ function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selec
   const selectedCollab = selectedCollabId ? myCollabs.find((t) => t.id === selectedCollabId) : null;
   // 新建小组后任务列表还没回刷时，先用 id 打开它的协同空间
   const selectedFallback = selectedCollabId ? { id: selectedCollabId } : null;
-  // 刚新建的小组可能还没进入任务列表：用 id 先打开它，而不是退回主项目的协同
-  const activeCollab = selectedCollab || selectedFallback || projectCollab || (!projectTask ? myCollabs[0] || createdCollab : null);
+  // 刚新建的小组可能还没进入任务列表：用 id 先打开它；
+  // 没有显式选择时优先项目协同，其次本搭子最近的小组——进「协同」即可直接看到对话框
+  const activeCollab =
+    selectedCollab || selectedFallback || projectCollab || myCollabs[0] || createdCollab || null;
   const activeTask = activeCollab ? myCollabs.find((t) => t.id === activeCollab.id) || null : null;
 
   // 一键开启协同：默认「朋友」场景 + Agent 全程协调，无需填写任何表单；
@@ -839,13 +842,13 @@ function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selec
   if (activeCollab) {
     return (
       <div className="space-y-3">
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
           {myCollabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => onSelectCollab?.(t.id)}
-              className={`max-w-[160px] shrink-0 truncate rounded-full px-3 py-1.5 text-[11px] transition-colors ${
+              className={`max-w-[140px] shrink-0 truncate rounded-full px-2.5 py-1 text-[10px] transition-colors ${
                 t.id === activeCollab.id
                   ? "bg-[#384877] text-white"
                   : "border border-stone-200 bg-white text-stone-500 hover:text-[#384877]"
@@ -857,7 +860,7 @@ function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selec
           <button
             type="button"
             onClick={onCreateCollab}
-            className="shrink-0 rounded-full border border-dashed border-stone-300 px-3 py-1.5 text-[11px] text-stone-400 hover:text-[#384877]"
+            className="shrink-0 rounded-full border border-dashed border-stone-300 px-2.5 py-1 text-[10px] text-stone-400 hover:text-[#384877]"
           >
             ＋ 新建小组
           </button>

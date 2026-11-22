@@ -536,7 +536,7 @@ export default function Tasks() {
       <main className="pt-4 px-4 sm:pt-8 sm:px-6 max-w-7xl mx-auto">
 
         {/* Header Section（手机端页眉已显示“约定”，不再重复大标题） */}
-        <div className="mb-5 flex flex-col justify-between gap-4 md:mb-10 md:flex-row md:items-center">
+        <div className="mb-3 flex flex-col justify-between gap-2 md:mb-10 md:flex-row md:items-center md:gap-4">
           <div className="hidden lg:block">
             <h1 className="mb-1 flex items-center gap-3 text-2xl font-bold text-slate-900 md:text-4xl">
               约定
@@ -546,25 +546,37 @@ export default function Tasks() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => setCollabDialog({ open: true, target: null })}
-            className="flex min-h-[40px] items-center gap-1.5 rounded-full border border-[#c7d2fe] bg-white px-3.5 text-[13px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:px-5 sm:text-sm"
+            className="flex h-9 min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-full border border-[#c7d2fe] bg-white px-3 text-[12px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:h-10 sm:min-h-[40px] sm:px-5 sm:text-sm"
           >
-            <Users2 className="w-4 h-4" />
+            <Users2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>协同约定</span>
           </button>
 
           <button
             onClick={() => navigate(createPageUrl("LockScreenTodo"))}
             title="生成锁屏壁纸，锁屏也能看约定、勾选约定"
-            className="flex min-h-[40px] items-center gap-1.5 rounded-full border border-[#c7d2fe] bg-white px-3.5 text-[13px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:px-5 sm:text-sm"
+            className="flex h-9 min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-full border border-[#c7d2fe] bg-white px-3 text-[12px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:h-10 sm:min-h-[40px] sm:px-5 sm:text-sm"
           >
-            <Wallpaper className="w-4 h-4" />
+            <Wallpaper className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>锁屏约定</span>
           </button>
 
-          <div className="inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+          {/* 手机端用下拉替代三段切换，和左侧按钮同处一行 */}
+          <select
+            aria-label="切换约定视图"
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value)}
+            className="h-9 rounded-full border border-slate-200 bg-white px-2.5 text-[12px] font-medium text-slate-700 shadow-sm outline-none sm:hidden"
+          >
+            <option value="overview">概览</option>
+            <option value="milestone">里程碑</option>
+            <option value="life">生活</option>
+          </select>
+
+          <div className="hidden rounded-full border border-slate-200 bg-white p-1 shadow-sm sm:inline-flex">
             <button
               onClick={() => setViewMode('overview')}
               className={cn(
@@ -604,7 +616,7 @@ export default function Tasks() {
         </div>
 
         {/* Task Creation Panel */}
-        <section id="mobile-task-create-anchor" className="mb-6 scroll-mt-20 md:mb-10">
+        <section id="mobile-task-create-anchor" className="mb-4 scroll-mt-20 md:mb-10">
           <TaskCreationPanel
             onAddTask={handleAddTask}
             onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}
@@ -617,9 +629,9 @@ export default function Tasks() {
         </section>
 
         {/* Toolbar: Search, View, Selection */}
-        <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200/60 mb-6 flex flex-col md:flex-row items-center justify-between gap-3 sticky top-2 z-20 md:mb-8">
+        <div className="bg-white/80 backdrop-blur-md p-1.5 rounded-2xl shadow-sm border border-slate-200/60 mb-4 flex items-center justify-between gap-2 sticky top-2 z-20 md:mb-8 md:p-2">
            {/* Search - local filter + press Enter to trigger global search */}
-           <div className="relative w-full md:max-w-md group flex items-center">
+           <div className="relative w-full min-w-0 md:max-w-md group flex items-center">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" />
               <input 
                 type="text" 
@@ -637,9 +649,9 @@ export default function Tasks() {
            </div>
 
            {/* Controls */}
-           <div className="flex items-center gap-2 w-full md:w-auto justify-end md:border-l md:border-slate-100 md:pl-3">
+           <div className="flex shrink-0 items-center justify-end gap-1 md:w-auto md:gap-2 md:border-l md:border-slate-100 md:pl-3">
               {/* View Modes */}
-              <div className="flex items-center bg-slate-100/50 p-1 rounded-xl mr-1">
+              <div className="mr-0.5 flex items-center rounded-xl bg-slate-100/50 p-0.5 md:mr-1 md:p-1">
                  <button 
                     onClick={() => setLayoutMode('list')}
                     className={cn(
@@ -679,9 +691,9 @@ export default function Tasks() {
                     setSelectedTaskIds([]);
                  }}
                  className={cn(
-                    "flex items-center justify-center w-9 h-9 rounded-xl transition-all border",
-                    isSelectionMode 
-                       ? "bg-blue-50 text-blue-600 border-blue-200" 
+                    "hidden items-center justify-center w-9 h-9 rounded-xl transition-all border sm:flex",
+                    isSelectionMode
+                       ? "bg-blue-50 text-blue-600 border-blue-200"
                        : "bg-transparent text-slate-500 border-transparent hover:bg-slate-50"
                  )}
                  title={isSelectionMode ? "取消选择" : "多选模式"}

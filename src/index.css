@@ -201,13 +201,22 @@ button:focus-visible {
     -webkit-touch-callout: none;
   }
 
-  /* 移动端最小触控尺寸 + 防输入框聚焦缩放 */
+  /* 移动端最小触控尺寸 + 防输入框聚焦缩放。
+     普通控件 36px 即可；导航、页眉和主操作按钮各自已有 44px+ 的显式高度，
+     避免所有小图标都被强制撑到 44px 导致工具栏虚胖。 */
   @media (max-width: 768px) {
     button:not(.no-min-size),
     a:not(.no-min-size),
     [role="button"]:not(.no-min-size) {
+      min-height: 36px;
+      min-width: 36px;
+    }
+
+    nav a,
+    nav button,
+    header button,
+    .btn-primary {
       min-height: 44px;
-      min-width: 44px;
     }
 
     input, textarea, select {

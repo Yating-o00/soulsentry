@@ -540,13 +540,13 @@ Return JSON.`,
 
   return (
     <>
-      <Card className="overflow-hidden bg-white border border-stone-200/60 rounded-2xl shadow-[0_1px_3px_rgba(0,0,0,0.04)] mb-8">
-        <div className="p-4 md:p-6">
+      <Card className="mb-0 overflow-hidden rounded-2xl border border-stone-200/60 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.04)] md:mb-8">
+        <div className="p-3 md:p-6">
           {!isExpanded ? (
             <Tabs defaultValue="smart" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4 md:mb-6 h-10 md:h-12 bg-slate-100/50 p-1 rounded-xl">
-                <TabsTrigger value="smart" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">新的约定</TabsTrigger>
-                <TabsTrigger value="quick" className="rounded-[10px] text-xs md:text-sm font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877]">快速创建</TabsTrigger>
+              <TabsList className="mb-2 grid h-8 w-full grid-cols-2 rounded-xl bg-slate-100/50 p-1 md:mb-6 md:h-12">
+                <TabsTrigger value="smart" className="rounded-[10px] text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877] md:text-sm">新的约定</TabsTrigger>
+                <TabsTrigger value="quick" className="rounded-[10px] text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-[#384877] md:text-sm">快速创建</TabsTrigger>
               </TabsList>
 
               <TabsContent value="smart" className="mt-0">
@@ -602,11 +602,11 @@ Return JSON.`,
                   }}
                 />
 
-                <div className="mt-6 flex flex-wrap gap-3 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100">
-                  <span className="text-xs font-medium text-slate-400 py-1.5">试一试:</span>
-                  <button onClick={() => setSmartInputValue("周五前完成周报")} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-100">周五前完成周报</button>
-                  <button onClick={() => setSmartInputValue("下班后去超市买牛奶")} className="px-3 py-1.5 bg-green-50 text-green-600 rounded-full text-xs font-medium hover:bg-green-100 transition-colors border border-green-100">下班后去超市买牛奶</button>
-                  <button onClick={() => setSmartInputValue("明天上午10点开会")} className="px-3 py-1.5 bg-amber-50 text-amber-600 rounded-full text-xs font-medium hover:bg-amber-100 transition-colors border border-amber-100">明天上午10点开会</button>
+                <div className="mt-2 flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-0.5 animate-in fade-in slide-in-from-bottom-2 duration-500 delay-100 md:mt-6 md:flex-wrap md:gap-3 md:overflow-visible">
+                  <span className="shrink-0 py-1.5 text-xs font-medium text-slate-400">试一试:</span>
+                  <button onClick={() => setSmartInputValue("周五前完成周报")} className="shrink-0 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100">周五前完成周报</button>
+                  <button onClick={() => setSmartInputValue("下班后去超市买牛奶")} className="shrink-0 rounded-full border border-green-100 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-600 transition-colors hover:bg-green-100">下班后去超市买牛奶</button>
+                  <button onClick={() => setSmartInputValue("明天上午10点开会")} className="shrink-0 rounded-full border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-600 transition-colors hover:bg-amber-100">明天上午10点开会</button>
                 </div>
               </TabsContent>
 

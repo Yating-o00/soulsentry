@@ -46,12 +46,10 @@ export default function BuddyCompanions() {
             >
               <Orb size={48} tint={tint} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-medium text-[#1c1917]">{b.name}</span>
-                  <span className="text-[11px] text-[#a8a29e]">{b.duration}</span>
-                </div>
+                <div className="font-medium text-[#1c1917]">{b.name}</div>
                 <div className="mt-0.5 truncate text-sm text-[#57534e]">
                   {profile?.plan_title || b.greeting[cardPersona] || b.greeting.gentle}
+                  <span className="ml-1.5 text-[11px] text-[#a8a29e]">{b.duration}</span>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 shrink-0 text-[#a8a29e]" />

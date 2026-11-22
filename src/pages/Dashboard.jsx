@@ -167,8 +167,8 @@ export default function Dashboard() {
           <img src={assistantPlanet} alt="心栈小助手" className="h-9 w-9 rounded-full object-cover md:h-11 md:w-11" />
         </header>
 
-        {/* PC：左列对话层（更宽更高），右列问候 + 陪伴 + Store；手机：保持样例纵向流 */}
-        <div className="lg:grid lg:grid-cols-[1.15fr_1fr] lg:gap-8 lg:items-start">
+        {/* PC：左列对话层与右列按黄金比例分布；手机：保持纵向流 */}
+        <div className="lg:grid lg:grid-cols-[1.618fr_1fr] lg:gap-8 lg:items-start">
           {/* 通用 Agent 对话层：内容输入的第一板块——说事、记事、办事，确认后落库。
               新用户给引导输入，老用户先给今日总结再给模版 */}
           <section className="mt-4 px-1">

@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles, Trash2, Pencil } from "lucide-react";
+import {
+  ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles, Trash2, Pencil,
+  Sun, Lightbulb, Users, BarChart3, UserCircle, MapPin, ListChecks, BookOpen, Library,
+  StickyNote, CheckCircle2, CalendarCheck, CalendarDays, ClipboardList, HeartPulse,
+  Backpack, FolderOpen, Circle,
+} from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
@@ -30,6 +35,28 @@ import BuddyChatPanel from "@/components/buddy/panels/BuddyChatPanel";
 import { useBuddyState } from "@/components/buddy/panels/shared";
 import { useListSubtasks } from "@/components/buddy/useListSubtasks";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
+
+// 手机端底部标签图标映射：把配置化的板块名称转成可识别的图标
+const SECTION_ICONS = {
+  今日: Sun,
+  解题: Lightbulb,
+  协同: Users,
+  周报: BarChart3,
+  画像: UserCircle,
+  行程: MapPin,
+  清单: ListChecks,
+  灵感: Sparkles,
+  在读: BookOpen,
+  书架: Library,
+  笔记: StickyNote,
+  打卡: CheckCircle2,
+  习惯: CalendarCheck,
+  课表: CalendarDays,
+  记录: ClipboardList,
+  身体: HeartPulse,
+  "装备与知识": Backpack,
+  资料: FolderOpen,
+};
 
 /**
  * 搭子空间（二期）：配置驱动的空间脚手架——每颗搭子一套板块（buddy.sections），
@@ -241,7 +268,7 @@ export default function BuddySpace() {
   };
 
   return (
-    <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 pt-4 md:pt-10 pb-4 md:pb-10">
+    <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-3 pt-2 md:px-4 md:pt-10 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-10">
       {/* 页眉：搭子头 + 人格化问候（手机端返回按钮由全局页眉提供；
           协同页把空间让给对话框，手机端隐藏这一行） */}
       <header className={cn("items-center gap-3", activeTab === "协同" ? "hidden md:flex" : "flex")}>
@@ -268,8 +295,8 @@ export default function BuddySpace() {
         </button>
       </header>
 
-      {/* 板块标签（配置驱动） */}
-      <nav className="mt-3 flex gap-1 overflow-x-auto scrollbar-hide border-b border-stone-200 md:mt-5 md:gap-2">
+      {/* 板块标签（配置驱动）：桌面端顶部标签；手机端用底部标签导航 */}
+      <nav className="hidden md:mt-5 md:flex md:gap-2 overflow-x-auto scrollbar-hide border-b border-stone-200">
         {sections.map((s) => {
           const active = s === activeTab;
           return (
@@ -277,7 +304,7 @@ export default function BuddySpace() {
               key={s}
               onClick={() => setTab(s)}
               className={cn(
-                "shrink-0 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors",
+                "shrink-0 px-3 py-2 text-[13px] border-b-2 -mb-px transition-colors md:px-4 md:py-2.5 md:text-sm",
                 active ? "font-semibold text-stone-900" : "border-transparent text-stone-400 hover:text-stone-600"
               )}
               style={active ? { borderColor: tint[2] } : undefined}
@@ -289,7 +316,7 @@ export default function BuddySpace() {
       </nav>
 
       {/* 板块内容 */}
-      <div className="mt-5">
+      <div className="mt-3 md:mt-5">
         {activeTab === sections[0] && buddy?.custom && (
           <div className="space-y-4">
             <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
@@ -388,6 +415,7 @@ export default function BuddySpace() {
             buddy={buddy}
             tint={tint}
             persona={persona}
+            profile={profile}
             projectTask={projectTask}
             allTasks={allTasks}
             selectedCollabId={selectedCollabId}
@@ -559,6 +587,31 @@ export default function BuddySpace() {
           </div>
         </div>
       )}
+      {/* 手机端场景化底部标签：把板块切换放到拇指区，同时替代全局底部导航 */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 md:hidden flex items-stretch justify-around border-t border-stone-200 bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
+        aria-label="搭子空间标签"
+      >
+        {sections.map((s) => {
+          const active = s === activeTab;
+          const Icon = SECTION_ICONS[s] || Circle;
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setTab(s)}
+              aria-current={active ? "page" : undefined}
+              className={cn(
+                "flex min-h-[48px] min-w-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors",
+                active ? "text-[#B89A6A]" : "text-stone-400 hover:text-stone-600"
+              )}
+            >
+              <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.6} />
+              <span className={cn("text-[11px]", active && "font-medium")}>{s}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
@@ -758,7 +811,7 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
    以专业 Agent 为协调者（拉齐共识、化解分歧、推进讨论、总结沉淀、外部信息支援）；
    讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
    其他搭子的协同约定不出现在这里。 */
-function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onDeleteCollab }) {
+function CollabSection({ buddy, tint, persona, profile, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onDeleteCollab }) {
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
   const [createdCollabId, setCreatedCollabId] = useState(null);
@@ -865,7 +918,7 @@ function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selec
             ＋ 新建小组
           </button>
         </div>
-        <BuddyCollabPanel key={activeCollab.id} taskId={activeCollab.id} buddy={buddy} tint={tint} />
+        <BuddyCollabPanel key={activeCollab.id} taskId={activeCollab.id} buddy={buddy} tint={tint} profile={profile} />
         {activeTask && activeTask.id !== projectTask?.id && !activeTask.shared_role && (
           <div className="flex justify-end">
             <button

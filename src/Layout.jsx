@@ -328,6 +328,8 @@ function LayoutContent({ children }) {
     currentPath === "/collabspace" ||
     currentPath.startsWith("/share/") ||
     currentPath.startsWith("/invite/");
+  // 搭子空间在手机端使用自己的场景化底部标签（今日/解题/协同…），不再叠加全局底部导航
+  const hideGlobalMobileNav = currentPath === "/buddyspace";
   
   // Fetch user theme preferences (深色模式已移除，仅保留主色与字号)
   const [theme, setTheme] = useState({
@@ -451,7 +453,7 @@ function LayoutContent({ children }) {
         {/* 背景必须是纯色:半透明渐变做滚动容器底色会让 iOS 每帧重合成整个视口,造成滚动卡顿 */}
         <main
           className={`flex-1 flex flex-col bg-[#FAF9F7] relative w-full min-w-0 overflow-hidden ${
-            isBareMobilePage ? "pb-0" : "pb-[calc(5rem_+_env(safe-area-inset-bottom))] md:pb-0"
+            isBareMobilePage || hideGlobalMobileNav ? "pb-0" : "pb-[calc(5rem_+_env(safe-area-inset-bottom))] md:pb-0"
           }`}
         >
           {!isBareMobilePage && <MobileHeader />}
@@ -461,8 +463,8 @@ function LayoutContent({ children }) {
           </div>
           </main>
 
-          {/* 移动端底部导航：独立页面（协同空间/分享/邀请）自带导航，不重复渲染 */}
-          {!isBareMobilePage && <MobileNavigation />}
+          {/* 移动端底部导航：独立页面（协同空间/分享/邀请）或搭子空间自带导航，不重复渲染 */}
+          {!isBareMobilePage && !hideGlobalMobileNav && <MobileNavigation />}
           </SidebarProvider>
     );
     }

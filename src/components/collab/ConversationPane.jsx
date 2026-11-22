@@ -136,7 +136,7 @@ function MessageActions({ message, canDelete, onConvert, onMark, onReply, onDele
 
 // ──────────────────────────── 讨论视图 ────────────────────────────
 
-function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, compact = false, savedTopics = [], members = [] }) {
+function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, compact = false, savedTopics = [], members = [], onInvite }) {
   const queryClient = useQueryClient();
   const [topicFilter, setTopicFilter] = useState("all");
   const [createdTopics, setCreatedTopics] = useState([]);
@@ -154,13 +154,13 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
   const inputRef = useRef(null);
   const fileRef = useRef(null);
 
-  // 输入框随内容长高（最多约 6 行），手机上便于检查和修改长句
+  // 输入框随内容长高（紧凑模式最多 4 行，桌面最多 6 行）
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [content]);
+    el.style.height = `${Math.min(el.scrollHeight, compact ? 120 : 160)}px`;
+  }, [content, compact]);
 
   // 可 @ 的协同成员（不含自己；Agent 单独展示）
   const mentionableMembers = useMemo(
@@ -422,8 +422,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   mine
                     ? "rounded-2xl rounded-tr-sm bg-[#384877] text-[#FAF9F7]"
                     : isAgent
-                      ? "rounded-2xl rounded-tl-sm border border-[#E6EAF4] bg-[#F5F7FC] text-[#4B5565]"
-                      : "rounded-2xl rounded-tl-sm border border-stone-200 bg-white text-stone-700 shadow-[0_1px_2px_rgba(36,36,36,0.04)]"
+                      ? "rounded-2xl rounded-tl-sm bg-[#F5F0E8] text-[#5B4A3A]"
+                      : "rounded-2xl rounded-tl-sm border border-stone-100 bg-white text-stone-700 shadow-[0_1px_2px_rgba(36,36,36,0.03)]"
                 )}
               >
                 {message.content}
@@ -639,11 +639,24 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 key={label}
                 type="button"
                 onClick={() => handleSend(label)}
-                className="min-h-[32px] rounded-full border border-[#d8d6cf] bg-white px-3 text-[12px] text-stone-600 transition-colors hover:border-[#384877] hover:text-[#384877]"
+                className="min-h-[32px] rounded-full border border-[#d8d6cf] bg-white px-3 text-[12px] text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
               >
                 {label}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* 空间还空时，给出一个显眼的邀请入口 */}
+        {compact && !agentPendingSince && filteredMessages[filteredMessages.length - 1]?.agent && members.length <= 1 && onInvite && (
+          <div className="pb-2 pl-9 pt-0.5">
+            <button
+              type="button"
+              onClick={onInvite}
+              className="rounded-full border border-[#B89A6A] bg-white px-4 py-1.5 text-[12px] font-medium text-[#8B6F47] transition-colors hover:bg-[#F5F0E8]"
+            >
+              邀请伙伴加入
+            </button>
           </div>
         )}
 
@@ -742,77 +755,124 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             ))}
           </div>
         )}
-        <div className="rounded-md border bg-[#fdfcf9] p-2.5 focus-within:border-[#384877]" style={{ borderColor: "#d4d2cb" }}>
-          <div className="flex items-start gap-2">
-            <div className="mt-0.5 flex flex-shrink-0 flex-col gap-1.5">
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading || attachments.length >= 10}
-                className="flex h-7 w-7 items-center justify-center rounded-md border text-[#99958d] transition-colors hover:text-[#57534d] disabled:opacity-50 min-h-7"
-                style={{ borderColor: "#d8d6cf" }}
-                title="插入图片或文档"
-                aria-label="插入图片或文档"
+        {compact ? (
+          // 手机搭子空间：极简圆角输入条，焦糖色发送按钮，把视觉重心让给对话内容
+          <div className="rounded-full border border-stone-200 bg-white px-1 py-1 pl-3 transition-colors focus-within:border-[#B89A6A]">
+            <div className="flex items-center gap-2">
+              <Textarea
+                ref={inputRef}
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  detectMention(e.target.value, e.target.selectionStart);
+                }}
+                onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
+                placeholder={
+                  topicFilter === "all"
+                    ? "@ 召唤搭子总结 · 把讨论变成约定…"
+                    : `在「${topicFilter}」里说…`
+                }
+                className="min-h-[38px] max-h-[120px] flex-1 resize-none border-0 bg-transparent py-2 text-[14px] leading-5 text-stone-700 placeholder:text-stone-400 focus-visible:ring-0"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (mentionOpen) {
+                    if (e.key === "Enter" || e.key === "Tab") {
+                      e.preventDefault();
+                      insertMention();
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setMentionOpen(false);
+                      return;
+                    }
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={() => handleSend()}
+                disabled={(!content.trim() && attachments.length === 0) || uploading}
+                className="h-9 flex-shrink-0 rounded-full bg-[#B89A6A] px-4 text-[13px] font-medium text-white hover:bg-[#A88A5A] disabled:opacity-50"
+                aria-label="发送讨论"
               >
-                {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
-              </button>
+                发送
+              </Button>
             </div>
-            <input
-              ref={fileRef}
-              type="file"
-              multiple
-              className="hidden"
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md"
-              onChange={(e) => handlePickFiles(e.target.files)}
-            />
-            <Textarea
-              ref={inputRef}
-              value={content}
-              onChange={(e) => {
-                setContent(e.target.value);
-                detectMention(e.target.value, e.target.selectionStart);
-              }}
-              onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
-              placeholder={
-                topicFilter === "all"
-                  ? compact
-                    ? "说点什么…输入 @ 可以叫上搭子"
-                    : "写下想法，@ 可召唤 Agent…"
-                  : `在「${topicFilter}」里说…`
-              }
-              className="min-h-[52px] max-h-40 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
-              rows={2}
-              onKeyDown={(e) => {
-                if (mentionOpen) {
-                  if (e.key === "Enter" || e.key === "Tab") {
-                    e.preventDefault();
-                    insertMention();
-                    return;
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setMentionOpen(false);
-                    return;
-                  }
-                }
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSend();
-                }
-              }}
-            />
-            <Button
-              size="sm"
-              onClick={() => handleSend()}
-              disabled={(!content.trim() && attachments.length === 0) || uploading}
-              className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
-              style={{ backgroundColor: C.ink }}
-              aria-label="发送讨论"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </Button>
           </div>
-          {!compact && (
+        ) : (
+          <div className="rounded-md border bg-[#fdfcf9] p-2.5 focus-within:border-[#384877]" style={{ borderColor: "#d4d2cb" }}>
+            <div className="flex items-start gap-2">
+              <div className="mt-0.5 flex flex-shrink-0 flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading || attachments.length >= 10}
+                  className="flex h-7 w-7 items-center justify-center rounded-md border text-[#99958d] transition-colors hover:text-[#57534d] disabled:opacity-50 min-h-7"
+                  style={{ borderColor: "#d8d6cf" }}
+                  title="插入图片或文档"
+                  aria-label="插入图片或文档"
+                >
+                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md"
+                onChange={(e) => handlePickFiles(e.target.files)}
+              />
+              <Textarea
+                ref={inputRef}
+                value={content}
+                onChange={(e) => {
+                  setContent(e.target.value);
+                  detectMention(e.target.value, e.target.selectionStart);
+                }}
+                onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
+                placeholder={
+                  topicFilter === "all"
+                    ? "写下想法，@ 可召唤 Agent…"
+                    : `在「${topicFilter}」里说…`
+                }
+                className="min-h-[52px] max-h-40 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
+                rows={2}
+                onKeyDown={(e) => {
+                  if (mentionOpen) {
+                    if (e.key === "Enter" || e.key === "Tab") {
+                      e.preventDefault();
+                      insertMention();
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setMentionOpen(false);
+                      return;
+                    }
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                onClick={() => handleSend()}
+                disabled={(!content.trim() && attachments.length === 0) || uploading}
+                className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
+                style={{ backgroundColor: C.ink }}
+                aria-label="发送讨论"
+              >
+                <ArrowUp className="w-4 h-4" />
+              </Button>
+            </div>
             <div className="mt-2 hidden items-center justify-between border-t pt-2 sm:flex" style={{ borderColor: C.lineSoft }}>
               <span className="px-1.5 text-[11px]" style={{ color: "#8a867e" }}>
                 <span className="font-medium" style={{ color: "#384877" }}>@</span> 召唤 Agent 总结 · 查攻略 · 转化
@@ -821,8 +881,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 {content.trim() || attachments.length > 0 ? "Enter 发送 · Shift+Enter 换行" : "成员与 Agent 的共同讨论"}
               </span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -886,7 +946,7 @@ function ActivityView({ taskId }) {
 // ──────────────────────────── 会话窗（右栏） ────────────────────────────
 
 export default function ConversationPane({
-  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId, compact = false, savedTopics = [], members = [],
+  taskId, view, onViewChange, highlightId, onClearHighlight, onOpenAgent, messageCount, currentUserId, compact = false, savedTopics = [], members = [], onInvite,
 }) {
   return (
     <section
@@ -950,7 +1010,7 @@ export default function ConversationPane({
       </div>
       )}
       {view === "discussion"
-        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} compact={compact} savedTopics={savedTopics} members={members} />
+        ? <DiscussionView taskId={taskId} highlightId={highlightId} onClearHighlight={onClearHighlight} currentUserId={currentUserId} compact={compact} savedTopics={savedTopics} members={members} onInvite={onInvite} />
         : <ActivityView taskId={taskId} />}
     </section>
   );

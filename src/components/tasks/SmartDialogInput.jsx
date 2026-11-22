@@ -617,7 +617,7 @@ ${timeCtx.promptSnippet}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={messages.length === 0 ? "用一句话描述你的约定，比如：明天下午3点和李明开会讨论方案..." : "继续补充或修正，比如：改成下周三、加个准备资料的子任务..."}
+          placeholder={messages.length === 0 ? "一句话描述约定…" : "继续补充或修正…"}
           disabled={isLoading}
           className="flex-1 bg-slate-50 border-slate-200 rounded-xl"
         />

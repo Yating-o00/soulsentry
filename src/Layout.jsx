@@ -246,38 +246,69 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
   );
 }
 
+// 手机端页眉标题：直接显示当前页面的名字，避免每个页面重复品牌名
+const MOBILE_PAGE_TITLES = {
+  "/": "首页",
+  "/dashboard": "首页",
+  "/tasks": "约定",
+  "/notes": "心签",
+  "/notifications": "通知",
+  "/notificationsettings": "提醒设置",
+  "/account": "我的",
+  "/buddystore": "搭子Store",
+  "/buddyspace": "搭子空间",
+  "/collabspace": "协同空间",
+  "/teams": "团队",
+  "/trash": "回收站",
+  "/knowledgebase": "知识库",
+  "/heartsign": "心签",
+  "/agentintro": "心栈助手",
+  "/buddyclaim": "认领搭子",
+  "/lockscreentodo": "锁屏约定",
+  "/onboarding": "开始使用",
+  "/pricing": "会员",
+  "/adminstats": "数据看板",
+  "/invitecollabpreview": "协同邀请",
+};
+
+const normalizedPath = (pathname) => String(pathname || "/").toLowerCase();
+
 function MobileHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const path = normalizedPath(location.pathname);
 
   // 主导航页面：显示侧边栏按钮；其它子页面显示返回按钮
   const mainPaths = [
-    createPageUrl("Dashboard"),
-    createPageUrl("Tasks"),
-    createPageUrl("Notes"),
-    "/"
+    "/",
+    "/dashboard",
+    "/tasks",
+    "/notes",
+    "/notifications",
+    "/account",
   ];
-  const isMainPage = mainPaths.indexOf(location.pathname) !== -1;
+  const isMainPage = mainPaths.indexOf(path) !== -1;
+  const title = MOBILE_PAGE_TITLES[path] || t('soulSentry');
 
   return (
-    <header className="bg-white border-b border-slate-200 px-4 py-3 lg:hidden sticky top-0 z-10 min-h-[56px]">
+    <header className="lg:hidden sticky top-0 z-30 w-full border-b border-stone-200/70 bg-white">
       {/* 不用 backdrop-blur：sticky 头 + 背景模糊会让 iOS 滚动时每帧重绘整个视口,是移动端滚动卡顿的主要来源 */}
-      <div className="flex items-center gap-3">
+      <div className="flex w-full min-h-[52px] items-center gap-2 px-3">
         {isMainPage ? (
-          <SidebarTrigger className="hover:bg-slate-100 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center" />
+          <SidebarTrigger className="hover:bg-stone-100 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0" />
         ) : (
           <button
             type="button"
             onClick={() => navigate(-1)}
             aria-label="返回"
-            className="hover:bg-slate-100 p-2.5 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="hover:bg-stone-100 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
           >
-            <ChevronLeft className="w-5 h-5 text-slate-700" />
+            <ChevronLeft className="w-5 h-5 text-stone-700" />
           </button>
         )}
-        <h1 className="text-base font-semibold text-stone-900">
-          {t('soulSentry')}
+        <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-stone-900">
+          {title}
         </h1>
       </div>
     </header>
@@ -290,6 +321,13 @@ function LayoutContent({ children }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const { t } = useTranslation();
   const { isOnline, pendingSync } = useOfflineManager();
+  // 自带页头/底部导航的独立页面（协同空间、公开分享、邀请落地）：
+  // 不再叠加全局手机壳，避免双页眉、双页脚挡内容
+  const currentPath = normalizedPath(location.pathname);
+  const isBareMobilePage =
+    currentPath === "/collabspace" ||
+    currentPath.startsWith("/share/") ||
+    currentPath.startsWith("/invite/");
   
   // Fetch user theme preferences (深色模式已移除，仅保留主色与字号)
   const [theme, setTheme] = useState({
@@ -405,22 +443,26 @@ function LayoutContent({ children }) {
 
         {/* 离线状态提示 */}
         {!isOnline && (
-          <div className="md:hidden fixed top-0 inset-x-0 z-50 bg-amber-500 text-white text-center py-3 text-base font-medium flex items-center justify-center gap-2">
+          <div className="md:hidden fixed top-[52px] inset-x-0 z-40 bg-amber-500 text-white text-center py-2.5 text-sm font-medium flex items-center justify-center gap-2">
             <WifiOff className="w-4 h-4" /> 离线模式 {pendingSync > 0 && `· ${pendingSync} 项待同步`}
           </div>
         )}
 
         {/* 背景必须是纯色:半透明渐变做滚动容器底色会让 iOS 每帧重合成整个视口,造成滚动卡顿 */}
-        <main className="flex-1 flex flex-col bg-[#FAF9F7] relative w-full overflow-hidden pb-20 md:pb-0">
-          <MobileHeader />
+        <main
+          className={`flex-1 flex flex-col bg-[#FAF9F7] relative w-full min-w-0 overflow-hidden ${
+            isBareMobilePage ? "pb-0" : "pb-[calc(5rem_+_env(safe-area-inset-bottom))] md:pb-0"
+          }`}
+        >
+          {!isBareMobilePage && <MobileHeader />}
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto min-w-0 [scroll-padding-bottom:6rem] md:[scroll-padding-bottom:0]">
             {children}
           </div>
           </main>
 
-          {/* 移动端底部导航 */}
-          <MobileNavigation />
+          {/* 移动端底部导航：独立页面（协同空间/分享/邀请）自带导航，不重复渲染 */}
+          {!isBareMobilePage && <MobileNavigation />}
           </SidebarProvider>
     );
     }

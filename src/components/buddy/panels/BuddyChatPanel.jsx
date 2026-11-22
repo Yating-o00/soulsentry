@@ -30,11 +30,19 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
   const [switchingPersona, setSwitchingPersona] = useState(null);
   const scrollRef = useRef(null);
   const fileRef = useRef(null);
+  const composerRef = useRef(null);
   const greetedRef = useRef(false);
 
   // 每颗搭子独立人格：未单独设置时用搭子类型的默认人格
   const activePersonaKey = profile?.persona || buddy.defaultPersona || DEFAULT_PERSONA;
-  const activePersona = PERSONAS.find((p) => p.key === activePersonaKey) || PERSONAS[0];
+
+  // 输入框随内容长高（最多约 5 行），手机端更容易检查和修改问题
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
+  }, [input]);
 
   const chat = useMemo(() => (Array.isArray(state.chat) ? state.chat : []), [state.chat]);
   const quickAsks = QUICK_ASKS[buddy.id] || (Array.isArray(buddy.quickAsks) ? buddy.quickAsks : []);
@@ -227,14 +235,9 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
   };
 
   return (
-    <section className="rounded-2xl border border-stone-200 bg-white p-4">
-      <div className="flex items-baseline justify-between px-1">
-        <span className="text-[11px] tracking-widest text-stone-400">问{buddy.name}</span>
-        <span className="text-[10px] text-stone-300">专业问题，随时问</span>
-      </div>
-
+    <section className="rounded-2xl border border-stone-200 bg-white p-3.5 md:p-4">
       {/* 陪伴人格：对话前先设定，后续对话与协同都按它来 */}
-      <div className="mt-2.5 rounded-xl bg-[#FAF9F7] px-2.5 py-2">
+      <div className="rounded-xl bg-[#FAF9F7] px-2.5 py-2">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="mr-0.5 text-[10px] tracking-widest text-stone-400">陪伴方式</span>
           {PERSONAS.map((p) => {
@@ -259,13 +262,10 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
             );
           })}
         </div>
-        <p className="mt-1.5 text-[10px] leading-relaxed text-stone-400">
-          {activePersona.desc} · 只影响这颗搭子
-        </p>
       </div>
 
       {chat.length > 0 && (
-        <div ref={scrollRef} className="mt-3 max-h-[320px] space-y-3 overflow-y-auto pr-1">
+        <div ref={scrollRef} className="mt-3 max-h-[min(380px,calc(100dvh_-_420px))] min-h-[180px] space-y-3 overflow-y-auto pr-1 md:max-h-[340px]">
           {chat.map((m, i) =>
             m.role === "user" ? (
               <div key={i} className="flex justify-end">
@@ -279,7 +279,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                             <img
                               src={att.url}
                               alt={att.name || "图片"}
-                              className="max-h-60 w-auto max-w-full rounded-lg border border-white/20 bg-white/10 object-contain"
+                              className="max-h-48 w-auto max-w-full rounded-lg border border-white/20 bg-white/10 object-contain md:max-h-60"
                             />
                           </a>
                         ) : (
@@ -384,26 +384,34 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       )}
 
       <form
-        className="mt-3 flex gap-2"
+        className="mt-3 flex items-end gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           send();
         }}
       >
-        <div className="flex min-h-[42px] flex-1 items-center gap-1 rounded-full border border-stone-200 bg-[#FAF9F7] pl-1.5 pr-3 focus-within:border-stone-400">
+        <div className="flex min-h-[44px] flex-1 items-end gap-1 rounded-2xl border border-stone-200 bg-[#FAF9F7] pl-1.5 pr-2 focus-within:border-stone-400">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading || attachments.length >= 3}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-stone-600 disabled:opacity-50"
+            className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-stone-600 disabled:opacity-50"
             title="添加图片或文件"
             aria-label="添加图片或文件"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </button>
-          <input
+          <textarea
+            ref={composerRef}
+            rows={1}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
             onPaste={(e) => {
               const files = Array.from(e.clipboardData?.files || []);
               if (files.length > 0) {
@@ -411,14 +419,14 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                 handleFiles(files);
               }
             }}
-            placeholder={`问点专业的，也可以粘贴图片/文件，比如「${quickAsks[0] || "怎么坚持下去"}」`}
-            className="min-w-0 flex-1 bg-transparent py-2 text-[14px] text-stone-800 placeholder:text-stone-400 focus:outline-none"
+            placeholder="问点专业的…"
+            className="max-h-[120px] min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[14px] leading-5 text-stone-800 placeholder:text-stone-400 focus:outline-none"
           />
         </div>
         <button
           type="submit"
           disabled={(!input.trim() && attachments.length === 0) || sending || uploading}
-          className="min-h-[42px] rounded-full px-4 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-50"
+          className="min-h-[44px] rounded-full px-4 text-sm font-medium text-white transition-transform active:scale-95 disabled:opacity-50"
           style={{ background: tint[2] }}
         >
           发送

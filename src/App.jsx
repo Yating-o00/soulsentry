@@ -41,8 +41,24 @@ const RouteFallback = () => (
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
   const location = useLocation();
-  // 首页（Dashboard）已内嵌通用 Agent 对话框，右下角机器人不再重复出现
-  const isHomePage = location.pathname === createPageUrl("Dashboard") || location.pathname === "/";
+  // 已经在页面内提供了对话入口的页面，不再重复出现右下角机器人：
+  // 首页（内嵌 Agent）、搭子空间（搭子对话）、协同空间（Agent 抽屉）、通知页（捕获输入框）
+  const normalizedPath = String(location.pathname || "/").toLowerCase();
+  const hideFloatingAssistant =
+    normalizedPath.startsWith("/share/") ||
+    normalizedPath.startsWith("/invite/") ||
+    [
+      "/",
+      "/dashboard",
+      "/buddyspace",
+      "/collabspace",
+      "/notifications",
+      "/notificationsettings",
+      "/knowledgebase",
+      "/buddystore",
+      "/trash",
+      "/pricing",
+    ].includes(normalizedPath);
 
   // 行为埋点：每个浏览器会话上报一次应用打开（驱动 admin 看板的活跃口径）
   useEffect(() => {
@@ -109,8 +125,8 @@ const AuthenticatedApp = () => {
       </Routes>
       </React.Suspense>
       <React.Suspense fallback={null}><OnboardingHost /></React.Suspense>
-      {/* 心栈小助手：右下角机器人入口（公开分享页不显示；首页已内嵌对话框，不重复出现） */}
-      {isAuthenticated && !isPublicSharePage() && !isHomePage && (
+      {/* 心栈小助手：右下角机器人入口（公开分享页不显示；已有页面内对话入口时不重复出现） */}
+      {isAuthenticated && !isPublicSharePage() && !hideFloatingAssistant && (
         <React.Suspense fallback={null}><AssistantWidget /></React.Suspense>
       )}
     </LayoutWrapper>
@@ -131,7 +147,7 @@ function App() {
         <SonnerToaster
           position="top-center"
           closeButton
-          offset={20}
+          offset={{ top: 64, bottom: 84 }}
           gap={10}
           duration={3500}
           toastOptions={{

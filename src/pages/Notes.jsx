@@ -676,7 +676,7 @@ export default function Notes() {
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
-            placeholder="搜索你记过的任何东西…"
+            placeholder="搜索心签…"
             className="pl-9 pr-8 h-9 md:h-10 text-sm bg-white border-slate-200 rounded-xl focus:ring-2 focus:ring-[#384877]/20"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}

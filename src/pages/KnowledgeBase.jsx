@@ -215,7 +215,7 @@ ${context}
               <Brain className="w-7 h-7 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-slate-800">AI 知识库</h1>
+              <h1 className="text-2xl font-bold text-slate-800 md:text-3xl">AI 知识库</h1>
               <p className="text-slate-600 text-sm">智能存储 · 快速检索 · AI问答</p>
             </div>
           </div>

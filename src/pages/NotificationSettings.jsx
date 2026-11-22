@@ -164,8 +164,9 @@ export default function NotificationSettingsPage() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="hidden lg:block"
       >
-        <h1 className="text-3xl font-bold bg-[#384877] bg-clip-text text-transparent mb-2">
+        <h1 className="text-2xl font-bold bg-[#384877] bg-clip-text text-transparent mb-2 md:text-3xl">
           通知设置
         </h1>
         <p className="text-slate-600">自定义您的约定提醒方式和通知规则</p>

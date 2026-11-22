@@ -147,6 +147,15 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   const messagesRef = useRef([]);
   const scrollRef = useRef(null);
   const lastIdRef = useRef("");
+  const composerRef = useRef(null);
+
+  // 输入框随内容长高（最多约 5 行），手机上也能看清自己正在输入什么
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  }, [input]);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -483,14 +492,14 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
     <>
       {/* 头部（浮动形态；内嵌形态用问候区代替） */}
       {!inline && (
-      <div className="flex items-center gap-2.5 px-4 py-3 shrink-0" style={{ background: "#fff", borderBottom: "1px solid #e8ecef" }}>
+      <div className="flex items-center gap-2.5 px-4 py-2.5 shrink-0" style={{ background: "#fff", borderBottom: "1px solid #e8ecef" }}>
         <img src={assistantPlanet} alt="" className={`assistant-avatar w-9 h-9 rounded-full object-cover ${busy ? "assistant-avatar--active" : ""}`} />
         <div className="flex-1 min-w-0">
           <div className="text-[14px] font-semibold" style={{ color: "#1c1c1e" }}>心栈小助手</div>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: busy ? "#f0c36d" : "#1f9d55" }} />
             <span className="text-[11px]" style={{ color: "#63666e" }}>
-              {busy ? "正在思考…" : "24 小时陪伴中 · 说事、记事、办事都可以找我"}
+              {busy ? "正在思考…" : "在线"}
             </span>
           </div>
         </div>
@@ -505,8 +514,21 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         </button>
       </div>
       )}
-      <div className="flex justify-end px-4 py-2">
-        <button type="button" onClick={() => { const next = !memoryOpen; setMemoryOpen(next); if (next) loadMemories(); }} className="text-xs text-slate-600">我的记忆</button>
+      <div className="flex items-center justify-end gap-3 px-4 py-1.5">
+        {inline && messages.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !historyOpen;
+              setHistoryOpen(next);
+              if (next) requestAnimationFrame(scrollToBottom);
+            }}
+            className="text-xs text-slate-500"
+          >
+            {historyOpen ? "收起历史" : `历史对话 ${messages.length}`}
+          </button>
+        )}
+        <button type="button" onClick={() => { const next = !memoryOpen; setMemoryOpen(next); if (next) loadMemories(); }} className="text-xs text-slate-500">我的记忆</button>
       </div>
       {memoryOpen && <div className="max-h-52 overflow-auto bg-white px-4 py-3 text-sm border-b border-slate-200">
         <p className="text-xs text-slate-500 mb-2">对小助手说“记住我……”可以添加记忆。</p>
@@ -571,7 +593,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
           <div className="flex flex-col items-center px-6 pb-2">
             <img src={assistantPlanet} alt="" className="assistant-avatar w-20 h-20 rounded-full object-cover mb-3" />
             <div className="rounded-2xl px-4 py-3 text-[13px] leading-relaxed" style={{ background: "#eef1f9", border: "1px solid #dbe3f2", color: "#384877" }}>
-              你好呀，我是心栈小助手。想记的、想定的都可以说给我听；也可以直接让我改东西——比如「勾掉子约定『订酒店』」「把『周报』的标题改成『周报第45周』」，确认后我就会动手。
+              想记的、想定的都可以说给我听；也可以让我直接改东西，确认后我就动手。
             </div>
           </div>
         )}
@@ -586,22 +608,6 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
                   : summary || "欢迎回来。想从哪件开始，还是先说点别的？"}
               </p>
             </div>
-          </div>
-        )}
-        {inline && messages.length > 0 && (
-          <div className="px-4 pb-2">
-            <button
-              type="button"
-              onClick={() => {
-                const next = !historyOpen;
-                setHistoryOpen(next);
-                if (next) requestAnimationFrame(scrollToBottom);
-              }}
-              className="rounded-full px-3 py-1 text-[11px] transition-colors"
-              style={{ color: "#63666e", background: "#fff", border: "1px solid #e4e6ec", cursor: "pointer" }}
-            >
-              {historyOpen ? "收起历史对话" : `查看历史对话（${messages.length} 条）`}
-            </button>
           </div>
         )}
         {(!inline || historyOpen) && messages.map(renderMessage)}
@@ -620,7 +626,6 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
         <div className="shrink-0 px-4 pt-2 pb-1" style={{ background: "#FAF9F7", borderTop: "1px solid #efeae4" }}>
           <div className="flex items-baseline justify-between">
             <span className="text-[11px] tracking-widest font-medium" style={{ color: "#384877" }}>和心栈说事</span>
-            <span className="text-[10px]" style={{ color: "#c4c6cc" }}>不用认领搭子，直接说</span>
           </div>
           <div className="mt-2 flex flex-col gap-2">
             {(quickAsks && quickAsks.length > 0
@@ -748,6 +753,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
       <div className="shrink-0 px-3 py-2.5" style={inline ? { background: "transparent" } : { background: "#fff", borderTop: "1px solid #e8ecef" }}>
         <div className="flex items-end gap-2">
           <textarea
+            ref={composerRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -757,12 +763,12 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
               }
             }}
             rows={1}
-            placeholder={inline ? "立约定、写心签、订票购物…都可以说" : "和小助手说点什么…"}
+            placeholder={inline ? "说点什么，我来安排…" : "和小助手说点什么…"}
             className="flex-1 resize-none px-3.5 py-2.5 text-[13.5px] outline-none"
             style={
               inline
-                ? { background: "#fff", border: "1px solid #e8ecef", borderRadius: 9999, maxHeight: 120, color: "#1c1c1e" }
-                : { background: "#eef0f5", border: "none", borderRadius: 16, maxHeight: 120, color: "#1c1c1e" }
+                ? { background: "#fff", border: "1px solid #e8ecef", borderRadius: 20, maxHeight: 140, minHeight: 40, color: "#1c1c1e" }
+                : { background: "#eef0f5", border: "none", borderRadius: 16, maxHeight: 140, minHeight: 40, color: "#1c1c1e" }
             }
           />
           <button
@@ -788,7 +794,7 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
   if (inline) {
     return (
       <div
-        className="flex flex-col overflow-hidden rounded-3xl h-[600px] lg:h-[720px]"
+        className="flex flex-col overflow-hidden rounded-3xl h-[min(620px,calc(100dvh-210px))] min-h-[420px] lg:h-[min(720px,calc(100dvh-120px))]"
         style={{ background: "#FAF9F7", border: "1px solid #e7e5e4" }}
       >
         {panelBody}
@@ -798,12 +804,12 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
 
   return (
     <>
-      {/* 右下角机器人入口 */}
+      {/* 右下角机器人入口：手机上抬到底部导航之上，避免压住“我的/通知” */}
       <button
         type="button"
         aria-label="心栈小助手"
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-[90] rounded-full focus:outline-none"
+        className="fixed right-4 bottom-[calc(72px_+_env(safe-area-inset-bottom))] z-[90] rounded-full focus:outline-none md:right-5 md:bottom-5"
         style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer" }}
       >
         <img
@@ -825,12 +831,8 @@ export default function AssistantWidget({ inline = false, newUser = false, summa
       {/* 聊天面板 */}
       {open && (
         <div
-          className="fixed z-[90] flex flex-col overflow-hidden rounded-3xl"
+          className="fixed z-[90] flex flex-col overflow-hidden rounded-3xl inset-x-2 top-[calc(52px_+_env(safe-area-inset-top))] bottom-[calc(72px_+_env(safe-area-inset-bottom))] md:inset-auto md:right-5 md:bottom-[84px] md:top-auto md:w-[min(400px,calc(100vw-40px))] md:h-[min(620px,calc(100dvh-120px))]"
           style={{
-            right: 20,
-            bottom: 84,
-            width: "min(400px, calc(100vw - 40px))",
-            height: "min(620px, calc(100dvh - 120px))",
             background: "#f5f6fa",
             boxShadow: "0 20px 60px rgba(30,42,64,0.25)",
             border: "1px solid #e8ecef"

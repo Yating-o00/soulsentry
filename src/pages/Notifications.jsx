@@ -206,7 +206,7 @@ export default function NotificationsPage() {
     <div className="min-h-screen bg-slate-50/30 p-4 md:p-8">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/70 shadow-sm p-5 md:p-6">
+        <div className="relative overflow-hidden rounded-2xl bg-white border border-slate-200/70 shadow-sm p-4 md:p-6">
           {/* 装饰性光晕 */}
           <div className="hidden pointer-events-none" />
           <div className="hidden pointer-events-none" />
@@ -229,8 +229,8 @@ export default function NotificationsPage() {
                   <span className="text-[10px] font-semibold tracking-wide text-emerald-700">引擎在线</span>
                 </div>
               </div>
-              {/* 流程胶囊标签 */}
-              <div className="flex items-center gap-1 flex-wrap text-[11px] md:text-xs text-slate-500">
+              {/* 流程胶囊标签：手机上隐藏，减少重复说明 */}
+              <div className="hidden items-center gap-1 flex-wrap text-[11px] text-slate-500 sm:flex md:text-xs">
                 {['意图理解', '智能规划', '自动执行', '结果反馈'].map((step, idx, arr) => (
                   <React.Fragment key={step}>
                     <span className="px-2 py-0.5 rounded-md bg-slate-100/80 text-slate-600 font-medium">

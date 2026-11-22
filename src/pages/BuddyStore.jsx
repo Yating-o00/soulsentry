@@ -52,13 +52,12 @@ export default function BuddyStore() {
 
   return (
     <div className="max-w-3xl lg:max-w-5xl mx-auto px-4 py-6 md:py-10">
-      <h1 className="text-2xl font-bold text-stone-900">搭子Store</h1>
-      <p className="mt-2 text-sm text-stone-500 leading-relaxed">
-        每颗搭子都是一段长期关系：有自己的专业、自己的记忆、自己的陪伴时长。
-        认领后，它会出现在你的首页，直到这个项目走完。
+      <h1 className="hidden text-xl font-bold text-stone-900 lg:block lg:text-2xl">搭子Store</h1>
+      <p className="text-[13px] leading-relaxed text-stone-500 md:mt-1.5 md:text-sm">
+        每颗搭子都有自己的专业、记忆和陪伴时长，认领后常驻首页。
       </p>
 
-      <div className="mt-6 space-y-5 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0 lg:items-start">
+      <div className="mt-5 space-y-4 lg:mt-6 lg:grid lg:grid-cols-2 lg:gap-5 lg:space-y-0 lg:items-start">
         {buddies.map((buddy) => {
           const tint = buddy.tint || BUDDY_TINTS[buddy.id] || BUDDY_TINTS.study;
           const profile = profiles[buddy.id];

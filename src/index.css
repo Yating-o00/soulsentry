@@ -171,6 +171,14 @@ button:focus-visible {
     @apply border-border outline-ring/50;
   }
 
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-[#FAF9F7] text-foreground antialiased;
     /* 防止 iOS 滚动弹跳 */

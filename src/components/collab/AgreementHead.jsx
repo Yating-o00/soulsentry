@@ -66,12 +66,14 @@ export default function AgreementHead({ task, summary, isLoading, onBack, onOpen
       </div>
 
       {/* 标题 + 共同目标 */}
-      <h1 className="mt-4 text-[24px] font-semibold leading-[1.35] tracking-[-0.03em] sm:text-[28px]" style={{ color: "#282423" }}>
+      <h1 className="mt-3 text-[20px] font-semibold leading-[1.35] tracking-[-0.02em] sm:mt-4 sm:text-[28px]" style={{ color: "#282423" }}>
         {isLoading ? "加载中…" : task?.title || "共创空间"}
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6" style={{ color: "#69665f" }}>
-        {collab?.goal || "围绕这个共同目标，把讨论落成约定、节点与沉淀。"}
-      </p>
+      {collab?.goal && (
+        <p className="mt-1.5 max-w-2xl text-[13px] leading-5 sm:mt-2 sm:text-sm sm:leading-6" style={{ color: "#69665f" }}>
+          {collab.goal}
+        </p>
+      )}
 
       {/* 成员行：成员头像叠放 + Agent 头像，点击管理邀请 */}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">

@@ -241,34 +241,34 @@ export default function BuddySpace() {
   };
 
   return (
-    <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 pt-6 md:pt-10 pb-10">
-      {/* 页眉：搭子头 + 人格化问候 */}
+    <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-4 pt-4 md:pt-10 pb-4 md:pb-10">
+      {/* 页眉：搭子头 + 人格化问候（手机端返回按钮由全局页眉提供，不重复） */}
       <header className="flex items-center gap-3">
         <button
           onClick={() => navigate(createPageUrl("Dashboard"))}
           aria-label="返回"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-stone-500 transition-colors hover:bg-stone-100"
+          className="hidden h-9 w-9 items-center justify-center rounded-full text-stone-500 transition-colors hover:bg-stone-100 lg:flex"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <Orb size={52} tint={tint} />
+        <Orb size={48} tint={tint} />
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-bold text-stone-900">{buddy.name}</h1>
-          <p className="mt-0.5 text-[13px] text-stone-500 truncate">
+          <h1 className="text-lg font-bold text-stone-900 md:text-xl">{buddy.name}</h1>
+          <p className="mt-0.5 truncate text-[12px] text-stone-500 md:text-[13px]">
             {buddy.greeting[persona] || buddy.greeting.gentle}
           </p>
         </div>
         <button
           onClick={() => setGraduateOpen(true)}
           title="结束陪伴：毕业或先收起（内容会沉淀）"
-          className="flex h-9 w-9 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
         >
           <GraduationCap className="w-5 h-5" />
         </button>
       </header>
 
       {/* 板块标签（配置驱动） */}
-      <nav className="mt-5 flex gap-2 overflow-x-auto scrollbar-hide border-b border-stone-200">
+      <nav className="mt-3 flex gap-1 overflow-x-auto scrollbar-hide border-b border-stone-200 md:mt-5 md:gap-2">
         {sections.map((s) => {
           const active = s === activeTab;
           return (
@@ -584,19 +584,6 @@ function HomeSection({ buddy, profile, tint, projectTask }) {
           )}
         </section>
       )}
-      {(buddy.abilities || []).length > 0 && (
-        <section className="rounded-2xl border border-stone-200 bg-white p-5">
-          <div className="text-[11px] tracking-widest text-stone-400">它能帮你</div>
-          <ul className="mt-2.5 space-y-2">
-            {(buddy.abilities || []).map((ability) => (
-              <li key={ability} className="flex items-start gap-2 text-[13px] leading-relaxed text-stone-600">
-                <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint[1] }} />
-                {ability}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
       {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
     </div>
   );
@@ -639,10 +626,7 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
   return (
     <section className="rounded-2xl border border-stone-200 bg-white p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <div>
-          <div className="text-[11px] tracking-widest text-stone-400">项目与小组</div>
-          <p className="mt-1 text-xs text-stone-400">同一个{buddy.name}下，可以并行推进多条线</p>
-        </div>
+        <div className="text-[11px] tracking-widest text-stone-400">项目与小组</div>
         <span className="shrink-0 text-xs text-stone-400">{tasks.length} 个</span>
       </div>
 
@@ -896,18 +880,14 @@ function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selec
 
   return (
     <div className="space-y-4">
-      {/* Agent 角色说明 */}
-      <section className="rounded-2xl bg-[#384877] p-5 text-[#FAF9F7]">
+      {/* Agent 角色：一行说清，不再铺四段说明 */}
+      <section className="rounded-2xl bg-[#384877] p-4 text-[#FAF9F7]">
         <div className="flex items-center gap-2 text-xs tracking-widest opacity-70">
           <Users2 className="w-4 h-4" /> 协同约定里的{buddy.name}
         </div>
-        <p className="mt-1.5 text-[11px] opacity-60">协同人格：{personaName(persona)}</p>
-        <ul className="mt-3 space-y-2 text-sm leading-relaxed">
-          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />协调沟通：讨论跑偏时拉回来，有分歧时给出折中方案</li>
-          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />推动进展：把聊出来的共识变成子约定，进展自动勾划</li>
-          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />专业外援：需要外部信息（攻略、资料、行情）时 ta 去查</li>
-          <li className="flex gap-2"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[#FAF9F7]" />总结沉淀：阶段性结论自动沉淀为心签，随时翻得回来</li>
-        </ul>
+        <p className="mt-2 text-[13px] leading-relaxed opacity-90">
+          {personaName(persona)} · 协调分歧、推动进展、专业外援、总结沉淀
+        </p>
       </section>
 
       {/* 本搭子的其他协同约定 */}
@@ -939,8 +919,7 @@ function CollabSection({ buddy, tint, persona, projectTask, allTasks = [], selec
       <section className="rounded-2xl border border-stone-200 bg-white p-5 text-center">
         <p className="text-[15px] font-medium text-stone-800">拉个伙伴，一起推进</p>
         <p className="mt-1.5 text-[13px] leading-relaxed text-stone-500">
-          把「{projectTask?.title || buddy.name + "的项目约定"}」变成协同约定：发邀请链接给朋友，
-          大家和 {buddy.name} 在一个讨论区里聊，子约定和沉淀由 ta 维护。
+          发邀请给朋友，大家和{buddy.name}在同一个讨论区聊，子约定和沉淀由 ta 维护。
         </p>
         <button
           onClick={enableCollab}

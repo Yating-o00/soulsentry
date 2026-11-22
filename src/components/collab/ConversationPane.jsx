@@ -154,6 +154,14 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
   const inputRef = useRef(null);
   const fileRef = useRef(null);
 
+  // 输入框随内容长高（最多约 6 行），手机上便于检查和修改长句
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [content]);
+
   // 可 @ 的协同成员（不含自己；Agent 单独展示）
   const mentionableMembers = useMemo(
     () => (Array.isArray(members) ? members : []).filter(
@@ -612,7 +620,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               topicFilter === "all"
                 ? compact
                   ? "先打个招呼，或说说这次想一起推进什么。"
-                  : "写下第一条想法，共同约定会从这里开始。输入 @ 可以召唤心栈 Agent 总结、查资料或转化内容。"
+                  : "写下第一条想法，共同约定会从这里开始。"
                 : `在「${topicFilter}」里开始讨论。`
             }
           />
@@ -766,10 +774,10 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 topicFilter === "all"
                   ? compact
                     ? "说点什么…输入 @ 可以叫上搭子"
-                    : "写下想法，输入 @ 召唤心栈 Agent…"
+                    : "写下想法，@ 可召唤 Agent…"
                   : `在「${topicFilter}」里说…`
               }
-              className="min-h-[60px] max-h-28 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
+              className="min-h-[52px] max-h-40 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
               rows={2}
               onKeyDown={(e) => {
                 if (mentionOpen) {
@@ -802,7 +810,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             </Button>
           </div>
           {!compact && (
-            <div className="mt-2 flex items-center justify-between border-t pt-2" style={{ borderColor: C.lineSoft }}>
+            <div className="mt-2 hidden items-center justify-between border-t pt-2 sm:flex" style={{ borderColor: C.lineSoft }}>
               <span className="px-1.5 text-[11px]" style={{ color: "#8a867e" }}>
                 <span className="font-medium" style={{ color: "#384877" }}>@</span> 召唤 Agent 总结 · 查攻略 · 转化
               </span>
@@ -880,7 +888,7 @@ export default function ConversationPane({
   return (
     <section
       id="conversation-pane"
-      className={compact ? "flex h-full min-h-0 flex-col" : "flex min-h-[75vh] flex-col min-[900px]:h-full min-[900px]:min-h-0"}
+      className={compact ? "flex h-full min-h-0 flex-col" : "flex min-h-[calc(100dvh_-_64px_-_env(safe-area-inset-bottom))] flex-col min-[900px]:h-full min-[900px]:min-h-0"}
       style={{ backgroundColor: C.pane }}
     >
       {!compact && (
@@ -894,7 +902,7 @@ export default function ConversationPane({
                 {view === "discussion" ? `· ${messageCount}` : ""}
               </span>
             </h2>
-            <p className="mt-1 text-xs leading-5" style={{ color: C.sub }}>
+            <p className="mt-1 hidden text-xs leading-5 sm:block" style={{ color: C.sub }}>
               {view === "discussion" ? "各方与 Agent 的自由聊天：@ 它总结、查资料，或把内容转成子约定、节点、沉淀。" : "查看成员操作、确认进度与 Agent 沉淀记录。"}
             </p>
           </div>

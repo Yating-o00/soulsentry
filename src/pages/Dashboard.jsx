@@ -90,7 +90,14 @@ export default function Dashboard() {
       );
     }
     if (imprint.notes > 0) parts.push(`心签已沉淀 ${imprint.notes} 条。`);
-    if (activeBuddies.length > 0) parts.push(`${activeBuddies.map((b) => b.name).join("、")}在岗。`);
+    if (activeBuddies.length > 0) {
+      const names = activeBuddies.slice(0, 3).map((b) => b.name).join("、");
+      parts.push(
+        activeBuddies.length > 3
+          ? `${names}等 ${activeBuddies.length} 位搭子在岗。`
+          : `${names}在岗。`
+      );
+    }
     parts.push("想先排今天的安排，还是先聊两句？");
     return parts.join("");
   }, [isNewUser, dayGreeting, name, imprint, activeBuddies]);
@@ -149,15 +156,15 @@ export default function Dashboard() {
   }, [imprint, notesList, activeBuddies, mine, allTasks]);
 
   return (
-    <div className="min-h-screen bg-[#FAF9F7] pb-24 font-sans text-[#1c1917]">
-      <div className="max-w-2xl lg:max-w-6xl mx-auto px-4 pt-6 md:pt-10">
+    <div className="min-h-screen bg-[#FAF9F7] pb-2 font-sans text-[#1c1917]">
+      <div className="max-w-2xl lg:max-w-6xl mx-auto px-4 pt-4 md:pt-10">
         {/* 页眉：人格模式行 */}
         <header className="flex items-center justify-between px-1">
           <div>
-            <div className="text-lg font-semibold tracking-wide">SoulSentry</div>
-            <div className="text-xs text-[#a8a29e]">{personaName}模式 · 我一直都在</div>
+            <div className="text-base font-semibold tracking-wide md:text-lg">SoulSentry</div>
+            <div className="text-[11px] text-[#a8a29e] md:text-xs">{personaName}模式</div>
           </div>
-          <img src={assistantPlanet} alt="心栈小助手" className="w-11 h-11 rounded-full object-cover" />
+          <img src={assistantPlanet} alt="心栈小助手" className="h-9 w-9 rounded-full object-cover md:h-11 md:w-11" />
         </header>
 
         {/* PC：左列对话层（更宽更高），右列问候 + 陪伴 + Store；手机：保持样例纵向流 */}
@@ -174,30 +181,23 @@ export default function Dashboard() {
           </section>
 
           <div className="lg:mt-4">
-            {/* 心栈的问候 + 今日印记（真实数据的一行播报） */}
-            <div className="mx-1 mt-4 lg:mt-0 flex items-start gap-3 rounded-2xl bg-[#FFFFFF] p-4 shadow-[0_1px_2px_rgba(36,36,36,0.06)] border border-stone-200/60">
-              <div className="mt-0.5 shrink-0">
-                <img src={assistantPlanet} alt="心栈小助手" className="w-9 h-9 rounded-full object-cover" />
-              </div>
-              <div>
-                <p className="text-[15px] leading-relaxed">
-                  {dayGreeting}{name ? `，${name}` : ""}。今天想做点什么？日程、情绪、随便聊聊都可以找我；
-                  {claimedCount > 0 ? "你的搭子们也在各自的岗位上待命。" : "如果有个想长期推进的目标，我帮你找个专业搭子。"}
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-[#a8a29e]">
-                  今日印记：
-                  <Link to={createPageUrl("Tasks")} className="hover:text-[#384877]">
-                    {imprint.todayPending} 条约定今日待赴约
-                  </Link>
-                  {" · "}
-                  <Link to={createPageUrl("Tasks")} className="hover:text-[#384877]">
-                    {imprint.guarding} 条约定守护中
-                  </Link>
-                  {" · "}
-                  <Link to={createPageUrl("Notes")} className="hover:text-[#384877]">
-                    {imprint.notes} 条心签已沉淀
-                  </Link>
-                </p>
+            {/* 今日印记（真实数据的一行播报；问候语由上方对话层承载，不重复） */}
+            <div className="mx-1 mt-3 lg:mt-0 flex items-center gap-3 rounded-2xl bg-[#FFFFFF] px-4 py-3 shadow-[0_1px_2px_rgba(36,36,36,0.06)] border border-stone-200/60">
+              <img src={assistantPlanet} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] leading-relaxed text-[#a8a29e] md:text-xs">
+                <span>今日印记</span>
+                <span className="text-stone-300">·</span>
+                <Link to={createPageUrl("Tasks")} className="hover:text-[#384877]">
+                  {imprint.todayPending} 条今日待赴约
+                </Link>
+                <span className="text-stone-300">·</span>
+                <Link to={createPageUrl("Tasks")} className="hover:text-[#384877]">
+                  {imprint.guarding} 条守护中
+                </Link>
+                <span className="text-stone-300">·</span>
+                <Link to={createPageUrl("Notes")} className="hover:text-[#384877]">
+                  {imprint.notes} 条心签
+                </Link>
               </div>
             </div>
 

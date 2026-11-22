@@ -141,7 +141,7 @@ export default function Teams() {
         <h1 className="bg-slate-50 text-[#2d60ac] text-base font-bold md:text-4xl from-[#5a647d] to-[#1e3a5f]">聚是一团火，散是满天星
 
         </h1>
-        <p className="text-slate-600">查看和管理团队共享的约定</p>
+        <p className="hidden text-sm text-slate-600 sm:block sm:text-base">查看和管理团队共享的约定</p>
       </motion.div>
 
       {/* 统计卡片 */}

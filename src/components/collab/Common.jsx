@@ -76,7 +76,7 @@ export function PanelHeader({ eyebrow, title, description, action }) {
       <div>
         <Eyebrow>{eyebrow}</Eyebrow>
         <h2 className="mt-1.5 text-[18px] font-semibold tracking-[-0.02em]" style={{ color: "#302c2a" }}>{title}</h2>
-        {description && <p className="mt-1 text-xs leading-5" style={{ color: C.sub }}>{description}</p>}
+        {description && <p className="mt-1 hidden text-xs leading-5 sm:block" style={{ color: C.sub }}>{description}</p>}
       </div>
       {action && <div className="flex shrink-0 flex-wrap items-center gap-2">{action}</div>}
     </div>

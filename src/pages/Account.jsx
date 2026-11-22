@@ -223,11 +223,12 @@ export default function Account() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
+        className="hidden lg:block"
       >
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-stone-900 mb-2">
+        <h1 className="mb-2 text-2xl font-bold tracking-tight text-stone-900 md:text-4xl">
           我的账户
         </h1>
-        <p className="text-slate-600">管理您的个人信息和账户设置</p>
+        <p className="hidden text-sm text-slate-600 sm:block md:text-base">管理您的个人信息和账户设置</p>
       </motion.div>
 
       {isDemo && (
@@ -409,7 +410,7 @@ export default function Account() {
                       {user.assistant_name || "小雅"}
                     </p>
                   )}
-                  <p className="text-xs text-slate-400">您可以自定义助手的名字，例如：小雅、Jarvis 等</p>
+                  <p className="hidden text-xs text-slate-400 sm:block">您可以自定义助手的名字，例如：小雅、Jarvis 等</p>
                 </div>
 
                 <div className="space-y-2">
@@ -751,8 +752,8 @@ function PersonaMemorySection() {
         <CardContent className="pt-6 space-y-6">
           {/* 人格切换 */}
           <div>
-            <p className="text-sm text-slate-500 mb-3">
-              心栈小助手的默认说话方式——切换后全局生效；每颗搭子还可以在自己的对话框里单独设置人格。
+            <p className="mb-3 text-xs text-slate-500 md:text-sm">
+              切换后全局生效；每颗搭子也可以单独设置。
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {PERSONAS.map((p) => {

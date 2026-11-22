@@ -531,25 +531,25 @@ export default function Tasks() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F7] pb-24 font-sans text-slate-900">
+    <div className="min-h-screen bg-[#FAF9F7] pb-2 font-sans text-slate-900">
 
-      <main className="pt-8 px-6 max-w-7xl mx-auto">
-        
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10">
-          <div>
-            <h1 className="text-4xl font-bold text-slate-900 mb-2 flex items-center gap-3">约定
+      <main className="pt-4 px-4 sm:pt-8 sm:px-6 max-w-7xl mx-auto">
 
+        {/* Header Section（手机端页眉已显示“约定”，不再重复大标题） */}
+        <div className="mb-5 flex flex-col justify-between gap-4 md:mb-10 md:flex-row md:items-center">
+          <div className="hidden lg:block">
+            <h1 className="mb-1 flex items-center gap-3 text-2xl font-bold text-slate-900 md:text-4xl">
+              约定
             </h1>
-            <p className="text-slate-500 text-lg">
+            <p className="hidden text-sm text-slate-500 sm:block md:text-lg">
               你的点滴都是最重要的事
             </p>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap sm:gap-3">
           <button
             onClick={() => setCollabDialog({ open: true, target: null })}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium bg-white border border-[#c7d2fe] text-[#384877] hover:bg-[#eef2ff] transition-all shadow-sm"
+            className="flex min-h-[40px] items-center gap-1.5 rounded-full border border-[#c7d2fe] bg-white px-3.5 text-[13px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:px-5 sm:text-sm"
           >
             <Users2 className="w-4 h-4" />
             <span>协同约定</span>
@@ -558,17 +558,17 @@ export default function Tasks() {
           <button
             onClick={() => navigate(createPageUrl("LockScreenTodo"))}
             title="生成锁屏壁纸，锁屏也能看约定、勾选约定"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-medium bg-white border border-[#c7d2fe] text-[#384877] hover:bg-[#eef2ff] transition-all shadow-sm"
+            className="flex min-h-[40px] items-center gap-1.5 rounded-full border border-[#c7d2fe] bg-white px-3.5 text-[13px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:px-5 sm:text-sm"
           >
             <Wallpaper className="w-4 h-4" />
             <span>锁屏约定</span>
           </button>
 
-          <div className="bg-white p-1 rounded-full shadow-sm border border-slate-200 inline-flex">
+          <div className="inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
             <button
               onClick={() => setViewMode('overview')}
               className={cn(
-                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                "flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-all duration-300 sm:px-6 sm:text-sm",
                 viewMode === 'overview' ?
                 "bg-[#384877] text-white shadow-md" :
                 "text-slate-600 hover:bg-slate-50"
@@ -580,7 +580,7 @@ export default function Tasks() {
             <button
               onClick={() => setViewMode('milestone')}
               className={cn(
-                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                "flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-all duration-300 sm:px-6 sm:text-sm",
                 viewMode === 'milestone' ?
                 "bg-[#384877] text-white shadow-md" :
                 "text-slate-600 hover:bg-slate-50"
@@ -591,7 +591,7 @@ export default function Tasks() {
             <button
               onClick={() => setViewMode('life')}
               className={cn(
-                "px-6 py-2.5 rounded-full text-sm font-medium transition-all duration-300 flex items-center gap-2",
+                "flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-all duration-300 sm:px-6 sm:text-sm",
                 viewMode === 'life' ?
                 "bg-[#384877] text-white shadow-md" :
                 "text-slate-600 hover:bg-slate-50"
@@ -604,7 +604,7 @@ export default function Tasks() {
         </div>
 
         {/* Task Creation Panel */}
-        <section id="mobile-task-create-anchor" className="mb-10 scroll-mt-20">
+        <section id="mobile-task-create-anchor" className="mb-6 scroll-mt-20 md:mb-10">
           <TaskCreationPanel
             onAddTask={handleAddTask}
             onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}
@@ -617,7 +617,7 @@ export default function Tasks() {
         </section>
 
         {/* Toolbar: Search, View, Selection */}
-        <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200/60 mb-8 flex flex-col md:flex-row items-center justify-between gap-3 sticky top-4 z-20">
+        <div className="bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-sm border border-slate-200/60 mb-6 flex flex-col md:flex-row items-center justify-between gap-3 sticky top-2 z-20 md:mb-8">
            {/* Search - local filter + press Enter to trigger global search */}
            <div className="relative w-full md:max-w-md group flex items-center">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" />

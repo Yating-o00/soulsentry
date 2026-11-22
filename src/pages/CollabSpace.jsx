@@ -227,7 +227,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
           ? "rounded-2xl border overflow-hidden"
           : embedded
             ? "rounded-2xl border overflow-hidden min-[900px]:grid min-[900px]:h-[720px] min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)]"
-            : "min-h-dvh pb-[64px] min-[900px]:grid min-[900px]:h-screen min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden min-[900px]:pb-0"
+            : "min-h-dvh pb-[calc(64px_+_env(safe-area-inset-bottom))] min-[900px]:grid min-[900px]:h-screen min-[900px]:grid-cols-2 min-[900px]:grid-rows-[minmax(0,1fr)] min-[900px]:overflow-hidden min-[900px]:pb-0"
       }
       style={{ backgroundColor: "#f1f0ec", color: "#231f20", ...(embedded ? { borderColor: "#d5d3cc" } : {}) }}
     >

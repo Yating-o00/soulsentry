@@ -61,11 +61,11 @@ export default function Trash() {
           <div className="h-10 w-10 rounded-xl bg-[#fff1f2] flex items-center justify-center border border-[#e0919e]">
             <Trash2 className="w-6 h-6 text-[#d5495f]" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-[#d5495f]">
+          <h1 className="text-2xl font-bold text-[#d5495f] md:text-4xl">
             回收站
           </h1>
         </div>
-        <p className="text-slate-600">管理已删除的约定，您可以恢复它们或永久删除</p>
+        <p className="hidden text-sm text-slate-600 sm:block sm:text-base">管理已删除的约定，您可以恢复它们或永久删除</p>
       </motion.div>
 
       <motion.div

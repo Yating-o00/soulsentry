@@ -24,7 +24,7 @@ export default function DigestCard({ doc }) {
 
         {!doc && (
           <p className="mt-3 text-[13px] leading-5" style={{ color: "#8a867e" }}>
-            还没有执行概览。和伙伴聊起来，或在讨论区 @Agent 整理，这里会生成大方向、按主题进展与待确认。
+            还没有执行概览。在讨论区 @Agent 整理后会出现在这里。
           </p>
         )}
 

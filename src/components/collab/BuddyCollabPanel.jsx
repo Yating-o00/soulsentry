@@ -181,22 +181,26 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
   const memberCount = members.length || 1; // at least current user
 
   return (
-    <div className={cn("flex h-[calc(100dvh-220px)] min-h-[320px] max-h-[820px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-180px)] md:min-h-[540px]", className)}>
-      {/* 手机优先的协同头：头像 / 标题 / 进度 / 成员 / 切换，尽量把高度留给消息 */}
-      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-1.5 pt-2">
-        {/* 顶部：搭子头像 + 名称 + Agent/计划状态 */}
+    <div className={cn("flex h-[calc(100dvh-170px)] min-h-[320px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-180px)] md:min-h-[540px] md:max-h-[820px]", className)}>
+      {/* 手机优先的协同头：压缩行数，把高度尽量让给聊天 */}
+      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-1.5 pt-2 md:px-4 md:pb-2 md:pt-3">
+        {/* 第一行：头像、共创标题、Agent 状态、完整入口 */}
         <div className="flex items-center gap-2">
-          <Orb size={30} tint={tint} />
+          <Orb size={28} tint={tint} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-[13px] font-semibold text-stone-900">{buddy.name}</span>
-              <span className="inline-flex shrink-0 items-center gap-1 text-[9px] text-stone-400">
+              <span className="shrink-0 rounded-full bg-[#F3F0E8] px-1.5 py-0.5 text-[9px] font-medium text-[#6b5c45]">共创中</span>
+              <h3 className="truncate text-[14px] font-semibold leading-tight text-stone-900">{task.title}</h3>
+            </div>
+            <div className="mt-0.5 flex items-center gap-2 truncate text-[10px] text-stone-400">
+              <span className="inline-flex items-center gap-1">
                 <span className={`h-1.5 w-1.5 rounded-full ${agentActive ? "bg-emerald-500" : "bg-stone-300"}`} />
                 {agentActive ? "Agent 参与中" : "Agent 未参与"}
               </span>
-            </div>
-            <div className="truncate text-[10px] text-stone-400">
-              {profile?.plan_title || buddy.planTitle?.(profile?.answers || {}) || buddy.duration}
+              <span className="hidden sm:inline">·</span>
+              <span className="hidden sm:inline truncate">
+                {profile?.plan_title || buddy.planTitle?.(profile?.answers || {}) || buddy.duration}
+              </span>
             </div>
           </div>
           <Link
@@ -207,12 +211,6 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
           >
             <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
-        </div>
-
-        {/* 标题：共创中状态直接并入标题行 */}
-        <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
-          <span className="shrink-0 rounded-full bg-[#F3F0E8] px-1.5 py-0.5 text-[9px] font-medium text-[#6b5c45]">共创中</span>
-          <h3 className="truncate text-[14px] font-semibold leading-tight text-stone-900">{task.title}</h3>
         </div>
 
         {/* 进度 + 成员合并到一行 */}

@@ -974,14 +974,14 @@ function CollabSection({ buddy, tint, persona, profile, projectTask, allTasks = 
   // 已开启协同：小组切换 + 极简协同面板（讨论为主，约定/沉淀按需查看）
   if (activeCollab) {
     return (
-      <div className="space-y-3">
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+      <div className="space-y-2">
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
           {myCollabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => onSelectCollab?.(t.id)}
-              className={`max-w-[140px] shrink-0 truncate rounded-full px-2.5 py-1 text-[10px] transition-colors ${
+              className={`max-w-[140px] shrink-0 truncate rounded-full px-2.5 py-0.5 text-[10px] transition-colors ${
                 t.id === activeCollab.id
                   ? "bg-[#384877] text-white"
                   : "border border-stone-200 bg-white text-stone-500 hover:text-[#384877]"
@@ -993,7 +993,7 @@ function CollabSection({ buddy, tint, persona, profile, projectTask, allTasks = 
           <button
             type="button"
             onClick={onCreateCollab}
-            className="shrink-0 rounded-full border border-dashed border-stone-300 px-2.5 py-1 text-[10px] text-stone-400 hover:text-[#384877]"
+            className="shrink-0 rounded-full border border-dashed border-stone-300 px-2.5 py-0.5 text-[10px] text-stone-400 hover:text-[#384877]"
           >
             ＋ 新建小组
           </button>

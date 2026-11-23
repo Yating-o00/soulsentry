@@ -1,7 +1,7 @@
 // 共创空间：人 + 人 + Agent 协同 Group 的统一双栏工作区
 // 左栏内容区（Agreement 头卡 → 子约定 → 执行节点 → 沉淀），右栏会话窗（讨论/动态）
 // 桌面 ≥900px 双栏等高；移动端单栏 + 底部四格导航。数据：GET /api/collab/:taskId/summary 聚合，15s 轮询
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
@@ -33,9 +33,16 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
   const [inviteOpen, setInviteOpen] = useState(false);
   const [agentDrawerOpen, setAgentDrawerOpen] = useState(false);
   const [agentStoreOpen, setAgentStoreOpen] = useState(false);
-  const [conversationView, setConversationView] = useState("discussion");
+  const enterChatDirectly = Boolean(searchParams.get("view"));
+  const initialView = ["discussion", "activity"].includes(searchParams.get("view"))
+    ? searchParams.get("view")
+    : "discussion";
+  const [conversationView, setConversationView] = useState(initialView);
   const [highlightCommentId, setHighlightCommentId] = useState(null);
-  const [mobileNavActive, setMobileNavActive] = useState("content");
+  const [mobileNavActive, setMobileNavActive] = useState(
+    searchParams.get("view") ? initialView : "content"
+  );
+  const autoOpenedChatRef = useRef(false);
   const [togglingAgent, setTogglingAgent] = useState(false);
   const [togglingDrive, setTogglingDrive] = useState(false);
   const [nextPactOpen, setNextPactOpen] = useState(false);
@@ -97,17 +104,30 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
   const collab = task?.metadata?.collab;
   const members = summary?.members || [];
 
-  // 退出协同：搭子空间创建的协同约定一律回到对应搭子空间，并尽量回到同一个小群；
-  // 即使是从邀请卡片/通知进入、URL 没带 from=buddy，也按任务自带的 buddy_id 推断。
+  // 邀请接受后带 view=discussion：手机端直接滚到聊天，立刻能发言
+  useEffect(() => {
+    if (!enterChatDirectly || !summary || autoOpenedChatRef.current) return;
+    autoOpenedChatRef.current = true;
+    if (window.matchMedia("(min-width: 900px)").matches) return;
+    window.requestAnimationFrame(() => {
+      document.getElementById("conversation-pane")?.scrollIntoView({ behavior: "auto", block: "start" });
+    });
+  }, [enterChatDirectly, summary]);
+
+  // 退出协同：搭子空间创建的协同约定回到对应搭子空间；
+  // 从邀请链接进来的人通常还没认领搭子，回到约定列表，避免落到“未认领”页。
+  const fromInvite = searchParams.get("from") === "invite";
   const queryBuddyId = searchParams.get("from") === "buddy" ? searchParams.get("buddy") : "";
   const taskBuddyId = task?.metadata?._extraFields?.buddy_id || "";
   const buddyReturnId = queryBuddyId || taskBuddyId;
   const returnCollabId = searchParams.get("collab") || taskId;
-  const backTarget = buddyReturnId
-    ? `${createPageUrl("BuddySpace")}?buddy=${encodeURIComponent(buddyReturnId)}&tab=${encodeURIComponent("协同")}${
-        returnCollabId ? `&collab=${encodeURIComponent(returnCollabId)}` : ""
-      }`
-    : "/tasks";
+  const backTarget = fromInvite
+    ? createPageUrl("Tasks")
+    : buddyReturnId
+      ? `${createPageUrl("BuddySpace")}?buddy=${encodeURIComponent(buddyReturnId)}&tab=${encodeURIComponent("协同")}${
+          returnCollabId ? `&collab=${encodeURIComponent(returnCollabId)}` : ""
+        }`
+      : createPageUrl("Tasks");
 
   // 「完成与延续」：全部子约定（含从属）都完成时出现
   const allSubtasksDone = (() => {

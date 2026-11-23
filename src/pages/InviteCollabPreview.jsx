@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { httpRequest } from "@/api/httpClient";
+import { createPageUrl } from "@/utils";
 
 const BUDDY_NAMES = { study: "学习搭子", travel: "旅游搭子", reading: "读书搭子", morning: "早起搭子", running: "跑步搭子" };
 const SCENARIO_LABELS = { couple: "情侣", friends: "朋友", colleagues: "同事", custom: "协同" };
@@ -69,13 +70,13 @@ export default function InviteCollabPreview() {
   const openCollab = () => {
     const taskId = data?.task_id || data?.pact?.task_id;
     if (!taskId) return;
-    const params = new URLSearchParams({ taskId });
+    const params = new URLSearchParams({ taskId, view: "discussion", from: "invite" });
     if (data?.buddy_id) {
-      params.set("from", "buddy");
       params.set("buddy", data.buddy_id);
       params.set("collab", taskId);
     }
-    navigate(`/collabspace?${params.toString()}`);
+    // 公开预览页不会初始化登录态，用整页跳转让协同页重新鉴权
+    window.location.href = `${createPageUrl("CollabSpace")}?${params.toString()}`;
   };
 
   const onParticipate = () => {
@@ -84,8 +85,15 @@ export default function InviteCollabPreview() {
   };
 
   const goAuth = () => {
+    // 只有从本页主动点“参与”才允许登录后自动接受
+    try {
+      sessionStorage.setItem("ss_invite_auto", code);
+    } catch {
+      // 忽略隐私模式下的存储异常
+    }
+    // 已有登录态：回到邀请页并自动接受；未登录：登录/注册后回跳自动接受
     if (isLoggedIn) {
-      navigate(`/invite/${code}`);
+      navigate(`/invite/${code}?auto=accept`);
       return;
     }
     window.location.href = `/login?redirect=${encodeURIComponent(`/invite/${code}?auto=accept`)}`;

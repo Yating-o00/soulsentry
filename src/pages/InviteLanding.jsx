@@ -2,7 +2,7 @@
 // 接受邀请=加入成员并认领待办；提出建议=留言进共同讨论；暂不参与=仅记录回应。
 // 文案原则：没有内容时只留标题，有内容时只呈现内容本身，不铺解释。
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { httpRequest } from "@/api/httpClient";
+import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 
 const SCENARIO_LABELS = { couple: "情侣", friends: "朋友", colleagues: "同事", custom: "协同" };
@@ -23,7 +24,6 @@ const STATUS_LABELS = { open: "待回应", accepted: "已接受邀请", suggeste
 
 export default function InviteLanding() {
   const { code } = useParams();
-  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loggedIn, setLoggedIn] = useState(false);
@@ -47,7 +47,22 @@ export default function InviteLanding() {
   const autoFiredRef = useRef(false);
 
   const clearAutoParam = () => {
+    try {
+      sessionStorage.removeItem("ss_invite_auto");
+    } catch {
+      // 忽略隐私模式下的存储异常
+    }
     window.history.replaceState(null, "", `/invite/${code}`);
+  };
+
+  // 只允许“本人刚点过接受/暂不”的会话在登录后自动回应，
+  // 防止有人构造 ?auto=accept 链接让登录用户被自动加入。
+  const rememberAutoIntent = () => {
+    try {
+      sessionStorage.setItem("ss_invite_auto", code);
+    } catch {
+      // 忽略隐私模式下的存储异常
+    }
   };
 
   const loginRedirect = (action) =>
@@ -72,6 +87,13 @@ export default function InviteLanding() {
   useEffect(() => {
     if (!data || !loggedIn || autoFiredRef.current) return;
     if (autoAction !== "accept" && autoAction !== "decline") return;
+    let autoAllowed = false;
+    try {
+      autoAllowed = sessionStorage.getItem("ss_invite_auto") === code;
+    } catch {
+      // 忽略隐私模式下的存储异常
+    }
+    if (!autoAllowed) return;
     // 已是成员 / 已回应 / 邀请已关闭：清掉 auto 参数即可，不重复回应
     if (data.viewer?.is_member) {
       clearAutoParam();
@@ -86,16 +108,18 @@ export default function InviteLanding() {
     respond(autoAction);
   }, [data, loggedIn]);
 
-  // 接受后直接进入协同约定页；搭子归属会随任务元数据返回，退出时回到搭子空间
+  // 接受后直接进入该协同的会话空间；手机端带 view=discussion 自动落在聊天页。
+  // 受邀者通常还没有认领搭子，不能跳到搭子空间，否则会被“未认领”拦截。
   const openCollab = (taskId, buddyId) => {
     if (!taskId) return false;
-    const params = new URLSearchParams({ taskId });
+    const params = new URLSearchParams({ taskId, view: "discussion", from: "invite" });
     if (buddyId) {
-      params.set("from", "buddy");
       params.set("buddy", buddyId);
       params.set("collab", taskId);
     }
-    navigate(`/collabspace?${params.toString()}`);
+    // 邀请页属于公开页，AuthProvider 不会在这里检查登录态；
+    // 用整页跳转让协同页重新初始化鉴权，避免接受后落到登录页。
+    window.location.href = `${createPageUrl("CollabSpace")}?${params.toString()}`;
     return true;
   };
 
@@ -128,7 +152,8 @@ export default function InviteLanding() {
       }
     } catch (e) {
       if (e?.status === 401) {
-        // 未登录：带上本次意图跳登录页，登录回跳后由 auto 逻辑自动完成
+        // 未登录：记住本次意图再跳登录页，登录回跳后由 auto 逻辑自动完成
+        if (action === "accept" || action === "decline") rememberAutoIntent();
         window.location.href = loginRedirect(action === "suggest" ? "" : action);
         return;
       }
@@ -318,8 +343,10 @@ export default function InviteLanding() {
                   type="button"
                   disabled={responding}
                   onClick={() => {
+                    // 未登录：先去登录/注册，回跳后自动接受并进入协同页
                     if (!loggedIn) {
-                      navigate(`/invite/${code}/collab`, { state: { accepted: true } });
+                      rememberAutoIntent();
+                      window.location.href = loginRedirect("accept");
                       return;
                     }
                     respond("accept");

@@ -26,13 +26,21 @@ export default function PushNotificationPrompt() {
     localStorage.setItem("push-prompt-dismissed", "true");
   };
 
+  // 接受邀请后直达的协同聊天页：先不弹通知授权，否则会盖住输入框；
+  // 用户离开该页后仍会正常收到提示。
+  const isInviteChatLanding =
+    typeof window !== "undefined" &&
+    window.location.pathname.toLowerCase().includes("collabspace") &&
+    new URLSearchParams(window.location.search).get("view") === "discussion";
+
   // 只在满足以下条件时显示：浏览器支持、用户已登录、未授权、未订阅、用户未主动关闭
   const shouldShow =
     supported &&
     isAuthenticated &&
     permission !== "granted" &&
     !subscribed &&
-    !dismissed;
+    !dismissed &&
+    !isInviteChatLanding;
 
   if (!shouldShow) return null;
 

@@ -25,6 +25,13 @@ function getPostLoginRedirect() {
   return "/";
 }
 
+// 注册完成后的去向：有明确回跳目标（如邀请链接）时优先回跳，
+// 否则保持原来的新手引导流程。
+function getPostRegisterRedirect() {
+  const redirect = getPostLoginRedirect();
+  return redirect === "/" ? createPageUrl("Onboarding") : redirect;
+}
+
 export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [mode, setMode] = useState("phone");
@@ -104,8 +111,8 @@ export default function Login() {
         const data = await result.json();
         if (!result.ok) throw new Error(data?.message || "注册失败");
         localStorage.setItem("soulsentry_access_token", data.token);
-        // 新注册 → 四步身份识别（答案直接写入主档案），再进通用 Agent 介绍页
-        window.location.href = createPageUrl("Onboarding");
+        // 有邀请/回跳目标时优先回到目标页；没有才进入新手引导
+        window.location.href = getPostRegisterRedirect();
       } else {
         const result = await fetch("/api/auth/login", {
           method: "POST",
@@ -147,8 +154,8 @@ export default function Login() {
           password,
           displayName: displayName.trim() || undefined
         });
-        // 新注册 → 四步身份识别（答案直接写入主档案），再进通用 Agent 介绍页
-        window.location.href = createPageUrl("Onboarding");
+        // 有邀请/回跳目标时优先回到目标页；没有才进入新手引导
+        window.location.href = getPostRegisterRedirect();
         return;
       }
       await standaloneClient.auth.login(email, password);

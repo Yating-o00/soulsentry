@@ -17,7 +17,7 @@ import { httpRequest } from "@/api/httpClient";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  ACTIVITY_LABELS, MARK_LABELS, MARK_STYLES, agentIntentFor, C, formatTime,
+  ACTIVITY_LABELS, MARK_LABELS, MARK_STYLES, agentIntentFor, BRAND, C, formatTime,
 } from "./constants";
 import { AgentAvatar, EmptyState, MemberAvatar } from "./Common";
 import OptionCardView from "./OptionCardView";
@@ -42,11 +42,17 @@ const dayLabel = (iso) => {
   return `${d.getMonth() + 1}月${d.getDate()}日`;
 };
 
-// 消息附件：图片内联预览，其他文件卡片下载；Agent 选项卡由 OptionCardView 单独渲染
+// 消息附件：图片/视频内联预览，其他文件卡片下载；Agent 选项卡由 OptionCardView 单独渲染
 function AttachmentView({ attachments }) {
   if (!attachments || attachments.length === 0) return null;
   const images = attachments.filter((a) => (a?.type || "").startsWith("image/"));
-  const files = attachments.filter((a) => !(a?.type || "").startsWith("image/") && a?.type !== "option_card");
+  const videos = attachments.filter((a) => (a?.type || "").startsWith("video/"));
+  const files = attachments.filter(
+    (a) =>
+      !(a?.type || "").startsWith("image/") &&
+      !(a?.type || "").startsWith("video/") &&
+      a?.type !== "option_card"
+  );
   return (
     <div className="mt-2 space-y-2">
       {images.length > 0 && (
@@ -61,6 +67,20 @@ function AttachmentView({ attachments }) {
                 loading="lazy"
               />
             </a>
+          ))}
+        </div>
+      )}
+      {videos.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {videos.map((a, i) => (
+            <video
+              key={i}
+              src={a.url}
+              controls
+              preload="metadata"
+              className="max-h-44 max-w-full rounded-lg border"
+              style={{ borderColor: C.lineSoft }}
+            />
           ))}
         </div>
       )}
@@ -509,7 +529,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 mine
                   ? "rounded-2xl rounded-tr-md bg-[#384877] text-[#FAF9F7] shadow-sm"
                   : isAgent
-                    ? "rounded-2xl rounded-tl-md border border-[#e6ddca] bg-[#F5F0E8] text-[#5B4A3A]"
+                    ? "rounded-2xl rounded-tl-md border border-[#c9d5ef] bg-[#eef2ff] text-[#384877]"
                     : "rounded-2xl rounded-tl-md border border-stone-200 bg-white text-stone-700 shadow-[0_1px_2px_rgba(36,36,36,0.04)]"
               )}
             >
@@ -709,9 +729,9 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               <AgentAvatar size="sm" breathing />
               <span className="text-xs font-medium" style={{ color: "#45413d" }}>心栈 Agent 思考中…</span>
               <span className="flex gap-1">
-                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
-                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
-                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
+                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: BRAND }} />
+                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: BRAND }} />
+                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: BRAND }} />
               </span>
             </div>
           )}
@@ -815,9 +835,19 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           </div>
         )}
         {compact ? (
-          // 手机搭子空间：极简圆角输入条，焦糖色发送按钮，把视觉重心让给对话内容
-          <div className="rounded-full border border-stone-200 bg-white px-1 py-1 pl-3 transition-colors focus-within:border-[#B89A6A]">
-            <div className="flex items-center gap-2">
+          // 手机搭子空间：极简圆角输入条，品牌色发送按钮，支持图片/文件/视频
+          <div className="rounded-full border border-stone-200 bg-white px-1 py-1 pl-1 transition-colors focus-within:border-[#384877]">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading || attachments.length >= 10}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-[#384877] disabled:opacity-50"
+                title="插入图片、文件或视频"
+                aria-label="插入图片、文件或视频"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+              </button>
               <Textarea
                 ref={inputRef}
                 value={content}
@@ -856,7 +886,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 size="sm"
                 onClick={() => handleSend()}
                 disabled={(!content.trim() && attachments.length === 0) || uploading}
-                className="h-9 flex-shrink-0 rounded-full bg-[#B89A6A] px-4 text-[13px] font-medium text-white hover:bg-[#A88A5A] disabled:opacity-50"
+                className="h-9 flex-shrink-0 rounded-full bg-[#384877] px-4 text-[13px] font-medium text-white hover:bg-[#2d3a60] disabled:opacity-50"
                 aria-label="发送讨论"
               >
                 发送
@@ -884,7 +914,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 type="file"
                 multiple
                 className="hidden"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md"
+                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md"
                 onChange={(e) => handlePickFiles(e.target.files)}
               />
               <Textarea
@@ -926,7 +956,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 onClick={() => handleSend()}
                 disabled={(!content.trim() && attachments.length === 0) || uploading}
                 className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
-                style={{ backgroundColor: C.ink }}
+                style={{ backgroundColor: BRAND }}
                 aria-label="发送讨论"
               >
                 <ArrowUp className="w-4 h-4" />

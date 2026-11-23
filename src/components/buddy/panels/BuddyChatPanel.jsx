@@ -282,6 +282,14 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                               className="max-h-48 w-auto max-w-full rounded-lg border border-white/20 bg-white/10 object-contain md:max-h-60"
                             />
                           </a>
+                        ) : (att.type || "").startsWith("video/") ? (
+                          <video
+                            key={att.url || ai}
+                            src={att.url}
+                            controls
+                            preload="metadata"
+                            className="max-h-48 w-auto max-w-full rounded-lg border border-white/20 bg-white/10 md:max-h-60"
+                          />
                         ) : (
                           <a
                             key={att.url || ai}
@@ -364,6 +372,13 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                     className="h-28 w-28 rounded-xl border border-stone-200 bg-[#FAF9F7] object-contain"
                   />
                 </a>
+              ) : (att.type || "").startsWith("video/") ? (
+                <video
+                  src={att.url}
+                  controls
+                  preload="metadata"
+                  className="h-28 w-auto max-w-[200px] rounded-xl border border-stone-200 bg-[#FAF9F7]"
+                />
               ) : (
                 <span className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full border border-stone-200 bg-[#FAF9F7] px-2.5 py-1.5 text-[11px] text-stone-600">
                   <FileText className="h-3.5 w-3.5 shrink-0" />
@@ -437,7 +452,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
         type="file"
         multiple
         className="hidden"
-        accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
+        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
         onChange={(e) => handleFiles(e.target.files)}
       />
     </section>

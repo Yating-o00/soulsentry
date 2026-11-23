@@ -6,9 +6,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowUp, Bot, Check, ChevronDown, FileText, Loader2, Paperclip, Sparkles, X,
+  ArrowDown, ArrowUp, Bot, Check, FileText, Loader2, MoreHorizontal, Paperclip, Sparkles, X,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -23,13 +22,24 @@ import {
 import { AgentAvatar, EmptyState, MemberAvatar } from "./Common";
 import OptionCardView from "./OptionCardView";
 
-const msgActionCls = "inline-flex items-center rounded px-1.5 text-[10px] font-medium text-[#77736c] transition-colors hover:bg-[#efefe9] hover:text-[#384877] min-h-7 focus-visible:outline-none";
-
 const formatSize = (bytes) => {
   if (bytes == null || Number.isNaN(bytes)) return "";
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+};
+
+// 聊天日期分隔：今天 / 昨天 / 10月27日
+const dayKey = (iso) => new Date(iso).toDateString();
+const dayLabel = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "今天";
+  if (d.toDateString() === yesterday.toDateString()) return "昨天";
+  return `${d.getMonth() + 1}月${d.getDate()}日`;
 };
 
 // 消息附件：图片内联预览，其他文件卡片下载；Agent 选项卡由 OptionCardView 单独渲染
@@ -76,61 +86,50 @@ function AttachmentView({ attachments }) {
   );
 }
 
-// 删除消息（自己的内容）：第一次点击变为确认，3 秒后自动复位
-function DeleteMessageButton({ onDelete }) {
-  const [confirming, setConfirming] = useState(false);
-  useEffect(() => {
-    if (!confirming) return;
-    const timer = setTimeout(() => setConfirming(false), 3000);
-    return () => clearTimeout(timer);
-  }, [confirming]);
+// 消息操作：收进“⋯”菜单，像即时通讯一样不打断阅读
+function MessageMenu({ message, canDelete, onConvert, onMark, onReply, onDelete }) {
   return (
-    <button
-      type="button"
-      onClick={() => (confirming ? onDelete() : setConfirming(true))}
-      className={cn(msgActionCls, confirming && "text-rose-600 hover:text-rose-600")}
-    >
-      {confirming ? "确认删除？" : "删除"}
-    </button>
-  );
-}
-
-// 消息操作（桌面 hover 显示，移动端常驻）：转为子约定 / 标记节点 / 存为文件 / 标记 / 回复 / 删除
-function MessageActions({ message, canDelete, onConvert, onMark, onReply, onDelete }) {
-  return (
-    <div className="mt-1 flex flex-wrap gap-x-1 min-[900px]:opacity-0 min-[900px]:transition-opacity min-[900px]:group-hover:opacity-100">
-      <button type="button" onClick={() => onConvert(message, "subtask")} className={msgActionCls}>转为子约定</button>
-      <button type="button" onClick={() => onConvert(message, "node")} className={msgActionCls}>标记节点</button>
-      <button type="button" onClick={() => onConvert(message, "doc")} className={msgActionCls}>存为文件</button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className={cn(msgActionCls, message.mark && MARK_STYLES[message.mark])}>
-            {message.mark ? MARK_LABELS[message.mark] : "标记"}
-            <ChevronDown className="h-3 w-3 ml-0.5" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="text-xs">
-          {Object.entries(MARK_LABELS).map(([value, label]) => (
-            <DropdownMenuItem key={value} onClick={() => onMark(message, value)} className="gap-1.5">
-              <span className={cn("inline-block w-2 h-2 rounded-full", {
-                "bg-emerald-500": value === "consensus",
-                "bg-rose-500": value === "dispute",
-                "bg-amber-500": value === "pending",
-              })} />
-              {label}
-              {message.mark === value && <Check className="w-3 h-3 ml-auto" />}
-            </DropdownMenuItem>
-          ))}
-          {message.mark && (
-            <DropdownMenuItem onClick={() => onMark(message, null)} className="text-slate-400">
-              清除标记
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <button type="button" onClick={() => onReply(message)} className={msgActionCls}>回复</button>
-      {canDelete && <DeleteMessageButton onDelete={() => onDelete(message)} />}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="消息操作"
+          className="flex h-6 w-6 items-center justify-center rounded-full text-[#a8a29e] transition-colors hover:bg-[#efefe9] hover:text-[#384877] focus-visible:outline-none"
+        >
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40 text-xs">
+        <DropdownMenuItem onClick={() => onReply(message)}>回复</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onConvert(message, "subtask")}>转为子约定</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onConvert(message, "node")}>标记执行节点</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onConvert(message, "doc")}>存为沉淀文件</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onMark(message, "consensus")}>
+          <span className="mr-1.5 h-2 w-2 rounded-full bg-emerald-500" />标记共识
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onMark(message, "dispute")}>
+          <span className="mr-1.5 h-2 w-2 rounded-full bg-rose-500" />标记分歧
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onMark(message, "pending")}>
+          <span className="mr-1.5 h-2 w-2 rounded-full bg-amber-500" />标记待确认
+        </DropdownMenuItem>
+        {message.mark && (
+          <DropdownMenuItem onClick={() => onMark(message, null)} className="text-slate-400">
+            清除标记
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <DropdownMenuItem
+            className="text-rose-600 focus:text-rose-700"
+            onClick={() => {
+              if (window.confirm("删除这条消息？删除后无法恢复。")) onDelete(message);
+            }}
+          >
+            删除
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -150,9 +149,12 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
   const [mentionOpen, setMentionOpen] = useState(false); // @Agent 自动弹出
   const [agentPendingSince, setAgentPendingSince] = useState(null); // @Agent 打字指示器
   const [flashingId, setFlashingId] = useState(null);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   const streamRef = useRef(null);
   const inputRef = useRef(null);
   const fileRef = useRef(null);
+  const nearBottomRef = useRef(true);
+  const lastMessageIdRef = useRef("");
 
   // 输入框随内容长高（紧凑模式最多 4 行，桌面最多 6 行）
   useEffect(() => {
@@ -176,11 +178,22 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     if (el) el.scrollTo({ top: el.scrollHeight, behavior });
   };
 
+  const handleStreamScroll = () => {
+    const el = streamRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    nearBottomRef.current = atBottom;
+    if (atBottom) setHasNewMessages(false);
+  };
+
+  // 即时通讯式同步：可见时每 3 秒拉取新消息，切到后台自动暂停
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['collab', taskId, 'messages'],
     queryFn: () => httpRequest(`/api/comments?task_id=${taskId}&limit=300`),
     enabled: !!taskId,
-    refetchInterval: 15000,
+    refetchInterval: 3000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
     initialData: [],
   });
 
@@ -203,6 +216,37 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       (m) => m.topic === topicFilter || (m.replies || []).some((r) => r.topic === topicFilter)
     );
   }, [messages, topicFilter]);
+
+  // 即时通讯式消息流：把线程树摊平成时间顺序，回复用“回复某人”标注，
+  // 不再用论坛式的缩进和每层标题。
+  const flatMessages = useMemo(() => {
+    const out = [];
+    const walk = (message, replyToName) => {
+      out.push({ ...message, reply_to_name: replyToName || "" });
+      (message.replies || []).forEach((reply) => walk(reply, message.created_by_name || "成员"));
+    };
+    filteredMessages.forEach((message) => walk(message, ""));
+    out.sort((a, b) => new Date(a.created_date).getTime() - new Date(b.created_date).getTime());
+    return out;
+  }, [filteredMessages]);
+
+  // 新消息到达：如果用户在底部就自动跟随；否则保留阅读位置并提示“新消息”
+  useEffect(() => {
+    const el = streamRef.current;
+    if (!el || flatMessages.length === 0) return;
+    const lastId = flatMessages[flatMessages.length - 1]?.id || "";
+    if (!lastId || lastId === lastMessageIdRef.current) return;
+    const firstLoad = !lastMessageIdRef.current;
+    lastMessageIdRef.current = lastId;
+    if (firstLoad || nearBottomRef.current || agentPendingSince) {
+      window.requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: firstLoad ? "auto" : "smooth" });
+        setHasNewMessages(false);
+      });
+    } else {
+      setHasNewMessages(true);
+    }
+  }, [flatMessages, agentPendingSince]);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['collab', taskId] });
@@ -347,20 +391,48 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
         .map((m) => m.user_id)
     )];
     try {
+      const parentId = replyTo?.id || undefined;
       await httpRequest(`/api/collab/${taskId}/messages`, {
         method: "POST",
         body: {
           content: text || "（分享附件）",
-          parent_id: replyTo?.id || undefined,
+          parent_id: parentId,
           topic: topicFilter === "all" ? undefined : topicFilter,
           ...(mentionedUserIds.length > 0 ? { mentions: mentionedUserIds } : {}),
           attachments: sendingAttachments.length > 0 ? sendingAttachments : undefined,
         },
       });
       if (!overrideText) {
+        // 先把自己的消息放进时间线，拿到服务端结果后由刷新替换；发出去立刻可见
+        const optimistic = {
+          id: `local-${Date.now()}`,
+          task_id: taskId,
+          content: text || "（分享附件）",
+          parent_id: parentId || null,
+          topic: topicFilter === "all" ? null : topicFilter,
+          attachments: sendingAttachments,
+          created_by_id: currentUserId,
+          created_by_name: "我",
+          created_date: new Date().toISOString(),
+          replies: [],
+        };
+        queryClient.setQueryData(['collab', taskId, 'messages'], (old) => {
+          if (!Array.isArray(old)) return old;
+          if (parentId) {
+            return old.map((root) =>
+              root.id === parentId
+                ? { ...root, replies: [...(root.replies || []), optimistic] }
+                : root
+            );
+          }
+          return [...old, optimistic];
+        });
+        nearBottomRef.current = true;
+        setHasNewMessages(false);
         setContent("");
         setReplyTo(null);
         setAttachments([]);
+        window.setTimeout(() => scrollStreamToBottom("auto"), 30);
       }
       setMentionOpen(false);
       invalidateAll();
@@ -377,8 +449,12 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     }
   };
 
-  const renderMessage = (message, isReply = false) => {
+  // 即时通讯式气泡：自己靠右、成员/Agent 靠左；操作收进“⋯”菜单
+  const renderMessage = (message, index) => {
     const isAgent = !!message.agent;
+    const mine = message.created_by_id === currentUserId;
+    const previous = index > 0 ? flatMessages[index - 1] : null;
+    const showDay = !previous || dayKey(previous.created_date) !== dayKey(message.created_date);
     const attachmentsAndCards = (
       <>
         <AttachmentView attachments={message.attachments} />
@@ -396,114 +472,76 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       </>
     );
 
-    // 搭子空间里的人聊天：用普通聊天窗口的气泡（自己靠右、成员/搭子靠左），
-    // 不显示“整理建议”“共识/分歧”这类工作台标签，也不把操作按钮塞进每条消息。
-    if (compact) {
-      const mine = message.created_by_id === currentUserId;
-      return (
-        <div
-          key={message.id}
-          id={`collab-msg-${message.id}`}
-          className={cn("py-1.5", isReply && "ml-9", flashingId === message.id && "collab-msg-flash")}
-        >
-          <div className={cn("flex gap-2", mine ? "justify-end" : "items-start pr-6")}>
-            {!mine && (isAgent
-              ? <AgentAvatar size="sm" />
-              : <MemberAvatar name={message.created_by_name || "成员"} seed={message.created_by} size="sm" className="border-white" />)}
-            <div className={cn("min-w-0 max-w-[84%]", mine && "flex flex-col items-end")}>
-              {!mine && (
-                <div className="mb-0.5 px-1 text-[10px]" style={{ color: "#8a867e" }}>
-                  {isAgent ? "心栈 Agent" : message.created_by_name || "成员"}
-                </div>
-              )}
-              <div
-                className={cn(
-                  "whitespace-pre-wrap break-words px-3.5 py-2.5 text-[14px] leading-relaxed",
-                  mine
-                    ? "rounded-2xl rounded-tr-sm bg-[#384877] text-[#FAF9F7]"
-                    : isAgent
-                      ? "rounded-2xl rounded-tl-sm bg-[#F5F0E8] text-[#5B4A3A]"
-                      : "rounded-2xl rounded-tl-sm border border-stone-100 bg-white text-stone-700 shadow-[0_1px_2px_rgba(36,36,36,0.03)]"
-                )}
-              >
-                {message.content}
-              </div>
-              <div className={cn("mt-1 px-1 text-[9px]", mine ? "text-right" : "")} style={{ color: "#a8a29e" }}>
-                {formatTime(message.created_date)}
-                {message.topic ? ` · ${message.topic}` : ""}
-              </div>
-              <div className={cn("w-full", mine && "flex flex-col items-end")}>{attachmentsAndCards}</div>
-            </div>
-          </div>
-          {!isReply && (message.replies || []).map((reply) => renderMessage(reply, true))}
-        </div>
-      );
-    }
-
     return (
-      <div
-        key={message.id}
-        id={`collab-msg-${message.id}`}
-        className={cn(
-          "group relative border-b transition-colors last:border-b-0",
-          isReply ? "ml-10 border-transparent py-2.5" : compact ? "py-3.5" : "py-4",
-          flashingId === message.id && "collab-msg-flash"
+      <React.Fragment key={message.id}>
+        {showDay && (
+          <div className="my-2 flex justify-center">
+            <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] text-stone-400">
+              {dayLabel(message.created_date)}
+            </span>
+          </div>
         )}
-        style={isReply ? undefined : { borderColor: C.lineSoft }}
-      >
-        <div className="flex gap-3">
-          {isAgent
+        <div
+          id={`collab-msg-${message.id}`}
+          className={cn(
+            "group flex gap-2 py-1",
+            mine ? "justify-end" : "items-start",
+            flashingId === message.id && "collab-msg-flash"
+          )}
+        >
+          {!mine && (isAgent
             ? <AgentAvatar size="sm" />
-            : <MemberAvatar name={message.created_by_name || "成员"} seed={message.created_by} size="sm" className="border-[#fdfcf9]" />}
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-              <span className="font-semibold" style={{ color: "#45413d" }}>
+            : <MemberAvatar name={message.created_by_name || "成员"} seed={message.created_by} size="sm" className="border-white" />)}
+          <div className={cn("min-w-0 max-w-[86%] md:max-w-[76%]", mine && "flex flex-col items-end")}>
+            {!mine && (
+              <div className="mb-0.5 px-1 text-[10px]" style={{ color: "#8a867e" }}>
                 {isAgent ? "心栈 Agent" : message.created_by_name || "成员"}
-              </span>
-              {isAgent && (
-                <Badge className="text-[10px] px-1.5 py-0 border-transparent hover:bg-[#e4e6f8]" style={{ backgroundColor: "#e4e6f8", color: "#2a2861" }}>
-                  <Bot className="w-2.5 h-2.5 mr-0.5" />整理建议
-                </Badge>
+              </div>
+            )}
+            {message.reply_to_name && (
+              <div className="mb-1 max-w-full truncate px-1 text-[10px]" style={{ color: "#a8a29e" }}>
+                回复 {message.reply_to_name}
+              </div>
+            )}
+            <div
+              className={cn(
+                "max-w-full whitespace-pre-wrap break-words px-3.5 py-2.5 text-[14px] leading-relaxed",
+                mine
+                  ? "rounded-2xl rounded-tr-md bg-[#384877] text-[#FAF9F7] shadow-sm"
+                  : isAgent
+                    ? "rounded-2xl rounded-tl-md border border-[#e6ddca] bg-[#F5F0E8] text-[#5B4A3A]"
+                    : "rounded-2xl rounded-tl-md border border-stone-200 bg-white text-stone-700 shadow-[0_1px_2px_rgba(36,36,36,0.04)]"
               )}
-              {message.topic && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0" style={{ borderColor: "#d8d6cf", color: "#77736c" }}>
-                  {message.topic}
-                </Badge>
-              )}
-              {message.mark && (
-                <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0", MARK_STYLES[message.mark])}>
-                  {MARK_LABELS[message.mark]}
-                </Badge>
-              )}
-              <span className="text-[10px]" style={{ color: "#8a867e" }}>{formatTime(message.created_date)}</span>
-            </div>
-            <p
-              className={cn("mt-1.5 whitespace-pre-wrap break-words leading-6", compact ? "text-[14px]" : "text-[13px]")}
-              style={{ color: isAgent ? "#49465b" : "#57534d" }}
             >
               {message.content}
-            </p>
+            </div>
+            <div className={cn("mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px]", mine && "justify-end")} style={{ color: "#a8a29e" }}>
+              <span>{formatTime(message.created_date)}</span>
+              {message.topic && (
+                <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[#8a867e]">{message.topic}</span>
+              )}
+              {message.mark && (
+                <span className={cn("rounded-full border px-1.5 py-0.5", MARK_STYLES[message.mark])}>
+                  {MARK_LABELS[message.mark]}
+                </span>
+              )}
+              {!compact && !isAgent && (
+                <span className="min-[900px]:opacity-0 min-[900px]:transition-opacity min-[900px]:group-hover:opacity-100">
+                  <MessageMenu
+                    message={message}
+                    canDelete={message.created_by_id === currentUserId}
+                    onConvert={handleConvert}
+                    onMark={handleMark}
+                    onReply={(m) => setReplyTo({ id: m.parent_id || m.id, name: m.created_by_name })}
+                    onDelete={handleDelete}
+                  />
+                </span>
+              )}
+            </div>
             {attachmentsAndCards}
-
-            {!isAgent && !isReply && (
-              <MessageActions
-                message={message}
-                canDelete={message.created_by_id === currentUserId}
-                onConvert={handleConvert}
-                onMark={handleMark}
-                onReply={(m) => setReplyTo({ id: m.id, name: m.created_by_name })}
-                onDelete={handleDelete}
-              />
-            )}
-            {!isAgent && isReply && message.created_by_id === currentUserId && (
-              <div className="min-[900px]:opacity-0 min-[900px]:transition-opacity min-[900px]:group-hover:opacity-100">
-                <DeleteMessageButton onDelete={() => handleDelete(message)} />
-              </div>
-            )}
           </div>
         </div>
-        {!isReply && (message.replies || []).map((reply) => renderMessage(reply, true))}
-      </div>
+      </React.Fragment>
     );
   };
 
@@ -516,8 +554,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       className="flex min-h-0 flex-1 flex-col"
     >
       {/* 主题窗口：每个主题是一间独立讨论；全部窗口汇总所有主题。
-          搭子空间内的紧凑模式在没有任何主题时不显示这一行，把空间留给对话。 */}
-      {(!compact || topics.length > 0 || addingTopic) && (
+          搭子空间内的紧凑聊天不显示主题筛选，把空间留给消息。 */}
+      {!compact && (
       <div
         className={cn(
           "flex shrink-0 items-center gap-1.5 overflow-x-auto border-b",
@@ -610,67 +648,88 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       </div>
       )}
 
-      {/* 消息流：可被输入区挤压（多行输入/附件时），保证输入框始终在视口内；滚动仅限流内部 */}
-      <div ref={streamRef} className="min-h-20 flex-1 overflow-y-auto px-4 py-2 sm:px-6">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-10 text-sm" style={{ color: "#99958d" }}>
-            <Loader2 className="w-4 h-4 animate-spin mr-2" /> 加载讨论…
-          </div>
-        ) : filteredMessages.length === 0 ? (
-          <EmptyState
-            title={topicFilter === "all" ? (compact ? "还没有人说话" : "还没有讨论") : "该主题下暂无讨论"}
-            description={
-              topicFilter === "all"
-                ? compact
-                  ? "先打个招呼，或说说这次想一起推进什么。"
-                  : "写下第一条想法，共同约定会从这里开始。"
-                : `在「${topicFilter}」里开始讨论。`
-            }
-          />
-        ) : (
-          filteredMessages.map((m) => renderMessage(m))
-        )}
+      {/* 消息流：即时通讯式气泡，滚动只发生在流内部 */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          ref={streamRef}
+          onScroll={handleStreamScroll}
+          className="h-full overflow-y-auto px-4 py-2 sm:px-6"
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10 text-sm" style={{ color: "#99958d" }}>
+              <Loader2 className="w-4 h-4 animate-spin mr-2" /> 加载聊天…
+            </div>
+          ) : flatMessages.length === 0 ? (
+            <EmptyState
+              title={topicFilter === "all" ? (compact ? "还没有人说话" : "还没有消息") : "该主题下暂无消息"}
+              description={
+                topicFilter === "all"
+                  ? compact
+                    ? "先打个招呼，或说说这次想一起推进什么。"
+                    : "发一条消息，和大家同步现在的想法。"
+                  : `在「${topicFilter}」里说点什么。`
+              }
+            />
+          ) : (
+            flatMessages.map((m, index) => renderMessage(m, index))
+          )}
 
-        {/* 聊天快捷回应：只在最后一条是搭子时出现，点一下就能继续聊 */}
-        {compact && !agentPendingSince && filteredMessages[filteredMessages.length - 1]?.agent && (
-          <div className="flex flex-wrap gap-2 px-1 pb-2 pt-1">
-            {["收到，我来跟进", "这一步再商量一下", "帮我整理成约定"].map((label) => (
+          {/* 聊天快捷回应：只在最后一条是搭子时出现，点一下就能继续聊 */}
+          {compact && !agentPendingSince && flatMessages[flatMessages.length - 1]?.agent && (
+            <div className="flex flex-wrap gap-2 px-1 pb-2 pt-1">
+              {["收到，我来跟进", "这一步再商量一下", "帮我整理成约定"].map((label) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => handleSend(label)}
+                  className="min-h-[32px] rounded-full border border-[#d8d6cf] bg-white px-3 text-[12px] text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 空间还空时，给出一个显眼的邀请入口 */}
+          {compact && !agentPendingSince && flatMessages[flatMessages.length - 1]?.agent && members.length <= 1 && onInvite && (
+            <div className="pb-2 pl-9 pt-0.5">
               <button
-                key={label}
                 type="button"
-                onClick={() => handleSend(label)}
-                className="min-h-[32px] rounded-full border border-[#d8d6cf] bg-white px-3 text-[12px] text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
+                onClick={onInvite}
+                className="rounded-full border border-[#B89A6A] bg-white px-4 py-1.5 text-[12px] font-medium text-[#8B6F47] transition-colors hover:bg-[#F5F0E8]"
               >
-                {label}
+                邀请伙伴加入
               </button>
-            ))}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* 空间还空时，给出一个显眼的邀请入口 */}
-        {compact && !agentPendingSince && filteredMessages[filteredMessages.length - 1]?.agent && members.length <= 1 && onInvite && (
-          <div className="pb-2 pl-9 pt-0.5">
-            <button
-              type="button"
-              onClick={onInvite}
-              className="rounded-full border border-[#B89A6A] bg-white px-4 py-1.5 text-[12px] font-medium text-[#8B6F47] transition-colors hover:bg-[#F5F0E8]"
-            >
-              邀请伙伴加入
-            </button>
-          </div>
-        )}
+          {/* @Agent 打字指示器 */}
+          {agentPendingSince && (
+            <div className="flex items-center gap-2.5 py-3" aria-live="polite">
+              <AgentAvatar size="sm" breathing />
+              <span className="text-xs font-medium" style={{ color: "#45413d" }}>心栈 Agent 思考中…</span>
+              <span className="flex gap-1">
+                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
+                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
+                <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
+              </span>
+            </div>
+          )}
+        </div>
 
-        {/* @Agent 打字指示器 */}
-        {agentPendingSince && (
-          <div className="flex items-center gap-2.5 py-3" aria-live="polite">
-            <AgentAvatar size="sm" breathing />
-            <span className="text-xs font-medium" style={{ color: "#45413d" }}>心栈 Agent 思考中…</span>
-            <span className="flex gap-1">
-              <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
-              <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
-              <span className="collab-typing-dot h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#8a867e" }} />
-            </span>
-          </div>
+        {/* 用户在看旧消息时，新消息只提示不打断阅读 */}
+        {hasNewMessages && (
+          <button
+            type="button"
+            onClick={() => {
+              nearBottomRef.current = true;
+              setHasNewMessages(false);
+              scrollStreamToBottom();
+            }}
+            className="absolute bottom-3 right-4 z-10 inline-flex items-center gap-1 rounded-full bg-[#384877] px-3 py-1.5 text-[11px] font-medium text-white shadow-lg"
+          >
+            新消息 <ArrowDown className="h-3 w-3" />
+          </button>
         )}
       </div>
 
@@ -838,7 +897,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
                 placeholder={
                   topicFilter === "all"
-                    ? "写下想法，@ 可召唤 Agent…"
+                    ? "发消息，输入 @ 可召唤 Agent…"
                     : `在「${topicFilter}」里说…`
                 }
                 className="min-h-[52px] max-h-40 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
@@ -872,14 +931,6 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               >
                 <ArrowUp className="w-4 h-4" />
               </Button>
-            </div>
-            <div className="mt-2 hidden items-center justify-between border-t pt-2 sm:flex" style={{ borderColor: C.lineSoft }}>
-              <span className="px-1.5 text-[11px]" style={{ color: "#8a867e" }}>
-                <span className="font-medium" style={{ color: "#384877" }}>@</span> 召唤 Agent 总结 · 查攻略 · 转化
-              </span>
-              <span className="font-mono text-[9px] uppercase tracking-[0.12em]" style={{ color: "#b8b4ab" }}>
-                {content.trim() || attachments.length > 0 ? "Enter 发送 · Shift+Enter 换行" : "成员与 Agent 的共同讨论"}
-              </span>
             </div>
           </div>
         )}
@@ -951,34 +1002,33 @@ export default function ConversationPane({
   return (
     <section
       id="conversation-pane"
-      className={compact ? "flex h-full min-h-0 flex-col" : "flex min-h-[calc(100dvh_-_64px_-_env(safe-area-inset-bottom))] flex-col min-[900px]:h-full min-[900px]:min-h-0"}
+      className={compact ? "flex h-full min-h-0 flex-col" : "flex h-[calc(100dvh_-_64px_-_env(safe-area-inset-bottom))] flex-col min-[900px]:h-full min-[900px]:min-h-0"}
       style={{ backgroundColor: C.pane }}
     >
       {!compact && (
-      <div className="shrink-0 border-b px-4 pt-4 sm:px-6" style={{ borderColor: C.line }}>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="font-mono text-[9px] uppercase tracking-[0.16em]" style={{ color: C.sub }}>Conversation</div>
-            <h2 className="mt-1.5 text-[19px] font-semibold tracking-[-0.02em]" style={{ color: "#302c2a" }}>
-              {view === "discussion" ? "共同讨论" : "共同动态"}
-              <span className="ml-1.5 font-mono text-[11px] align-middle" style={{ color: "#8a867e" }}>
-                {view === "discussion" ? `· ${messageCount}` : ""}
-              </span>
+      <div className="shrink-0 border-b px-4 pt-3 sm:px-6" style={{ borderColor: C.line }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="truncate text-[17px] font-semibold tracking-[-0.01em]" style={{ color: "#302c2a" }}>
+              {view === "discussion" ? "协同聊天" : "协同动态"}
             </h2>
-            <p className="mt-1 hidden text-xs leading-5 sm:block" style={{ color: C.sub }}>
-              {view === "discussion" ? "各方与 Agent 的自由聊天：@ 它总结、查资料，或把内容转成子约定、节点、沉淀。" : "查看成员操作、确认进度与 Agent 沉淀记录。"}
-            </p>
+            {view === "discussion" && (
+              <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-emerald-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                实时
+              </span>
+            )}
           </div>
           <button
             type="button"
             onClick={onOpenAgent}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-xs font-medium transition-colors hover:border-[#384877] hover:text-[#384877] min-h-9"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors hover:border-[#384877] hover:text-[#384877] min-h-8"
             style={{ borderColor: "#d4d2cb", color: "#5b5751" }}
           >
-            <Bot className="h-4 w-4" />Agent 协同
+            <Bot className="h-3.5 w-3.5" />Agent
           </button>
         </div>
-        <div className="mt-3 flex gap-6" role="tablist" aria-label="谈话内容切换">
+        <div className="mt-2 flex gap-5" role="tablist" aria-label="谈话内容切换">
           <button
             id="discussion-tab"
             type="button"
@@ -986,12 +1036,12 @@ export default function ConversationPane({
             aria-selected={view === "discussion"}
             aria-controls="section-discussion"
             onClick={() => onViewChange("discussion")}
-            className="border-b-2 px-0 pb-2.5 text-xs font-medium transition-colors min-h-8 focus-visible:outline-none"
+            className="border-b-2 px-0 pb-2 text-xs font-medium transition-colors min-h-8 focus-visible:outline-none"
             style={view === "discussion"
               ? { borderColor: "#384877", color: "#384877" }
               : { borderColor: "transparent", color: "#77736c" }}
           >
-            成员讨论 <span className="ml-1 font-mono text-[10px]">{messageCount}</span>
+            聊天
           </button>
           <button
             id="activity-tab"
@@ -999,12 +1049,12 @@ export default function ConversationPane({
             role="tab"
             aria-selected={view === "activity"}
             onClick={() => onViewChange("activity")}
-            className="border-b-2 px-0 pb-2.5 text-xs font-medium transition-colors min-h-8 focus-visible:outline-none"
+            className="border-b-2 px-0 pb-2 text-xs font-medium transition-colors min-h-8 focus-visible:outline-none"
             style={view === "activity"
               ? { borderColor: "#384877", color: "#384877" }
               : { borderColor: "transparent", color: "#77736c" }}
           >
-            共同动态
+            动态
           </button>
         </div>
       </div>

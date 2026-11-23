@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Trash2, MessageSquarePlus, Search, WifiOff } from "lucide-react";
 import CreditsBadge from "@/components/credits/CreditsBadge";
+import { preloadPage } from "@/lib/pagePreload";
 import xinzhanLogo from "./assets/xinzhan-logo.png";
 
 // 首屏只加载应用壳；后台能力/弹窗按需加载，避免主包过大被网络中间层卡住
@@ -47,41 +48,49 @@ const getNavigationItems = (t) => [
     title: t('today'),
     url: createPageUrl("Dashboard"),
     icon: LayoutDashboard,
+    page: "Dashboard",
   },
   {
     title: t('tasks'),
     url: createPageUrl("Tasks"),
     icon: ListTodo,
+    page: "Tasks",
   },
   {
     title: "搭子Store",
     url: createPageUrl("BuddyStore"),
     icon: Store,
+    page: "BuddyStore",
   },
   {
     title: t('notes'),
     url: createPageUrl("Notes"),
     icon: StickyNote,
+    page: "Notes",
   },
   {
     title: t('teams'),
     url: createPageUrl("Teams"),
     icon: Users,
+    page: "Teams",
   },
   {
     title: t('myAccount'),
     url: createPageUrl("Account"),
     icon: User,
+    page: "Account",
   },
   {
     title: t('notifications'),
     url: createPageUrl("Notifications"),
     icon: Bell,
+    page: "Notifications",
   },
   {
     title: "数据看板",
     url: createPageUrl("AdminStats"),
     icon: BarChart3,
+    page: "AdminStats",
   },
 ];
 
@@ -104,6 +113,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
   const navigationItems = getNavigationItems(t).filter(
     (item) => item.title !== "数据看板" || user?.role === "admin"
   );
+
+  const currentPath = normalizedPath(location.pathname).replace(/\/+$/, "") || "/";
 
   const handleMobileClick = () => {
     setOpenMobile(false);
@@ -167,29 +178,33 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
           <SidebarGroupContent>
             <SidebarMenu>
               {navigationItems.map((item) => {
-                const isActive = location.pathname === item.url;
+                const isActive =
+                  currentPath === item.url.toLowerCase().replace(/\/+$/, "");
                 return (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton 
-                      asChild 
-                      className={`transition-colors duration-200 rounded-xl mb-1 ${
-                        isActive 
-                          ? 'bg-stone-100 text-stone-900' 
-                          : 'hover:bg-stone-100/70 text-stone-600'
+                    <SidebarMenuButton
+                      asChild
+                      className={`mb-1 rounded-xl transition-[background-color,color,transform] duration-150 active:scale-[0.99] ${
+                        isActive
+                          ? 'bg-[#eef2ff] text-[#384877] shadow-[inset_3px_0_0_#384877]'
+                          : 'text-stone-600 hover:bg-stone-100/80 active:bg-stone-200/70'
                       }`}
                     >
                       <Link
                         to={item.url}
+                        onMouseEnter={() => preloadPage(item.page)}
+                        onFocus={() => preloadPage(item.page)}
+                        aria-current={isActive ? "page" : undefined}
                         onClick={() => {
                           onNavigate?.();
                           handleMobileClick();
                         }}
-                        className="flex items-center gap-3 px-4 py-3"
+                        className="flex min-h-[40px] items-center gap-3 px-4 py-2.5"
                       >
-                        <item.icon className={`w-5 h-5 ${
+                        <item.icon className={`w-5 h-5 shrink-0 ${
                           isActive ? 'text-[#384877]' : 'text-stone-400'
                         }`} />
-                        <span className="font-medium">{item.title}</span>
+                        <span className={isActive ? "font-semibold" : "font-medium"}>{item.title}</span>
                         {item.url === notificationUrl && hasUnreadMention && (
                           <span className="ml-auto flex items-center" title="有未读的@提醒">
                             <span className="h-2 w-2 rounded-full bg-red-500" />
@@ -233,14 +248,16 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
             >
               <Link
                 to={createPageUrl("Trash")}
+                onMouseEnter={() => preloadPage("Trash")}
+                onFocus={() => preloadPage("Trash")}
                 onClick={() => {
                   onNavigate?.();
                   handleMobileClick();
                 }}
-                className="flex items-center gap-3 px-4 py-3"
+                className="flex min-h-[40px] items-center gap-3 px-4 py-2.5"
               >
-                <Trash2 className={`w-5 h-5 ${
-                  location.pathname === createPageUrl("Trash") ? 'text-stone-900' : 'text-stone-400'
+                <Trash2 className={`w-5 h-5 shrink-0 ${
+                  currentPath === createPageUrl("Trash") ? 'text-stone-900' : 'text-stone-400'
                 }`} />
                 <span className="font-medium">{t('trash')}</span>
               </Link>

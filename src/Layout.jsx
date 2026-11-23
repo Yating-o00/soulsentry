@@ -85,7 +85,7 @@ const getNavigationItems = (t) => [
   },
 ];
 
-function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
+function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
   const location = useLocation();
   const { setOpenMobile } = useSidebar();
   const { t, language, toggleLanguage, isAIMode, toggleAIMode } = useTranslation();
@@ -178,9 +178,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                           : 'hover:bg-stone-100/70 text-stone-600'
                       }`}
                     >
-                      <Link 
-                        to={item.url} 
-                        onClick={handleMobileClick}
+                      <Link
+                        to={item.url}
+                        onClick={() => {
+                          onNavigate?.();
+                          handleMobileClick();
+                        }}
                         className="flex items-center gap-3 px-4 py-3"
                       >
                         <item.icon className={`w-5 h-5 ${
@@ -228,9 +231,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen }) {
                   : 'hover:bg-stone-100/70 text-stone-600'
               }`}
             >
-              <Link 
-                to={createPageUrl("Trash")} 
-                onClick={handleMobileClick}
+              <Link
+                to={createPageUrl("Trash")}
+                onClick={() => {
+                  onNavigate?.();
+                  handleMobileClick();
+                }}
                 className="flex items-center gap-3 px-4 py-3"
               >
                 <Trash2 className={`w-5 h-5 ${
@@ -321,6 +327,17 @@ function LayoutContent({ children }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const { t } = useTranslation();
   const { isOnline, pendingSync } = useOfflineManager();
+  const contentScrollRef = React.useRef(null);
+  const scrollContentToTop = React.useCallback(function () {
+    const el = contentScrollRef.current;
+    if (el) el.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
+
+  // 切换页面时回到顶部：否则从长页面点侧边栏进入新页面会停在旧滚动位置，
+  // 看起来像“第一次点击没反应”。
+  React.useEffect(function () {
+    scrollContentToTop();
+  }, [location.pathname, scrollContentToTop]);
   // 自带页头/底部导航的独立页面（协同空间、公开分享、邀请落地）：
   // 不再叠加全局手机壳，避免双页眉、双页脚挡内容
   const currentPath = normalizedPath(location.pathname);
@@ -369,7 +386,7 @@ function LayoutContent({ children }) {
   }, []);
 
   return (
-    <SidebarProvider>
+    <SidebarProvider className="h-[100dvh] overflow-hidden">
       <style>{`
       :root {
         /* Main Primary Colors - Tech Blue */
@@ -427,7 +444,11 @@ function LayoutContent({ children }) {
       .bg-blue-100 { background-color: rgba(var(--primary-main), 0.1) !important; }
       `}</style>
         
-        <AppSidebar setSearchOpen={setSearchOpen} setFeedbackOpen={setFeedbackOpen} />
+        <AppSidebar
+          setSearchOpen={setSearchOpen}
+          setFeedbackOpen={setFeedbackOpen}
+          onNavigate={scrollContentToTop}
+        />
 
         <React.Suspense fallback={null}>
           <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
@@ -458,7 +479,10 @@ function LayoutContent({ children }) {
         >
           {!isBareMobilePage && <MobileHeader />}
 
-          <div className="flex-1 min-h-0 overflow-auto overflow-x-hidden min-w-0 [scrollbar-gutter:stable]">
+          <div
+            ref={contentScrollRef}
+            className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain min-w-0 [scrollbar-gutter:stable]"
+          >
             {children}
           </div>
           </main>

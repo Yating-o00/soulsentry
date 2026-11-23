@@ -3,9 +3,15 @@
 // - 两类提案，用户确认后才落库：
 //   创建提案（约定/心签/链接/智能规划）与动作提案（勾掉子约定、改约定/心签内容等）
 // - 确认执行后失效 react-query 缓存，产品各页面数据即时刷新
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { AtSign, FileText, Loader2, Mic, Paperclip, X } from "lucide-react";
+import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
+import { applyBuddyCapture } from "@/lib/buddyCapture";
+import { getAllBuddies } from "@/lib/customBuddies";
+import { BUDDY_TINTS } from "@/lib/buddies";
+import Orb from "@/components/buddy/Orb";
 import assistantPlanet from "@/assets/assistant-planet.png";
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划", collab: "协同约定" };
@@ -18,6 +24,42 @@ function fmtTime(iso) {
   const sameDay = d.toDateString() === today.toDateString();
   const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   return sameDay ? hm : `${d.getMonth() + 1}月${d.getDate()}日 ${hm}`;
+}
+
+/** 主聊天里搭子回执：优先用客户端真正落库后的回执，刷新后用服务端 capture 还原 */
+function captureDisplay(capture) {
+  if (!capture || !capture.kind || capture.kind === "none") return null;
+  const data = capture.data || {};
+  const parts = [];
+  if (capture.kind === "running_log") {
+    if (data.distance_km) parts.push(`${data.distance_km} km`);
+    if (data.duration_min) parts.push(`${data.duration_min} 分钟`);
+    if (data.avg_hr) parts.push(`心率 ${data.avg_hr}`);
+    return { title: "已同步到跑步记录", detail: [data.date, ...parts].filter(Boolean).join(" · ") };
+  }
+  if (capture.kind === "reading_log") {
+    if (data.book) parts.push(`《${data.book}》`);
+    if (data.minutes) parts.push(`+${data.minutes} 分钟`);
+    if (data.pages_read) parts.push(`${data.pages_read} 页`);
+    if (data.finished) parts.push("已读完");
+    return { title: "已同步到读书记录", detail: parts.join(" · ") || capture.summary || "" };
+  }
+  if (capture.kind === "wake_log") {
+    return {
+      title: "已记入早起记录",
+      detail: [data.wake_time ? `${data.wake_time} 起床` : "", capture.checkin ? "已打卡" : ""].filter(Boolean).join(" · ") || capture.summary || "",
+    };
+  }
+  if (capture.kind === "study_log") {
+    return {
+      title: "已记入学习记录",
+      detail: [data.topic, data.minutes ? `${data.minutes} 分钟` : ""].filter(Boolean).join(" · ") || capture.summary || "",
+    };
+  }
+  if (capture.kind === "travel_note") {
+    return { title: "已记入旅行手记", detail: data.note || capture.summary || "" };
+  }
+  return { title: "已记入日常记录", detail: data.note || data.topic || capture.summary || "" };
 }
 
 function extractUrl(text) {
@@ -56,6 +98,19 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
   const [revisionSource, setRevisionSource] = useState(null);
   const [memoryLearning, setMemoryLearning] = useState(null);
   const [showArchivedMemories, setShowArchivedMemories] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [mentionBuddies, setMentionBuddies] = useState([]);
+  const [mentionBuddy, setMentionBuddy] = useState(null);
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [mentionStart, setMentionStart] = useState(-1);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [recording, setRecording] = useState(false);
+  const [voiceText, setVoiceText] = useState("");
+  const fileInputRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const voiceTranscriptRef = useRef("");
+  const voiceErrorRef = useRef(false);
 
   const loadMemories = async (showArchived = showArchivedMemories) => {
     try {
@@ -149,12 +204,12 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
   const lastIdRef = useRef("");
   const composerRef = useRef(null);
 
-  // 输入框随内容长高（最多约 5 行），手机上也能看清自己正在输入什么
+  // 输入框随内容长高（最多约 5 行）；空着时锁回一行，别让 placeholder 把聊天框撑高
   useEffect(() => {
     const el = composerRef.current;
     if (!el) return;
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+    el.style.height = `${input.trim() ? Math.min(el.scrollHeight, 140) : 40}px`;
   }, [input]);
 
   const scrollToBottom = useCallback(() => {
@@ -163,6 +218,92 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
       if (el) el.scrollTop = el.scrollHeight;
     });
   }, []);
+
+  // 主聊天框可 @ 的搭子：只列已认领、正在陪伴中的
+  const loadMentionBuddies = useCallback(async () => {
+    try {
+      const mine = await httpRequest("/api/buddies/mine");
+      const active = getAllBuddies(mine)
+        .filter((buddy) => mine?.buddies?.[buddy.id]?.status === "active")
+        .map((buddy) => ({
+          id: buddy.id,
+          name: buddy.name,
+          tint: buddy.tint || BUDDY_TINTS[buddy.id] || BUDDY_TINTS.study,
+          custom: Boolean(buddy.custom),
+        }));
+      setMentionBuddies(active);
+      return mine;
+    } catch (_error) {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) loadMentionBuddies();
+  }, [open, loadMentionBuddies]);
+
+  const mentionResults = useMemo(() => {
+    const query = String(mentionQuery ?? "").trim();
+    return mentionBuddies
+      .filter((buddy) => !query || buddy.name.includes(query) || buddy.id.includes(query))
+      .slice(0, 8);
+  }, [mentionBuddies, mentionQuery]);
+
+  const updateMentionFromInput = useCallback((value, cursor) => {
+    const before = String(value || "").slice(0, cursor ?? String(value || "").length);
+    const match = before.match(/(?:^|\s)@([^\s@]*)$/);
+    if (match) {
+      setMentionStart(before.lastIndexOf("@"));
+      setMentionQuery(match[1]);
+      setMentionIndex(0);
+    } else {
+      setMentionStart(-1);
+      setMentionQuery(null);
+    }
+    if (mentionBuddy && !String(value || "").includes(`@${mentionBuddy.name}`)) {
+      setMentionBuddy(null);
+    }
+  }, [mentionBuddy]);
+
+  const chooseMention = useCallback((buddy) => {
+    if (!buddy) return;
+    const el = composerRef.current;
+    const cursor = el?.selectionStart ?? input.length;
+    const start = mentionStart >= 0 ? mentionStart : input.lastIndexOf("@");
+    if (start < 0) return;
+    const next = `${input.slice(0, start)}@${buddy.name} ${input.slice(cursor)}`;
+    setInput(next);
+    setMentionBuddy(buddy);
+    setMentionQuery(null);
+    setMentionStart(-1);
+    requestAnimationFrame(() => {
+      const node = composerRef.current;
+      if (!node) return;
+      const pos = start + buddy.name.length + 2;
+      node.focus();
+      node.setSelectionRange(pos, pos);
+    });
+  }, [input, mentionStart]);
+
+  const openMentionPicker = useCallback(() => {
+    if (busy) return;
+    const el = composerRef.current;
+    const cursor = el?.selectionStart ?? input.length;
+    const before = input.slice(0, cursor);
+    const insertion = before.length > 0 && !/\s$/.test(before) ? " @" : "@";
+    setInput(`${before}${insertion}${input.slice(cursor)}`);
+    setMentionStart(before.length + insertion.length - 1);
+    setMentionQuery("");
+    setMentionIndex(0);
+    loadMentionBuddies();
+    requestAnimationFrame(() => {
+      const node = composerRef.current;
+      if (!node) return;
+      const pos = before.length + insertion.length;
+      node.focus();
+      node.setSelectionRange(pos, pos);
+    });
+  }, [busy, input, loadMentionBuddies]);
 
   const appendMessage = useCallback((m) => {
     messagesRef.current = [...messagesRef.current, m];
@@ -238,12 +379,173 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
     return true;
   };
 
-  const sendText = useCallback(async (text, lastExtracted = null) => {
+  const handleFiles = useCallback(async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+    const room = 3 - attachments.length;
+    if (room <= 0) {
+      toast.info("最多随一条消息发送 3 个附件");
+      return;
+    }
+    setUploading(true);
+    for (const file of files.slice(0, room)) {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`「${file.name}」超过 20MB，暂时不能上传`);
+        continue;
+      }
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await httpRequest("/api/uploads", { method: "POST", body: form });
+        setAttachments((cur) => [...cur, {
+          url: res.file_url,
+          name: res.file_name,
+          type: res.file_type,
+          size: res.file_size,
+        }].slice(0, 3));
+      } catch (error) {
+        toast.error(error?.message || `「${file.name}」上传失败`);
+      }
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [attachments.length]);
+
+  const startVoice = useCallback(() => {
+    if (busy || recording) return;
+    const Recognition = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!Recognition) {
+      toast.info("当前浏览器不支持语音输入，先用键盘说给我听吧");
+      return;
+    }
+    try {
+      const recognition = new Recognition();
+      recognition.lang = "zh-CN";
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      voiceTranscriptRef.current = "";
+      voiceErrorRef.current = false;
+      recognition.onresult = (event) => {
+        let finalText = "";
+        let interim = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const transcript = event.results[i][0]?.transcript || "";
+          if (event.results[i].isFinal) finalText += transcript;
+          else interim += transcript;
+        }
+        if (finalText) voiceTranscriptRef.current += finalText;
+        setVoiceText(`${voiceTranscriptRef.current}${interim}`.trim());
+      };
+      recognition.onerror = (event) => {
+        if (event.error === "aborted") return;
+        voiceErrorRef.current = true;
+        setRecording(false);
+        setVoiceText("");
+        toast.error(
+          event.error === "not-allowed" || event.error === "service-not-allowed"
+            ? "需要麦克风权限才能语音输入"
+            : "没听清，再按住说一次"
+        );
+      };
+      recognition.onend = () => {
+        setRecording(false);
+        setVoiceText("");
+        recognitionRef.current = null;
+        const text = voiceTranscriptRef.current.trim();
+        if (!voiceErrorRef.current && text) {
+          setInput((prev) => `${prev}${prev && !/\s$/.test(prev) ? " " : ""}${text}`);
+          toast.success("已转成文字，发送前可以改");
+        }
+      };
+      recognitionRef.current = recognition;
+      setRecording(true);
+      setVoiceText("");
+      recognition.start();
+    } catch (_error) {
+      setRecording(false);
+      recognitionRef.current = null;
+      toast.error("语音输入没启动成功，再试一次");
+    }
+  }, [busy, recording]);
+
+  const stopVoice = useCallback(() => {
+    try {
+      recognitionRef.current?.stop();
+    } catch (_error) {
+      // 识别已经结束时忽略
+    }
+  }, []);
+
+  useEffect(() => () => {
+    try {
+      recognitionRef.current?.abort();
+    } catch (_error) {
+      // 卸载时识别已结束
+    }
+  }, []);
+
+  // @搭子回复里带 capture：主聊天负责把它真正写进对应搭子空间（跑步记录/读书/打卡…）
+  const applyCaptureFromMain = useCallback(async (res, sentAttachments) => {
+    const replyId = res?.reply?.id;
+    try {
+      const mine = await httpRequest("/api/buddies/mine");
+      const profile = mine?.buddies?.[res.buddy.id];
+      const applied = await applyBuddyCapture({
+        buddyId: res.buddy.id,
+        capture: res.capture,
+        state: profile?.state || {},
+        profile,
+        projectTask: res.project_task || null,
+        attachments: sentAttachments,
+        queryClient,
+      });
+      if (!applied) return;
+      if (applied.patch && Object.keys(applied.patch).length > 0) {
+        await httpRequest(`/api/buddies/${res.buddy.id}/state`, {
+          method: "POST",
+          body: { patch: applied.patch },
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["buddies", "mine"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      if (replyId) {
+        messagesRef.current = messagesRef.current.map((m) =>
+          m.id === replyId ? { ...m, meta: { ...(m.meta || {}), capture_receipt: applied.receipt } } : m
+        );
+        setMessages(messagesRef.current);
+      }
+      loadMentionBuddies();
+    } catch (error) {
+      if (replyId) {
+        const failure = {
+          kind: res?.capture?.kind,
+          title: "识别到数据，但同步没成功",
+          detail: error?.message || "稍后到搭子空间手动补一次",
+          failed: true,
+        };
+        messagesRef.current = messagesRef.current.map((m) =>
+          m.id === replyId ? { ...m, meta: { ...(m.meta || {}), capture_receipt: failure } } : m
+        );
+        setMessages(messagesRef.current);
+      }
+    }
+  }, [queryClient, loadMentionBuddies]);
+
+  const sendText = useCallback(async (text, lastExtracted = null, options = {}) => {
     const t = String(text || "").trim();
-    if (!t || busy) return false;
+    const sentAttachments = Array.isArray(options.attachments) ? options.attachments : [];
+    const sentBuddy = options.buddy || null;
+    if ((!t && sentAttachments.length === 0) || busy) return false;
     if (inline) setHistoryOpen(true); // 用户开口后才展开对话流
     setBusy(true);
-    const optimistic = { id: `local-${Date.now()}`, role: "user", content: t, kind: "chat", created_date: new Date().toISOString() };
+    const optimistic = {
+      id: `local-${Date.now()}`,
+      role: "user",
+      content: t || "（附件）",
+      kind: "chat",
+      created_date: new Date().toISOString(),
+      ...(sentAttachments.length > 0 ? { meta: { attachments: sentAttachments } } : {}),
+    };
     appendMessage(optimistic);
     scrollToBottom();
     try {
@@ -251,7 +553,12 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
         try {
           const res = await httpRequest("/api/companion/messages", {
             method: "POST",
-            body: { content: t, last_extracted: lastExtracted || undefined }
+            body: {
+              content: optimistic.content,
+              last_extracted: lastExtracted || undefined,
+              ...(sentAttachments.length > 0 ? { attachments: sentAttachments } : {}),
+              ...(sentBuddy?.id ? { buddy_id: sentBuddy.id } : {}),
+            }
           });
           if (res?.reply) {
             const next = [...messagesRef.current.filter((m) => m.id !== optimistic.id), res.message || optimistic, res.reply];
@@ -259,9 +566,36 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
             setMessages(next);
             lastIdRef.current = res.reply.id;
           }
-          setPending(res?.extracted?.type === "plan" ? { ...res.extracted, proposal_id: crypto.randomUUID() } : res?.extracted || null);
+          const pendingFromFlow = res?.extracted?.type === "plan"
+            ? { ...res.extracted, proposal_id: crypto.randomUUID() }
+            : res?.extracted || null;
+          if (res?.task?.title) {
+            setPending({
+              type: "task",
+              title: res.task.title,
+              description: res.task.description || "",
+              due_at: res.task.due_at || undefined,
+              buddy_id: res.buddy?.id,
+              buddy_name: res.buddy?.name,
+            });
+          } else if (res?.proposal?.type === "create_collab") {
+            setPending({
+              type: "collab",
+              title: res.proposal.title,
+              goal: res.proposal.goal || "",
+              description: res.proposal.goal || "",
+              scenario: res.proposal.scenario || "friends",
+              buddy_id: res.buddy?.id,
+              buddy_name: res.buddy?.name,
+            });
+          } else {
+            setPending(pendingFromFlow);
+          }
           setActions(Array.isArray(res?.actions) && res.actions.length > 0 ? res.actions : null);
           scrollToBottom();
+          if (res?.capture && res?.buddy?.id) {
+            await applyCaptureFromMain(res, sentAttachments);
+          }
           return true;
         } catch (err) {
           if (err?.status !== 404) throw err;
@@ -276,13 +610,34 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
     } finally {
       setBusy(false);
     }
-  }, [busy, appendMessage, markUnsupported, scrollToBottom, inline]);
+  }, [busy, appendMessage, markUnsupported, scrollToBottom, inline, applyCaptureFromMain]);
 
   const send = async () => {
-    const t = input.trim();
-    if (!t) return;
-    const ok = await sendText(t, pending);
-    if (ok) setInput("");
+    const sentAttachments = attachments;
+    const sentMention = mentionBuddy;
+    const raw = input.trim();
+    if ((!raw && sentAttachments.length === 0) || busy || uploading) return;
+    const fallbackLabel = sentAttachments.some((a) => String(a.type || "").startsWith("image/"))
+      ? "（图片）"
+      : sentAttachments.some((a) => String(a.type || "").startsWith("video/"))
+        ? "（视频）"
+        : "（文件）";
+    let content = raw || fallbackLabel;
+    if (sentMention && !content.includes(`@${sentMention.name}`)) {
+      content = `@${sentMention.name} ${content}`;
+    }
+    // 先把输入区清空，不让「同步跑步记录/打卡」的等待把已发出的文字留在输入框里
+    const sendingPromise = sendText(content, pending, { attachments: sentAttachments, buddy: sentMention });
+    setInput("");
+    setAttachments([]);
+    setMentionBuddy(null);
+    setMentionQuery(null);
+    const ok = await sendingPromise;
+    if (!ok) {
+      setInput(raw);
+      setAttachments(sentAttachments);
+      setMentionBuddy(sentMention);
+    }
   };
 
   // 「不对，再聊聊」：创建提案收回，继续对话
@@ -310,7 +665,10 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
             description: pending.description || firstUserText || undefined,
             category: pending.category || "personal",
             priority: pending.priority || "medium",
-            due_at: pending.due_at || undefined
+            due_at: pending.due_at || undefined,
+            ...(pending.buddy_id
+              ? { metadata: { _extraFields: { buddy_id: pending.buddy_id, buddy_name: pending.buddy_name } } }
+              : {}),
           }
         });
         doneLabel = pending.title;
@@ -355,6 +713,9 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
                 agent: { enabled: true, paused: false },
                 confirmRule: scenario === "couple" ? "all" : "owner",
               },
+              ...(pending.buddy_id
+                ? { _extraFields: { buddy_id: pending.buddy_id, buddy_name: pending.buddy_name } }
+                : {}),
             },
           },
         });
@@ -463,18 +824,29 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
   // ── 渲染 ──
   const MessageItem = React.memo(function MessageItem({ m }) {
     const mine = m.role === "user";
+    const buddy = m.meta?.buddy;
+    const buddyTint = buddy?.tint || BUDDY_TINTS[buddy?.id] || BUDDY_TINTS.study;
+    const sentAttachments = Array.isArray(m.meta?.attachments) ? m.meta.attachments : [];
+    const receipt = m.meta?.capture_receipt || captureDisplay(m.meta?.capture);
     return (
       <div className={`flex items-start gap-2 px-4 mb-4 ${mine ? "flex-row-reverse" : ""}`}>
         {!mine && (
-          <img
-            src={assistantPlanet}
-            alt="心栈小助手"
-            className="assistant-avatar w-8 h-8 rounded-full shrink-0 object-cover"
-          />
+          buddy ? (
+            <div className="shrink-0 mt-0.5"><Orb size={32} tint={buddyTint} /></div>
+          ) : (
+            <img
+              src={assistantPlanet}
+              alt="心栈小助手"
+              className="assistant-avatar w-8 h-8 rounded-full shrink-0 object-cover"
+            />
+          )
         )}
         <div className={`max-w-[78%] flex flex-col ${mine ? "items-end" : "items-start"}`}>
           {m.kind === "proactive" && (
             <span className="text-[10px] mb-1" style={{ color: "#384877" }}>小助手主动来聊</span>
+          )}
+          {!mine && buddy && (
+            <span className="text-[10px] mb-1" style={{ color: "#63666e" }}>{buddy.name}</span>
           )}
           <div
             className="rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap break-all"
@@ -485,7 +857,56 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
             }
           >
             {m.content}
+            {sentAttachments.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {sentAttachments.map((att, index) =>
+                  String(att.type || "").startsWith("image/") ? (
+                    <a key={att.url || index} href={att.url} target="_blank" rel="noreferrer" className="block" title="点击查看原图">
+                      <img
+                        src={att.url}
+                        alt={att.name || "图片"}
+                        className="max-h-40 w-auto max-w-full rounded-lg border border-white/20 bg-white/10 object-contain"
+                      />
+                    </a>
+                  ) : String(att.type || "").startsWith("video/") ? (
+                    <video
+                      key={att.url || index}
+                      src={att.url}
+                      controls
+                      preload="metadata"
+                      className="max-h-40 w-auto max-w-full rounded-lg border border-white/20 bg-white/10"
+                    />
+                  ) : (
+                    <a
+                      key={att.url || index}
+                      href={att.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex max-w-[180px] items-center gap-1.5 rounded-lg bg-white/15 px-2 py-1 text-[11px]"
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{att.name || "文件"}</span>
+                    </a>
+                  )
+                )}
+              </div>
+            )}
           </div>
+          {!mine && receipt && (
+            <div
+              className={`mt-1.5 flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] leading-relaxed ${
+                receipt.failed
+                  ? "border-amber-200/70 bg-amber-50/70 text-amber-700"
+                  : "border-emerald-200/70 bg-emerald-50/70 text-emerald-700"
+              }`}
+            >
+              <span className="mt-0.5">{receipt.failed ? "!" : "✓"}</span>
+              <div className="min-w-0">
+                <span className="font-medium">{receipt.title}</span>
+                {receipt.detail && <span className="opacity-80"> · {receipt.detail}</span>}
+              </div>
+            </div>
+          )}
           <span className="text-[10px] mt-1" style={{ color: "#9ca0a8" }}>{fmtTime(m.created_date)}</span>
         </div>
       </div>
@@ -645,7 +1066,7 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
             </div>
           </div>
         )}
-        {inline && !historyOpen && inlineQuickItems.length > 0 && (
+        {inline && !historyOpen && !input.trim() && !mentionBuddy && inlineQuickItems.length > 0 && (
           /* 快捷问句：单行横滑小胶囊，把纵向空间留给对话 */
           <div className="px-4 pb-3">
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
@@ -732,6 +1153,9 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
               {(pending.goal || pending.description) && (
                 <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>{pending.goal || pending.description}</div>
               )}
+              {pending.type === "task" && pending.due_at && fmtTime(pending.due_at) && (
+                <div className="text-[11.5px] mt-1" style={{ color: "#63666e" }}>提醒：{fmtTime(pending.due_at)}</div>
+              )}
             </div>
           )}
           <div className="flex gap-2 mt-3">
@@ -756,43 +1180,267 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
         </div>
       )}
 
-      {/* 输入区 */}
+      {/* 输入区：@搭子 / 图片文件视频 / 长按语音 */}
       <div className="shrink-0 px-3 py-2.5" style={inline ? { background: "transparent" } : { background: "#fff", borderTop: "1px solid #e8ecef" }}>
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={composerRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
+        <div className="relative">
+          {mentionQuery !== null && (
+            <div className="absolute bottom-full left-0 right-0 z-20 mb-2 overflow-hidden rounded-2xl border border-[#dbe3f2] bg-white shadow-[0_12px_30px_rgba(30,42,64,0.18)]">
+              <div className="max-h-56 overflow-y-auto py-1">
+                {mentionResults.length === 0 && (
+                  <p className="px-3 py-2.5 text-[12px] leading-relaxed text-[#9ca0a8]">
+                    {mentionBuddies.length === 0 ? "还没有认领搭子，先去搭子Store看看" : "没有匹配的搭子"}
+                  </p>
+                )}
+                {mentionResults.map((buddy, index) => (
+                  <button
+                    key={buddy.id}
+                    type="button"
+                    onPointerDown={(event) => {
+                      event.preventDefault();
+                      chooseMention(buddy);
+                    }}
+                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] transition-colors ${
+                      index === mentionIndex ? "bg-[#eef2ff]" : "hover:bg-[#f7f8fc]"
+                    }`}
+                  >
+                    <Orb size={24} tint={buddy.tint} />
+                    <span className="flex-1" style={{ color: "#1c1c1e" }}>{buddy.name}</span>
+                    <span className="text-[10px]" style={{ color: "#9ca0a8" }}>@{buddy.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {attachments.map((att, index) => (
+                <div key={`${att.url}-${index}`} className="relative">
+                  {String(att.type || "").startsWith("image/") ? (
+                    <a href={att.url} target="_blank" rel="noreferrer" className="block" title="点击查看原图">
+                      <img
+                        src={att.url}
+                        alt={att.name || "图片"}
+                        className="h-12 w-12 rounded-xl border border-[#e8ecef] bg-white object-cover"
+                      />
+                    </a>
+                  ) : String(att.type || "").startsWith("video/") ? (
+                    <video
+                      src={att.url}
+                      muted
+                      preload="metadata"
+                      className="h-12 w-16 rounded-xl border border-[#e8ecef] bg-black object-cover"
+                    />
+                  ) : (
+                    <span className="inline-flex h-12 max-w-[180px] items-center gap-1.5 rounded-xl border border-[#e8ecef] bg-white px-2.5 text-[11px] text-[#63666e]">
+                      <FileText className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{att.name || "文件"}</span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAttachments((cur) => cur.filter((_, i) => i !== index))}
+                    aria-label="移除附件"
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#384877] text-white shadow"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {mentionBuddy && (
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px]" style={{ color: "#384877" }}>
+              <span className="rounded-full bg-[#eef2ff] px-2 py-0.5">{mentionBuddy.name} 会接这条</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMentionBuddy(null);
+                  setInput((prev) => prev.replace(`@${mentionBuddy.name}`, "").trimStart());
+                }}
+                className="text-[#9ca0a8]"
+                aria-label="取消 @搭子"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {recording && (
+            <div className="mb-2 flex items-center gap-2 rounded-2xl border border-[#c9d5ef] bg-[#eef2ff]/80 px-3 py-2 text-[12px]" style={{ color: "#384877" }}>
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#384877] opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-[#384877]" />
+              </span>
+              <span className="shrink-0">正在听…松开结束</span>
+              {voiceText && <span className="truncate" style={{ color: "#63666e" }}>{voiceText}</span>}
+            </div>
+          )}
+
+          <div className="flex items-end gap-1.5">
+            <div className="flex shrink-0 items-center gap-0.5 pb-0.5">
+              <button
+                type="button"
+                onClick={openMentionPicker}
+                disabled={busy || uploading}
+                className="flex h-9 w-8 items-center justify-center rounded-full text-[#63666e] transition-colors hover:bg-[#eef0f5] hover:text-[#384877] disabled:opacity-40"
+                title="选择搭子"
+                aria-label="选择搭子"
+              >
+                <AtSign className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={busy || uploading || attachments.length >= 3}
+                className="flex h-9 w-8 items-center justify-center rounded-full text-[#63666e] transition-colors hover:bg-[#eef0f5] hover:text-[#384877] disabled:opacity-40"
+                title="添加图片、视频或文件"
+                aria-label="添加图片、视频或文件"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+              </button>
+            </div>
+            <textarea
+              ref={composerRef}
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                updateMentionFromInput(e.target.value, e.target.selectionStart);
+              }}
+              onClick={(e) => updateMentionFromInput(e.target.value, e.target.selectionStart)}
+              onPaste={(e) => {
+                const files = Array.from(e.clipboardData?.files || []);
+                if (files.length > 0) {
+                  e.preventDefault();
+                  handleFiles(files);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (mentionQuery !== null) {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setMentionQuery(null);
+                    return;
+                  }
+                  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                    e.preventDefault();
+                    if (mentionResults.length > 0) {
+                      setMentionIndex((index) =>
+                        (index + (e.key === "ArrowDown" ? 1 : -1) + mentionResults.length) % mentionResults.length
+                      );
+                    }
+                    return;
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    const pick = mentionResults[mentionIndex] || mentionResults[0];
+                    if (pick) chooseMention(pick);
+                    else setMentionQuery(null);
+                    return;
+                  }
+                }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              rows={1}
+              aria-label="聊天输入"
+              placeholder={
+                mentionBuddy
+                  ? `和${mentionBuddy.name}说…`
+                  : inline
+                    ? "说点什么…"
+                    : "跟小助手说…"
               }
-            }}
-            rows={1}
-            placeholder={inline ? "说点什么，我来安排…" : "和小助手说点什么…"}
-            className="flex-1 resize-none px-3.5 py-2.5 text-[13.5px] outline-none"
-            style={
-              inline
-                ? { background: "#fff", border: "1px solid #e8ecef", borderRadius: 20, maxHeight: 140, minHeight: 40, color: "#1c1c1e" }
-                : { background: "#eef0f5", border: "none", borderRadius: 16, maxHeight: 140, minHeight: 40, color: "#1c1c1e" }
-            }
-          />
-          <button
-            type="button"
-            onClick={send}
-            disabled={busy || !input.trim()}
-            className="rounded-full text-white text-[13px] font-semibold shrink-0"
-            style={
-              inline
-                ? { minWidth: 56, height: 40, padding: "0 14px", background: input.trim() ? "#384877" : "#c6c9cf", border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1 }
-                : { width: 40, height: 40, background: input.trim() ? "#384877" : "#c6c9cf", border: "none", cursor: input.trim() ? "pointer" : "default", opacity: busy ? 0.6 : 1 }
-            }
-            aria-label="发送"
-          >
-            {inline ? "发送" : "➤"}
-          </button>
+              className="flex-1 resize-none px-3.5 py-2.5 text-[13.5px] outline-none"
+              style={
+                inline
+                  ? { background: "#fff", border: "1px solid #e8ecef", borderRadius: 20, maxHeight: 140, minHeight: 40, color: "#1c1c1e" }
+                  : { background: "#eef0f5", border: "none", borderRadius: 16, maxHeight: 140, minHeight: 40, color: "#1c1c1e" }
+              }
+            />
+            {input.trim() || attachments.length > 0 ? (
+              <button
+                type="button"
+                onClick={send}
+                disabled={busy || uploading}
+                className="rounded-full text-white text-[13px] font-semibold shrink-0"
+                style={
+                  inline
+                    ? {
+                        minWidth: 48,
+                        height: 40,
+                        padding: "0 10px",
+                        background: "#384877",
+                        border: "none",
+                        cursor: "pointer",
+                        opacity: busy || uploading ? 0.6 : 1,
+                      }
+                    : {
+                        width: 40,
+                        height: 40,
+                        background: "#384877",
+                        border: "none",
+                        cursor: "pointer",
+                        opacity: busy || uploading ? 0.6 : 1,
+                      }
+                }
+                aria-label="发送"
+              >
+                {inline ? "发送" : "➤"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  startVoice();
+                }}
+                onPointerUp={stopVoice}
+                onPointerCancel={stopVoice}
+                onPointerLeave={() => {
+                  if (recording) stopVoice();
+                }}
+                onContextMenu={(e) => e.preventDefault()}
+                onKeyDown={(e) => {
+                  if (e.key === " " || e.key === "Enter") {
+                    e.preventDefault();
+                    if (recording) stopVoice();
+                    else startVoice();
+                  }
+                }}
+                disabled={busy || uploading}
+                className="flex shrink-0 items-center justify-center rounded-full disabled:opacity-40"
+                style={{
+                  ...(inline ? { minWidth: 48, padding: "0 10px" } : { width: 40 }),
+                  height: 40,
+                  background: recording ? "#c9d5ef" : "#eef2ff",
+                  color: "#384877",
+                  border: "none",
+                  cursor: "pointer",
+                  touchAction: "none",
+                  userSelect: "none",
+                  WebkitUserSelect: "none",
+                  WebkitTouchCallout: "none",
+                }}
+                title="长按说话"
+                aria-label="长按语音输入"
+              >
+                <Mic className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="hidden"
+          accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.md,.csv"
+          onChange={(e) => handleFiles(e.target.files)}
+        />
       </div>
     </>
   );

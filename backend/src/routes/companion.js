@@ -13,6 +13,7 @@ import { retrievePersonalMemories, searchMemoryTranscript } from "../services/pe
 import { createMemory, ownedMemoryProposal, recallableMessageScope } from "../services/memoryStore.js";
 import { enqueueMemoryMessage } from "../services/memoryWorker.js";
 import { buildMemoryTopicSummary, loadMemoryContext, loadRememberedCommitments, RECENT_CHAT_WINDOW } from "../services/memoryContext.js";
+import { resolveCompanionBuddyId, runBuddyChatFromCompanion } from "./buddies.js";
 
 export const companionRouter = Router();
 
@@ -59,6 +60,14 @@ companionRouter.post("/read", async (req, res) => {
 const sendSchema = z.object({
   content: z.string().min(1).max(3000).optional(),
   last_extracted: z.any().optional().nullable(),
+  // 主聊天框 @搭子：图片/文件随消息上传；buddy_id 是明确的 @ 选择
+  attachments: z.array(z.object({
+    url: z.string().trim().min(1).max(500),
+    name: z.string().trim().max(120).optional(),
+    type: z.string().trim().max(80).optional(),
+    size: z.number().nonnegative().optional(),
+  })).max(3).optional(),
+  buddy_id: z.string().trim().max(64).optional(),
   // 提案确认后的回执：客户端已完成落库，追加一条助手话术到时间线（不触发 AI）
   assistant_echo: z.string().min(1).max(1000).optional()
 }).refine((d) => d.content || d.assistant_echo, { message: "content 或 assistant_echo 至少提供一个" });
@@ -78,15 +87,85 @@ companionRouter.post("/messages", async (req, res) => {
   }
 
   const content = payload.data.content.trim();
+  const attachments = Array.isArray(payload.data.attachments) ? payload.data.attachments : [];
   const explicitMemory = content.match(/^(?:请)?(?:帮我)?记住[：:,，\s]*(.+)$/s);
   const memoryText = explicitMemory?.[1].trim().slice(0, 1000);
+
+  // @搭子（或正文直接点名）：这条消息交给对应搭子人格处理，主聊天只负责路由和回执
+  const routedBuddyId = memoryText
+    ? null
+    : await resolveCompanionBuddyId(req.user.id, content, payload.data.buddy_id);
+  if (routedBuddyId) {
+    // 同一颗搭子在主聊天里的上一段对话，接着聊不丢上下文
+    const recentRows = await prisma.companionMessage.findMany({
+      where: recallableMessageScope(req.user.id),
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    });
+    const buddyHistory = recentRows
+      .reverse()
+      .filter((m) => m.meta?.buddy?.id === routedBuddyId || m.meta?.buddy_id === routedBuddyId)
+      .slice(-8)
+      .map((m) => ({ role: m.role, content: String(m.content || "").slice(0, 500) }));
+    const userMsg = await prisma.companionMessage.create({
+      data: {
+        userId: req.user.id, role: "user", content, kind: "chat",
+        meta: { buddy_id: routedBuddyId, ...(attachments.length > 0 ? { attachments } : {}) },
+      },
+    });
+    enqueueMemoryMessage(prisma, userMsg).catch(() => {});
+    let result = null;
+    try {
+      result = await runBuddyChatFromCompanion({
+        userId: req.user.id,
+        buddyId: routedBuddyId,
+        text: content,
+        attachments,
+        history: buddyHistory,
+      });
+    } catch (error) {
+      console.error("[companion] 搭子路由失败:", error?.message || error);
+      result = { error: "FAILED", message: "搭子刚才走神了一下，再跟我说一次好吗？" };
+    }
+    const replyText = String(result?.reply || result?.message || "搭子刚才没接住，再跟我说一次好吗？");
+    const assistantMeta = {
+      ...(result?.buddy ? { buddy: result.buddy } : {}),
+      ...(result?.capture ? { capture: result.capture } : {}),
+      ...(result?.project_task ? { project_task: result.project_task } : {}),
+      ...(result?.proposal ? { proposal: result.proposal } : {}),
+      ...(result?.task ? { task: result.task } : {}),
+    };
+    const assistantMsg = await prisma.companionMessage.create({
+      data: {
+        userId: req.user.id, role: "assistant", content: replyText, kind: "chat",
+        ...(Object.keys(assistantMeta).length > 0 ? { meta: assistantMeta } : {}),
+      },
+    });
+    return res.json({
+      message: serialize(userMsg),
+      reply: serialize(assistantMsg),
+      extracted: null,
+      agent: null,
+      actions: null,
+      buddy: result?.buddy || null,
+      capture: result?.capture || null,
+      project_task: result?.project_task || null,
+      proposal: result?.proposal || null,
+      task: result?.task || null,
+    });
+  }
+
   const { userMsg, savedReply } = await prisma.$transaction(async (tx) => {
     const feedbackProposal = !memoryText && /(?:因为|由于|我通常|我平常|我更喜欢|我没空|我没法|我不能|对我来说)/.test(content)
       ? await ownedMemoryProposal(tx, req.user.id, payload.data.last_extracted?.memory_proposal_id) : null;
+    const userMeta = {
+      ...(attachments.length > 0 ? { attachments } : {}),
+      ...(feedbackProposal ? { memoryProposalId: feedbackProposal.id } : {}),
+    };
     const userMsg = await tx.companionMessage.create({
       data: {
         userId: req.user.id, role: "user", content, kind: "chat",
-        ...(feedbackProposal ? { meta: { memoryProposalId: feedbackProposal.id } } : {}),
+        ...(Object.keys(userMeta).length > 0 ? { meta: userMeta } : {}),
       },
     });
     if (feedbackProposal) await tx.memoryTaskSignal.create({
@@ -181,7 +260,7 @@ companionRouter.post("/messages", async (req, res) => {
       };
     } else {
       result = await runFlowChat({
-        messages, lastExtracted, userId: req.user.id, prisma, memories, memoryContext, planRun,
+        messages, lastExtracted, userId: req.user.id, prisma, memories, memoryContext, planRun, attachments,
       });
     }
     let extracted = result?.extracted || null;

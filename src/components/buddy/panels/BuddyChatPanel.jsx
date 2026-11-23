@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { FileText, Loader2, Paperclip, Users2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, FileText, Loader2, Paperclip, Users2, X } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
+import { applyBuddyCapture } from "@/lib/buddyCapture";
 import { BuddyMsg, useBuddyAgent, useBuddyState, todayKey } from "./shared";
 import { PERSONAS, DEFAULT_PERSONA } from "@/lib/buddies";
 import {
@@ -20,7 +21,7 @@ import {
  */
 export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
   const { call } = useBuddyAgent(buddy.id);
-  const { state, patch } = useBuddyState(buddy.id);
+  const { state, patch, patchAsync } = useBuddyState(buddy.id);
   const queryClient = useQueryClient();
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -142,8 +143,8 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       at: new Date().toISOString(),
       ...(sentAttachments.length > 0 ? { attachments: sentAttachments } : {}),
     };
-    const base = [...chat, userMsg];
-    patch({ chat: base.slice(-40) });
+    const base = [...chat, userMsg].slice(-40);
+    await patchAsync({ chat: base }).catch(() => {});
     try {
       const history = base.slice(-10).map((m) => ({ role: m.role === "user" ? "user" : "buddy", content: m.content }));
       const data = await call({
@@ -157,18 +158,127 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       const reply = String(data?.reply || "").trim();
       if (reply) {
         const proposal = data?.proposal?.type === "create_collab" ? data.proposal : null;
+        // 先把搭子的回复上屏，再做数据提取/兜底识别——上传截图时不让用户干等第二次识别
         const replyMsg = {
           role: "buddy",
           content: reply,
           at: new Date().toISOString(),
           ...(proposal ? { proposal } : {}),
         };
-        patch({ chat: [...base, replyMsg].slice(-40) });
+        await patchAsync({ chat: [...base, replyMsg].slice(-40) }).catch(() => {});
+        // 对话里随手报的数据（跑量 / 读书 / 学习 / 早起…）直接落进搭子的日常记录
+        let captureReceipt = null;
+        const tryApply = async (capture) => {
+          try {
+            return await applyBuddyCapture({
+              buddyId: buddy.id,
+              capture,
+              state,
+              profile,
+              projectTask,
+              attachments: sentAttachments,
+              queryClient,
+            });
+          } catch (error) {
+            captureReceipt = {
+              kind: capture?.kind,
+              title: "识别到数据，但同步没成功",
+              detail: error?.message || "稍后可在记录里手动补一次",
+              failed: true,
+            };
+            return null;
+          }
+        };
+        let applied = null;
+        if (data?.capture?.kind && data.capture.kind !== "none") {
+          applied = await tryApply(data.capture);
+        }
+        // 跑步截图走更专注的 run_parse 兜底：即使对话模型漏了 capture，也不丢这次跑步数据
+        if (
+          !applied &&
+          buddy.id === "running" &&
+          (sentAttachments.length > 0 ||
+            /(跑了|跑完|跑步记录|记录一下|录入).{0,16}\d/i.test(text) ||
+            (/\d+(\.\d+)?\s*(公里|km|千米)/i.test(text) && /(用时|耗时|配速|心率|分钟)/.test(text)))
+        ) {
+          try {
+            const parsed = await call({
+              mode: "run_parse",
+              payload: {
+                ...(sentAttachments.length > 0 ? { attachments: sentAttachments } : {}),
+                ...(text ? { text } : {}),
+              },
+            });
+            if (Number(parsed?.distance_km) > 0 || Number(parsed?.duration_min) > 0) {
+              applied = await tryApply({
+                kind: "running_log",
+                confidence: Number(parsed?.confidence) || 0.85,
+                checkin: false,
+                summary: "已识别本次跑步",
+                data: {
+                  distance_km: parsed?.distance_km ?? null,
+                  duration_min: parsed?.duration_min ?? null,
+                  avg_hr: parsed?.avg_hr ?? null,
+                  date: parsed?.date ?? null,
+                },
+              });
+            }
+          } catch (_error) {
+            // 兜底识别失败不打断对话，正常回复照常展示
+          }
+        }
+        // 读书书页/截图同理：对话模型漏掉时，用专注的 read_parse 再提一次
+        if (
+          !applied &&
+          buddy.id === "reading" &&
+          (sentAttachments.length > 0 ||
+            /(读了|读到|看完|读完).{0,16}(\d|分钟|页)/.test(text) ||
+            /(\d+\s*(分钟|页)).{0,12}(读|书)/.test(text))
+        ) {
+          try {
+            const parsed = await call({
+              mode: "read_parse",
+              payload: {
+                ...(sentAttachments.length > 0 ? { attachments: sentAttachments } : {}),
+                ...(text ? { text } : {}),
+              },
+            });
+            const hasReadingData =
+              Boolean(parsed?.book) ||
+              Number(parsed?.minutes) > 0 ||
+              Number(parsed?.pages_read) > 0 ||
+              Boolean(String(parsed?.summary || "").trim());
+            if (hasReadingData && parsed?.did_read !== false) {
+              applied = await tryApply({
+                kind: "reading_log",
+                confidence: Number(parsed?.confidence) || 0.85,
+                checkin: parsed?.did_read !== false,
+                summary: "已识别读书进度",
+                data: {
+                  book: parsed?.book ?? null,
+                  minutes: parsed?.minutes ?? null,
+                  pages_read: parsed?.pages_read ?? null,
+                  summary: parsed?.summary ?? "",
+                  quote: parsed?.quote ?? null,
+                  finished: parsed?.finished === true,
+                },
+              });
+            }
+          } catch (_error) {
+            // 兜底识别失败不打断对话
+          }
+        }
+        if (applied) captureReceipt = applied.receipt;
+        // 回执和真实数据一起落库：跑步进 logs、读书进 mins/notes、其他搭子进 captures
+        if (captureReceipt) {
+          const withReceipt = [...base, { ...replyMsg, capture: captureReceipt }].slice(-40);
+          await patchAsync({ ...(applied?.patch || {}), chat: withReceipt }).catch(() => {});
+        }
       }
     } catch (_e) {
-      patch({
+      await patchAsync({
         chat: [...base, { role: "buddy", content: "我走神了一下…再说一次好吗？", at: new Date().toISOString() }].slice(-40),
-      });
+      }).catch(() => {});
     } finally {
       setSending(false);
     }
@@ -310,6 +420,25 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
             ) : (
               <div key={i}>
                 <BuddyMsg tint={tint}>{m.content}</BuddyMsg>
+                {m.capture && (
+                  <div
+                    className={`ml-10 mt-1.5 flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] leading-relaxed ${
+                      m.capture.failed
+                        ? "border-amber-200/70 bg-amber-50/70 text-amber-700"
+                        : "border-emerald-200/70 bg-emerald-50/70 text-emerald-700"
+                    }`}
+                  >
+                    {m.capture.failed ? (
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <span className="font-medium">{m.capture.title}</span>
+                      {m.capture.detail && <span className="opacity-80"> · {m.capture.detail}</span>}
+                    </div>
+                  </div>
+                )}
                 {m.proposal && (
                   <div className="ml-10 mt-2 rounded-2xl border border-[#c9d5ef] bg-[#eef2ff]/60 p-3">
                     <div className="flex items-center gap-1.5 text-[11px] font-medium text-[#384877]">
@@ -411,8 +540,8 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
             onClick={() => fileRef.current?.click()}
             disabled={uploading || attachments.length >= 3}
             className="mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-stone-600 disabled:opacity-50"
-            title="添加图片或文件"
-            aria-label="添加图片或文件"
+            title="添加图片或文件（截图、书页会自动记录）"
+            aria-label="添加图片或文件，截图和书页会自动记录"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </button>
@@ -434,7 +563,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
                 handleFiles(files);
               }
             }}
-            placeholder="问点专业的…"
+            placeholder={CAPTURE_PLACEHOLDERS[buddy.id] || "聊两句，或上传截图…"}
             className="max-h-[120px] min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[14px] leading-5 text-stone-800 placeholder:text-stone-400 focus:outline-none"
           />
         </div>
@@ -447,6 +576,28 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
           发送
         </button>
       </form>
+
+      {/* 随口记下的日常记录：学习/早起/旅行/自定义搭子的数据入口，随时能回看 */}
+      {Array.isArray(state.captures) && state.captures.length > 0 && (
+        <details className="group mt-3 rounded-xl border border-stone-100 bg-[#FAF9F7] px-3 py-2">
+          <summary className="flex cursor-pointer list-none items-center justify-between text-[11px] text-stone-400 [&::-webkit-details-marker]:hidden">
+            <span>日常记录 · {state.captures.length} 条</span>
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <ul className="mt-2 max-h-40 space-y-1.5 overflow-y-auto pr-1">
+            {[...state.captures]
+              .slice(-8)
+              .reverse()
+              .map((item, index) => (
+                <li key={item.id || `${item.day}-${index}`} className="flex gap-2 text-[12px] leading-relaxed">
+                  <span className="shrink-0 text-stone-400">{String(item.day || "").slice(5)}</span>
+                  <span className="min-w-0 text-stone-600">{item.topic || item.text || "一条记录"}</span>
+                </li>
+              ))}
+          </ul>
+        </details>
+      )}
+
       <input
         ref={fileRef}
         type="file"
@@ -458,6 +609,14 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
     </section>
   );
 }
+
+const CAPTURE_PLACEHOLDERS = {
+  running: "报跑量，或上传运动截图…",
+  reading: "聊书，或上传书页截图…",
+  study: "今天学了什么？说一句…",
+  morning: "说声「起来了」就打卡…",
+  travel: "聊旅途，搭子自动记…",
+};
 
 const QUICK_ASKS = {
   study: ["这道题怎么入手？", "背了就忘怎么办？", "帮我拆一下这周的目标"],

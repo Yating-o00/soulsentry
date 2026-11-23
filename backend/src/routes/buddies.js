@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { beijingToday, beijingDayRange } from "../lib/behavior.js";
 import crypto from "node:crypto";
 import { invokeKimiText, FAST_TEXT_MODELS, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
 import { readAttachmentText } from "../services/readAttachment.js";
@@ -922,7 +923,7 @@ const PERSONA_TONES = {
 };
 
 const agentSchema = z.object({
-  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "inspiration", "weekly", "talk", "chat", "greeting", "run_parse"]),
+  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "inspiration", "weekly", "talk", "chat", "greeting", "run_parse", "read_parse"]),
   payload: z.record(z.any()).optional().default({}),
 });
 
@@ -973,6 +974,32 @@ function detectBuddyGroupIntent(text) {
     reply: `这个想法适合做成一个独立的协同小组。我建议叫「${title}」，目标是「${goal}」。确认后我就创建，你再邀请伙伴加入。`,
     proposal: { type: "create_collab", title, goal, scenario: "friends" },
   };
+}
+
+/**
+ * 搭子对话里的「随口记录」：用户报的跑量、读到的书、学的内容，直接从对话里结构化提取。
+ * 只认用户亲历、可核对的事实；提问、计划、建议一律不记，避免把聊天污染成假数据。
+ */
+function buildCaptureSpec(buddyId, custom = false) {
+  const head =
+    `同时判断这条消息是否带来了用户亲历的真实数据，需要同步进这个搭子空间的日常记录。只提取用户明确自述或附件里可核对的事实，绝不把提问、假设、计划、建议当成数据；拿不准就 kind="none"。capture 通用格式：{"kind":"...","confidence":0到1,"checkin":true/false,"summary":"给用户看的回执（16字内）","data":{...}}；checkin 表示这件事今天已完成、应记为今日打卡；confidence 低于 0.6 时 kind 必须是 "none"。`;
+  if (custom) {
+    return `${head}这颗搭子由用户自己设计：kind="daily_note"，data={"topic":"一句话主题（16字内）","note":"用户提供的可记录信息（80字内）","metrics":{用户明确说出的数值字段}}。`;
+  }
+  switch (buddyId) {
+    case "running":
+      return `${head}跑步：kind="running_log"，data={"distance_km":本次公里数或null,"duration_min":本次用时分钟数或null,"avg_hr":平均心率或null,"date":"YYYY-MM-DD"或null,"note":"身体感受或路线（30字内）"}。距离和用时至少有一项才记录；用户只是问训练问题、没有报告本次跑步数据时 kind="none"。`;
+    case "reading":
+      return `${head}读书：kind="reading_log"，data={"book":"书名（不带书名号）或null","minutes":本次新增阅读分钟数或null,"pages_read":读了多少页或null,"summary":"用户读到或讲到的内容概述（60字内），没有就空字符串","quote":"原文摘录或null","finished":是否读完 true/false,"note":"感受（30字内）"}。用户上传书页、读书截图或摘抄并说明自己读了，也按此提取，checkin=true；用户说「今天一共读了30分钟」时，用上下文里今日已读分钟数换算成本次新增，无法确定就 minutes=null；只是问书、求推荐、讨论观点时 kind="none"。`;
+    case "study":
+      return `${head}学习：kind="study_log"，data={"minutes":本次新增学习分钟数或null,"topic":"学习内容（30字内）","accuracy":正确率百分数或null,"note":"卡点或感受（30字内）"}。用户说今天已学完/完成今日学习任务时 checkin=true。`;
+    case "morning":
+      return `${head}早起：kind="wake_log"，data={"wake_time":"HH:MM或null","sleep_h":睡眠小时数或null,"note":"起床后的感受（30字内）"}。用户说自己已起床/已打卡时 checkin=true；只是问赖床怎么办时 kind="none"。`;
+    case "travel":
+      return `${head}旅行：kind="travel_note"，data={"dest":"目的地或null","day":"第几天或null","note":"实际去了哪、花了多少、真实感受（60字内）"}。只是问攻略时 kind="none"。`;
+    default:
+      return `${head}kind="daily_note"，data={"topic":"一句话主题（16字内）","note":"用户提供的可记录信息（80字内）","metrics":{用户明确说出的数值字段}}。`;
+  }
 }
 
 function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMeta = {}) {
@@ -1043,6 +1070,15 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
         prompt: `从下面这条跑步记录（截图文字或用户手输）中提取数据：\n「${source || "（没有可识别的内容）"}」\n\n只输出 JSON：{"distance_km":数字或null,"duration_min":数字或null,"pace":"分'秒\\""或null,"avg_hr":数字或null,"date":"YYYY-MM-DD"或null,"confidence":0到1}。duration_min 用分钟，可含小数；pace 是每公里配速；看不清的字段填 null，绝不猜。`,
       };
     }
+    case "read_parse": {
+      const typed = String(payload.text || "").trim().slice(0, 800);
+      const attachmentText = String(payload.attachment_text || "").trim().slice(0, 5000);
+      const source = [typed, attachmentText ? `书页/截图识别内容：\n${attachmentText}` : ""].filter(Boolean).join("\n\n");
+      return {
+        systemPrompt: `${base}${expertise}你现在只做读书记录提取：忠实转写书页/截图和用户自述，不评价、不编造，看不清就留空。`,
+        prompt: `从下面这条读书记录（书页截图文字或用户手输）中提取：\n「${source || "（没有可识别的内容）"}」\n\n只输出 JSON：{"book":"书名（不带书名号）或null","minutes":本次新增阅读分钟数或null,"pages_read":本次读了多少页或null,"summary":"读到的内容概述（60字内），没有就空字符串","quote":"书中原文摘录或null","finished":是否读完 true/false,"did_read":用户是否在报告今天读了 true/false,"confidence":0到1}。只提取用户亲历的阅读事实；用户只是在问书、求推荐、讨论观点时 did_read=false 且 book/minutes/pages_read 为 null。绝不猜数字。`,
+      };
+    }
     case "weekly": {
       const stats = String(payload.stats || "").slice(0, 800);
       const runningHint =
@@ -1079,8 +1115,8 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
             .join("\n")
         : "";
       return {
-        systemPrompt: `${base}${expertise}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。如果用户想成立小组、拉伙伴一起做某件事（如「成立一个专门考公的学习小组」），不要只给建议：在 proposal 里给出可确认的协同小组提案（type=create_collab，title=小组名，goal=一句话目标，scenario=friends），reply 里说明确认后会创建；普通问题 proposal 为 null。用户可能随消息发来图片或文件，附件会以识别后的文本提供给你，必须结合附件内容回答。`,
-        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n${attachmentText ? `\n用户这条消息附带的图片/文件内容（已识别）：\n${attachmentText}\n` : ""}\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。只输出 JSON：{"reply":"...","proposal":null}；需要创建小组时输出 {"reply":"...","proposal":{"type":"create_collab","title":"...","goal":"...","scenario":"friends"}}。`,
+        systemPrompt: `${base}${expertise}用户此刻的真实上下文：${context || "（暂无）"}。回答前先判断用户处在「目标设定 / 执行卡点 / 复盘调整」哪一阶段；给一个专业框架 + 一个今天就能做的最小动作，拒绝空泛的正确话。如果用户想成立小组、拉伙伴一起做某件事（如「成立一个专门考公的学习小组」），不要只给建议：在 proposal 里给出可确认的协同小组提案（type=create_collab，title=小组名，goal=一句话目标，scenario=friends），reply 里说明确认后会创建；普通问题 proposal 为 null。如果用户明确要你建一条具体的执行任务/提醒/待办（如「帮我建一条今晚 9 点刷题的任务」），在 task 里给出 {"title":"任务标题（20字内）","description":"一句话说明","due_at":"带时区的 ISO 时间或null"}，reply 里说明确认后会创建；普通建议或讲解不要输出 task。用户可能随消息发来图片或文件，附件会以识别后的文本提供给你，必须结合附件内容回答。`,
+        prompt: `以下是用户与${buddyName}的最近对话：\n${history}\n${attachmentText ? `\n用户这条消息附带的图片/文件内容（已识别）：\n${attachmentText}\n` : ""}\n以${buddyName}的身份回复最后一条用户消息（120字内）：先结合上下文里的真实进度指出一个具体事实，再给最实在的专业指导和下一步；涉及情绪先接住再引导。\n${buildCaptureSpec(buddyId, Boolean(buddyMeta.custom))}\n只输出 JSON：{"reply":"...","proposal":null,"task":null,"capture":{"kind":"none"}}；需要创建小组时 proposal 输出 {"type":"create_collab","title":"...","goal":"...","scenario":"friends"}；用户明确要你建任务时才输出 task；有可落库数据时按上面的 capture 规范输出。`,
       };
     }
     default:
@@ -1118,11 +1154,13 @@ async function loadBuddyLiveContext(userId, buddyId, profile) {
         }
         if (projectTask.category === "checkin") {
           const since = new Date(Date.now() - 7 * 86400000);
-          const [total, week] = await Promise.all([
+          const [todayStart, todayEnd] = beijingDayRange(beijingToday());
+          const [total, week, today] = await Promise.all([
             prisma.checkin.count({ where: { taskId: projectTask.id } }),
             prisma.checkin.count({ where: { taskId: projectTask.id, createdAt: { gte: since } } }),
+            prisma.checkin.count({ where: { taskId: projectTask.id, createdAt: { gte: todayStart, lt: todayEnd } } }),
           ]);
-          lines.push(`打卡：累计 ${total} 次，近 7 天 ${week} 次`);
+          lines.push(`打卡：累计 ${total} 次，近 7 天 ${week} 次，今天${today > 0 ? "已" : "还没"}打卡`);
         }
       }
     }
@@ -1153,6 +1191,31 @@ async function loadBuddyLiveContext(userId, buddyId, profile) {
       const defaultShoe = shoes.find((s) => s.id === st.gear?.default_shoe_id) || shoes[0];
       if (defaultShoe) bits.push(`默认跑鞋 ${defaultShoe.name || "未命名"} 已跑 ${Math.round(Number(defaultShoe.km) || 0)} km`);
       lines.push(`跑步档案：${bits.join("；")}`);
+    }
+
+    // 读书：最近笔记 + 今日分钟数，让对话接着上次读到的地方聊
+    if (buddyId === "reading" && profile?.state && typeof profile.state === "object") {
+      const st = profile.state;
+      const chinaToday = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+      const todayMins = Number(st.mins?.[chinaToday]) || 0;
+      if (todayMins > 0) lines.push(`今日已读 ${todayMins} 分钟`);
+      const recentNotes = (Array.isArray(st.notes) ? st.notes : [])
+        .filter((n) => n && (n.text || n.quote))
+        .slice(-3)
+        .reverse()
+        .map((n) => `《${String(n.book || "在读的书").slice(0, 20)}》${String(n.text || n.quote).slice(0, 30)}`);
+      if (recentNotes.length > 0) lines.push(`最近读书笔记：${recentNotes.join("；")}`);
+    }
+
+    // 对话里随口记下的日常记录（学习 / 早起 / 旅行 / 自定义搭子…），下次对话要接得住
+    const recentCaptures = Array.isArray(profile?.state?.captures) ? profile.state.captures.slice(-5) : [];
+    if (recentCaptures.length > 0) {
+      lines.push(
+        `最近日常记录：${recentCaptures
+          .filter((c) => c && (c.topic || c.text))
+          .map((c) => `${String(c.day || "").slice(5)} ${String(c.topic || c.text).slice(0, 30)}`)
+          .join("；")}`
+      );
     }
 
     const notes = await prisma.note.findMany({
@@ -1238,7 +1301,7 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
   // 搭子对话/解题支持图片与文件：先提取图片 OCR / 文件文本，再交给领域提示词
   const attachments = Array.isArray(payload.attachments) ? payload.attachments.slice(0, 3) : [];
   const hasAttachments = attachments.some((att) => att?.url || att?.file_url);
-  if (hasAttachments && ["chat", "solve_locate", "run_parse"].includes(parsed.data.mode)) {
+  if (hasAttachments && ["chat", "solve_locate", "run_parse", "read_parse"].includes(parsed.data.mode)) {
     const parts = [];
     for (const att of attachments) {
       const text = await readAttachmentText({
@@ -1315,3 +1378,299 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
     return res.status(502).json({ error: "AGENT_FAILED", message: "搭子走神了，再试一次" });
   }
 });
+
+/* =====================================================================
+   主聊天框 @搭子：从首页通用对话直接路由到某颗搭子
+   - 复用搭子人格、领域档案、专属资料、实时上下文和 capture 提取
+   - 附件复用搭子对话的 OCR；漏提取时用 run_parse / read_parse 兜底
+   ===================================================================== */
+
+/** 早起意图：只认「我起床了 / 起来了 / 醒了」，躲开「看起来 / 想起来 / 你醒了吗」这类误判 */
+function isWakeIntent(rawText) {
+  const text = String(rawText || "");
+  if (!text) return false;
+  if (/(不想|没起|还没|赖床|再睡|起不来|不打卡|别打卡)/.test(text)) return false;
+  const cleaned = text.replace(/(看起来|听起来|想起来|做起来|说起来|读起来|用起来|拿起来|站起来|坐起来|好起来)/g, "");
+  const hasSelf = /(^|[，,。！!\s])(我|俺|咱)/.test(cleaned);
+  const hasWake = /(起床|起来了|醒来|醒了|睡醒)/.test(cleaned);
+  const shortWake = /^(起床了|醒了|起来了|刚起床|刚起来|刚醒|刚刚起床|刚刚起来|刚刚醒)(?!吗|呢|没|[?？])/.test(cleaned.trim());
+  return (hasSelf && hasWake) || shortWake;
+}
+
+/** 解析主聊天要接手的搭子：显式 @ 选择优先，其次是正文里的搭子名/明显领域动作 */
+export async function resolveCompanionBuddyId(userId, rawText, explicitBuddyId = null) {
+  try {
+    const { extra } = await readExtraFields(userId);
+    const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? extra.buddy_profiles : {};
+    const activeIds = Object.keys(profiles).filter((id) => profiles[id]?.status === "active");
+    if (explicitBuddyId && activeIds.includes(explicitBuddyId)) return explicitBuddyId;
+    const text = String(rawText || "");
+    for (const id of activeIds) {
+      const custom = getCustomBuddy(extra, id);
+      const name = custom?.name || BUDDY_NAMES[id];
+      if (name && text.includes(name)) return id;
+    }
+    if (activeIds.includes("morning") && isWakeIntent(text)) {
+      return "morning";
+    }
+    if (activeIds.includes("running") && /(跑步|跑量|配速|公里|km)/i.test(text) && /(录入|记录|截图|图片|数据)/.test(text)) {
+      return "running";
+    }
+    if (activeIds.includes("reading") && /(读了|读到|读完|书页|读书)/.test(text) && /(录入|记录|打卡|截图|图片)/.test(text)) {
+      return "reading";
+    }
+    return null;
+  } catch (error) {
+    console.warn("[buddies/companion] 解析搭子失败:", error?.message || error);
+    return null;
+  }
+}
+
+/** 主聊天里某颗搭子的完整回复：人格 + 资料 + 实时进度 + 对话回复 + 可落库 capture */
+export async function runBuddyChatFromCompanion({ userId, buddyId, text, attachments = [], history = [] }) {
+  const { profile, extra } = await getActiveProfile(userId, buddyId);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
+    return { error: "NOT_FOUND", message: "这颗搭子还没有来到货架" };
+  }
+  if (!profile) {
+    return { error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" };
+  }
+
+  const customBuddy = getCustomBuddy(extra, buddyId);
+  const buddyName = customBuddy?.name || BUDDY_NAMES[buddyId] || "搭子";
+  const buddyPersona = pickBuddyPersona(profile, extra.persona, buddyId);
+  const personaTone = PERSONA_TONES[buddyPersona] || PERSONA_TONES.gentle;
+
+  let materialContext = "";
+  if (customBuddy) {
+    try {
+      const materials = await prisma.buddyMaterial.findMany({
+        where: { userId, buddyId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { name: true, text: true },
+      });
+      materialContext = materials
+        .map((item) => `【${item.name}】\n${item.text}`)
+        .join("\n\n")
+        .slice(0, 6000);
+    } catch (error) {
+      console.warn("[buddies/companion] 读取专属资料失败:", error?.message || error);
+    }
+  }
+  const buddyMeta = customBuddy
+    ? {
+        name: customBuddy.name,
+        expertise: customBuddy.expertise,
+        custom: true,
+        slogan: customBuddy.slogan,
+        abilities: customBuddy.abilities,
+        actions: customBuddy.actions,
+        memory: customBuddy.memory,
+        materialContext,
+      }
+    : {};
+
+  const safeAttachments = (Array.isArray(attachments) ? attachments : []).slice(0, 3);
+  const parts = [];
+  for (const att of safeAttachments) {
+    if (!att?.url && !att?.file_url) continue;
+    try {
+      const content = await readAttachmentText({
+        url: att.url || att.file_url,
+        name: att.name || att.file_name,
+        type: att.type || att.file_type,
+      });
+      if (content) parts.push(content);
+    } catch (error) {
+      console.warn("[buddies/companion] 附件识别失败:", error?.message || error);
+    }
+  }
+  const attachmentText = parts.join("\n\n").slice(0, 6000);
+  const userText =
+    String(text || "").trim().slice(0, 2000) ||
+    (safeAttachments.length > 0 ? "（用户发来图片或文件）" : "");
+  const priorMessages = (Array.isArray(history) ? history : [])
+    .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+    .slice(-8)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 500) }));
+  const payload = {
+    messages: [...priorMessages, { role: "user", content: userText }],
+    text: userText,
+    ...(safeAttachments.length > 0 ? { attachments: safeAttachments } : {}),
+    ...(attachmentText ? { attachment_text: attachmentText } : {}),
+  };
+
+  let liveContext = "";
+  try {
+    liveContext = await loadBuddyLiveContext(userId, buddyId, profile);
+  } catch (error) {
+    console.warn("[buddies/companion] 读取实时进度失败:", error?.message || error);
+  }
+  payload.context = [`今天是 ${beijingToday()}`, liveContext].filter(Boolean).join("；");
+
+  const buddyInfo = {
+    id: buddyId,
+    name: buddyName,
+    custom: Boolean(customBuddy),
+    tint: Array.isArray(customBuddy?.tint) ? customBuddy.tint : null,
+  };
+  let projectTask = null;
+  if (profile.project_task_id) {
+    try {
+      projectTask = await prisma.task.findUnique({
+        where: { id: profile.project_task_id },
+        select: { id: true, title: true, category: true },
+      });
+    } catch (error) {
+      console.warn("[buddies/companion] 读取项目约定失败:", error?.message || error);
+    }
+  }
+  const projectTaskInfo = projectTask
+    ? { id: projectTask.id, title: projectTask.title, category: projectTask.category }
+    : null;
+
+  // 早起说一声「我起床了」：不依赖模型，立即记下并触发今日打卡
+  const morningIntent = isWakeIntent(userText);
+  if (buddyId === "morning" && morningIntent) {
+    const time = userText.match(/(\d{1,2})\s*[:：]\s*(\d{2})/);
+    const wakeTime = time ? `${String(time[1]).padStart(2, "0")}:${time[2]}` : null;
+    return {
+      reply: wakeTime ? `${wakeTime} 起床，记下了，今天也赢回一个早晨。` : "起来了就打卡，今天又赢回一个早晨。",
+      capture: {
+        kind: "wake_log",
+        confidence: 0.99,
+        checkin: true,
+        summary: "已记录起床打卡",
+        data: { wake_time: wakeTime, sleep_h: null, note: "" },
+      },
+      proposal: null,
+      task: null,
+      buddy: buddyInfo,
+      project_task: projectTaskInfo,
+    };
+  }
+
+  const built = buildAgentPrompt(buddyId, "chat", payload, personaTone, profile.answers, buddyMeta);
+  let data = null;
+  if (built) {
+    try {
+      data = await Promise.race([
+        invokeKimiText({
+          prompt: built.prompt,
+          systemPrompt: built.systemPrompt,
+          responseJsonSchema: true,
+          maxTokens: 2500,
+          fetchTimeout: 45000,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("AGENT_TIMEOUT")), 60000)),
+      ]);
+    } catch (error) {
+      console.warn(`[buddies/companion] ${buddyId}/chat failed:`, error?.message || error);
+    }
+  }
+
+  let reply = String(data?.reply || "").trim();
+  let capture = data?.capture && typeof data.capture === "object" ? data.capture : null;
+  const proposal = data?.proposal?.type === "create_collab" ? data.proposal : null;
+  const task =
+    data?.task && typeof data.task === "object" && String(data.task.title || "").trim()
+      ? {
+          title: String(data.task.title).trim().slice(0, 60),
+          description: String(data.task.description || "").trim().slice(0, 300),
+          due_at: data.task.due_at || null,
+        }
+      : null;
+
+  // 对话模型漏提取时，用专注解析再兜一层（附件文本已识别，不重复 OCR）
+  if (!capture || capture.kind === "none") {
+    const wantsRunningParse =
+      buddyId === "running" &&
+      (Boolean(attachmentText) ||
+        /(跑了|跑完|跑步记录|记录一下|录入).{0,16}\d/i.test(userText) ||
+        (/\d+(\.\d+)?\s*(公里|km|千米)/i.test(userText) && /(用时|耗时|配速|心率|分钟)/.test(userText)));
+    const wantsReadingParse =
+      buddyId === "reading" &&
+      (Boolean(attachmentText) ||
+        /(读了|读到|看完|读完).{0,16}(\d|分钟|页)/.test(userText) ||
+        /(\d+\s*(分钟|页)).{0,12}(读|书)/.test(userText));
+    const parseMode = wantsRunningParse ? "run_parse" : wantsReadingParse ? "read_parse" : null;
+    if (parseMode) {
+      const parseBuilt = buildAgentPrompt(buddyId, parseMode, payload, personaTone, profile.answers, buddyMeta);
+      if (parseBuilt) {
+        try {
+          const parsed = await Promise.race([
+            invokeKimiText({
+              prompt: parseBuilt.prompt,
+              systemPrompt: parseBuilt.systemPrompt,
+              responseJsonSchema: true,
+              maxTokens: 1500,
+              fetchTimeout: 30000,
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("PARSE_TIMEOUT")), 40000)),
+          ]);
+          if (parseMode === "run_parse" && (Number(parsed?.distance_km) > 0 || Number(parsed?.duration_min) > 0)) {
+            capture = {
+              kind: "running_log",
+              confidence: Number(parsed?.confidence) || 0.85,
+              checkin: false,
+              summary: "已识别本次跑步",
+              data: {
+                distance_km: parsed?.distance_km ?? null,
+                duration_min: parsed?.duration_min ?? null,
+                avg_hr: parsed?.avg_hr ?? null,
+                date: parsed?.date ?? null,
+              },
+            };
+          }
+          if (
+            parseMode === "read_parse" &&
+            parsed?.did_read !== false &&
+            (parsed?.book ||
+              Number(parsed?.minutes) > 0 ||
+              Number(parsed?.pages_read) > 0 ||
+              String(parsed?.summary || "").trim())
+          ) {
+            capture = {
+              kind: "reading_log",
+              confidence: Number(parsed?.confidence) || 0.85,
+              checkin: parsed?.did_read !== false,
+              summary: "已识别读书进度",
+              data: {
+                book: parsed?.book ?? null,
+                minutes: parsed?.minutes ?? null,
+                pages_read: parsed?.pages_read ?? null,
+                summary: parsed?.summary ?? "",
+                quote: parsed?.quote ?? null,
+                finished: parsed?.finished === true,
+              },
+            };
+          }
+        } catch (error) {
+          console.warn(`[buddies/companion] ${buddyId}/${parseMode} fallback failed:`, error?.message || error);
+        }
+      }
+    }
+  }
+
+  if (!reply) {
+    if (capture?.kind === "running_log") {
+      const d = capture.data || {};
+      reply = `这次${d.distance_km ? ` ${d.distance_km} km` : ""}${d.duration_min ? `、${d.duration_min} 分钟` : ""}，已经记进跑步记录。`;
+    } else if (capture?.kind === "reading_log") {
+      const d = capture.data || {};
+      reply = `已经记下今天的阅读${d.book ? `《${d.book}》` : ""}${d.minutes ? ` ${d.minutes} 分钟` : ""}，打卡也帮你勾上了。`;
+    } else {
+      reply = "我在。刚才没来得及展开——把最想先解决的那一步告诉我，我马上接着答。";
+    }
+  }
+
+  return {
+    reply,
+    capture: capture?.kind && capture.kind !== "none" ? capture : null,
+    proposal,
+    task,
+    buddy: buddyInfo,
+    project_task: projectTaskInfo,
+  };
+}

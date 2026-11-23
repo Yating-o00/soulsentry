@@ -24,6 +24,13 @@ export function normalizeCustomBuddy(raw) {
     if (profileIndex >= 0) sections.splice(profileIndex, 0, "资料");
     else sections.push("资料");
   }
+  // 所有搭子统一把「协同」放在第二栏（首页之后），自定义搭子历史配置也一并纠正
+  {
+    const withoutCollab = sections.filter((section) => section !== "协同");
+    withoutCollab.splice(Math.min(1, withoutCollab.length), 0, "协同");
+    sections.length = 0;
+    sections.push(...withoutCollab);
+  }
   return {
     ...raw,
     name,

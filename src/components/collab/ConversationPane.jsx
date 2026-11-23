@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowDown, ArrowUp, Bot, Check, FileText, Loader2, MoreHorizontal, Paperclip, Sparkles, X,
+  ArrowDown, ArrowUp, Bot, Check, FileText, Loader2, Mic, MoreHorizontal, Paperclip, Sparkles, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -47,10 +47,12 @@ function AttachmentView({ attachments }) {
   if (!attachments || attachments.length === 0) return null;
   const images = attachments.filter((a) => (a?.type || "").startsWith("image/"));
   const videos = attachments.filter((a) => (a?.type || "").startsWith("video/"));
+  const audios = attachments.filter((a) => (a?.type || "").startsWith("audio/"));
   const files = attachments.filter(
     (a) =>
       !(a?.type || "").startsWith("image/") &&
       !(a?.type || "").startsWith("video/") &&
+      !(a?.type || "").startsWith("audio/") &&
       a?.type !== "option_card"
   );
   return (
@@ -81,6 +83,20 @@ function AttachmentView({ attachments }) {
               className="max-h-44 max-w-full rounded-lg border"
               style={{ borderColor: C.lineSoft }}
             />
+          ))}
+        </div>
+      )}
+      {audios.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {audios.map((a, i) => (
+            <span
+              key={i}
+              className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1.5"
+              style={{ borderColor: C.lineSoft, background: "#fff" }}
+            >
+              <Mic className="h-3.5 w-3.5 shrink-0" style={{ color: BRAND }} />
+              <audio src={a.url} controls preload="metadata" className="h-7 max-w-[220px]" />
+            </span>
           ))}
         </div>
       )}
@@ -166,6 +182,9 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
   const [content, setContent] = useState("");
   const [attachments, setAttachments] = useState([]); // {url,name,type,size}
   const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false); // @Agent 自动弹出
   const [agentPendingSince, setAgentPendingSince] = useState(null); // @Agent 打字指示器
   const [flashingId, setFlashingId] = useState(null);
@@ -175,6 +194,13 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
   const fileRef = useRef(null);
   const nearBottomRef = useRef(true);
   const lastMessageIdRef = useRef("");
+  const recorderRef = useRef(null);
+  const recordChunksRef = useRef([]);
+  const recordStreamRef = useRef(null);
+  const recordTimerRef = useRef(null);
+  const voiceCancelRef = useRef(false);
+  const voicePressingRef = useRef(false);
+  const voiceStartedAtRef = useRef(0);
 
   // 输入框随内容长高（紧凑模式最多 4 行，桌面最多 6 行）
   useEffect(() => {
@@ -183,6 +209,22 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, compact ? 120 : 160)}px`;
   }, [content, compact]);
+
+  // 离开讨论窗时一定释放麦克风，避免后台一直占用
+  useEffect(() => () => {
+    voiceCancelRef.current = true;
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    recordStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+    recordStreamRef.current = null;
+    try {
+      recorderRef.current?.stop();
+    } catch (_error) {
+      // 录音已经结束时忽略
+    }
+  }, []);
 
   // 可 @ 的协同成员（不含自己；Agent 单独展示）
   const mentionableMembers = useMemo(
@@ -379,6 +421,21 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     }
   };
 
+  // 粘贴板里的图片/文件直接进附件，不用先存到本地再选
+  const handlePasteFiles = (event) => {
+    const files = Array.from(event.clipboardData?.files || []);
+    if (files.length === 0) {
+      for (const item of event.clipboardData?.items || []) {
+        if (item.kind !== "file") continue;
+        const file = item.getAsFile?.();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length === 0) return;
+    event.preventDefault();
+    handlePickFiles(files);
+  };
+
   // 插入附件：上传后挂到待发列表
   const handlePickFiles = async (fileList) => {
     const list = Array.from(fileList || []).slice(0, Math.max(0, 10 - attachments.length));
@@ -400,9 +457,13 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const handleSend = async (overrideText) => {
+  const handleSend = async (overrideText, overrideAttachments = null) => {
     const text = String(overrideText ?? content).trim();
-    const sendingAttachments = overrideText ? [] : attachments;
+    const sendingAttachments = Array.isArray(overrideAttachments)
+      ? overrideAttachments
+      : overrideText
+        ? []
+        : attachments;
     if ((!text && sendingAttachments.length === 0) || uploading) return;
     const mentionAgent = /@\s*(agent|心栈)/i.test(text);
     const mentionedUserIds = [...new Set(
@@ -466,6 +527,122 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       setTimeout(() => scrollStreamToBottom(), 150);
     } catch (error) {
       toast.error(error?.message || "发送失败");
+    }
+  };
+
+  const stopVoiceRecording = (cancel = false) => {
+    voicePressingRef.current = false;
+    voiceCancelRef.current = cancel;
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+    setRecording(false);
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    try {
+      recorder.stop();
+    } catch (_error) {
+      recordStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+      recordStreamRef.current = null;
+      recorderRef.current = null;
+    }
+  };
+
+  const sendVoiceMessage = async (blob) => {
+    setVoiceBusy(true);
+    try {
+      const mime = String(blob.type || "");
+      const ext = mime.includes("mp4") ? "m4a" : mime.includes("ogg") ? "ogg" : "webm";
+      const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: blob.type || "audio/webm" });
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploaded = await httpRequest("/api/uploads", { method: "POST", body: formData });
+      await handleSend("（语音）", [{
+        url: uploaded.file_url,
+        name: "语音消息",
+        type: uploaded.file_type || file.type || "audio/webm",
+        size: uploaded.file_size,
+      }]);
+    } catch (error) {
+      toast.error(error?.message || "语音发送失败，再试一次");
+    } finally {
+      setVoiceBusy(false);
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    if (recording || voiceBusy || uploading) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      toast.info("当前浏览器不支持语音消息，先用文字说给我听");
+      return;
+    }
+    voicePressingRef.current = true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!voicePressingRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find(
+        (type) => typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported(type)
+      );
+      const recorder = preferred ? new MediaRecorder(stream, { mimeType: preferred }) : new MediaRecorder(stream);
+      recordStreamRef.current = stream;
+      recordChunksRef.current = [];
+      voiceCancelRef.current = false;
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) recordChunksRef.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        if (recordTimerRef.current) {
+          clearInterval(recordTimerRef.current);
+          recordTimerRef.current = null;
+        }
+        setRecording(false);
+        recordStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+        recordStreamRef.current = null;
+        const chunks = recordChunksRef.current;
+        recordChunksRef.current = [];
+        const elapsed = Date.now() - voiceStartedAtRef.current;
+        const cancelled = voiceCancelRef.current;
+        recorderRef.current = null;
+        if (cancelled || elapsed < 500 || chunks.length === 0) {
+          if (!cancelled) toast.info("按住说话，松开发送");
+          return;
+        }
+        const voiceBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        if (voiceBlob.size < 800) {
+          toast.info("没录到声音，再试一次");
+          return;
+        }
+        await sendVoiceMessage(voiceBlob);
+      };
+      recorderRef.current = recorder;
+      voiceStartedAtRef.current = Date.now();
+      setRecording(true);
+      setRecordSeconds(0);
+      recorder.start();
+      recordTimerRef.current = setInterval(() => {
+        setRecordSeconds((seconds) => {
+          const next = seconds + 1;
+          if (next >= 60) {
+            // 最长 60 秒，避免一条语音过大；到时自动发送
+            window.setTimeout(() => stopVoiceRecording(false), 0);
+          }
+          return next;
+        });
+      }, 1000);
+    } catch (error) {
+      voicePressingRef.current = false;
+      recordStreamRef.current?.getTracks?.().forEach((track) => track.stop());
+      recordStreamRef.current = null;
+      setRecording(false);
+      toast.error(
+        error?.name === "NotAllowedError" || error?.name === "SecurityError"
+          ? "需要麦克风权限才能发语音"
+          : "语音录制没启动成功，再试一次"
+      );
     }
   };
 
@@ -813,25 +990,68 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           </div>
         )}
         {attachments.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {attachments.map((a, i) => (
-              <span
-                key={`${a.url}-${i}`}
-                className="inline-flex max-w-48 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px]"
-                style={{ borderColor: C.lineSoft, color: "#57534d" }}
-              >
-                <FileText className="h-3 w-3 shrink-0" style={{ color: "#77736c" }} />
-                <span className="truncate">{a.name || "附件"}</span>
-                <button
-                  type="button"
-                  aria-label="移除附件"
-                  onClick={() => setAttachments((cur) => cur.filter((_, idx) => idx !== i))}
-                  className="shrink-0 rounded-full p-0.5 hover:bg-[#efefe9]"
-                >
-                  <X className="h-3 w-3" style={{ color: "#8a867e" }} />
-                </button>
-              </span>
-            ))}
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((a, i) => {
+              const type = String(a.type || "");
+              const isImage = type.startsWith("image/");
+              const isVideo = type.startsWith("video/");
+              const isAudio = type.startsWith("audio/");
+              return (
+                <div key={`${a.url}-${i}`} className="relative">
+                  {isImage ? (
+                    <img
+                      src={a.url}
+                      alt={a.name || "图片"}
+                      className="h-11 w-11 rounded-lg border object-cover"
+                      style={{ borderColor: C.lineSoft }}
+                    />
+                  ) : isVideo ? (
+                    <video
+                      src={a.url}
+                      muted
+                      preload="metadata"
+                      className="h-11 w-14 rounded-lg border object-cover"
+                      style={{ borderColor: C.lineSoft }}
+                    />
+                  ) : (
+                    <span
+                      className="inline-flex h-11 max-w-48 items-center gap-1.5 rounded-lg border px-2.5 text-[11px]"
+                      style={{ borderColor: C.lineSoft, color: "#57534d" }}
+                    >
+                      {isAudio ? (
+                        <Mic className="h-3 w-3 shrink-0" style={{ color: BRAND }} />
+                      ) : (
+                        <FileText className="h-3 w-3 shrink-0" style={{ color: "#77736c" }} />
+                      )}
+                      <span className="truncate">{isAudio ? "语音" : a.name || "附件"}</span>
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="移除附件"
+                    onClick={() => setAttachments((cur) => cur.filter((_, idx) => idx !== i))}
+                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#384877] text-white shadow"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {(recording || voiceBusy) && (
+          <div className="mb-1.5 flex items-center gap-2 rounded-full bg-[#fdf2f2] px-3 py-1.5 text-[11px] text-rose-600">
+            {recording ? (
+              <>
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-rose-500" />
+                <span>正在录音 {recordSeconds}s · 松开发送，最长 60 秒</span>
+              </>
+            ) : (
+              <>
+                <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
+                <span>正在发送语音…</span>
+              </>
+            )}
           </div>
         )}
         {compact ? (
@@ -856,6 +1076,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   detectMention(e.target.value, e.target.selectionStart);
                 }}
                 onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
+                onPaste={handlePasteFiles}
                 placeholder={
                   topicFilter === "all"
                     ? "@ 召唤搭子总结 · 把讨论变成约定…"
@@ -882,15 +1103,43 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   }
                 }}
               />
-              <Button
-                size="sm"
-                onClick={() => handleSend()}
-                disabled={(!content.trim() && attachments.length === 0) || uploading}
-                className="h-9 flex-shrink-0 rounded-full bg-[#384877] px-4 text-[13px] font-medium text-white hover:bg-[#2d3a60] disabled:opacity-50"
-                aria-label="发送讨论"
-              >
-                发送
-              </Button>
+              {(content.trim() || attachments.length > 0) && !recording ? (
+                <Button
+                  size="sm"
+                  onClick={() => handleSend()}
+                  disabled={uploading || voiceBusy}
+                  className="h-9 flex-shrink-0 rounded-full bg-[#384877] px-4 text-[13px] font-medium text-white hover:bg-[#2d3a60] disabled:opacity-50"
+                  aria-label="发送讨论"
+                >
+                  发送
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                    startVoiceRecording();
+                  }}
+                  onPointerUp={() => stopVoiceRecording(false)}
+                  onPointerCancel={() => stopVoiceRecording(true)}
+                  onContextMenu={(event) => event.preventDefault()}
+                  onKeyDown={(event) => {
+                    if (event.key === " " || event.key === "Enter") {
+                      event.preventDefault();
+                      if (recording) stopVoiceRecording(false);
+                      else startVoiceRecording();
+                    }
+                  }}
+                  disabled={uploading || voiceBusy}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50"
+                  style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
+                  title="按住说话，松开发送"
+                  aria-label="按住说话，发送语音"
+                >
+                  <Mic className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -925,6 +1174,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   detectMention(e.target.value, e.target.selectionStart);
                 }}
                 onSelect={(e) => detectMention(e.target.value, e.target.selectionStart)}
+                onPaste={handlePasteFiles}
                 placeholder={
                   topicFilter === "all"
                     ? "发消息，输入 @ 可召唤 Agent…"
@@ -951,16 +1201,44 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   }
                 }}
               />
-              <Button
-                size="sm"
-                onClick={() => handleSend()}
-                disabled={(!content.trim() && attachments.length === 0) || uploading}
-                className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
-                style={{ backgroundColor: BRAND }}
-                aria-label="发送讨论"
-              >
-                <ArrowUp className="w-4 h-4" />
-              </Button>
+              {(content.trim() || attachments.length > 0) && !recording ? (
+                <Button
+                  size="sm"
+                  onClick={() => handleSend()}
+                  disabled={uploading || voiceBusy}
+                  className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
+                  style={{ backgroundColor: BRAND }}
+                  aria-label="发送讨论"
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                    startVoiceRecording();
+                  }}
+                  onPointerUp={() => stopVoiceRecording(false)}
+                  onPointerCancel={() => stopVoiceRecording(true)}
+                  onContextMenu={(event) => event.preventDefault()}
+                  onKeyDown={(event) => {
+                    if (event.key === " " || event.key === "Enter") {
+                      event.preventDefault();
+                      if (recording) stopVoiceRecording(false);
+                      else startVoiceRecording();
+                    }
+                  }}
+                  disabled={uploading || voiceBusy}
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50"
+                  style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
+                  title="按住说话，松开发送"
+                  aria-label="按住说话，发送语音"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         )}

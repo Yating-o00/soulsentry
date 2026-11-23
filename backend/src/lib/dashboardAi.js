@@ -34,18 +34,19 @@ export async function invokeDashboardAi(options, { provider: internalProvider, m
       temperature: options.temperature,
       max_tokens: options.maxTokens,
     }),
-    signal: AbortSignal.timeout(options.fetchTimeout || 30000),
+    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.fetchTimeout || 30000)])
+      : AbortSignal.timeout(options.fetchTimeout || 30000),
   });
   if (!response.ok) throw new Error(`DeepSeek API returned HTTP ${response.status}`);
   const result = await response.json();
   const content = result.choices?.[0]?.message?.content;
-  if (!content) throw new Error("DeepSeek returned an empty response");
+  if (!content) throw Object.assign(new Error("DeepSeek returned an empty response"), { code: "PLAN_JSON", usage: result.usage });
   try {
     const data = parseModelJson(content);
     console.log(`[dashboardAi] provider=deepseek model=${model} success`);
     return { data, usage: result.usage || null, model };
   } catch {
     // Even malformed output can be billed.
-    throw Object.assign(new Error("DeepSeek returned invalid JSON"), { usage: result.usage });
+    throw Object.assign(new Error("DeepSeek returned invalid JSON"), { code: "PLAN_JSON", usage: result.usage });
   }
 }

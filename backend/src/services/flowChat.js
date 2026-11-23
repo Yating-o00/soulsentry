@@ -6,7 +6,7 @@ import { respondToAgent } from "./browserAgent.js";
 import { analyzeImage } from "./analyzeImage.js";
 import { readAttachmentText } from "./readAttachment.js";
 import { planCommitmentWithKimi, reexpandPlan, applyPlanAdjustments, requiredBudget, extractAdjustmentsFromText, resolvePlanAdjustments, rebuildPatternsFromChildren, buildFallbackPlan } from "./planCommitment.js";
-import { applyRememberedDuration, planningConstraints, validateScheduledSessions } from "./taskHarness.js";
+import { applyRememberedDuration, loadPlanningBusy, planningConstraints, resolvePlanningRequest, validateScheduledSessions } from "./taskHarness.js";
 import { trainingClarification } from "./trainingWorkflow.js";
 import { RECENT_CHAT_WINDOW, renderMemoryContext } from "./memoryContext.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
@@ -569,13 +569,18 @@ const RESPONSE_SCHEMA = {
   type: "object",
   properties: {
     reply: { type: "string", description: "对用户说的话，1-3 句，温柔自然口语" },
+    clarification_field: {
+      type: "string",
+      enum: ["horizon_days", "daily_minutes"],
+      description: "仅当 reply 正在询问规划周期或单次可投入时长时填写对应字段。",
+    },
     agent_goal: {
       type: ["string", "null"],
       description: "用户想让 Agent 现在就去网页上办的事（查实时信息/订票/网页查询办理等），原样保留诉求；不需要时为 null"
     },
     extracted: {
       type: ["object", "null"],
-      description: "从对话中提取的待确认内容；信息不足或纯聊天时为 null",
+      description: "从对话中提取的待确认内容；纯聊天或意图不明确时为 null，明确的多天规划即使缺参也返回 type=plan",
       properties: {
         type: { type: "string", enum: ["task", "heart", "link", "plan", "collab"], description: "collab=协同/共创约定：用户说「帮我建立一个以X为主题的协同约定」「创建和同事/朋友/伴侣一起的协同约定」时用它，title=主题；主题明确即可出提案，不要追问" },
         title: { type: "string" },
@@ -618,6 +623,28 @@ const RESPONSE_SCHEMA = {
   },
   required: ["reply", "agent_goal", "extracted"]
 };
+
+const PLAN_QUESTION_PATTERNS = {
+  horizon_days: [
+    /(?:几|多少)\s*(?:天|周|个星期|个月)/,
+    /(?:持续|坚持|周期|计划).{0,12}(?:多久|多长时间|多长)/,
+    /(?:多久|多长).{0,8}(?:周期|收尾|结束)/,
+  ],
+  daily_minutes: [
+    /(?:每次|单次|一次|一回|一轮|每天|上限|时长).{0,32}(?:多久|多长|(?:几|多少)\s*(?:分钟|小时|分|钟头|时间))/,
+    /(?:几|多少)\s*(?:分钟|小时).{0,12}(?:一次|每次|单次|一轮|一回|每天)/,
+    /(?:上限|时长).{0,55}(?:分钟|小时).{0,22}(?:哪个|哪一个|哪项)/,
+  ],
+};
+
+function modelPlanQuestion(reply, field) {
+  // Keep one focused question even if the provider adds a preface or another sentence.
+  const questions = reply.match(/[^。！？!?\n]+[？?]/g) || [];
+  return questions.find((question) =>
+    PLAN_QUESTION_PATTERNS[field]?.some((pattern) => pattern.test(question))
+    && !/已(?:经)?(?:排好|保存|排完|创建|生成)|(?:周几|星期几|哪天|几点|什么时段)/.test(question)
+  )?.trim();
+}
 
 function buildMessagesBlock(messages) {
   return messages
@@ -725,7 +752,7 @@ async function loadDialogueContext({ userId, prisma }) {
   }
 }
 
-export async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "", personaTone = PERSONA_TONES.gentle, userContext = "", memories = [], memoryContext, invoke = invokeDashboardAi }) {
+export async function chatWithKimi({ messages, lastExtracted, attachmentCtx = "", personaTone = PERSONA_TONES.gentle, userContext = "", memories = [], memoryContext, invoke = invokeDashboardAi, signal, singleAttempt }) {
   const now = chinaNow();
   const extractedCtx = lastExtracted
     ? `（你上一轮提出的待确认提案如下，用户可能正在对它做修改：${JSON.stringify(lastExtracted)}）`
@@ -753,7 +780,7 @@ ${recalled}
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
 - type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好；用户提到的体重、伤病、运动基础、饮食禁忌、作息等个性化条件也必须写进 preferences，规划器会据此调整强度与内容），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。用户想在规划里新增一项（如"周六下午3点加半小时瑜伽""每天加冥想"）时用 field="add"，value=新项名称（如"瑜伽"），并带上 start_time（如"15:00"）与 duration_minutes（如 30），target 为适用日。
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
-- 纯聊天或信息还不足：extracted 为 null。
+- 纯聊天，或意图还不足以判断类型：extracted 为 null。
 
 agent_goal（网页办事，即时执行）：用户想让你"现在就去网上办一件事"——查实时信息（天气/股价/快递/余票）、打开网页搜索查询、订机票/火车票/酒店、网页填写/预约/比价等。把用户的原始诉求原样填进 agent_goal（含完整网址），extracted 保持 null（同一件事不要两边都放）。回复时告诉用户：浏览器小助手已经出发去办了，过程和结果会直接回到对话里，遇到需要你拍板的地方会 pause 下来问你。若这件事里另有"需要用户日后参与/值得记住"的部分（如出行安排、约定），再单独用 extracted 立约定。
 
@@ -763,6 +790,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
 
 对话原则：
 1. 信息不足时不要硬猜：只问一个最关键的补充问题（通常是时间），语气像朋友，不像表单。
+   如果用户明确要制定多天计划，即使需要追问也保留 type=plan 和已知参数，缺失参数留 null。结合用户的目标与上文，用自然的一句话问缺的那一项，以问号结束，避免重复问用户已给的条件。询问计划持续几天或几周时，clarification_field 填 horizon_days。询问单次时长或沿用的时长上限时填 daily_minutes。缺少证据或记忆冲突时，请用户给出当前值，别替他决定。没有问这两个字段时省略 clarification_field。
 2. 信息足够时：extracted 给出完整提案，reply 里用一两句话温柔复述你要记下什么，提醒用户点确认即可生成，不要催促。
 3. 用户修改提案时，更新 extracted；用户说"就这些/对了/确认"时保持 extracted 不变。
 4. 用户否定当前提案（比如说"不对""我想改一下"）时：extracted 输出 null，先温柔地问清楚 TA 想改哪一部分（时间、内容，还是这其实不是约定/心签），不要立刻重复同一个提案。
@@ -774,10 +802,11 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
     responseJsonSchema: RESPONSE_SCHEMA,
     temperature: 0.7,
     models: DASHBOARD_TEXT_MODELS,
-    // 给 K3 留足输出预算：Kimi 的推理 token 也计入 max_tokens，
-    // 预算过小时 JSON 会被截断成空内容，对话就会退化成兜底话术
+    // K3 的推理 token 也计入 max_tokens，给 JSON 留足预算。
     maxTokens: 2500,
     fetchTimeout: 30000,
+    signal,
+    singleAttempt,
     withUsage: true
   });
 
@@ -818,6 +847,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   }
   return {
     reply,
+    clarificationField: result.clarification_field,
     agentGoal,
     extracted,
     usage
@@ -829,7 +859,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
  * agentExecutionId：对话中挂着浏览器小助手会话时，用户消息直接转发给 Agent。
  * 返回 { reply, extracted, agentGoal?, agent?, source }；任何情况下都给出可继续的对话。
  */
-export async function runFlowChat({ messages, lastExtracted = null, userId = null, prisma = null, agentExecutionId = null, attachments = [], memories = [], memoryContext }) {
+export async function runFlowChat({ messages, lastExtracted = null, userId = null, prisma = null, agentExecutionId = null, attachments = [], memories = [], memoryContext, planRun }) {
   // 附件上下文：图片走视觉识别（本地读文件转 base64，无需公网 URL），文件列名称类型
   let attachmentCtx = "";
   if (Array.isArray(attachments) && attachments.length) {
@@ -910,6 +940,10 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     }
   }
 
+  const userTexts = safeMessages.filter((message) => message.role === "user").map(({ content }) => content);
+  const planningMemories = [...(memoryContext?.profile || []), ...memories];
+  let activeConstraints;
+  const noteValidation = (errors) => errors.map((error) => error.match(/^([A-Z_]+)：/)?.[1] || "DOMAIN_RULE");
   try {
     if (!safeMessages.length || !lastUser) throw new Error("empty messages");
     // 注入对话的提案上下文要瘦身：逐日 children 又长又干扰理解，模板(patterns)才是调整的核心上下文
@@ -925,12 +959,15 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       : lastExtracted;
     const personaTone = await loadPersonaTone({ userId, prisma });
     const userContext = await loadDialogueContext({ userId, prisma });
-    const out = await Promise.race([
-      chatWithKimi({ messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx, personaTone, userContext, memories, memoryContext }),
-      // 外层必须比 Kimi 单次超时更宽，才能等到 DeepSeek 兜底完成；
-      // 否则 Kimi 刚超时、还没来得及切 DeepSeek，整轮对话就被判失败
-      new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 45000))
-    ]);
+    if (planRun) planRun.chatCalls += 1;
+    // 外层给今日对话的 Kimi 调用和 DeepSeek 兜底留出时间。
+    const chatTimeout = AbortSignal.timeout(45000);
+    const out = await chatWithKimi({
+      messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx,
+      personaTone, userContext, memories, memoryContext,
+      signal: planRun ? AbortSignal.any([planRun.signal, chatTimeout]) : chatTimeout,
+      singleAttempt: Boolean(planRun),
+    });
 
     // 协同约定强意图优先：「建立/创建…协同约定」明确要的是多人共创卡片，
     // 模型若误读成智能规划（plan）或普通约定，一律按协同提案覆盖，话术同步换掉
@@ -947,21 +984,39 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     // plan 字段由服务端生成，不落模型之手；每次带最新 plan_request 重排，确认/改期都走这里
     if (out.extracted?.type === "plan" && out.extracted.plan_request && userId && prisma) {
       try {
-        const planningMemories = [...(memoryContext?.profile || []), ...memories];
-        const req = applyRememberedDuration(out.extracted.plan_request, lastUser.content, planningMemories);
+        const resolved = planRun && resolvePlanningRequest(out.extracted.plan_request, userTexts, planningMemories);
+        const req = resolved ? resolved.request : applyRememberedDuration(out.extracted.plan_request, lastUser.content, planningMemories);
         out.extracted.plan_request = req;
-        const userContext = safeMessages.filter((message) => message.role === "user").map((message) => message.content).join(" ");
-        const constraints = planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context: userContext, latestContext: lastUser.content, memories: planningMemories });
+        const userContext = userTexts.join(" ");
+        const constraints = resolved ? resolved.constraints : planningConstraints({
+          goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes,
+          context: userContext, latestContext: lastUser.content, memories: planningMemories,
+        });
+        if (planRun) {
+          activeConstraints = constraints;
+          planRun.constraints = constraints;
+        }
 
         // —— 反问门控：关键参数缺失时不烧规划调用，先问清楚（多轮对话把需求明确，一次只问一个） ——
-        const missingQuestion = !req.horizon_days
+        const clarification = resolved?.clarification;
+        const missingQuestion = clarification?.fallback || (!req.horizon_days
           ? "这个计划想坚持多少天？比如 7 天、14 天或 21 天～"
           : !req.daily_minutes
             ? "每天大概能投入多少分钟？我按这个强度来排～"
-            : trainingClarification({ goal: req.goal, context: [userContext, ...[...(memoryContext?.profile || []), ...memories].map((memory) => memory.content || memory.title)].join(" ") });
+            : trainingClarification({ goal: req.goal, context: [userContext, ...planningMemories.map((memory) => memory.content || memory.title)].join(" "), oneAtATime: Boolean(planRun) }));
         if (missingQuestion) {
-          out.reply = missingQuestion;
+          const field = clarification?.field;
+          const question = field && (!out.clarificationField || field === out.clarificationField)
+            ? modelPlanQuestion(out.reply, field) : undefined;
+          if (planRun) {
+            planRun.status = "clarify";
+            planRun.clarificationField = field;
+            planRun.clarificationSource = question ? "model" : "fallback";
+            out.agentGoal = null;
+          }
+          out.reply = question || missingQuestion;
         } else {
+        if (planRun) constraints.busy = await loadPlanningBusy(prisma, userId, constraints);
         const horizon = req.horizon_days || 7;
         const dayMs = 86400000;
         const start = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -1025,7 +1080,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           const textPatched = applyPlanAdjustments(prevPatterns, textAdjustments);
           if (textPatched.applied.length > 0) { patched = textPatched; adjustments = textAdjustments; }
         }
-        console.log(`[flowChat] 规划调整: sameGoal=${!!sameGoal} via=${resolved.via} applied=${patched ? patched.applied.length : 0} goal=${String(req.goal || "").slice(0, 20)}`);
+        if (!planRun) console.log(`[flowChat] 规划调整: sameGoal=${!!sameGoal} via=${resolved.via} applied=${patched ? patched.applied.length : 0}`);
         let planned = null;
         let adjustedPatterns = null;
         if (!planned && prevPatterns && sameGoal && patched && patched.applied.length > 0) {
@@ -1100,7 +1155,14 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             memoryContext: memoryContext && { ...memoryContext, memories },
             existing,
             insights,
-            constraints
+            constraints,
+            signal: planRun?.signal,
+            onAttempt: planRun && (({ attempt, errors, failed }) => {
+              planRun.plannerCalls = attempt + 1;
+              if (attempt === 0) planRun.firstValidation = noteValidation(errors);
+              planRun.validation = noteValidation(errors);
+              if (failed) planRun.status = planRun.signal.aborted ? "timeout" : "provider_failure";
+            }),
           });
           out.extracted.plan = {
             parent: planned.parent,
@@ -1123,6 +1185,10 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
         const planErrors = validateScheduledSessions(planned, constraints);
         if (planErrors.length) {
+          if (planRun) {
+            planRun.status = "invalid";
+            planRun.validation = noteValidation(planErrors);
+          }
           out.extracted = null;
           out.reply = `计划还不符合要求：${planErrors.join("；")}。请重新规划或调整要求。`;
         }
@@ -1136,7 +1202,8 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
         }
       } catch (planErr) {
-        console.warn("[flowChat] 规划失败:", planErr?.message || planErr);
+        if (planRun && planRun.status === "chat") planRun.status = planRun.signal.aborted ? "timeout" : "invalid";
+        if (!planRun) console.warn("[flowChat] 规划失败:", planErr?.message || planErr);
         out.reply = `计划暂时无法生成：${planErr?.message || "请稍后重试"}。你可以调整要求后重新规划。`;
       }
       // 规划内容缺失（反问中/调整未识别/生成失败）时降级为纯对话，绝不弹空的「将要生成智能规划」卡片
@@ -1152,7 +1219,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       const prevPats = Array.isArray(prevExt?.plan?.patterns) && prevExt.plan.patterns.length > 0 ? prevExt.plan.patterns : null;
       const usablePlanThisTurn = out.extracted?.type === "plan" && !!out.extracted?.plan;
       const lastText = [...safeMessages].reverse().find((m) => m.role === "user")?.content || "";
-      if (!usablePlanThisTurn && prevPats && prevExt?.plan_request) {
+      if (!usablePlanThisTurn && prevPats && prevExt?.plan_request && (!planRun || planRun.status === "chat")) {
         const textAdj = extractAdjustmentsFromText(lastText);
         if (textAdj?.length) {
           const patched = applyPlanAdjustments(prevPats, textAdj);
@@ -1180,7 +1247,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
       }
       // 提案卡已确认（lastExtracted 清空）或 goal 被改写失配时：从库里的活跃规划重建模板再应用
-      if (!(out.extracted?.type === "plan" && out.extracted?.plan) && userId && prisma) {
+      if (!(out.extracted?.type === "plan" && out.extracted?.plan) && userId && prisma && (!planRun || planRun.status === "chat")) {
         const dbAdj = await tryDbPlanAdjustment({ userId, prisma, text: lastText });
         if (dbAdj) {
           out.extracted = dbAdj.extracted;
@@ -1193,12 +1260,21 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     // checks before it can be confirmed.
     if (out.extracted?.type === "plan" && out.extracted.plan) {
       const req = out.extracted.plan_request || {};
-      const context = safeMessages.filter((message) => message.role === "user").map((message) => message.content).join(" ");
-      const constraints = planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context, latestContext: lastUser.content, memories: [...(memoryContext?.profile || []), ...memories] });
+      const constraints = activeConstraints || (planRun
+        ? resolvePlanningRequest(req, userTexts, planningMemories).constraints
+        : planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context: userTexts.join(" "), latestContext: lastUser.content, memories: planningMemories }));
+      if (planRun && constraints.busy == null) constraints.busy = await loadPlanningBusy(prisma, userId, constraints);
       const errors = validateScheduledSessions(out.extracted.plan, constraints);
       if (errors.length) {
+        if (planRun) {
+          planRun.status = "invalid";
+          planRun.validation = noteValidation(errors);
+        }
         out.extracted = null;
         out.reply = `调整后的计划还不符合要求：${errors.join("；")}。请重新规划或调整要求。`;
+      } else if (planRun) {
+        planRun.status = "ready";
+        planRun.constraints = constraints;
       }
     }
 
@@ -1238,7 +1314,8 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     }
     return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
   } catch (err) {
-    console.warn("[flowChat] Kimi chat failed, fallback:", err?.message || err);
+    if (planRun) planRun.status = planRun.signal.aborted || err?.name === "TimeoutError" ? "timeout" : "provider_failure";
+    else console.warn("[flowChat] Kimi chat failed, fallback:", err?.message || err);
     // "设为约定"这类指令常指代上文：把最近的用户消息倒序传给兜底，供标题提取
     const recentUserTexts = safeMessages
       .filter((m) => m.role === "user")

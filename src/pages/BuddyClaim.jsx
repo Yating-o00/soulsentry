@@ -128,11 +128,12 @@ export default function BuddyClaim() {
       queryClient.invalidateQueries({ queryKey: ["buddies"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       toast.success(`${buddy.name}开始陪你了`);
-      navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}`);
+      // 认领后直接落到协同栏，并自动把首个项目开成协同讨论，省掉「切 tab + 开启协同」两次点击
+      navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}&tab=协同&autoCollab=1`, { replace: true });
     } catch (e) {
       if (e?.status === 409) {
         toast("这颗搭子已经在陪你啦");
-        navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}`);
+        navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}&tab=协同&autoCollab=1`, { replace: true });
       } else {
         toast.error(e?.message || "认领失败，请再试一次");
         setClaiming(false);

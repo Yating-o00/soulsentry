@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -86,7 +86,7 @@ export default function BuddySpace() {
   // 每颗搭子独立人格：先看用户在这颗搭子下的设置，再用该搭子类型的默认人格
   const persona = profile?.persona || buddy?.defaultPersona || mine?.persona || DEFAULT_PERSONA;
 
-  const { data: allTasks = [] } = useQuery({
+  const { data: allTasks = [], isLoading: tasksLoading, isFetching: tasksFetching } = useQuery({
     queryKey: ["tasks", "with-subs"],
     // 按创建时间倒序：新建的协同小组没有提醒时间，按提醒时间排会沉到 300 条之后
     queryFn: () => base44.entities.Task.filter({ parent_task_id: "all" }, "-created_date", 2000),
@@ -494,6 +494,8 @@ export default function BuddySpace() {
             onSelectCollab={setSelectedCollabId}
             onCreateCollab={() => setNewCollabOpen(true)}
             onDeleteCollab={setDeleteCollabTarget}
+            autoOpenCollab={searchParams.get("autoCollab") === "1"}
+            tasksLoading={tasksLoading || tasksFetching}
           />
         )}
         {activeTab === "画像" && (buddyId === "running" ? (
@@ -891,7 +893,10 @@ function BuddyProjectsSection({ buddy, tint, primaryTask, tasks = [], onSelectCo
    以专业 Agent 为协调者（拉齐共识、化解分歧、推进讨论、总结沉淀、外部信息支援）；
    讨论产出自动落成子约定与心签。只显示属于本搭子的协同约定（项目约定或同 buddy_id），
    其他搭子的协同约定不出现在这里。 */
-function CollabSection({ buddy, tint, persona, profile, projectTask, allTasks = [], selectedCollabId, onSelectCollab, onCreateCollab, onDeleteCollab }) {
+function CollabSection({
+  buddy, tint, persona, profile, projectTask, allTasks = [], selectedCollabId, onSelectCollab,
+  onCreateCollab, onDeleteCollab, autoOpenCollab = false, tasksLoading = false,
+}) {
   const queryClient = useQueryClient();
   const [enabling, setEnabling] = useState(false);
   const [createdCollabId, setCreatedCollabId] = useState(null);
@@ -970,6 +975,19 @@ function CollabSection({ buddy, tint, persona, profile, projectTask, allTasks = 
       setEnabling(false);
     }
   };
+
+  // 认领后首次进入：协同栏已由 URL 选中，这里自动把首个项目开成协同，直接落到对话框
+  const autoOpenHandledRef = useRef(false);
+  useEffect(() => {
+    if (!autoOpenCollab || autoOpenHandledRef.current || tasksLoading) return;
+    if (activeCollab) {
+      autoOpenHandledRef.current = true;
+      return;
+    }
+    if (!profile || profile.status !== "active") return;
+    autoOpenHandledRef.current = true;
+    enableCollab();
+  }, [autoOpenCollab, tasksLoading, activeCollab, profile, enableCollab]);
 
   // 已开启协同：小组切换 + 极简协同面板（讨论为主，约定/沉淀按需查看）
   if (activeCollab) {

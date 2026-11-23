@@ -223,7 +223,8 @@ if [[ "$KEEP_RELEASES" =~ ^[0-9]+$ ]] && (( KEEP_RELEASES > 0 )); then
     delete_count=$(( ${#all_releases[@]} - KEEP_RELEASES ))
     for ((i = 0; i < delete_count; i += 1)); do
       if [[ "${all_releases[$i]}" != "$(readlink -f "$CURRENT_LINK")" ]]; then
-        rm -rf "${all_releases[$i]}"
+        # 清理旧 release 失败（文件属主/占用）不能把已经健康上线的新版本回滚掉
+        rm -rf "${all_releases[$i]}" || log "Could not remove ${all_releases[$i]}; skip"
       fi
     done
   fi

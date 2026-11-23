@@ -515,6 +515,94 @@ export function weeklyKmSeries(state, weeks = 8) {
   return buckets;
 }
 
+/**
+ * 根据已解析或已填写的字段构造一条跑步记录及其关联 patch。
+ * 用于手动记录、截图自动记录等入口，避免重复实现成就/反馈/跑鞋里程逻辑。
+ */
+export function buildRunningLogPatch(state = {}, fields = {}, runner = {}, session = null) {
+  const distInput = Number(fields.distance_km) || 0;
+  const durInput = Number(fields.duration_min) || 0;
+  if (!distInput && !durInput) return null;
+
+  const pacesec = session?.pace || runner?.easyPace || 420;
+  const finalDist = distInput || Math.round((durInput / (pacesec / 60)) * 100) / 100;
+  const finalDur = durInput || Math.round((finalDist * pacesec) / 60);
+  const previousStats = computeRunningStats(state);
+
+  const log = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    date: fields.date || todayKeyBJ(),
+    type: session?.type || "easy",
+    title: session?.type === "rest" ? "自由跑" : session?.title || fields.title || "跑步",
+    distance_km: Math.round(finalDist * 100) / 100,
+    duration_min: Math.round(finalDur),
+    rpe: Number(fields.rpe) || 3,
+    feel: fields.feel || "不错",
+    avg_hr: Number(fields.avg_hr) || null,
+    note: String(fields.note || "").trim(),
+    source: fields.source || "manual",
+    created_at: new Date().toISOString(),
+  };
+
+  const logs = [log, ...(state.logs || [])].slice(0, 150);
+  const patchData = { logs };
+
+  const shoes = state.gear?.shoes;
+  if (Array.isArray(shoes) && shoes.length > 0) {
+    const defaultShoe = shoes.find((s) => s.id === state.gear?.default_shoe_id) || shoes[0];
+    patchData.gear = {
+      ...(state.gear || {}),
+      default_shoe_id: defaultShoe.id,
+      shoes: shoes.map((s) =>
+        s.id === defaultShoe.id
+          ? { ...s, km: Math.round(((Number(s.km) || 0) + log.distance_km) * 10) / 10 }
+          : s
+      ),
+    };
+  }
+
+  const paceSec = log.distance_km > 0 ? (log.duration_min * 60) / log.distance_km : null;
+  const pace = formatPace(paceSec);
+  const tired = log.feel === "很累" || log.rpe >= 4;
+  const crossed100 = previousStats.totalKm < 100 && previousStats.totalKm + log.distance_km >= 100;
+  const crossed50 = previousStats.totalKm < 50 && previousStats.totalKm + log.distance_km >= 50;
+  const previousSameType = (state.logs || []).find(
+    (l) => l.type === log.type && Number(l.distance_km) >= 3 && Number(l.duration_min) > 0
+  );
+  let comparison = "";
+  if (paceSec && previousSameType) {
+    const previousPace = (Number(previousSameType.duration_min) * 60) / Number(previousSameType.distance_km);
+    const delta = Math.round(previousPace - paceSec);
+    if (delta > 5) comparison = `比上次同类型快了 ${delta} 秒/公里。`;
+    else if (delta < -5) comparison = `比上次同类型慢了 ${Math.abs(delta)} 秒/公里，注意恢复。`;
+    else comparison = "和上次同类型配速接近。";
+  }
+  if (Number(log.avg_hr) > 0 && Number(previousSameType?.avg_hr) > 0) {
+    const hrDelta = Math.round(Number(log.avg_hr) - Number(previousSameType.avg_hr));
+    if (hrDelta >= 5) comparison += ` 同样配速下心率比上次高 ${hrDelta}，可能有点累，明天注意休息。`;
+  }
+  const newPb = paceSec && (!previousStats.bestPace || paceSec < previousStats.bestPace);
+  const first5k = previousStats.longest < 5 && log.distance_km >= 5;
+  const achievement = crossed100
+    ? "百公里俱乐部达成！"
+    : crossed50
+      ? "累计 50 公里达成！"
+      : first5k
+        ? "第一次跑满 5 公里！"
+        : newPb
+          ? "刷新个人最佳配速！"
+          : null;
+  patchData.last_feedback = {
+    date: log.date,
+    text: `这次 ${log.distance_km} km，用时 ${log.duration_min} 分钟，平均配速 ${pace}。${comparison}${
+      tired ? "身体偏累，明天优先休息或轻松跑，别再加速度。" : "恢复不错，补水、拉伸，今晚早点睡。"
+    }`,
+    achievement,
+  };
+
+  return { log, patchData };
+}
+
 // 实际完成率：从开跑到今天，所有「已到期」的跑步课里完成了多少
 export function computeConsistency(state, runner, status) {
   let planned = 0;

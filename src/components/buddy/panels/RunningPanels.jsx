@@ -29,6 +29,7 @@ import {
   addDays,
   bodyTrend,
   buildRunnerProfile,
+  buildRunningLogPatch,
   computeAchievements,
   computeConsistency,
   computeRunningStats,
@@ -488,11 +489,60 @@ export function RunningTodayPanel({ profile, tint, persona, projectTask }) {
 
 export function RunningLogPanel({ profile, tint }) {
   const { state, patch } = useBuddyState("running");
+  const { call } = useBuddyAgent("running");
   const status = useMemo(() => getRunningStatus(profile?.answers || {}, profile, state), [profile, state]);
   const stats = useMemo(() => computeRunningStats(state), [state]);
   const series = useMemo(() => weeklyKmSeries(state, 8), [state]);
   const maxKm = Math.max(...series.map((s) => s.km), 1);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [autoParsing, setAutoParsing] = useState(false);
+  const autoFileRef = useRef(null);
+  const runner = useMemo(() => buildRunnerProfile(profile?.answers || {}), [profile]);
+
+  const parseAndCreateFromScreenshot = async (file) => {
+    if (!file || autoParsing) return;
+    setAutoParsing(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const uploaded = await httpRequest("/api/uploads", { method: "POST", body: fd });
+      const data = await call({
+        mode: "run_parse",
+        payload: {
+          attachments: [{ url: uploaded.file_url, name: uploaded.file_name, type: uploaded.file_type }],
+        },
+      });
+      const gotDistance = Number(data?.distance_km) > 0;
+      const gotDuration = Number(data?.duration_min) > 0;
+      if (!gotDistance && !gotDuration) {
+        toast.info("截图里没读到明确的跑量，手动补一下就好");
+        return;
+      }
+      const result = buildRunningLogPatch(
+        state,
+        {
+          date: data?.date && /^\d{4}-\d{2}-\d{2}$/.test(data.date) ? data.date : todayKeyBJ(),
+          distance_km: gotDistance ? data.distance_km : "",
+          duration_min: gotDuration ? data.duration_min : "",
+          avg_hr: Number(data?.avg_hr) > 0 ? data.avg_hr : "",
+          source: "screenshot",
+        },
+        runner
+      );
+      if (!result) {
+        toast.error("数据不完整，没能生成记录");
+        return;
+      }
+      patch(result.patchData);
+      const { log } = result;
+      toast.success(`已生成记录：${log.date} · ${log.distance_km} km / ${log.duration_min} 分钟`);
+    } catch (e) {
+      toast.error(e?.message || "截图识别失败，可以手动填");
+    } finally {
+      setAutoParsing(false);
+      if (autoFileRef.current) autoFileRef.current.value = "";
+    }
+  };
 
   const removeLog = (id) => {
     const target = (state.logs || []).find((l) => l.id === id);
@@ -525,14 +575,32 @@ export function RunningLogPanel({ profile, tint }) {
           <h2 className="text-base font-semibold text-stone-900">跑步记录</h2>
           <p className="mt-0.5 text-[12px] text-stone-400">所有出发都算数，不只看配速</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setSheetOpen(true)}
-          className="inline-flex min-h-[36px] items-center gap-1 rounded-full px-3 text-xs font-medium text-white"
-          style={{ background: tint[2] }}
-        >
-          <Plus className="h-3.5 w-3.5" /> 补记一次
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => autoFileRef.current?.click()}
+            disabled={autoParsing}
+            className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 disabled:opacity-50"
+          >
+            {autoParsing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+            {autoParsing ? "识别中…" : "上传截图"}
+          </button>
+          <input
+            ref={autoFileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => parseAndCreateFromScreenshot(e.target.files?.[0])}
+          />
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            className="inline-flex min-h-[36px] items-center gap-1 rounded-full px-3 text-xs font-medium text-white"
+            style={{ background: tint[2] }}
+          >
+            <Plus className="h-3.5 w-3.5" /> 补记一次
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -1359,83 +1427,27 @@ export function RunLogSheet({ open, date, session, tint, answers, onClose }) {
 
   const save = () => {
     if (saving) return;
-    const dist = Number(distance) || 0;
-    const dur = Number(duration) || 0;
-    if (!dist && !dur) {
+    const result = buildRunningLogPatch(
+      state,
+      {
+        date: formDate,
+        distance_km: distance,
+        duration_min: duration,
+        rpe,
+        feel,
+        avg_hr: avgHr,
+        note,
+        source: "manual",
+      },
+      runner,
+      session
+    );
+    if (!result) {
       toast.error("至少填一下距离或用时");
       return;
     }
     setSaving(true);
-    const pacesec = session?.pace || runner.easyPace || 420;
-    const finalDist = dist || Math.round((dur / (pacesec / 60)) * 100) / 100;
-    const finalDur = dur || Math.round((finalDist * pacesec) / 60);
-    const previousStats = computeRunningStats(state);
-    const log = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      date: formDate,
-      type: session?.type || "easy",
-      title: session?.type === "rest" ? "自由跑" : session?.title || "自由跑",
-      distance_km: Math.round(finalDist * 100) / 100,
-      duration_min: Math.round(finalDur),
-      rpe: Number(rpe) || 3,
-      feel,
-      avg_hr: Number(avgHr) || null,
-      note: note.trim(),
-      source: "manual",
-      created_at: new Date().toISOString(),
-    };
-    const logs = [log, ...(state.logs || [])].slice(0, 150);
-    const shoes = state.gear?.shoes;
-    const patchData = { logs };
-    if (Array.isArray(shoes) && shoes.length > 0) {
-      const defaultShoe = shoes.find((s) => s.id === state.gear?.default_shoe_id) || shoes[0];
-      patchData.gear = {
-        ...(state.gear || {}),
-        default_shoe_id: defaultShoe.id,
-        shoes: shoes.map((s) =>
-          s.id === defaultShoe.id ? { ...s, km: Math.round(((Number(s.km) || 0) + log.distance_km) * 10) / 10 } : s
-        ),
-      };
-    }
-    const paceSec = log.distance_km > 0 ? (log.duration_min * 60) / log.distance_km : null;
-    const pace = paceSec ? formatPace(paceSec) : "—";
-    const tired = log.feel === "很累" || log.rpe >= 4;
-    const crossed100 = previousStats.totalKm < 100 && previousStats.totalKm + log.distance_km >= 100;
-    const crossed50 = previousStats.totalKm < 50 && previousStats.totalKm + log.distance_km >= 50;
-    const previousSameType = (state.logs || []).find(
-      (l) => l.type === log.type && Number(l.distance_km) >= 3 && Number(l.duration_min) > 0
-    );
-    let comparison = "";
-    if (paceSec && previousSameType) {
-      const previousPace = (Number(previousSameType.duration_min) * 60) / Number(previousSameType.distance_km);
-      const delta = Math.round(previousPace - paceSec);
-      if (delta > 5) comparison = `比上次同类型快了 ${delta} 秒/公里。`;
-      else if (delta < -5) comparison = `比上次同类型慢了 ${Math.abs(delta)} 秒/公里，注意恢复。`;
-      else comparison = "和上次同类型配速接近。";
-    }
-    if (Number(avgHr) > 0 && Number(previousSameType?.avg_hr) > 0) {
-      const hrDelta = Math.round(Number(avgHr) - Number(previousSameType.avg_hr));
-      if (hrDelta >= 5) comparison += ` 同样配速下心率比上次高 ${hrDelta}，可能有点累，明天注意休息。`;
-    }
-    const newPb = paceSec && (!previousStats.bestPace || paceSec < previousStats.bestPace);
-    const first5k = previousStats.longest < 5 && log.distance_km >= 5;
-    const achievement = crossed100
-      ? "百公里俱乐部达成！"
-      : crossed50
-        ? "累计 50 公里达成！"
-        : first5k
-          ? "第一次跑满 5 公里！"
-          : newPb
-            ? "刷新个人最佳配速！"
-            : null;
-    patchData.last_feedback = {
-      date: formDate,
-      text: `这次 ${log.distance_km} km，用时 ${log.duration_min} 分钟，平均配速 ${pace}。${comparison}${
-        tired ? "身体偏累，明天优先休息或轻松跑，别再加速度。" : "恢复不错，补水、拉伸，今晚早点睡。"
-      }`,
-      achievement,
-    };
-    patch(patchData);
+    patch(result.patchData);
     toast.success("记录已保存，这一步算数");
     setSaving(false);
     onClose?.();

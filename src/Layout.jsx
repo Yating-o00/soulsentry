@@ -184,7 +184,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
-                      className={`group relative mb-1 rounded-xl transition-[color,transform] duration-150 active:scale-[0.99] ${
+                      className={`mb-1 rounded-xl transition-[color,transform] duration-150 active:scale-[0.99] ${
                         isActive
                           ? 'text-[#384877]'
                           : 'text-stone-600 hover:text-stone-900'
@@ -201,14 +201,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
                         }}
                         className="flex min-h-[40px] items-center gap-3 px-4 py-2.5"
                       >
-                        {/* 轻量级激活标记：左侧品牌色短竖线，不占空间 */}
-                        <span
-                          className={`absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[#384877] transition-opacity ${
-                            isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'
-                          }`}
-                        />
                         <item.icon className={`w-5 h-5 shrink-0 ${
-                          isActive ? 'text-[#384877]' : 'text-stone-400 group-hover:text-stone-500'
+                          isActive ? 'text-[#384877]' : 'text-stone-400'
                         }`} />
                         <span className={isActive ? "font-semibold" : "font-medium"}>{item.title}</span>
                         {item.url === notificationUrl && hasUnreadMention && (
@@ -234,11 +228,10 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
                 setFeedbackOpen(true);
                 handleMobileClick();
               }}
-              className="group relative mb-1 rounded-xl text-stone-600 transition-[color,transform] duration-150 hover:text-stone-900 active:scale-[0.99] cursor-pointer"
+              className="mb-1 rounded-xl text-stone-600 transition-[color,transform] duration-150 hover:text-stone-900 active:scale-[0.99] cursor-pointer"
             >
               <div className="flex items-center gap-3 px-4 py-3 w-full">
-                <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[#384877] opacity-0 transition-opacity group-hover:opacity-30" />
-                <MessageSquarePlus className="w-5 h-5 text-stone-400 group-hover:text-stone-500" />
+                <MessageSquarePlus className="w-5 h-5 text-stone-400" />
                 <span className="font-medium">{t('feedback')}</span>
               </div>
             </SidebarMenuButton>
@@ -247,7 +240,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className={`group relative mb-1 rounded-xl transition-[color,transform] duration-150 active:scale-[0.99] ${
+              className={`mb-1 rounded-xl transition-[color,transform] duration-150 active:scale-[0.99] ${
                 location.pathname === createPageUrl("Trash")
                   ? 'text-[#384877]'
                   : 'text-stone-600 hover:text-stone-900'
@@ -263,13 +256,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
                 }}
                 className="flex min-h-[40px] items-center gap-3 px-4 py-2.5"
               >
-                <span
-                  className={`absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-[#384877] transition-opacity ${
-                    location.pathname === createPageUrl("Trash") ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'
-                  }`}
-                />
                 <Trash2 className={`w-5 h-5 shrink-0 ${
-                  currentPath === createPageUrl("Trash") ? 'text-[#384877]' : 'text-stone-400 group-hover:text-stone-500'
+                  currentPath === createPageUrl("Trash") ? 'text-[#384877]' : 'text-stone-400'
                 }`} />
                 <span className={location.pathname === createPageUrl("Trash") ? "font-semibold" : "font-medium"}>{t('trash')}</span>
               </Link>

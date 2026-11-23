@@ -18,6 +18,7 @@ import { getBuddyFromMine } from "@/lib/customBuddies";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
 import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
 import BuddyCollabPanel from "@/components/collab/BuddyCollabPanel";
+import CustomBuddyDesigner from "@/components/buddy/CustomBuddyDesigner";
 import SolvePanel from "@/components/buddy/panels/SolvePanel";
 import CustomMaterialsPanel from "@/components/buddy/panels/CustomMaterialsPanel";
 import WeekPanel from "@/components/buddy/panels/WeekPanel";
@@ -143,6 +144,8 @@ export default function BuddySpace() {
   const [creatingProject, setCreatingProject] = useState(false);
   const [deleteCollabTarget, setDeleteCollabTarget] = useState(null);
   const [deletingCollab, setDeletingCollab] = useState(false);
+  const [designOpen, setDesignOpen] = useState(false);
+  const [designBuddy, setDesignBuddy] = useState(null);
 
   if (!buddy && isLoading) {
     return (
@@ -342,6 +345,19 @@ export default function BuddySpace() {
             {buddy.greeting[persona] || buddy.greeting.gentle}
           </p>
         </div>
+        {buddy.custom && profile?.status === "active" && (
+          <button
+            onClick={() => {
+              setDesignBuddy(buddy);
+              setDesignOpen(true);
+            }}
+            aria-label="调整搭子"
+            title="用自然语言调整这颗搭子"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877]"
+          >
+            <Pencil className="w-5 h-5" />
+          </button>
+        )}
         <button
           onClick={() => setGraduateOpen(true)}
           title="结束陪伴：毕业或先收起（内容会沉淀）"
@@ -508,6 +524,14 @@ export default function BuddySpace() {
           setTab("协同");
           queryClient.invalidateQueries({ queryKey: ["tasks"] });
         }}
+      />
+
+      {/* 自定义搭子：随时用自然语言调整设计，保存后立即生效 */}
+      <CustomBuddyDesigner
+        open={designOpen}
+        editingBuddy={designBuddy}
+        claimed={profile?.status === "active"}
+        onClose={() => setDesignOpen(false)}
       />
 
       {/* 新建子项目：同一颗搭子下并行推进多条线 */}

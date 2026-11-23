@@ -219,7 +219,12 @@ export default function BuddyStore() {
         </p>
       </div>
 
-      <CustomBuddyDesigner open={designerOpen} editingBuddy={editingBuddy} onClose={closeDesigner} />
+      <CustomBuddyDesigner
+        open={designerOpen}
+        editingBuddy={editingBuddy}
+        claimed={Boolean(editingBuddy && profiles[editingBuddy.id]?.status === "active")}
+        onClose={closeDesigner}
+      />
 
       {deleteTarget && (
         <div

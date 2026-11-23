@@ -21,12 +21,12 @@ const MATERIAL_ACCEPT = ".pdf,.docx,.txt,.md,.csv,.json,.html,.htm,.xlsx,.xls,.p
 const MATERIAL_LIMIT = 5;
 const MATERIAL_MAX_SIZE = 20 * 1024 * 1024;
 
-function DesignMaterials({ materials, existingCount = 0, uploading, onAdd, onRemove }) {
+function DesignMaterials({ materials, existingCount = 0, uploading, onAdd, onRemove, className = "" }) {
   const inputRef = useRef(null);
   const total = existingCount + materials.length;
   const full = total >= MATERIAL_LIMIT;
   return (
-    <div className="rounded-2xl border border-stone-200 bg-white p-3">
+    <div className={`rounded-2xl border border-stone-200 bg-white p-3 ${className}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-stone-600">
           <FileText className="h-3.5 w-3.5 text-stone-400" />
@@ -89,25 +89,33 @@ function DesignMaterials({ materials, existingCount = 0, uploading, onAdd, onRem
  * 自然语言描述 → AI 生成六要素配置 → 预览 → 继续用自然语言调整 → 确认上架。
  * 只生成配置，不上架；确认后才写入自己的 custom_buddies。
  */
-export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null }) {
+export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null, claimed = false }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const isEditing = Boolean(editingBuddy?.id);
   const [description, setDescription] = useState("");
   const [adjustment, setAdjustment] = useState("");
   const [buddy, setBuddy] = useState(null);
-  const [savedBuddy, setSavedBuddy] = useState(null);
+  // 已保存/已上架的搭子 id：有了它之后，后续保存都走 PUT，支持无限次调整
+  const [activeId, setActiveId] = useState(editingBuddy?.id || null);
+  const [createdNow, setCreatedNow] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [savedThisSession, setSavedThisSession] = useState(false);
   const [savedMaterialCount, setSavedMaterialCount] = useState(0);
   const [materials, setMaterials] = useState([]);
   const [existingMaterials, setExistingMaterials] = useState([]);
   const [materialUploading, setMaterialUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const hasSaved = Boolean(activeId);
+  const shouldClaim = createdNow || !claimed;
 
   useEffect(() => {
     if (!open) return;
     setAdjustment("");
-    setSavedBuddy(null);
+    setActiveId(editingBuddy?.id || null);
+    setCreatedNow(false);
+    setDirty(false);
+    setSavedThisSession(false);
     setSavedMaterialCount(0);
     setMaterials([]);
     setExistingMaterials([]);
@@ -195,6 +203,7 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
           return;
         }
         setBuddy(result.buddy);
+        setDirty(true);
         if (result.degraded) {
           toast.info("AI 暂时有点忙，先给你一个可用版本，你可以继续描述调整");
         }
@@ -209,27 +218,36 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
   const save = async () => {
     if (!buddy || saving) return;
     setSaving(true);
+    const isUpdate = Boolean(activeId);
     try {
       const result = await httpRequest(
-        isEditing ? `/api/buddies/custom/${editingBuddy.id}` : "/api/buddies/custom",
+        isUpdate ? `/api/buddies/custom/${activeId}` : "/api/buddies/custom",
         {
-          method: isEditing ? "PUT" : "POST",
+          method: isUpdate ? "PUT" : "POST",
           body: { buddy, description, materials },
         }
       );
       queryClient.invalidateQueries({ queryKey: ["buddies", "mine"] });
-      if (isEditing) queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["buddy", result.buddy?.id || editingBuddy?.id, "materials"] });
+      if (isUpdate) queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["buddy", result.buddy?.id || activeId, "materials"] });
+      setActiveId(result.buddy.id);
+      if (!isUpdate) setCreatedNow(true);
+      setBuddy(result.buddy);
+      setDirty(false);
+      setSavedThisSession(true);
       setSavedMaterialCount(result.materials_added || 0);
       setMaterials([]);
-      setSavedBuddy(result.buddy);
+      // 刷新资料列表，连续调整时资料计数仍然准确
+      httpRequest(`/api/buddies/${result.buddy.id}/materials`)
+        .then((data) => setExistingMaterials(data?.materials || []))
+        .catch(() => {});
       toast.success(
-        isEditing
-          ? `${result.buddy.name} 已更新，下一次对话就会生效`
-          : `${result.buddy.name} 已上架到你的搭子 Store`
+        isUpdate
+          ? `${result.buddy.name} 已更新，后续对话会按新设定来`
+          : `${result.buddy.name} 已上架到你的搭子 Store，可继续调整`
       );
     } catch (error) {
-      toast.error(error?.message || (isEditing ? "保存修改失败，再试一次" : "上架失败，再试一次"));
+      toast.error(error?.message || (isUpdate ? "保存修改失败，再试一次" : "上架失败，再试一次"));
     } finally {
       setSaving(false);
     }
@@ -251,7 +269,7 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            {buddy && !savedBuddy && (
+            {buddy && !hasSaved && (
               <button
                 type="button"
                 onClick={() => { setBuddy(null); setAdjustment(""); }}
@@ -263,14 +281,14 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
             )}
             <div>
               <h3 className="text-lg font-semibold text-stone-900">
-                {savedBuddy ? (isEditing ? "搭子已更新" : "搭子已上架") : buddy ? "预览你的搭子" : "设计一颗搭子"}
+                {buddy ? (hasSaved ? "预览与调整" : "预览你的搭子") : "设计一颗搭子"}
               </h3>
               <p className="mt-0.5 text-xs text-stone-400">
-                {savedBuddy
-                  ? (isEditing ? "调整已保存，资料、项目和协同都还在" : "它已经出现在你的搭子 Store 里了")
-                  : buddy
-                    ? "觉得哪里不对，继续用自然语言告诉心栈"
-                    : "用一句自然语言，描述你想要一个怎样的搭子"}
+                {buddy
+                  ? hasSaved
+                    ? "继续用自然语言调整，保存后立即生效"
+                    : "觉得哪里不对，继续用自然语言告诉心栈"
+                  : "用一句自然语言，描述你想要一个怎样的搭子"}
               </p>
             </div>
           </div>
@@ -278,7 +296,7 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
         </div>
 
         {/* 描述 / 生成 */}
-        {!buddy && !savedBuddy && (
+        {!buddy && (
           <div className="mt-4 space-y-3">
             <textarea
               autoFocus
@@ -323,10 +341,24 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
           </div>
         )}
 
-        {/* 预览 */}
-        {buddy && !savedBuddy && (
-          <div className="mt-4 space-y-3">
-            <div className="rounded-3xl border border-stone-200 bg-white p-4">
+        {/* 预览与调整：调整区放在顶部，随时可以继续用自然语言改 */}
+        {buddy && (
+          <div className="mt-4 flex flex-col gap-3">
+            {hasSaved && savedThisSession && (
+              <div className={`order-1 rounded-2xl border px-3 py-2.5 text-[11px] leading-relaxed ${
+                dirty
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-emerald-200 bg-emerald-50 text-emerald-800"
+              }`}>
+                {dirty
+                  ? "有未保存的调整，确认后点「保存修改」。"
+                  : createdNow
+                    ? "已上架到你的搭子 Store。可以继续用自然语言调整，改完再保存。"
+                    : "修改已保存。可以继续用自然语言调整，改完再保存。"}
+                {!dirty && savedMaterialCount > 0 ? ` 新增的 ${savedMaterialCount} 份资料已收进它的「资料」里。` : ""}
+              </div>
+            )}
+            <div className="order-5 rounded-3xl border border-stone-200 bg-white p-4">
               <div className="flex items-center gap-3">
                 <Orb size={52} tint={tint} />
                 <div className="min-w-0 flex-1">
@@ -407,17 +439,18 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
             </div>
 
             <DesignMaterials
+              className="order-6"
               materials={materials}
               existingCount={existingMaterials.length}
               uploading={materialUploading}
               onAdd={addMaterials}
               onRemove={(index) => setMaterials((current) => current.filter((_, i) => i !== index))}
             />
-            <p className="text-center text-[10px] text-stone-400">
+            <p className="order-7 text-center text-[10px] text-stone-400">
               新加的资料会随保存留在搭子里；如果想让它们也融入能力设计，再加一句调整让它重读一遍。
             </p>
 
-            <div className="rounded-2xl border border-dashed border-stone-300 bg-white p-3">
+            <div className="order-2 rounded-2xl border border-dashed border-stone-300 bg-white p-3">
               <div className="text-[11px] text-stone-500">想改哪里？继续用自然语言说</div>
               <textarea
                 value={adjustment}
@@ -442,48 +475,41 @@ export default function CustomBuddyDesigner({ open, onClose, editingBuddy = null
               type="button"
               onClick={save}
               disabled={saving || loading}
-              className="flex min-h-[46px] w-full items-center justify-center gap-2 rounded-full bg-[#384877] text-sm font-medium text-white disabled:opacity-50"
+              className="order-3 flex min-h-[46px] w-full items-center justify-center gap-2 rounded-full bg-[#384877] text-sm font-medium text-white disabled:opacity-50"
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {saving ? (isEditing ? "正在保存…" : "正在上架…") : (isEditing ? "保存修改" : "确认生成，上架到我的 Store")}
+              {saving
+                ? (hasSaved ? "正在保存…" : "正在上架…")
+                : (hasSaved ? "保存修改" : "确认生成，上架到我的 Store")}
             </button>
-            <p className="text-center text-[10px] text-stone-400">
-              {isEditing ? "保存后，下一次对话就会按新的设定来。" : "上架后仍需认领，回答几个问题就会开始陪伴。"}
+            <p className="order-4 text-center text-[10px] text-stone-400">
+              {hasSaved
+                ? "保存后，下一次对话就会按新的设定来；还可以继续调整。"
+                : "上架后仍需认领，回答几个问题就会开始陪伴。"}
             </p>
-          </div>
-        )}
-
-        {/* 已保存 */}
-        {savedBuddy && (
-          <div className="mt-5 text-center">
-            <div className="flex justify-center">
-              <Orb size={68} tint={Array.isArray(savedBuddy.tint) ? savedBuddy.tint : tint} />
-            </div>
-            <h4 className="mt-3 text-[17px] font-semibold text-stone-900">{savedBuddy.name}</h4>
-            <p className="mt-1 text-[12px] leading-relaxed text-stone-500">
-              {isEditing
-                ? "新的设定已经保存。已上传的资料、项目和协同都保留着，下一次对话会按新的设定来。"
-                : "已经出现在你的搭子 Store。现在认领它，回答几个问题就能开始使用，也可以随时在 Store 里找到它。"}
-              {savedMaterialCount > 0 ? ` 你给的 ${savedMaterialCount} 份参考资料也收进它的「资料」里了。` : ""}
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex-1 rounded-full border border-stone-200 bg-white py-2.5 text-sm text-stone-600"
-              >
-                {isEditing ? "完成" : "先看看 Store"}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(isEditing
-                  ? `${createPageUrl("BuddySpace")}?buddy=${savedBuddy.id}`
-                  : `${createPageUrl("BuddyClaim")}?buddy=${savedBuddy.id}`)}
-                className="flex-1 rounded-full bg-[#384877] py-2.5 text-sm font-medium text-white"
-              >
-                {isEditing ? "进入搭子空间" : "现在认领"}
-              </button>
-            </div>
+            {hasSaved && (
+              <div className="order-8 flex gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="flex-1 rounded-full border border-stone-200 bg-white py-2.5 text-sm text-stone-600"
+                >
+                  完成
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate(shouldClaim
+                      ? `${createPageUrl("BuddyClaim")}?buddy=${activeId}`
+                      : `${createPageUrl("BuddySpace")}?buddy=${activeId}`);
+                  }}
+                  className="flex-1 rounded-full bg-[#384877] py-2.5 text-sm font-medium text-white"
+                >
+                  {shouldClaim ? "现在认领" : "进入搭子空间"}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

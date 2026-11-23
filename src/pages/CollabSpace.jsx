@@ -117,6 +117,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
   // 退出协同：搭子空间创建的协同约定回到对应搭子空间；
   // 从邀请链接进来的人通常还没认领搭子，回到约定列表，避免落到“未认领”页。
   const fromInvite = searchParams.get("from") === "invite";
+  const guestMode = searchParams.get("guest") === "1";
   const queryBuddyId = searchParams.get("from") === "buddy" ? searchParams.get("buddy") : "";
   const taskBuddyId = task?.metadata?._extraFields?.buddy_id || "";
   const buddyReturnId = queryBuddyId || taskBuddyId;
@@ -126,7 +127,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
     : buddyReturnId
       ? `${createPageUrl("BuddySpace")}?buddy=${encodeURIComponent(buddyReturnId)}&tab=${encodeURIComponent("协同")}${
           returnCollabId ? `&collab=${encodeURIComponent(returnCollabId)}` : ""
-        }`
+        }${guestMode ? "&guest=1" : ""}`
       : createPageUrl("Tasks");
 
   // 「完成与延续」：全部子约定（含从属）都完成时出现

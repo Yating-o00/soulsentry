@@ -28,10 +28,14 @@ export default function PushNotificationPrompt() {
 
   // 接受邀请后直达的协同聊天页：先不弹通知授权，否则会盖住输入框；
   // 用户离开该页后仍会正常收到提示。
+  const inviteSearch =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const isInviteChatLanding =
     typeof window !== "undefined" &&
-    window.location.pathname.toLowerCase().includes("collabspace") &&
-    new URLSearchParams(window.location.search).get("view") === "discussion";
+    ((window.location.pathname.toLowerCase().includes("collabspace") &&
+      inviteSearch.get("view") === "discussion") ||
+      (window.location.pathname.toLowerCase().includes("buddyspace") &&
+        inviteSearch.get("guest") === "1"));
 
   // 只在满足以下条件时显示：浏览器支持、用户已登录、未授权、未订阅、用户未主动关闭
   const shouldShow =

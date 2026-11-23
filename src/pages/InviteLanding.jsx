@@ -97,7 +97,13 @@ export default function InviteLanding() {
     // 已是成员 / 已回应 / 邀请已关闭：清掉 auto 参数即可，不重复回应
     if (data.viewer?.is_member) {
       clearAutoParam();
-      if (autoAction === "accept") openCollab(data.task_id || data.pact?.task_id, data.buddy_id || data.pact?.buddy_id);
+      if (autoAction === "accept") {
+        openCollab(
+          data.task_id || data.pact?.task_id,
+          data.buddy_id || data.pact?.buddy_id,
+          data.buddy_name || data.pact?.buddy_name
+        );
+      }
       return;
     }
     if (data.viewer?.responded || data.invite?.status !== "open") {
@@ -108,17 +114,24 @@ export default function InviteLanding() {
     respond(autoAction);
   }, [data, loggedIn]);
 
-  // 接受后直接进入该协同的会话空间；手机端带 view=discussion 自动落在聊天页。
-  // 受邀者通常还没有认领搭子，不能跳到搭子空间，否则会被“未认领”拦截。
-  const openCollab = (taskId, buddyId) => {
+  // 接受后按协同归属分流：
+  // - 搭子协同：进入搭子空间的轻量协同模块（受邀未认领也允许 guest 访问）
+  // - 约定页协同：进入完整协同空间的“共同讨论”
+  // 邀请页属于公开页，必须整页跳转，让目标页重新初始化登录态。
+  const openCollab = (taskId, buddyId, buddyName) => {
     if (!taskId) return false;
-    const params = new URLSearchParams({ taskId, view: "discussion", from: "invite" });
     if (buddyId) {
-      params.set("buddy", buddyId);
-      params.set("collab", taskId);
+      const params = new URLSearchParams({
+        buddy: buddyId,
+        tab: "协同",
+        collab: taskId,
+        guest: "1",
+      });
+      if (buddyName) params.set("buddyName", buddyName);
+      window.location.href = `${createPageUrl("BuddySpace")}?${params.toString()}`;
+      return true;
     }
-    // 邀请页属于公开页，AuthProvider 不会在这里检查登录态；
-    // 用整页跳转让协同页重新初始化鉴权，避免接受后落到登录页。
+    const params = new URLSearchParams({ taskId, view: "discussion", from: "invite" });
     window.location.href = `${createPageUrl("CollabSpace")}?${params.toString()}`;
     return true;
   };
@@ -148,7 +161,8 @@ export default function InviteLanding() {
       if (action === "accept") {
         const taskId = res?.task_id || data?.task_id || data?.pact?.task_id;
         const buddyId = res?.buddy_id || data?.buddy_id || data?.pact?.buddy_id;
-        if (openCollab(taskId, buddyId)) return;
+        const buddyName = res?.buddy_name || data?.buddy_name || data?.pact?.buddy_name;
+        if (openCollab(taskId, buddyId, buddyName)) return;
       }
     } catch (e) {
       if (e?.status === 401) {
@@ -328,7 +342,11 @@ export default function InviteLanding() {
               )}
               <button
                 type="button"
-                onClick={() => openCollab(data?.task_id || data?.pact?.task_id, data?.buddy_id || data?.pact?.buddy_id)}
+                onClick={() => openCollab(
+                  data?.task_id || data?.pact?.task_id,
+                  data?.buddy_id || data?.pact?.buddy_id,
+                  data?.buddy_name || data?.pact?.buddy_name
+                )}
                 className="mt-3 rounded-full px-4 py-2 text-[12px] font-medium text-white"
                 style={{ backgroundColor: "#384877" }}
               >

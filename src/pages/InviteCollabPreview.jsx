@@ -70,11 +70,18 @@ export default function InviteCollabPreview() {
   const openCollab = () => {
     const taskId = data?.task_id || data?.pact?.task_id;
     if (!taskId) return;
-    const params = new URLSearchParams({ taskId, view: "discussion", from: "invite" });
     if (data?.buddy_id) {
-      params.set("buddy", data.buddy_id);
-      params.set("collab", taskId);
+      const params = new URLSearchParams({
+        buddy: data.buddy_id,
+        tab: "协同",
+        collab: taskId,
+        guest: "1",
+      });
+      if (data.buddy_name) params.set("buddyName", data.buddy_name);
+      window.location.href = `${createPageUrl("BuddySpace")}?${params.toString()}`;
+      return;
     }
+    const params = new URLSearchParams({ taskId, view: "discussion", from: "invite" });
     // 公开预览页不会初始化登录态，用整页跳转让协同页重新鉴权
     window.location.href = `${createPageUrl("CollabSpace")}?${params.toString()}`;
   };

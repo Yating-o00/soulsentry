@@ -68,7 +68,12 @@ export default function BuddySpace() {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const buddyId = new URLSearchParams(location.search).get("buddy") || "";
+  const searchParams = new URLSearchParams(location.search);
+  const buddyId = searchParams.get("buddy") || "";
+  // 受到邀请但还没认领搭子：允许只进入轻量协同模块
+  const inviteGuest = searchParams.get("guest") === "1";
+  const guestBuddyName = (searchParams.get("buddyName") || "").slice(0, 20);
+  const requestedCollabId = searchParams.get("collab") || "";
 
   const { data: mine, isLoading } = useQuery({
     queryKey: ["buddies", "mine"],
@@ -144,6 +149,57 @@ export default function BuddySpace() {
       <div className="max-w-xl mx-auto px-4 py-16 text-center text-stone-400">
         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
         <p className="mt-2 text-sm">正在打开搭子空间…</p>
+      </div>
+    );
+  }
+
+  // 受邀访客：没有认领这颗搭子，只开放轻量协同聊天；
+  // 其它板块依赖领域档案，不在访客态展示。
+  if (!isLoading && inviteGuest && profile?.status !== "active" && requestedCollabId) {
+    const guestBuddy = buddy || {
+      id: buddyId,
+      name: guestBuddyName || "搭子",
+      tint,
+      custom: true,
+      sections: ["协同"],
+      defaultPersona: DEFAULT_PERSONA,
+      greeting: {
+        gentle: "一起把这次协同推进下去。",
+        strict: "先把共识落成行动。",
+        buddy: "来，一起把这件事往前推。",
+      },
+      duration: "",
+    };
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <header className="mx-auto hidden w-full max-w-xl items-center gap-2 px-3 pb-2 pt-3 md:flex md:max-w-3xl md:px-4 md:pt-4">
+          <button
+            type="button"
+            onClick={() => navigate(createPageUrl("Tasks"))}
+            aria-label="返回约定列表"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-500 transition-colors hover:bg-stone-100"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <Orb size={32} tint={tint} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <h1 className="truncate text-base font-bold text-stone-900">{guestBuddy.name}</h1>
+              <span className="shrink-0 rounded-full bg-[#eef2ff] px-1.5 py-0.5 text-[9px] font-medium text-[#384877]">
+                受邀协同
+              </span>
+            </div>
+          </div>
+        </header>
+        <div className="mx-auto flex w-full max-w-xl min-h-0 flex-1 flex-col px-3 pb-2 pt-2 md:max-w-3xl md:px-4 md:pb-3 md:pt-0">
+          <BuddyCollabPanel
+            taskId={requestedCollabId}
+            buddy={guestBuddy}
+            tint={tint}
+            guest
+            className="!h-full !min-h-0"
+          />
+        </div>
       </div>
     );
   }

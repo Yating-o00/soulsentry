@@ -312,6 +312,9 @@ function MobileHeader() {
     "/account",
   ];
   const isMainPage = mainPaths.indexOf(path) !== -1;
+  const isGuestBuddyCollab =
+    path === "/buddyspace" &&
+    new URLSearchParams(location.search).get("guest") === "1";
   const title = MOBILE_PAGE_TITLES[path] || t('soulSentry');
 
   return (
@@ -323,8 +326,8 @@ function MobileHeader() {
         ) : (
           <button
             type="button"
-            onClick={() => navigate(-1)}
-            aria-label="返回"
+            onClick={() => (isGuestBuddyCollab ? navigate(createPageUrl("Tasks")) : navigate(-1))}
+            aria-label={isGuestBuddyCollab ? "返回约定列表" : "返回"}
             className="hover:bg-stone-100 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
           >
             <ChevronLeft className="w-5 h-5 text-stone-700" />

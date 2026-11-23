@@ -37,7 +37,7 @@ function flatten(list, depth = 0, out = []) {
  * 讨论是主视图；约定/沉淀由 Agent 从讨论中整理，用户只在需要时切换查看。
  * 不铺说明文字，用顶部进度、成员和分段切换传达状态。
  */
-export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null }) {
+export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, guest = false, className = "" }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [view, setView] = useState("chat");
@@ -80,7 +80,9 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null }
   const confirmedPacts = pactRows.map((row) => row.node).filter((node) => node.metadata?.collab?.state !== "draft");
   const doneCount = confirmedPacts.filter((node) => isTaskEffectivelyCompleted(node)).length;
   const pct = confirmedPacts.length ? Math.round((doneCount / confirmedPacts.length) * 100) : 0;
-  const fullSpaceUrl = `${createPageUrl("CollabSpace")}?taskId=${taskId}&from=buddy&buddy=${buddy.id}&collab=${taskId}`;
+  const fullSpaceUrl = `${createPageUrl("CollabSpace")}?taskId=${taskId}&from=buddy&buddy=${buddy.id}&collab=${taskId}${
+    guest ? "&guest=1&view=discussion" : ""
+  }`;
 
   useEffect(() => {
     if (!summary) return;
@@ -179,7 +181,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null }
   const memberCount = members.length || 1; // at least current user
 
   return (
-    <div className="flex h-[calc(100dvh-220px)] min-h-[320px] max-h-[820px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-180px)] md:min-h-[540px]">
+    <div className={cn("flex h-[calc(100dvh-220px)] min-h-[320px] max-h-[820px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-180px)] md:min-h-[540px]", className)}>
       {/* 手机优先的协同头：头像 / 标题 / 进度 / 成员 / 切换，尽量把高度留给消息 */}
       <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-1.5 pt-2">
         {/* 顶部：搭子头像 + 名称 + Agent/计划状态 */}

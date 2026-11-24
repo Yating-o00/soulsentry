@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeAgentSettings, renderWelcomeText, buildCheckinDigest } from "./collabAutomation.js";
+import { buildCheckinDigest, customRulePeriodKey, fallbackParseCustomRule, isCustomRuleDue, normalizeAgentSettings, normalizeCustomRule, renderWelcomeText } from "./collabAutomation.js";
 
 test("normalizes automation settings with safe defaults", () => {
   const settings = normalizeAgentSettings({
@@ -76,4 +76,39 @@ test("builds a check-in digest with done/missing members and language", () => {
   });
   assert.match(english.content, /Daily check-in summary/);
   assert.doesNotMatch(english.content, /@/);
+});
+
+test("compiles natural-language group duties into schedulable rules", () => {
+  const daily = fallbackParseCustomRule("每天早上9点提醒大家本周目标", { language: "zh" });
+  assert.equal(daily.mode, "schedule");
+  assert.equal(daily.frequency, "daily");
+  assert.equal(daily.time, "09:00");
+  assert.match(daily.instruction, /本周目标/);
+
+  const weekly = fallbackParseCustomRule("每周一晚上8点提醒未打卡成员", { language: "zh" });
+  assert.equal(weekly.frequency, "weekly");
+  assert.equal(weekly.weekday, 1);
+  assert.equal(weekly.time, "20:00");
+
+  const conditional = fallbackParseCustomRule("当有人连续3天没发言时提醒我", { language: "zh" });
+  assert.equal(conditional.mode, "schedule");
+  assert.equal(conditional.time, "21:00");
+  assert.match(conditional.condition, /3天没发言/);
+
+  const instruction = fallbackParseCustomRule("以后尽量用英文跟我沟通", { language: "zh" });
+  assert.equal(instruction.mode, "instruction");
+});
+
+test("normalizes and checks custom rule periods", () => {
+  const rule = normalizeCustomRule({
+    id: "r1", name: "每日提醒", mode: "schedule", frequency: "daily",
+    time: "21:00", instruction: "提醒大家收尾",
+  });
+  assert.equal(rule.time, "21:00");
+  const at2130 = new Date("2026-11-24T13:30:00.000Z"); // 21:30 Beijing
+  assert.equal(isCustomRuleDue(rule, at2130), true);
+  assert.equal(customRulePeriodKey(rule, at2130), "2026-11-24");
+  assert.equal(isCustomRuleDue({ ...rule, lastRunKey: "2026-11-24" }, at2130), false);
+  const at2000 = new Date("2026-11-24T12:00:00.000Z"); // 20:00 Beijing
+  assert.equal(isCustomRuleDue(rule, at2000), false);
 });

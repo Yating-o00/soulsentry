@@ -12,7 +12,7 @@ import { runCollabAgent, postAgentMessage, cascadeNodeCompletion } from "../serv
 import { scheduleCollabDrive } from "../services/collabDrive.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "../services/collabSpace.js";
 import { AGENT_DOMAINS, AGENT_TEMPLATES, findAgentTemplate } from "../services/agentStore.js";
-import { normalizeAgentSettings, sendCollabWelcome } from "../services/collabAutomation.js";
+import { normalizeAgentSettings, normalizeCustomRule, parseCustomRuleWithAI, sendCollabWelcome } from "../services/collabAutomation.js";
 import { BUDDY_NAMES } from "./buddies.js";
 
 export const collabRouter = Router();
@@ -214,6 +214,21 @@ const agentSettingsSchema = z.object({
     time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式需为 HH:MM").optional(),
     mentionMissing: z.boolean().optional(),
   }).optional(),
+  customRules: z.array(z.object({
+    id: z.string().max(60).optional(),
+    name: z.string().trim().min(1).max(24),
+    enabled: z.boolean().optional(),
+    mode: z.enum(["schedule", "instruction"]),
+    frequency: z.enum(["daily", "weekly", "monthly"]).optional(),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    weekday: z.number().int().min(1).max(7).optional(),
+    day: z.number().int().min(1).max(31).optional(),
+    condition: z.string().max(300).optional(),
+    instruction: z.string().trim().min(1).max(600),
+    language: z.enum(["auto", "zh", "en", "ja", "es", "fr"]).optional(),
+    createdAt: z.string().optional(),
+    sourceText: z.string().max(600).optional(),
+  })).max(10).optional(),
 });
 
 collabRouter.patch("/:taskId/agent-settings", async (req, res) => {
@@ -235,9 +250,17 @@ collabRouter.patch("/:taskId/agent-settings", async (req, res) => {
     ...(payload.data.language ? { language: payload.data.language } : {}),
     welcome: { ...current.welcome, ...(payload.data.welcome || {}) },
     checkinDigest: { ...current.checkinDigest, ...(payload.data.checkinDigest || {}) },
+    customRules: current.customRules,
   };
   nextSettings.welcome.template = String(nextSettings.welcome.template || "").slice(0, 800);
   nextSettings.checkinDigest.time = String(nextSettings.checkinDigest.time || "21:00");
+  if (payload.data.customRules) {
+    const existingById = new Map(current.customRules.map((rule) => [rule.id, rule]));
+    nextSettings.customRules = payload.data.customRules
+      .map((rule, index) => normalizeCustomRule({ ...(existingById.get(rule.id) || {}), ...rule }, index))
+      .filter(Boolean)
+      .slice(0, 10);
+  }
   const nextAgent = { ...agent, settings: nextSettings };
   const metadata = { ...(task.metadata || {}), collab: { ...collab, agent: nextAgent } };
   await prisma.task.update({ where: { id: task.id }, data: { metadata } });
@@ -250,6 +273,27 @@ collabRouter.patch("/:taskId/agent-settings", async (req, res) => {
     },
   ]);
   return res.json({ agent: nextAgent, settings: nextSettings });
+});
+
+// POST /api/collab/:taskId/agent-rules/parse — 自然语言编译为一条自定义功能（仅返回规则，保存仍走 agent-settings）
+collabRouter.post("/:taskId/agent-rules/parse", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+  if (task.userId !== req.user.id) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "只有协同发起人可以添加 Agent 功能" });
+  }
+  const text = String(req.body?.text || "").trim().slice(0, 600);
+  if (!text) return res.status(400).json({ error: "INVALID_INPUT", message: "请描述希望 Agent 做什么" });
+  const settings = normalizeAgentSettings(task.metadata?.collab?.agent || {});
+  try {
+    const rule = await parseCustomRuleWithAI(text, { task, settings });
+    if (!rule) return res.status(400).json({ error: "INVALID_RULE", message: "这句话还没法变成一条功能，再具体一点？" });
+    return res.json({ rule });
+  } catch (error) {
+    console.error("[collab] agent-rule parse failed:", error?.message || error);
+    return res.status(500).json({ error: "PARSE_FAILED", message: "暂时解析不了，再试一次或换个说法" });
+  }
 });
 
 // POST /api/collab/:taskId/welcome — 成员第一次进入空间时发送入群欢迎语（后端幂等，不扣 AI 点数）

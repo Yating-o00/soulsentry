@@ -93,9 +93,6 @@ export default function AgentDrawer({ open, onOpenChange, agentEnabled, agentPau
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-semibold" style={{ color: "#3b3734" }}>空间自动化</div>
-                  <p className="mt-1 text-[10px] leading-4" style={{ color: "#77736c" }}>
-                    入群欢迎、每天 21:00 打卡公布、跨语言沟通，都可以按这个空间单独设置。
-                  </p>
                   <div className="mt-2 flex flex-wrap gap-1">
                     <span className="rounded-full bg-white px-2 py-0.5 text-[9px]" style={{ color: "#6f6b64", border: "1px solid #e5e4df" }}>
                       欢迎语{agentMeta?.settings?.welcome?.enabled ? "开" : "关"}

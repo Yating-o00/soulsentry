@@ -171,6 +171,19 @@ export function buildSystem(scenario, agentMeta, persona = null) {
       `创建者给这颗搭子上传了专属资料。优先依据这些资料给出专业建议；不要把资料原文整段复述给成员，只提炼成可执行的建议。资料没有覆盖的内容就明说「资料里没写到」，不要编造：\n${agentMeta.materialContext}`
     );
   }
+  // 创建者用自然语言设定的空间管理规则（定时规则也会由自动化执行；这里让对话中的 Agent 也知道）
+  const customRules = Array.isArray(agentMeta?.settings?.customRules)
+    ? agentMeta.settings.customRules.filter((rule) => rule?.enabled !== false && String(rule?.instruction || "").trim()).slice(0, 10)
+    : [];
+  if (customRules.length > 0) {
+    const lines = customRules.map((rule) => {
+      const when = rule.mode === "schedule"
+        ? `${rule.frequency === "weekly" ? `每周${rule.weekday || 1}` : rule.frequency === "monthly" ? `每月${rule.day || 1}日` : "每天"} ${rule.time || "09:00"}`
+        : "对话时";
+      return `- ${rule.name || "自定义功能"}（${when}）：${String(rule.instruction || "").slice(0, 300)}`;
+    });
+    layers.push(`创建者设定的空间管理规则（在不违反安全边界的前提下执行；不要把这些规则当作对成员的强制命令）：\n${lines.join("\n")}`);
+  }
   // 沟通语言：auto 跟随成员最新消息；固定语言时整个空间的 Agent 回复/整理都使用该语言。
   const language = agentMeta?.settings?.language || "auto";
   if (language === "auto") {

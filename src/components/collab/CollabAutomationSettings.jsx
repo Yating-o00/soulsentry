@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { CalendarCheck, Globe2, Loader2, MessageCircle, Sparkles } from "lucide-react";
+import { CalendarCheck, Globe2, Loader2, MessageCircle, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 
 export const COLLAB_LANGUAGE_OPTIONS = [
@@ -17,10 +17,13 @@ export const COLLAB_LANGUAGE_OPTIONS = [
   { key: "fr", label: "Français" },
 ];
 
+const WEEKDAY_LABELS = ["", "一", "二", "三", "四", "五", "六", "日"];
+
 const DEFAULT_SETTINGS = {
   language: "auto",
   welcome: { enabled: false, template: "" },
   checkinDigest: { enabled: false, time: "21:00", mentionMissing: true },
+  customRules: [],
 };
 
 function normalize(agentMeta) {
@@ -40,20 +43,28 @@ function normalize(agentMeta) {
         : DEFAULT_SETTINGS.checkinDigest.time,
       mentionMissing: settings.checkinDigest?.mentionMissing !== false,
     },
+    customRules: (Array.isArray(settings.customRules) ? settings.customRules : [])
+      .filter((rule) => rule && String(rule.instruction || "").trim())
+      .map((rule) => ({ ...rule, enabled: rule.enabled !== false }))
+      .slice(0, 10),
   };
 }
 
-function Section({ icon: Icon, title, description, children }) {
+function scheduleLabel(rule) {
+  if (!rule || rule.mode === "instruction") return "对话时";
+  if (rule.frequency === "weekly") return `每周${WEEKDAY_LABELS[rule.weekday] || "一"} ${rule.time}`;
+  if (rule.frequency === "monthly") return `每月${rule.day || 1}日 ${rule.time}`;
+  return `每天 ${rule.time || "09:00"}`;
+}
+
+function Section({ icon: Icon, title, children }) {
   return (
     <div className="rounded-xl border border-stone-200 bg-[#FAF9F7] p-3.5">
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-center gap-2.5">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877]">
           <Icon className="h-3.5 w-3.5" />
         </span>
-        <div className="min-w-0">
-          <div className="text-[12px] font-semibold text-stone-800">{title}</div>
-          {description && <p className="mt-0.5 text-[10px] leading-relaxed text-stone-400">{description}</p>}
-        </div>
+        <div className="text-[12px] font-semibold text-stone-800">{title}</div>
       </div>
       <div className="mt-3">{children}</div>
     </div>
@@ -61,19 +72,55 @@ function Section({ icon: Icon, title, description, children }) {
 }
 
 /**
- * 协同空间 Agent 自动化设置：入群欢迎、每日打卡公布、沟通语言。
- * 只有空间发起人可以修改；其他成员可以打开查看当前配置。
+ * 协同空间 Agent 自定义：欢迎语、打卡公布、语言，以及自然语言添加的更多群管理功能。
+ * 只有空间发起人可以修改；规则在保存后生效。
  */
 export default function CollabAutomationSettings({ open, onOpenChange, taskId, agentMeta, canEdit = false, onSaved }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [ruleInput, setRuleInput] = useState("");
+  const [parsing, setParsing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) setSettings(normalize(agentMeta));
+    if (open) {
+      setSettings(normalize(agentMeta));
+      setRuleInput("");
+    }
   }, [open, agentMeta]);
 
   const updateWelcome = (patch) => setSettings((current) => ({ ...current, welcome: { ...current.welcome, ...patch } }));
   const updateDigest = (patch) => setSettings((current) => ({ ...current, checkinDigest: { ...current.checkinDigest, ...patch } }));
+  const updateRule = (id, patch) =>
+    setSettings((current) => ({
+      ...current,
+      customRules: current.customRules.map((rule) => (rule.id === id ? { ...rule, ...patch } : rule)),
+    }));
+  const removeRule = (id) =>
+    setSettings((current) => ({ ...current, customRules: current.customRules.filter((rule) => rule.id !== id) }));
+
+  const addRule = async () => {
+    const text = ruleInput.trim();
+    if (!text || parsing || !canEdit) return;
+    if (settings.customRules.length >= 10) {
+      toast.info("最多添加 10 个自定义功能");
+      return;
+    }
+    setParsing(true);
+    try {
+      const result = await httpRequest(`/api/collab/${taskId}/agent-rules/parse`, {
+        method: "POST",
+        body: { text },
+      });
+      if (!result?.rule) throw new Error("empty rule");
+      setSettings((current) => ({ ...current, customRules: [...current.customRules, result.rule].slice(0, 10) }));
+      setRuleInput("");
+      toast.success("已添加，保存后生效");
+    } catch (error) {
+      toast.error(error?.data?.message || error?.message || "这句话还没法变成一条功能，换个说法试试");
+    } finally {
+      setParsing(false);
+    }
+  };
 
   const save = async () => {
     if (!taskId || saving || !canEdit) return;
@@ -89,9 +136,10 @@ export default function CollabAutomationSettings({ open, onOpenChange, taskId, a
             time: settings.checkinDigest.time,
             mentionMissing: settings.checkinDigest.mentionMissing,
           },
+          customRules: settings.customRules,
         },
       });
-      toast.success("Agent 自动化设置已保存");
+      toast.success("Agent 设置已保存");
       onSaved?.();
       onOpenChange(false);
     } catch (error) {
@@ -108,23 +156,16 @@ export default function CollabAutomationSettings({ open, onOpenChange, taskId, a
           <DialogTitle className="flex items-center gap-2 text-[16px] text-stone-900">
             <Sparkles className="h-4 w-4 text-[#384877]" /> 自定义心栈 Agent
           </DialogTitle>
-          <DialogDescription className="text-[11px] leading-relaxed text-stone-500">
-            让 Agent 在协同空间里承担欢迎成员、公布打卡和语言沟通等固定工作。仅使用本空间数据，不消耗 AI 点数。
-          </DialogDescription>
         </DialogHeader>
 
         {!canEdit && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700">
-            只有协同发起人可以修改自动化设置；你可以查看当前配置。
+            只有协同发起人可以修改。
           </div>
         )}
 
         <div className="space-y-3">
-          <Section
-            icon={MessageCircle}
-            title="入群欢迎语"
-            description="每个成员第一次进入协同空间时，由 Agent 在讨论里欢迎 TA。"
-          >
+          <Section icon={MessageCircle} title="入群欢迎语">
             <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2">
               <span className="text-[11px] text-stone-700">发送入群欢迎</span>
               <Switch
@@ -139,19 +180,12 @@ export default function CollabAutomationSettings({ open, onOpenChange, taskId, a
               onChange={(event) => updateWelcome({ template: event.target.value.slice(0, 800) })}
               disabled={!canEdit || !settings.welcome.enabled}
               rows={3}
-              placeholder="留空使用默认欢迎语。可用变量：{name}、{task}、{goal}、{members}"
+              placeholder="自定义欢迎语"
               className="mt-2 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-[11px] leading-relaxed text-stone-700 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none disabled:bg-stone-50 disabled:text-stone-400"
             />
-            <p className="mt-1 text-[9px] leading-relaxed text-stone-400">
-              默认：欢迎 @名字 来到「空间」，这里的共同目标是……；会自动 @ 新成员并发送通知。
-            </p>
           </Section>
 
-          <Section
-            icon={CalendarCheck}
-            title="每日打卡公布"
-            description="每天按设定时间整理成员打卡，并发到讨论的「打卡日报」主题。"
-          >
+          <Section icon={CalendarCheck} title="每日打卡公布">
             <div className="flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2">
               <span className="text-[11px] text-stone-700">开启每日打卡公布</span>
               <Switch
@@ -162,7 +196,7 @@ export default function CollabAutomationSettings({ open, onOpenChange, taskId, a
               />
             </div>
             <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white px-3 py-2">
-              <span className="text-[11px] text-stone-700">公布时间（北京时间）</span>
+              <span className="text-[11px] text-stone-700">公布时间</span>
               <input
                 type="time"
                 value={settings.checkinDigest.time}
@@ -172,7 +206,7 @@ export default function CollabAutomationSettings({ open, onOpenChange, taskId, a
               />
             </div>
             <div className="mt-2 flex items-center justify-between rounded-lg border border-stone-200 bg-white px-3 py-2">
-              <span className="text-[11px] text-stone-700">点名还没打卡的成员</span>
+              <span className="text-[11px] text-stone-700">点名未打卡成员</span>
               <Switch
                 checked={settings.checkinDigest.mentionMissing}
                 onCheckedChange={(checked) => updateDigest({ mentionMissing: checked })}
@@ -180,16 +214,9 @@ export default function CollabAutomationSettings({ open, onOpenChange, taskId, a
                 className="data-[state=checked]:bg-[#384877]"
               />
             </div>
-            <p className="mt-1 text-[9px] leading-relaxed text-stone-400">
-              只对包含打卡约定的协同空间生效；当天没有打卡记录时也会公布一次。
-            </p>
           </Section>
 
-          <Section
-            icon={Globe2}
-            title="沟通语言"
-            description="Agent 的回复、整理和群发消息使用的语言。"
-          >
+          <Section icon={Globe2} title="沟通语言">
             <select
               value={settings.language}
               onChange={(event) => setSettings((current) => ({ ...current, language: event.target.value }))}
@@ -200,9 +227,59 @@ export default function CollabAutomationSettings({ open, onOpenChange, taskId, a
                 <option key={item.key} value={item.key}>{item.label}</option>
               ))}
             </select>
-            <p className="mt-1 text-[9px] leading-relaxed text-stone-400">
-              「自动」会跟随成员每条消息使用的语言；固定语言适合跨语言协作的群。
-            </p>
+          </Section>
+
+          <Section icon={Wand2} title="自定义功能">
+            <div className="flex items-end gap-2">
+              <textarea
+                value={ruleInput}
+                onChange={(event) => setRuleInput(event.target.value.slice(0, 600))}
+                disabled={!canEdit}
+                rows={2}
+                placeholder="例如：每周一早上 9 点提醒大家本周目标"
+                className="min-w-0 flex-1 resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-[11px] leading-relaxed text-stone-700 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none disabled:bg-stone-50 disabled:text-stone-400"
+              />
+              <Button
+                type="button"
+                onClick={addRule}
+                disabled={!canEdit || parsing || !ruleInput.trim()}
+                className="min-h-[36px] shrink-0 text-[11px] text-white"
+                style={{ backgroundColor: "#384877" }}
+              >
+                {parsing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                添加
+              </Button>
+            </div>
+            {settings.customRules.length > 0 && (
+              <div className="mt-2 space-y-1.5">
+                {settings.customRules.map((rule) => (
+                  <div key={rule.id} className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-2.5 py-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[11px] font-medium text-stone-800">{rule.name}</div>
+                      <div className="mt-0.5 truncate text-[9px] text-stone-400">
+                        {scheduleLabel(rule)}
+                        {rule.condition ? ` · ${rule.condition}` : ""}
+                      </div>
+                    </div>
+                    <Switch
+                      checked={rule.enabled !== false}
+                      onCheckedChange={(checked) => updateRule(rule.id, { enabled: checked })}
+                      disabled={!canEdit}
+                      className="data-[state=checked]:bg-[#384877]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeRule(rule.id)}
+                      disabled={!canEdit}
+                      className="flex h-7 w-7 items-center justify-center rounded-full text-stone-400 hover:bg-stone-100 hover:text-red-500 disabled:opacity-40"
+                      aria-label="删除功能"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </Section>
         </div>
 

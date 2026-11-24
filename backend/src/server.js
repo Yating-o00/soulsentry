@@ -6,7 +6,7 @@ import { ensureDemoUser } from "./lib/ensureDemoUser.js";
 import { startReminderCron } from "./services/reminderCron.js";
 import { startStatsCron } from "./services/statsRollup.js";
 import { startCollabNudgeSweep } from "./services/collabNudge.js";
-import { startCollabCheckinDigestCron } from "./services/collabAutomation.js";
+import { startCollabCheckinDigestCron, startCollabCustomRuleCron } from "./services/collabAutomation.js";
 import { startCompanionPatrol } from "./services/companionPatrol.js";
 import { sweepStaleBrowserExecutions } from "./services/browserAgent.js";
 import { attachAgentStream } from "./services/agentStream.js";
@@ -29,6 +29,8 @@ if (process.env.DISABLE_REMINDER_CRON !== "1") startReminderCron();
 startCollabNudgeSweep();
 // 协同空间每日打卡公布：每分钟扫描，到点且当天未发过的空间发一次
 startCollabCheckinDigestCron();
+// 协同空间自定义定时功能：每分钟扫描自然语言规则，到点由 Agent 执行
+startCollabCustomRuleCron();
 // 小助手 24 小时巡检：逾期/协同待确认/晚间未办/久未露面时主动在陪伴对话里留消息
 startCompanionPatrol();
 // 数据看板日汇总：每天 03:07 滚昨天，启动后回补缺失日期（独立于提醒开关）

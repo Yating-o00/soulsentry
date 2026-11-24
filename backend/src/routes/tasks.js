@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { createHash } from "node:crypto";
 import { ownedMemoryProposal } from "../services/memoryStore.js";
-import { loadPlanningBusy, validateScheduledSessions } from "../services/taskHarness.js";
+import { checkSchedule, confirmSchedule } from "../services/scheduleCapability.js";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -452,92 +452,81 @@ tasksRouter.post("/plan", async (req, res) => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
   const { proposal_id, parent, children, memory_proposal_id } = parsed.data;
-  const proposal = await ownedMemoryProposal(prisma, req.user.id, memory_proposal_id);
   // Older homepage clients still submit a payload alongside the proposal ID.
-  if (proposal?.meta.planDraft) return confirmTaskPlan(req, res, proposal);
+  const confirmed = await confirmTaskPlan(req.user.id, memory_proposal_id);
+  if (confirmed) return res.status(confirmed.status).json(confirmed.body);
   if (parent.parent_task_id) return res.status(400).json({ error: "INVALID_INPUT", message: "计划必须是顶层约定" });
-  return saveTaskPlan(req, res, { proposalKey: proposal_id, parent, children, memoryProposalId: memory_proposal_id });
+  const saved = await saveTaskPlan(req.user.id, { proposalKey: proposal_id, parent, children, memoryProposalId: memory_proposal_id });
+  return res.status(saved.status).json(saved.body);
 });
 
 tasksRouter.post("/plan-proposals/:id/confirm", async (req, res) => {
-  const proposal = await ownedMemoryProposal(prisma, req.user.id, req.params.id);
-  if (!proposal?.meta.planDraft) return res.status(404).json({ error: "PLAN_PROPOSAL_NOT_FOUND" });
-  return confirmTaskPlan(req, res, proposal);
+  const confirmed = await confirmTaskPlan(req.user.id, req.params.id);
+  if (!confirmed) return res.status(404).json({ error: "PLAN_PROPOSAL_NOT_FOUND" });
+  return res.status(confirmed.status).json(confirmed.body);
 });
 
-async function confirmTaskPlan(req, res, proposal) {
-  const draft = proposal.meta.planDraft;
-  const plan = draft.extracted.plan;
-  const { title, description, category = "personal", priority = "medium" } = plan.parent;
-  const parent = { title, description, category, priority, status: "pending" };
-  const children = plan.children.map((child) => ({
-    title: child.title, description: child.description, category, priority, status: "pending",
-    reminder_time: `${child.date}T${child.start_time}:00+08:00`,
-    end_time: `${child.date}T${child.end_time}:00+08:00`,
-    plan_kind: child.kind, plan_group: child.plan_group, session_type: child.session_type,
-    note: child.note ?? undefined, tags: ["智能规划"],
-  }));
-  return saveTaskPlan(req, res, {
-    proposalKey: `companion:${proposal.id}`, parent, children, memoryProposalId: proposal.id, draft,
+function confirmTaskPlan(userId, proposalId) {
+  return confirmSchedule(proposalId, {
+    actorId: userId, db: prisma, savePlan: (args) => saveTaskPlan(userId, args),
   });
 }
 
-async function saveTaskPlan(req, res, { proposalKey, parent, children, memoryProposalId, draft }) {
-  const taskId = createHash("sha256").update(`${req.user.id}:${proposalKey}`).digest("hex");
+async function saveTaskPlan(userId, { proposalKey, parent, children, memoryProposalId, draft }) {
+  const taskId = createHash("sha256").update(`${userId}:${proposalKey}`).digest("hex");
   const payloadHash = createHash("sha256").update(JSON.stringify({ parent, children })).digest("hex");
   const existingResult = async () => {
     const existing = await prisma.task.findUnique({ where: { id: taskId } });
-    if (!existing || existing.userId !== req.user.id) return null;
+    if (!existing || existing.userId !== userId) return null;
     if (existing.metadata?.planPayloadHash !== payloadHash) return { conflict: true };
     return { parent: serializeTask(existing), child_count: children.length };
   };
   const previous = await existingResult();
-  if (previous?.conflict) return res.status(409).json({ error: "PROPOSAL_CONFLICT" });
-  if (previous) return res.json(previous);
+  if (previous?.conflict) return { status: 409, body: { error: "PROPOSAL_CONFLICT" } };
+  if (previous) return { status: 200, body: previous };
   try {
     const created = await prisma.$transaction(async (tx) => {
-      const proposal = await ownedMemoryProposal(tx, req.user.id, memoryProposalId);
+      const proposal = await ownedMemoryProposal(tx, userId, memoryProposalId);
       if (draft) {
         if (!proposal?.meta.planDraft) return { missingProposal: true };
-        const constraints = { ...draft.constraints, busy: await loadPlanningBusy(tx, req.user.id, draft.constraints) };
-        const errors = validateScheduledSessions(draft.extracted.plan, constraints);
+        const { errors } = await checkSchedule({ plan: draft.extracted.plan, constraints: draft.constraints, refreshBusy: true }, { db: tx, actorId: userId });
         if (errors.length) return { errors };
       }
-      const parentData = buildTaskCreateData(req.user.id, parent);
+      const parentData = buildTaskCreateData(userId, parent);
       const task = await tx.task.create({ data: { ...parentData, id: taskId, metadata: { ...(parentData.metadata || {}), planPayloadHash: payloadHash } } });
-      await createTaskChangeLog(req.user.id, task, "created", parent, null, tx);
+      await createTaskChangeLog(userId, task, "created", parent, null, tx);
       if (proposal?.meta.planTitle === parent.title) await tx.memoryTaskSignal.create({
-        data: { userId: req.user.id, kind: "confirmed_plan", evidenceId: task.id, proposalMessageId: proposal.id },
+        data: { userId, kind: "confirmed_plan", evidenceId: task.id, proposalMessageId: proposal.id },
       });
       const createdChildren = [];
       for (const child of children) {
         const payload = { ...child, parent_task_id: taskId };
-        const createdChild = await tx.task.create({ data: buildTaskCreateData(req.user.id, payload) });
-        await createTaskChangeLog(req.user.id, createdChild, "subtask_created", payload, null, tx);
+        const createdChild = await tx.task.create({ data: buildTaskCreateData(userId, payload) });
+        await createTaskChangeLog(userId, createdChild, "subtask_created", payload, null, tx);
         createdChildren.push(createdChild);
       }
       return { task, createdChildren };
     });
-    if (created.missingProposal) return res.status(404).json({ error: "PLAN_PROPOSAL_NOT_FOUND" });
+    if (created.missingProposal) return { status: 404, body: { error: "PLAN_PROPOSAL_NOT_FOUND" } };
     if (created.errors) {
       // A simultaneous confirm can make our own committed children appear busy.
       const replay = await existingResult();
-      if (replay && !replay.conflict) return res.json(replay);
-      return res.status(409).json({ error: "PLAN_CONFLICT", message: created.errors.join("；") });
+      if (replay && !replay.conflict) return { status: 200, body: replay };
+      return { status: 409, body: { error: "PLAN_CONFLICT", message: created.errors.join("；") } };
     }
     for (const task of [created.task, ...created.createdChildren]) {
-      checkTextSecurityAsync(`${task.title || ""}\n${task.description || ""}`, req.user.id, () => {
+      checkTextSecurityAsync(`${task.title || ""}\n${task.description || ""}`, userId, () => {
         prisma.task.update({ where: { id: task.id }, data: { deletedAt: new Date() } }).catch(() => {});
       });
-      if (!draft) void maybeAutoExecute(task, req.user.id, prisma);
-      logBehavior(req.user.id, "task_created", { taskId: task.id, category: task.category, metadata: { via: task.parentTaskId ? "subtask" : "top" } });
+      if (!draft) void maybeAutoExecute(task, userId, prisma);
+      logBehavior(userId, "task_created", { taskId: task.id, category: task.category, metadata: { via: task.parentTaskId ? "subtask" : "top" } });
     }
-    return res.status(201).json({ parent: serializeTask(created.task), child_count: children.length });
+    return { status: 201, body: { parent: serializeTask(created.task), child_count: children.length } };
   } catch (error) {
     if (["P2002", "P1008", "P2028", "P2034"].includes(error.code)) {
       const result = await existingResult();
-      if (result?.conflict) return res.status(409).json({ error: "PROPOSAL_CONFLICT" });
-      if (result) return res.json(result);
+      if (result?.conflict) return { status: 409, body: { error: "PROPOSAL_CONFLICT" } };
+      if (result) return { status: 200, body: result };
     }
     throw error;
   }

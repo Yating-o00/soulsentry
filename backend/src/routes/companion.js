@@ -7,7 +7,8 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runFlowChat } from "../services/flowChat.js";
 import { moveProposalWeekday } from "../services/planCommitment.js";
-import { loadPlanningBusy, resolvePlanningRequest, validateScheduledSessions } from "../services/taskHarness.js";
+import { resolvePlanningRequest } from "../services/taskHarness.js";
+import { checkSchedule } from "../services/scheduleCapability.js";
 import { extractActions, executeActions } from "../services/assistantActions.js";
 import { retrievePersonalMemories, searchMemoryTranscript } from "../services/personalMemory.js";
 import { createMemory, ownedMemoryProposal, recallableMessageScope } from "../services/memoryStore.js";
@@ -274,15 +275,13 @@ companionRouter.post("/messages", async (req, res) => {
         messages.filter(({ role }) => role === "user").map(({ content }) => content),
         [...memoryContext.profile, ...memories],
       ).constraints;
-      constraints.busy ??= await loadPlanningBusy(prisma, req.user.id, constraints);
-      const errors = validateScheduledSessions(extracted.plan, constraints);
+      const { snapshot, errors } = await checkSchedule({ plan: extracted.plan, constraints }, { db: prisma, actorId: req.user.id });
       if (errors.length || planRun.signal.aborted) {
         extracted = null;
         planRun.status = planRun.signal.aborted ? "timeout" : "invalid";
         planRun.validation = errors.map((error) => error.match(/^([A-Z_]+)：/)?.[1] || "DOMAIN_RULE");
         replyText = errors.length ? `这份计划还不符合要求：${errors.join("；")}。请调整后再试。` : "规划超时，请稍后重试。";
       } else {
-        const { busy: _busy, ...snapshot } = constraints;
         planDraft = { extracted, constraints: snapshot };
         planRun.status = "ready";
       }

@@ -427,8 +427,8 @@ export default function NotificationManager() {
               setupPersistentReminder(task);
             }
           } else if (isPast(reminderTime) && !task.reminder_sent && minutesSinceDue > 10) {
-            // 已严重逾期：真正写库 reminder_sent，避免每次打开 App 时同时涌出一堆历史 toast
-            // 真正的"高优先级长时逾期"由下方 proactive-nag 逻辑兜底（仅 high/urgent 且 24h+）
+            // 已严重逾期：写库 reminder_sent，避免每次打开 App 时把历史逾期任务集中弹出。
+            // 历史逾期交给约定列表/守护卡片查看，不再在打开产品时用提醒卡打断用户。
             markNotified(singleKey);
             checkedTasks.current.add(singleKey);
             updateTaskMutation.mutate({ id: task.id, data: { reminder_sent: true } });
@@ -497,42 +497,9 @@ export default function NotificationManager() {
         }
       }
 
-      // Proactive: 检查是否为遗漏的重要约定 (High/Urgent, Overdue > 24h, Not Completed)
-      // 且未被Snooze, 且未交互过
-      if (['high', 'urgent'].includes(task.priority) && 
-          task.status === 'pending' && 
-          !task.snooze_until &&
-          isPast(reminderTime)) {
-            
-            const hoursOverdue = Math.abs(differenceInMinutes(now, reminderTime)) / 60;
-            const proactiveKey = `${task.id}-proactive-nag`;
-
-            // 如果超过24小时未处理，且没有被此逻辑触发过
-            if (hoursOverdue > 24 && !checkedTasks.current.has(proactiveKey) && !isNotified(proactiveKey)) {
-                // 检查用户最近是否活跃但忽略了此约定
-                const recentActivity = recentBehaviors.length > 0;
-                
-                if (recentActivity) {
-                    sendNotification(task, {
-                        custom_message: `检测到此重要约定已逾期 ${Math.round(hoursOverdue)} 小时。建议重新规划时间或分解约定。`,
-                        message_type: 'urgent',
-                        title: `⚠️ 遗漏约定关注：${task.title}`
-                    });
-                    checkedTasks.current.add(proactiveKey);
-                    markNotified(proactiveKey);
-
-                    // 记录AI主动干预
-                    logBehaviorMutation.mutate({
-                        event_type: "ai_proactive_remind",
-                        task_id: task.id,
-                        hour_of_day: new Date().getHours(),
-                        day_of_week: new Date().getDay(),
-                        category: task.category,
-                        metadata: { reason: "high_priority_neglected" }
-                    });
-                }
-            }
-      }
+      // 不再在打开产品时对历史逾期约定做主动弹窗打扰。
+      // 到点/当日重复提醒仍按下面的正常提醒逻辑处理；逾期约定交给约定列表和守护卡片，
+      // 不在这里用「已逾期 XXX 小时」的模态卡打断用户当前正在做的事。
 
       // Dynamic Adjustment: 简单的动态调整逻辑
       // 如果约定设置了 dynamic_adjustment，并且现在距离提醒时间还有一段距离

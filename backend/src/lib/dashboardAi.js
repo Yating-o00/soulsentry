@@ -1,11 +1,12 @@
+import { getAiContext, recordAiAttempt } from "./aiContext.js";
 import { invokeKimiText, parseModelJson } from "./kimi.js";
 
 // Internal default for companion chat, planning and memory jobs. Only trusted
-// server-side callers can override it; request bodies never select a provider.
+// server-side callers or the gated, validated chat experiment can override it.
 const DEFAULT_DASHBOARD_AI_PROVIDER = "kimi";
 
 export function resolveDashboardAiProvider(provider) {
-  const selected = provider ?? (process.env.CHAT_AI_PROVIDER?.trim() || DEFAULT_DASHBOARD_AI_PROVIDER);
+  const selected = provider ?? getAiContext()?.provider ?? (process.env.CHAT_AI_PROVIDER?.trim() || DEFAULT_DASHBOARD_AI_PROVIDER);
   if (selected !== "kimi" && selected !== "deepseek") throw new Error(`Unsupported chat AI provider: ${selected}`);
   return selected;
 }
@@ -24,29 +25,44 @@ export async function invokeDashboardAi(options, { provider: internalProvider, m
   if (options.systemPrompt) messages.push({ role: "system", content: options.systemPrompt });
   messages.push({ role: "user", content: options.prompt });
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model,
-      messages,
-      response_format: { type: "json_object" },
-      temperature: options.temperature,
-      max_tokens: options.maxTokens,
-    }),
-    signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.fetchTimeout || 30000)])
-      : AbortSignal.timeout(options.fetchTimeout || 30000),
-  });
-  if (!response.ok) throw new Error(`DeepSeek API returned HTTP ${response.status}`);
-  const result = await response.json();
-  const content = result.choices?.[0]?.message?.content;
-  if (!content) throw Object.assign(new Error("DeepSeek returned an empty response"), { code: "PLAN_JSON", usage: result.usage });
+  const startedAt = Date.now();
+  const attempt = { provider: "deepseek", endpoint: "deepseek", model, outcome: "pending" };
+  recordAiAttempt(attempt);
   try {
-    const data = parseModelJson(content);
-    console.log(`[dashboardAi] provider=deepseek model=${model} success`);
-    return { data, usage: result.usage || null, model };
-  } catch {
-    // Even malformed output can be billed.
-    throw Object.assign(new Error("DeepSeek returned invalid JSON"), { code: "PLAN_JSON", usage: result.usage });
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        messages,
+        response_format: { type: "json_object" },
+        temperature: options.temperature,
+        max_tokens: options.maxTokens,
+      }),
+      signal: options.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(options.fetchTimeout || 30000)])
+        : AbortSignal.timeout(options.fetchTimeout || 30000),
+    });
+    attempt.status = response.status;
+    if (!response.ok) { attempt.reason = `http_${response.status}`; throw new Error(`DeepSeek API returned HTTP ${response.status}`); }
+    const result = await response.json();
+    const content = result.choices?.[0]?.message?.content;
+    if (!content) { attempt.reason = "empty_response"; throw Object.assign(new Error("DeepSeek returned an empty response"), { code: "PLAN_JSON", usage: result.usage }); }
+    try {
+      const data = parseModelJson(content);
+      attempt.outcome = "success";
+      console.log(`[dashboardAi] provider=deepseek model=${model} success`);
+      return { data, usage: result.usage || null, model };
+    } catch {
+      attempt.reason = "invalid_json";
+      // Even malformed output can be billed.
+      throw Object.assign(new Error("DeepSeek returned invalid JSON"), { code: "PLAN_JSON", usage: result.usage });
+    }
+  } catch (error) {
+    attempt.reason ||= /abort|timeout/i.test(error?.name || "") ? "timeout" : "request_error";
+    throw error;
+  } finally {
+    attempt.elapsedMs = Date.now() - startedAt;
+    if (attempt.outcome === "pending") attempt.outcome = "error";
+    recordAiAttempt(attempt);
   }
 }

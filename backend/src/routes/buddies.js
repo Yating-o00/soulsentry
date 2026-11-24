@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { aiRequestContext } from "../lib/aiContext.js";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -1254,7 +1255,7 @@ async function loadBuddyLiveContext(userId, buddyId, profile) {
 }
 
 // POST /api/buddies/:id/agent —— 领域技能调用（人格 + 领域档案注入，服务端定型提示词防跑偏）
-buddiesRouter.post("/:id/agent", async (req, res) => {
+buddiesRouter.post("/:id/agent", aiRequestContext, async (req, res) => {
   const buddyId = req.params.id;
   const parsed = agentSchema.safeParse(req.body || {});
   if (!parsed.success) {

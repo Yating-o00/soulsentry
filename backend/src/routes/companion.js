@@ -2,6 +2,7 @@
 // POST /messages 发送：用户消息落库 → 复用心流对话引擎（意图理解/提案）→ 助手回复落库
 // 巡检产生的主动消息（kind=proactive）也在这条时间线上，未读数驱动小程序入口角标
 import { Router } from "express";
+import { aiRequestContext, aiTrace } from "../lib/aiContext.js";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -18,6 +19,11 @@ import { resolveCompanionBuddyId, runBuddyChatFromCompanion } from "./buddies.js
 export const companionRouter = Router();
 
 companionRouter.use(requireAuth);
+companionRouter.get("/ai-options", (_req, res) => res.json({
+  enabled: process.env.CHAT_AI_EXPERIMENT_ENABLED === "1",
+  defaultProvider: process.env.CHAT_AI_PROVIDER?.trim() || "kimi",
+  deepseekAvailable: Boolean(process.env.DEEPSEEK_API_KEY?.trim()),
+}));
 
 const serialize = (m) => ({
   id: m.id,
@@ -72,7 +78,7 @@ const sendSchema = z.object({
   assistant_echo: z.string().min(1).max(1000).optional()
 }).refine((d) => d.content || d.assistant_echo, { message: "content 或 assistant_echo 至少提供一个" });
 
-companionRouter.post("/messages", async (req, res) => {
+companionRouter.post("/messages", aiRequestContext, async (req, res) => {
   const payload = sendSchema.safeParse(req.body);
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
@@ -81,7 +87,7 @@ companionRouter.post("/messages", async (req, res) => {
   // 回执消息：提案「确认生成」后客户端追加的助手话术
   if (payload.data.assistant_echo && !payload.data.content) {
     const echo = await prisma.companionMessage.create({
-      data: { userId: req.user.id, role: "assistant", content: payload.data.assistant_echo, kind: "chat" }
+      data: { userId: req.user.id, role: "assistant", content: payload.data.assistant_echo, kind: "chat", meta: { ai: aiTrace("local") } }
     });
     return res.status(201).json({ message: serialize(echo) });
   }
@@ -129,6 +135,7 @@ companionRouter.post("/messages", async (req, res) => {
     }
     const replyText = String(result?.reply || result?.message || "搭子刚才没接住，再跟我说一次好吗？");
     const assistantMeta = {
+      ai: aiTrace(result?.error || result?.degraded ? "fallback" : undefined),
       ...(result?.buddy ? { buddy: result.buddy } : {}),
       ...(result?.capture ? { capture: result.capture } : {}),
       ...(result?.project_task ? { project_task: result.project_task } : {}),
@@ -183,7 +190,7 @@ companionRouter.post("/messages", async (req, res) => {
     const savedReply = await tx.companionMessage.create({
       data: {
         userId: req.user.id, role: "assistant", content: `好的，我记住了：${memoryText}`, kind: "chat",
-        meta: { memoryIds: [saved.id], memorySourceIds: [userMsg.id] },
+        meta: { ai: aiTrace("local"), memoryIds: [saved.id], memorySourceIds: [userMsg.id] },
       },
     });
     return { userMsg, savedReply };
@@ -216,7 +223,7 @@ companionRouter.post("/messages", async (req, res) => {
       if (actionResult?.actions?.length > 0) {
         const reply = actionResult.reply || "好的，我整理了一下要做的修改，确认后我就动手～";
         const assistantMsg = await prisma.companionMessage.create({
-          data: { userId: req.user.id, role: "assistant", content: reply, kind: "chat" }
+          data: { userId: req.user.id, role: "assistant", content: reply, kind: "chat", meta: { ai: aiTrace(actionResult.reply ? "ai" : "local") } }
         });
         return res.json({
           message: serialize(userMsg),
@@ -294,6 +301,7 @@ companionRouter.post("/messages", async (req, res) => {
       data: {
         userId: req.user.id, role: "assistant", content: reply, kind: "chat",
         meta: {
+          ai: aiTrace(["timeout", "provider_failure", "invalid"].includes(planRun.status) ? "fallback" : planRun.clarificationSource === "fallback" ? "local" : result?.source || (localMove ? "local" : "ai")),
           memoryIds: [...profileIds, ...memories.map(({ id }) => id)],
           memorySourceIds: [...memoryContext.recap.map(({ sourceId }) => sourceId), ...(memoryContext.transcript || []).map(({ id }) => id)],
           recentUserIds: history.slice(-RECENT_CHAT_WINDOW).filter(({ role }) => role === "user").map(({ id }) => id),
@@ -303,7 +311,7 @@ companionRouter.post("/messages", async (req, res) => {
     });
     if (planRun.status !== "chat" || planRun.plannerCalls) {
       console.info("[planHarness]", JSON.stringify({
-        runId: userMsg.id, status: planRun.status, provider: process.env.CHAT_AI_PROVIDER?.trim() || "kimi",
+        runId: userMsg.id, status: planRun.status, provider: assistantMsg.meta?.ai?.provider || null,
         route: localMove ? "local_adjustment" : "chat",
         chatCalls: planRun.chatCalls, plannerCalls: planRun.plannerCalls,
         repairCount: Math.max(0, planRun.plannerCalls - 1), firstValidation: planRun.firstValidation,
@@ -324,7 +332,7 @@ companionRouter.post("/messages", async (req, res) => {
   } catch (err) {
     console.error("[companion] 对话处理失败:", err?.message || err);
     const fallback = await prisma.companionMessage.create({
-      data: { userId: req.user.id, role: "assistant", content: "刚才走神了一下…你再说一遍好吗？", kind: "chat" }
+      data: { userId: req.user.id, role: "assistant", content: "刚才走神了一下…你再说一遍好吗？", kind: "chat", meta: { ai: aiTrace("fallback") } }
     });
     return res.json({ message: serialize(userMsg), reply: serialize(fallback), extracted: null, agent: null });
   }

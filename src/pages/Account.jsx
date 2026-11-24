@@ -24,6 +24,7 @@ import PersonalProfileCard from "@/components/insights/PersonalProfileCard";
 import AlertChannelSettings from "@/components/account/AlertChannelSettings";
 import PWAInstallGuide from "@/components/account/PWAInstallGuide";
 import EnableBackgroundPush from "@/components/account/EnableBackgroundPush";
+import ChatAiSettings from "@/components/account/ChatAiSettings";
 import DeleteAccountSection from "@/components/account/DeleteAccountSection";
 
 export default function Account() {
@@ -505,6 +506,8 @@ export default function Account() {
       </motion.div>
 
       <CreditHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+
+      <ChatAiSettings />
 
       {/* PWA 安装引导 */}
       <motion.div

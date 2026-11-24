@@ -461,7 +461,7 @@ test("legacy homepage confirmation uses the canonical proposal and shares its id
   assert.equal(await db.taskExecution.count({ where: { userId: user.id } }), 0);
 });
 
-test("defaults to Kimi and sends one HTTP invocation to repair invalid model JSON", async (t) => {
+test("defaults to Kimi and preserves production DeepSeek recovery for invalid planner JSON", async (t) => {
   const original = process.env.CHAT_AI_PROVIDER;
   delete process.env.CHAT_AI_PROVIDER;
   process.env.KIMI_API_KEY = "local-test";
@@ -476,7 +476,9 @@ test("defaults to Kimi and sends one HTTP invocation to repair invalid model JSO
   draft();
   assertSchedule(await send(study), 20);
   assert.equal(calls.length, 3);
-  assert.ok(calls.every(({ model }) => model.startsWith("kimi-")));
+  assert.ok(calls[0].model.startsWith("kimi-"));
+  assert.equal(calls[1].model, "kimi-k3");
+  assert.equal(calls[2].model, "deepseek-chat");
   assert.equal(plannerCalls().length, 2);
 });
 
@@ -529,7 +531,7 @@ test("replays the same invalid first draft with zero repairs and with one repair
   assertSchedule({ extracted: { plan: result } }, 20);
 });
 
-test("keeps Kimi K3 and DeepSeek fallback for the upstream today chat route", async (t) => {
+test("keeps production Kimi K2.7 and DeepSeek fallback for both today chat routes", async (t) => {
   const original = process.env.CHAT_AI_PROVIDER;
   delete process.env.CHAT_AI_PROVIDER;
   process.env.KIMI_API_KEY = "local-test";
@@ -544,5 +546,11 @@ test("keeps Kimi K3 and DeepSeek fallback for the upstream today chat route", as
   const result = await post("/api/chat", { messages: [{ role: "user", content: "今天想整理一下思路。" }] });
   assert.equal(result.status, 200);
   assert.equal(result.data.reply, "我听着呢。");
-  assert.deepEqual(calls.map(({ model }) => model), ["kimi-k3", "deepseek-chat"]);
+  assert.deepEqual(calls.map(({ model }) => model), ["kimi-k2.7-code-highspeed", "deepseek-chat"]);
+  answers.push({ phase: "chat", status: 401 });
+  chatOnly();
+  const companion = await send("连通性测试，请只回复收到。");
+  assert.equal(companion.reply.content, "我听着呢。");
+  assert.equal(companion.reply.meta.ai.provider, "deepseek");
+  assert.deepEqual(calls.slice(-2).map(({ model }) => model), ["kimi-k2.7-code-highspeed", "deepseek-chat"]);
 });

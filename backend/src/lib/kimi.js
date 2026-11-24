@@ -1,3 +1,5 @@
+import { getAiContext, recordAiAttempt } from "./aiContext.js";
+
 const DEFAULT_BASE_URL = "https://api.moonshot.cn/v1";
 const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
 // 模型链说明：K2.7 只有编程版（code/code-highspeed），无通用对话版，且 K2 全系 2026-12 底下线；
@@ -140,7 +142,13 @@ export async function callKimiChat({
   singleAttempt = false,
   allowDeepSeekFallback = true
 }) {
-  const endpoints = getEndpointConfigs(allowDeepSeekFallback);
+  let endpoints = getEndpointConfigs(allowDeepSeekFallback);
+  const hasImage = messages?.some((m) => Array.isArray(m.content) && m.content.some((part) => part.type === "image_url"));
+  if (getAiContext()?.provider === "deepseek" && allowDeepSeekFallback && !tools?.length && !hasImage) {
+    endpoints = endpoints.filter((endpoint) => endpoint.label === "deepseek");
+    if (!endpoints.length) throw new Error("DEEPSEEK_API_KEY is not configured");
+  }
+  if (hasImage || tools?.length) endpoints = endpoints.filter((endpoint) => endpoint.label !== "deepseek");
   const candidateModels = Array.isArray(models) && models.length > 0
     ? models
     : model
@@ -184,6 +192,11 @@ export async function callKimiChat({
       // 结构化长 JSON 需要给 DeepSeek 更长的生成时间；Kimi 仍用短窗口先试，
       // 避免 Kimi 想太久把整次请求拖到 20 秒以上。
       const attemptTimeout = Number(endpointFetchTimeouts?.[endpoint.label]) || fetchTimeout;
+      const attempt = {
+        provider: endpoint.label === "deepseek" ? "deepseek" : "kimi",
+        endpoint: endpoint.label, model: candidateModel, outcome: "pending",
+      };
+      recordAiAttempt(attempt);
       try {
         console.log(`[callKimiChat] attempt: endpoint=${endpoint.label}(${endpoint.baseUrl}), model=${candidateModel}, timeout=${attemptTimeout}ms`);
         const controller = new AbortController();
@@ -205,10 +218,11 @@ export async function callKimiChat({
           const content = data.choices?.[0]?.message?.content || "";
           // JSON 模式下内容不合法（个别模型会无视 response_format 输出自由文本或被截断）：
           // 视为本次失败，换下一个候选模型/端点重试，而不是直接把坏内容抛给调用方
-          if (responseJsonSchema) {
+          if (responseJsonSchema || (!content && !data.choices?.[0]?.message?.tool_calls?.length)) {
             if (!content) {
               lastStatus = 200;
               lastErrorText = "RESPONSE_EMPTY";
+              attempt.reason = "empty_response";
               console.log(`[callKimiChat] empty content: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, finish=${data.choices?.[0]?.finish_reason}`);
               continue;
             }
@@ -217,10 +231,12 @@ export async function callKimiChat({
             } catch {
               lastStatus = 200;
               lastErrorText = "RESPONSE_NOT_JSON";
+              attempt.reason = "invalid_json";
               console.log(`[callKimiChat] invalid json: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, head=${content.slice(0, 80)}`);
               continue;
             }
           }
+          attempt.outcome = "success";
           console.log(`[callKimiChat] success: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms`);
           return {
             endpoint: endpoint.label,
@@ -234,6 +250,8 @@ export async function callKimiChat({
         }
 
         lastStatus = response.status;
+        attempt.status = response.status;
+        attempt.reason = `http_${response.status}`;
         lastErrorText = await response.text();
         console.log(`[callKimiChat] http error: endpoint=${endpoint.label}, model=${candidateModel}, status=${lastStatus}, duration=${duration}ms, body=${lastErrorText.slice(0, 200)}`);
         lastError = null;
@@ -246,11 +264,15 @@ export async function callKimiChat({
       } catch (error) {
         const duration = Date.now() - startAt;
         lastError = error;
+        attempt.reason ||= /abort|timeout/i.test(error?.name || "") ? "timeout" : "request_error";
         lastStatus = error?.status || 0;
         lastErrorText = error?.message || "Unknown request failure";
         console.log(`[callKimiChat] exception: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, error=${lastErrorText.slice(0, 200)}`);
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
+        attempt.elapsedMs = Date.now() - startAt;
+        if (attempt.outcome === "pending") attempt.outcome = "error";
+        recordAiAttempt(attempt);
       }
     }
   }

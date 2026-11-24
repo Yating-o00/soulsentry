@@ -6,19 +6,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Sparkles, ChevronDown, Check, CheckCircle2, Search, Filter, List, Kanban, BarChart, CheckSquare, X, Trash2, LayoutGrid, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2, Wallpaper } from "lucide-react";
+import { ChevronDown, Check, CheckCircle2, Filter, X, Trash2, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
 import { toast } from "sonner";
 import AdvancedTaskFilters from "../components/tasks/AdvancedTaskFilters";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import MilestoneCard from "../components/tasks/MilestoneCard";
-import LifeTaskCard from "../components/tasks/LifeTaskCard";
 import { isTaskEffectivelyCompleted, isRecurringTask } from "@/lib/taskStatus";
 import { flattenSubtasks } from "@/components/checkins/subtaskTree";
 import { composeShanghaiISO } from "@/lib/timeCore";
-import TaskCreationPanel from "../components/tasks/TaskCreationPanel";
+import QuickTaskComposer from "../components/tasks/QuickTaskComposer";
 import ContextReminder from "../components/tasks/ContextReminder";
 import TaskDetailModal from "../components/tasks/TaskDetailModal";
 import TaskShareCard from "../components/tasks/TaskShareCard";
@@ -26,11 +24,9 @@ import CheckinShareCard from "../components/checkins/CheckinShareCard";
 import GlobalSearch from "../components/search/GlobalSearch";
 import SmartGroupSection from "../components/tasks/SmartGroupSection";
 import CombineParentDialog from "../components/tasks/CombineParentDialog";
-import CollabTaskCard from "../components/tasks/CollabTaskCard";
-import CollapsibleTaskCard from "../components/tasks/CollapsibleTaskCard";
 import CollabCreateDialog from "../components/tasks/CollabCreateDialog";
 
-const MILESTONE_CATEGORIES = ['work', 'study', 'finance', 'project'];
+
 
 // analyzeTasks 调用去抖（模块级，避免对近百条卡片反复调 Kimi 造成并发风暴）
 let lastAnalyzeSig = "";
@@ -40,8 +36,6 @@ export default function Tasks() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [viewMode, setViewMode] = useState("overview"); // 'overview', 'milestone', 'life'
-  const [layoutMode, setLayoutMode] = useState("list"); // 'list', 'kanban', 'gantt'
   const [showCompleted, setShowCompleted] = useState(false);
   const [expandedParents, setExpandedParents] = useState(new Set());
   const [selectedTask, setSelectedTask] = useState(null);
@@ -221,7 +215,7 @@ export default function Tasks() {
   }, [allComments]);
 
   // Filter tasks
-  const { milestoneTasks, lifeTasks, completedTasks, smartGroups, stats } = useMemo(() => {
+  const { buddyCollabTasks, completedTasks, smartGroups, stats } = useMemo(() => {
     // Apply search filter
     const searchLower = searchQuery.toLowerCase();
     let filteredTasks = allTasks.filter(t => 
@@ -262,6 +256,9 @@ export default function Tasks() {
     const completed = filteredTasks.filter(isTaskEffectivelyCompleted);
 
     const roots = active.filter((t) => !t.parent_task_id);
+    const isBuddyCollab = (t) => t.metadata?.collab || t.metadata?._extraFields?.buddy_id || t.buddy_id;
+    const buddyCollabTasks = roots.filter(isBuddyCollab);
+    const normalRoots = roots.filter((t) => !isBuddyCollab(t));
 
     // 综合排序：置顶(urgent) > 优先级 > 时间紧迫度 > AI 风险等级
     // 适用于所有分组与 milestone/life 列表，保证用户置顶的约定始终排在最上方
@@ -300,18 +297,6 @@ export default function Tasks() {
       return cb - ca;
     };
 
-    const milestone = [];
-    const life = [];
-
-    roots.forEach((task) => {
-      const isMilestone = MILESTONE_CATEGORIES.includes(task.category) || task.priority === 'urgent' || task.priority === 'high';
-      if (isMilestone) {
-        milestone.push(task);
-      } else {
-        life.push(task);
-      }
-    });
-
     // Stats Calculations（口径=顶层约定：子约定已可在卡片上勾选，不计入顶部统计，避免双重计数）
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -341,7 +326,7 @@ export default function Tasks() {
     const fixedSchedule = []; // 固定安排: 重复任务 或 >24h 后的明确时间
     const candidates = [];    // 待评估候选 -> 现在能做 / 智能建议
 
-    roots.forEach((task) => {
+    normalRoots.forEach((task) => {
       const reminderTs = task.reminder_time ? new Date(task.reminder_time).getTime() : null;
       const endTs = task.end_time ? new Date(task.end_time).getTime() : null;
       const diff = reminderTs !== null ? reminderTs - now.getTime() : null;
@@ -455,8 +440,7 @@ export default function Tasks() {
 
     // 综合排序：在保留分组打分逻辑的基础上，统一让"置顶(urgent) + 时间紧迫 + 重要性"决定卡片顺序
     return {
-      milestoneTasks: [...milestone].sort(sortByPriorityTimeImportance),
-      lifeTasks: [...life].sort(sortByPriorityTimeImportance),
+      buddyCollabTasks: [...buddyCollabTasks].sort(sortByPriorityTimeImportance),
       completedTasks: completed,
       smartGroups: {
         canDoNow: [...canDoNow].sort(sortByPriorityTimeImportance),
@@ -535,407 +519,189 @@ export default function Tasks() {
 
       <main className="pt-4 px-4 sm:pt-8 sm:px-6 max-w-7xl mx-auto">
 
-        {/* Header Section（手机端页眉已显示“约定”，不再重复大标题） */}
-        <div className="mb-3 flex flex-col justify-between gap-2 md:mb-10 md:flex-row md:items-center md:gap-4">
+        {/* Header Section（手机端页眉已显示“约定”，桌面端保留标题） */}
+        <div className="mb-4 flex items-center justify-between md:mb-6">
           <div className="hidden lg:block">
-            <h1 className="mb-1 flex items-center gap-3 text-2xl font-bold text-slate-900 md:text-4xl">
-              约定
-            </h1>
-            <p className="hidden text-sm text-slate-500 sm:block md:text-lg">
-              你的点滴都是最重要的事
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-          <button
-            onClick={() => setCollabDialog({ open: true, target: null })}
-            className="flex h-9 min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-full border border-[#c7d2fe] bg-white px-3 text-[12px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:h-10 sm:min-h-[40px] sm:px-5 sm:text-sm"
-          >
-            <Users2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span>协同约定</span>
-          </button>
-
-          <button
-            onClick={() => navigate(createPageUrl("LockScreenTodo"))}
-            title="生成锁屏壁纸，锁屏也能看约定、勾选约定"
-            className="flex h-9 min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-full border border-[#c7d2fe] bg-white px-3 text-[12px] font-medium text-[#384877] shadow-sm transition-all hover:bg-[#eef2ff] sm:h-10 sm:min-h-[40px] sm:px-5 sm:text-sm"
-          >
-            <Wallpaper className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span>锁屏约定</span>
-          </button>
-
-          {/* 手机端用下拉替代三段切换，和左侧按钮同处一行 */}
-          <select
-            aria-label="切换约定视图"
-            value={viewMode}
-            onChange={(e) => setViewMode(e.target.value)}
-            className="h-9 rounded-full border border-slate-200 bg-white px-2.5 text-[12px] font-medium text-slate-700 shadow-sm outline-none sm:hidden"
-          >
-            <option value="overview">概览</option>
-            <option value="milestone">里程碑</option>
-            <option value="life">生活</option>
-          </select>
-
-          <div className="hidden rounded-full border border-slate-200 bg-white p-1 shadow-sm sm:inline-flex">
-            <button
-              onClick={() => setViewMode('overview')}
-              className={cn(
-                "flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-all duration-300 sm:px-6 sm:text-sm",
-                viewMode === 'overview' ?
-                "bg-[#384877] text-white shadow-md" :
-                "text-slate-600 hover:bg-slate-50"
-              )}>
-
-              <Sparkles className="w-4 h-4" />
-              <span>概览</span>
-            </button>
-            <button
-              onClick={() => setViewMode('milestone')}
-              className={cn(
-                "flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-all duration-300 sm:px-6 sm:text-sm",
-                viewMode === 'milestone' ?
-                "bg-[#384877] text-white shadow-md" :
-                "text-slate-600 hover:bg-slate-50"
-              )}>
-
-              <span>里程碑</span>
-            </button>
-            <button
-              onClick={() => setViewMode('life')}
-              className={cn(
-                "flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-all duration-300 sm:px-6 sm:text-sm",
-                viewMode === 'life' ?
-                "bg-[#384877] text-white shadow-md" :
-                "text-slate-600 hover:bg-slate-50"
-              )}>
-
-              <span>生活</span>
-            </button>
-          </div>
+            <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">约定</h1>
+            <p className="text-sm text-slate-500">你的点滴都是最重要的事</p>
           </div>
         </div>
 
-        {/* Task Creation Panel */}
-        <section id="mobile-task-create-anchor" className="mb-4 scroll-mt-20 md:mb-10">
-          <TaskCreationPanel
-            onAddTask={handleAddTask}
-            onOpenManual={() => setSelectedTask({ status: 'pending', priority: 'medium' })}
-            onVoiceTasks={async (tasks) => {
-              for (const task of tasks) {
-                await handleAddTask(task);
-              }
-            }} />
-
+        {/* 1 区：极简创建 + 搜索 */}
+        <section id="mobile-task-create-anchor" className="mb-4 scroll-mt-20 md:mb-8">
+          <QuickTaskComposer
+            onCreateTask={handleAddTask}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            onGlobalSearch={() => setGlobalSearchOpen(true)}
+            onCreateCollab={() => setCollabDialog({ open: true, target: null })}
+          />
         </section>
 
-        {/* Toolbar: Search, View, Selection */}
-        <div className="bg-white/80 backdrop-blur-md p-1.5 rounded-2xl shadow-sm border border-slate-200/60 mb-4 flex items-center justify-between gap-2 sticky top-2 z-20 md:mb-8 md:p-2">
-           {/* Search - local filter + press Enter to trigger global search */}
-           <div className="relative w-full min-w-0 md:max-w-md group flex items-center">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors pointer-events-none" />
-              <input 
-                type="text" 
-                placeholder="搜索约定..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && searchQuery.trim()) {
-                    e.preventDefault();
-                    setGlobalSearchOpen(true);
-                  }
-                }}
-                className="w-full pl-9 pr-4 py-2 bg-transparent border-none rounded-xl text-sm focus:ring-0 transition-all placeholder:text-slate-400"
-              />
-           </div>
+        {/* Toolbar: 仅保留筛选与多选 */}
+        <div className="mb-4 flex items-center justify-end gap-2 md:mb-6">
+          <button
+            onClick={() => {
+              setIsSelectionMode(!isSelectionMode);
+              setSelectedTaskIds([]);
+            }}
+            className={cn(
+              "hidden items-center justify-center rounded-xl border px-3 py-1.5 text-[12px] transition-all sm:inline-flex",
+              isSelectionMode
+                ? "bg-blue-50 text-blue-600 border-blue-200"
+                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+            )}
+          >
+            {isSelectionMode ? "取消选择" : "多选"}
+          </button>
 
-           {/* Controls */}
-           <div className="flex shrink-0 items-center justify-end gap-1 md:w-auto md:gap-2 md:border-l md:border-slate-100 md:pl-3">
-              {/* View Modes */}
-              <div className="mr-0.5 flex items-center rounded-xl bg-slate-100/50 p-0.5 md:mr-1 md:p-1">
-                 <button 
-                    onClick={() => setLayoutMode('list')}
-                    className={cn(
-                       "p-1.5 rounded-lg transition-all",
-                       layoutMode === 'list' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-200/50"
-                    )}
-                    title="列表视图"
-                 >
-                    <List className="w-4 h-4" />
-                 </button>
-                 <button 
-                    onClick={() => setLayoutMode('kanban')}
-                    className={cn(
-                       "p-1.5 rounded-lg transition-all",
-                       layoutMode === 'kanban' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-200/50"
-                    )}
-                    title="看板视图"
-                 >
-                    <Kanban className="w-4 h-4" />
-                 </button>
-                 <button 
-                    onClick={() => setLayoutMode('gantt')}
-                    className={cn(
-                       "p-1.5 rounded-lg transition-all",
-                       layoutMode === 'gantt' ? "bg-white shadow-sm text-blue-600" : "text-slate-400 hover:text-slate-600 hover:bg-slate-200/50"
-                    )}
-                    title="甘特图"
-                 >
-                    <BarChart className="w-4 h-4" />
-                 </button>
-              </div>
-
-              {/* Selection Toggle */}
-              <button 
-                 onClick={() => {
-                    setIsSelectionMode(!isSelectionMode);
-                    setSelectedTaskIds([]);
-                 }}
-                 className={cn(
-                    "hidden items-center justify-center w-9 h-9 rounded-xl transition-all border sm:flex",
-                    isSelectionMode
-                       ? "bg-blue-50 text-blue-600 border-blue-200"
-                       : "bg-transparent text-slate-500 border-transparent hover:bg-slate-50"
-                 )}
-                 title={isSelectionMode ? "取消选择" : "多选模式"}
-              >
-                 {isSelectionMode ? <X className="w-4 h-4" /> : <CheckSquare className="w-4 h-4" />}
-              </button>
-
-              {/* Filter Button */}
-              <AdvancedTaskFilters 
-                filters={filters} 
-                onChange={setFilters} 
-                onClear={() => setFilters({ category: 'all', priority: 'all', dateRange: undefined, createdBy: 'all', tags: [] })}
-              >
-                <button 
-                  className={cn(
-                    "flex items-center justify-center w-9 h-9 rounded-xl transition-all",
-                    Object.values(filters).some(v => v !== 'all' && v !== undefined && (!Array.isArray(v) || v.length > 0))
-                      ? "bg-blue-50 text-blue-600" 
-                      : "text-slate-500 hover:bg-slate-50"
-                  )} 
-                  title="筛选"
-                >
-                   <Filter className="w-4 h-4" />
-                </button>
-              </AdvancedTaskFilters>
-           </div>
+          <AdvancedTaskFilters
+            filters={filters}
+            onChange={setFilters}
+            onClear={() => setFilters({ category: 'all', priority: 'all', dateRange: undefined, createdBy: 'all', tags: [] })}
+          >
+            <button
+              className={cn(
+                "flex items-center gap-1 rounded-xl border px-3 py-1.5 text-[12px] transition-all",
+                Object.values(filters).some(v => v !== 'all' && v !== undefined && (!Array.isArray(v) || v.length > 0))
+                  ? "bg-blue-50 text-blue-600 border-blue-200"
+                  : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+              )}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              <span>筛选</span>
+            </button>
+          </AdvancedTaskFilters>
         </div>
 
-        {/* Content Area */}
-        <div className="space-y-8">
-
-          {/* Overview Mode: 4 Smart Groups */}
-          {viewMode === 'overview' && (
-            <div className="space-y-10">
-              <SmartGroupSection
-                title="现在能做"
-                description="长期计划且当下可执行"
-                icon={Zap}
-                iconBg="bg-emerald-50"
-                iconColor="text-emerald-600"
-                tasks={smartGroups.canDoNow}
-                emptyHint="暂无可立即执行的约定"
-                getSubtasks={getSubtasks}
-                commentCountMap={commentCountMap}
-                isSelectionMode={isSelectionMode}
-                selectedTaskIds={selectedTaskIds}
-                onToggleSelection={toggleSelection}
-                onToggleSubtask={handleToggleSubtask}
-                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => setEditingTask(task)}
-                onShare={(task) => setSharingTask(task)}
-                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
-                onSettleKnowledge={handleSettleKnowledge}
-                onEnableCollab={openEnableCollab}
-                onDelete={(task) => deleteTask(task.id)}
-                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
-              />
-
-              <SmartGroupSection
-                title="即将截止"
-                description="24 小时内到期或已逾期"
-                icon={AlarmClock}
-                iconBg="bg-rose-50"
-                iconColor="text-rose-600"
-                tasks={smartGroups.dueSoon}
-                emptyHint="暂无紧急到期的约定"
-                getSubtasks={getSubtasks}
-                commentCountMap={commentCountMap}
-                isSelectionMode={isSelectionMode}
-                selectedTaskIds={selectedTaskIds}
-                onToggleSelection={toggleSelection}
-                onToggleSubtask={handleToggleSubtask}
-                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => setEditingTask(task)}
-                onShare={(task) => setSharingTask(task)}
-                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
-                onSettleKnowledge={handleSettleKnowledge}
-                onEnableCollab={openEnableCollab}
-                onDelete={(task) => deleteTask(task.id)}
-                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
-              />
-
-              <SmartGroupSection
-                title="智能建议"
-                description="哨兵 AI 已生成执行建议或上下文摘要"
-                icon={Lightbulb}
-                iconBg="bg-amber-50"
-                iconColor="text-amber-600"
-                tasks={smartGroups.smartSuggestion}
-                emptyHint="暂无 AI 智能建议"
-                getSubtasks={getSubtasks}
-                commentCountMap={commentCountMap}
-                isSelectionMode={isSelectionMode}
-                selectedTaskIds={selectedTaskIds}
-                onToggleSelection={toggleSelection}
-                onToggleSubtask={handleToggleSubtask}
-                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => setEditingTask(task)}
-                onShare={(task) => setSharingTask(task)}
-                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
-                onSettleKnowledge={handleSettleKnowledge}
-                onEnableCollab={openEnableCollab}
-                onDelete={(task) => deleteTask(task.id)}
-                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
-              />
-
-              <SmartGroupSection
-                title="固定安排"
-                description="有明确未来时间或周期重复的约定"
-                icon={CalendarClock}
-                iconBg="bg-blue-50"
-                iconColor="text-blue-600"
-                tasks={smartGroups.fixedSchedule}
-                emptyHint="暂无固定时间安排"
-                getSubtasks={getSubtasks}
-                commentCountMap={commentCountMap}
-                isSelectionMode={isSelectionMode}
-                selectedTaskIds={selectedTaskIds}
-                onToggleSelection={toggleSelection}
-                onToggleSubtask={handleToggleSubtask}
-                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                onEdit={(task) => setEditingTask(task)}
-                onShare={(task) => setSharingTask(task)}
-                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
-                onSettleKnowledge={handleSettleKnowledge}
-                onEnableCollab={openEnableCollab}
-                onDelete={(task) => deleteTask(task.id)}
-                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
-              />
-            </div>
+        {/* 2 区：概览 */}
+        <div className="space-y-10">
+          {buddyCollabTasks.length > 0 && (
+            <SmartGroupSection
+              title="来自搭子的协同约定"
+              description="与搭子共创中的约定"
+              icon={Users2}
+              iconBg="bg-[#eef2ff]"
+              iconColor="text-[#384877]"
+              tasks={buddyCollabTasks}
+              emptyHint={null}
+              getSubtasks={getSubtasks}
+              commentCountMap={commentCountMap}
+              isSelectionMode={isSelectionMode}
+              selectedTaskIds={selectedTaskIds}
+              onToggleSelection={toggleSelection}
+              onToggleSubtask={handleToggleSubtask}
+              onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+              onEdit={(task) => setEditingTask(task)}
+              onShare={(task) => setSharingTask(task)}
+              onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+              onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+              onSettleKnowledge={handleSettleKnowledge}
+              onEnableCollab={openEnableCollab}
+              onDelete={(task) => deleteTask(task.id)}
+              getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
+            />
           )}
 
-          {/* Milestone Section */}
-          {viewMode === 'milestone' && milestoneTasks.length > 0 &&
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              {milestoneTasks.map((task) => {
-            const fullCard = (
-              <MilestoneCard
-              task={task}
-              subtasks={getSubtasks(task.id)}
-              commentCount={commentCountMap[task.id] || 0}
-              isSelectionMode={isSelectionMode}
-              isSelected={selectedTaskIds.includes(task.id)}
-              selectedTaskIds={selectedTaskIds}
-              onToggleSelection={(id) => toggleSelection(id ?? task.id)}
-              onToggleSubtask={handleToggleSubtask}
-              onUpdateStatus={handleUpdateStatus}
-              onAddSubtask={() => {
-                setSelectedTask(task);
-                setSelectedTab(null);
-              }}
-              onUpdate={(task, data) => updateTaskAsync({ id: task.id, data })}
-              onDelete={(task) => deleteTask(task.id)}
-              onEdit={() => setEditingTask(task)}
-              onShare={(task) => setSharingTask(task)}
-              onView={() => { setSelectedTask(task); setSelectedTab(null); }}
-              onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-              onReparent={handleReparent} />
-            );
-            // 多选模式不做折叠（保持卡片完整可见以便勾选）；其余默认极简折叠
-            if (isSelectionMode) {
-              return <React.Fragment key={task.id}>{fullCard}</React.Fragment>;
-            }
-            return (
-              <CollapsibleTaskCard
-                key={task.id}
-                task={task}
-                onToggleDone={(t, next) => handleUpdateStatus(t, next ? 'completed' : 'in_progress')}
-                onOpenDetail={() => { setSelectedTask(task); setSelectedTab(null); }}
-              >
-                {fullCard}
-              </CollapsibleTaskCard>
-            );
-            })}
-            </div>
-          }
+          <SmartGroupSection
+            title="现在能做"
+            description="长期计划且当下可执行"
+            icon={Zap}
+            iconBg="bg-emerald-50"
+            iconColor="text-emerald-600"
+            tasks={smartGroups.canDoNow}
+            emptyHint="暂无可立即执行的约定"
+            getSubtasks={getSubtasks}
+            commentCountMap={commentCountMap}
+            isSelectionMode={isSelectionMode}
+            selectedTaskIds={selectedTaskIds}
+            onToggleSelection={toggleSelection}
+            onToggleSubtask={handleToggleSubtask}
+            onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+            onEdit={(task) => setEditingTask(task)}
+            onShare={(task) => setSharingTask(task)}
+            onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+            onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+            onSettleKnowledge={handleSettleKnowledge}
+            onEnableCollab={openEnableCollab}
+            onDelete={(task) => deleteTask(task.id)}
+            getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
+          />
 
-          {/* Life Section */}
-          {viewMode === 'life' && lifeTasks.length > 0 &&
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-75">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-stone-100 flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-stone-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-serif text-lg font-semibold text-stone-800">生活提醒</h3>
-                    <p className="text-sm text-stone-500">已智能协调至最佳时机，不干扰深度工作</p>
-                  </div>
-                </div>
-                <span className="text-xs text-stone-400">{lifeTasks.length} 个活跃提醒</span>
-              </div>
+          <SmartGroupSection
+            title="即将截止"
+            description="24 小时内到期或已逾期"
+            icon={AlarmClock}
+            iconBg="bg-rose-50"
+            iconColor="text-rose-600"
+            tasks={smartGroups.dueSoon}
+            emptyHint="暂无紧急到期的约定"
+            getSubtasks={getSubtasks}
+            commentCountMap={commentCountMap}
+            isSelectionMode={isSelectionMode}
+            selectedTaskIds={selectedTaskIds}
+            onToggleSelection={toggleSelection}
+            onToggleSubtask={handleToggleSubtask}
+            onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+            onEdit={(task) => setEditingTask(task)}
+            onShare={(task) => setSharingTask(task)}
+            onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+            onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+            onSettleKnowledge={handleSettleKnowledge}
+            onEnableCollab={openEnableCollab}
+            onDelete={(task) => deleteTask(task.id)}
+            getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
+          />
 
-              <div className="flex flex-col gap-4">
-                {lifeTasks.map((task) => task.metadata?.collab ? (
-                  <CollabTaskCard key={task.id} task={task} />
-                ) : (() => {
-                  const fullCard = (
-                    <LifeTaskCard
-                      task={task}
-                      subtasks={getSubtasks(task.id)}
-                      subtaskTree={flattenSubtasks(getSubtasks, task.id)}
-                      commentCount={commentCountMap[task.id] || 0}
-                      isSelectionMode={isSelectionMode}
-                      isSelected={selectedTaskIds.includes(task.id)}
-                      selectedTaskIds={selectedTaskIds}
-                      onToggleSelection={(id) => toggleSelection(id ?? task.id)}
-                      onToggleSubtask={handleToggleSubtask}
-                      onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-                      onEdit={() => setEditingTask(task)}
-                      onShare={() => setSharingTask(task)}
-                      onViewTab={(tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-                      onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
-                      onSettleKnowledge={handleSettleKnowledge}
-                      onEnableCollab={() => openEnableCollab(task)}
-                      onDelete={(t) => deleteTask(t.id)}
-                      onReparent={handleReparent}
-                      autoExec={autoExecMap[task.id]?.autoExec}
-                    />
-                  );
-                  // 多选模式不做折叠（保持卡片完整可见以便勾选）；其余默认极简折叠
-                  if (isSelectionMode) {
-                    return <React.Fragment key={task.id}>{fullCard}</React.Fragment>;
-                  }
-                  return (
-                    <CollapsibleTaskCard
-                      key={task.id}
-                      task={task}
-                      onToggleDone={(t, next) => handleComplete(t, allTasks, next ? 'completed' : 'pending')}
-                      onOpenDetail={() => { setSelectedTask(task); setSelectedTab(null); }}
-                    >
-                      {fullCard}
-                    </CollapsibleTaskCard>
-                  );
-                })())}
-              </div>
-            </div>
-          }
+          <SmartGroupSection
+            title="智能建议"
+            description="哨兵 AI 已生成执行建议或上下文摘要"
+            icon={Lightbulb}
+            iconBg="bg-amber-50"
+            iconColor="text-amber-600"
+            tasks={smartGroups.smartSuggestion}
+            emptyHint="暂无 AI 智能建议"
+            getSubtasks={getSubtasks}
+            commentCountMap={commentCountMap}
+            isSelectionMode={isSelectionMode}
+            selectedTaskIds={selectedTaskIds}
+            onToggleSelection={toggleSelection}
+            onToggleSubtask={handleToggleSubtask}
+            onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+            onEdit={(task) => setEditingTask(task)}
+            onShare={(task) => setSharingTask(task)}
+            onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+            onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+            onSettleKnowledge={handleSettleKnowledge}
+            onEnableCollab={openEnableCollab}
+            onDelete={(task) => deleteTask(task.id)}
+            getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
+          />
+
+          <SmartGroupSection
+            title="固定安排"
+            description="有明确未来时间或周期重复的约定"
+            icon={CalendarClock}
+            iconBg="bg-blue-50"
+            iconColor="text-blue-600"
+            tasks={smartGroups.fixedSchedule}
+            emptyHint="暂无固定时间安排"
+            getSubtasks={getSubtasks}
+            commentCountMap={commentCountMap}
+            isSelectionMode={isSelectionMode}
+            selectedTaskIds={selectedTaskIds}
+            onToggleSelection={toggleSelection}
+            onToggleSubtask={handleToggleSubtask}
+            onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+            onEdit={(task) => setEditingTask(task)}
+            onShare={(task) => setSharingTask(task)}
+            onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+            onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+            onSettleKnowledge={handleSettleKnowledge}
+            onEnableCollab={openEnableCollab}
+            onDelete={(task) => deleteTask(task.id)}
+            getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
+          />
 
           {/* 已完成约定 - 点击展开 */}
           <div className="mt-8 pt-8 border-t border-stone-200">

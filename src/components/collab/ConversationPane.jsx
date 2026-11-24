@@ -691,13 +691,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             : <MemberAvatar name={message.created_by_name || "成员"} seed={message.created_by} size="sm" className="border-white" />)}
           <div className={cn("min-w-0 max-w-[86%] md:max-w-[76%]", mine && "flex flex-col items-end")}>
             {!mine && (
-              <div className="mb-0.5 px-1 text-[10px]" style={{ color: "#8a867e" }}>
-                {isAgent ? "心栈 Agent" : message.created_by_name || "成员"}
-              </div>
-            )}
-            {message.reply_to_name && (
-              <div className="mb-1 max-w-full truncate px-1 text-[10px]" style={{ color: "#a8a29e" }}>
-                回复 {message.reply_to_name}
+              <div className="mb-0 flex max-w-full items-center gap-1.5 truncate px-1 text-[10px]" style={{ color: "#8a867e" }}>
+                <span>{isAgent ? "心栈 Agent" : message.created_by_name || "成员"}</span>
+                {message.reply_to_name && (
+                  <span style={{ color: "#a8a29e" }}>· 回复 {message.reply_to_name}</span>
+                )}
               </div>
             )}
             <div
@@ -873,13 +871,13 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
 
           {/* 聊天快捷回应：只在最后一条是搭子时出现，点一下就能继续聊 */}
           {compact && !agentPendingSince && flatMessages[flatMessages.length - 1]?.agent && (
-            <div className="flex flex-wrap gap-2 px-1 pb-2 pt-1">
+            <div className="flex flex-wrap gap-1.5 px-1 pb-1.5 pt-0.5">
               {["收到，我来跟进", "这一步再商量一下", "帮我整理成约定"].map((label) => (
                 <button
                   key={label}
                   type="button"
                   onClick={() => handleSend(label)}
-                  className="min-h-[32px] rounded-full border border-[#d8d6cf] bg-white px-3 text-[12px] text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
+                  className="min-h-[28px] rounded-full border border-[#d8d6cf] bg-white px-2.5 text-[11px] text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
                 >
                   {label}
                 </button>
@@ -931,7 +929,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       </div>
 
       {/* 输入区 */}
-      <div className={compact ? "relative shrink-0 border-t p-2.5" : "relative shrink-0 border-t p-4 sm:px-6"} style={{ borderColor: C.line, backgroundColor: C.card }}>
+      <div className={compact ? "relative shrink-0 border-t p-1.5" : "relative shrink-0 border-t p-4 sm:px-6"} style={{ borderColor: C.line, backgroundColor: C.card }}>
         {/* @ 自动弹出：选择心栈 Agent */}
         {mentionOpen && (
           <div
@@ -1055,18 +1053,18 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           </div>
         )}
         {compact ? (
-          // 手机搭子空间：极简圆角输入条，品牌色发送按钮，支持图片/文件/视频
-          <div className="rounded-full border border-stone-200 bg-white px-1 py-1 pl-1 transition-colors focus-within:border-[#384877]">
+          // 手机搭子空间：贴底单条输入，按钮与输入同高，尽量减少占地
+          <div className="rounded-full border border-stone-200 bg-white px-1.5 py-1 transition-colors focus-within:border-[#384877]">
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading || attachments.length >= 10}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-[#384877] disabled:opacity-50"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-[#384877] disabled:opacity-50"
                 title="插入图片、文件或视频"
                 aria-label="插入图片、文件或视频"
               >
-                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
               </button>
               <Textarea
                 ref={inputRef}
@@ -1082,7 +1080,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                     ? "@ 召唤搭子总结 · 把讨论变成约定…"
                     : `在「${topicFilter}」里说…`
                 }
-                className="min-h-[38px] max-h-[120px] flex-1 resize-none border-0 bg-transparent py-2 text-[14px] leading-5 text-stone-700 placeholder:text-stone-400 focus-visible:ring-0"
+                className="min-h-[34px] max-h-[120px] flex-1 resize-none border-0 bg-transparent py-1.5 text-[13px] leading-5 text-stone-700 placeholder:text-stone-400 focus-visible:ring-0"
                 rows={1}
                 onKeyDown={(e) => {
                   if (mentionOpen) {
@@ -1108,7 +1106,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   size="sm"
                   onClick={() => handleSend()}
                   disabled={uploading || voiceBusy}
-                  className="h-9 flex-shrink-0 rounded-full bg-[#384877] px-4 text-[13px] font-medium text-white hover:bg-[#2d3a60] disabled:opacity-50"
+                  className="h-8 flex-shrink-0 rounded-full bg-[#384877] px-3 text-[12px] font-medium text-white hover:bg-[#2d3a60] disabled:opacity-50"
                   aria-label="发送讨论"
                 >
                   发送
@@ -1132,12 +1130,12 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                     }
                   }}
                   disabled={uploading || voiceBusy}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50"
                   style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
                   title="按住说话，松开发送"
                   aria-label="按住说话，发送语音"
                 >
-                  <Mic className="h-4 w-4" />
+                  <Mic className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>

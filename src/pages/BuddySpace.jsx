@@ -992,7 +992,7 @@ function CollabSection({
   // 已开启协同：小组切换 + 极简协同面板（讨论为主，约定/沉淀按需查看）
   if (activeCollab) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-1">
         <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
           {myCollabs.map((t) => (
             <button

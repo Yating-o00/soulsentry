@@ -20,7 +20,7 @@ export const toneFor = (idOrName) => {
 };
 
 export function MemberAvatar({ name, seed, size = "md", className }) {
-  const dim = size === "sm" ? "h-7 w-7 text-[11px]" : size === "lg" ? "h-11 w-11 text-[15px]" : "h-9 w-9 text-[13px]";
+  const dim = size === "xs" ? "h-5 w-5 text-[8px]" : size === "sm" ? "h-7 w-7 text-[11px]" : size === "lg" ? "h-11 w-11 text-[15px]" : "h-9 w-9 text-[13px]";
   return (
     <span
       className={cn("inline-flex shrink-0 items-center justify-center rounded-full border-2 font-medium", dim, toneFor(seed ?? name), className)}

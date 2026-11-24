@@ -320,20 +320,20 @@ function MobileHeader() {
   return (
     <header className="lg:hidden sticky top-0 z-30 w-full border-b border-stone-200/70 bg-white">
       {/* 不用 backdrop-blur：sticky 头 + 背景模糊会让 iOS 滚动时每帧重绘整个视口,是移动端滚动卡顿的主要来源 */}
-      <div className="flex w-full min-h-[52px] items-center gap-2 px-3">
+      <div className="flex w-full min-h-[44px] items-center gap-1.5 px-2">
         {isMainPage ? (
-          <SidebarTrigger className="hover:bg-stone-100 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0" />
+          <SidebarTrigger className="hover:bg-stone-100 rounded-xl transition-all duration-200 min-w-[36px] min-h-[36px] flex items-center justify-center shrink-0" />
         ) : (
           <button
             type="button"
             onClick={() => (isGuestBuddyCollab ? navigate(createPageUrl("Tasks")) : navigate(-1))}
             aria-label={isGuestBuddyCollab ? "返回约定列表" : "返回"}
-            className="hover:bg-stone-100 rounded-xl transition-all duration-200 min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
+            className="hover:bg-stone-100 rounded-xl transition-all duration-200 min-w-[36px] min-h-[36px] flex items-center justify-center shrink-0"
           >
             <ChevronLeft className="w-5 h-5 text-stone-700" />
           </button>
         )}
-        <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold text-stone-900">
+        <h1 className="min-w-0 flex-1 truncate text-[14px] font-semibold text-stone-900">
           {title}
         </h1>
       </div>

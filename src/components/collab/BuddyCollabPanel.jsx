@@ -181,18 +181,18 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
   const memberCount = members.length || 1; // at least current user
 
   return (
-    <div className={cn("flex h-[calc(100dvh-170px)] min-h-[320px] flex-col overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-180px)] md:min-h-[540px] md:max-h-[820px]", className)}>
-      {/* 手机优先的协同头：压缩行数，把高度尽量让给聊天 */}
-      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-1.5 pt-2 md:px-4 md:pb-2 md:pt-3">
+    <div className={cn("flex h-[calc(100dvh-140px)] min-h-[320px] flex-col overflow-hidden rounded-t-2xl rounded-b-none border border-stone-200 border-b-0 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-180px)] md:min-h-[540px] md:max-h-[820px] md:rounded-3xl md:border-b", className)}>
+      {/* 手机优先的协同头：压到最薄，把高度让给聊天 */}
+      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-1 pt-1.5 md:px-4 md:pb-2 md:pt-3">
         {/* 第一行：头像、共创标题、Agent 状态、完整入口 */}
-        <div className="flex items-center gap-2">
-          <Orb size={28} tint={tint} />
+        <div className="flex items-center gap-1.5">
+          <Orb size={26} tint={tint} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="shrink-0 rounded-full bg-[#F3F0E8] px-1.5 py-0.5 text-[9px] font-medium text-[#6b5c45]">共创中</span>
-              <h3 className="truncate text-[14px] font-semibold leading-tight text-stone-900">{task.title}</h3>
+              <span className="shrink-0 rounded-full bg-[#F3F0E8] px-1.5 py-0 text-[9px] font-medium text-[#6b5c45]">共创中</span>
+              <h3 className="truncate text-[13px] font-semibold leading-tight text-stone-900">{task.title}</h3>
             </div>
-            <div className="mt-0.5 flex items-center gap-2 truncate text-[10px] text-stone-400">
+            <div className="mt-0 flex items-center gap-1.5 truncate text-[10px] text-stone-400">
               <span className="inline-flex items-center gap-1">
                 <span className={`h-1.5 w-1.5 rounded-full ${agentActive ? "bg-emerald-500" : "bg-stone-300"}`} />
                 {agentActive ? "Agent 参与中" : "Agent 未参与"}
@@ -205,18 +205,18 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
           </div>
           <Link
             to={fullSpaceUrl}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877]"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877] md:h-7 md:w-7"
             title="完整协同空间"
             aria-label="打开完整协同空间"
           >
-            <ArrowUpRight className="h-3.5 w-3.5" />
+            <ArrowUpRight className="h-3 w-3 md:h-3.5 md:w-3.5" />
           </Link>
         </div>
 
-        {/* 进度 + 成员合并到一行 */}
-        <div className="mt-1.5 flex items-center gap-2">
+        {/* 进度 + 成员：一行紧凑展示，头像/邀请按钮与"我"同大 */}
+        <div className="mt-1 flex items-center gap-2">
           <div
-            className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-200/70"
+            className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-200/70"
             role="progressbar"
             aria-valuenow={pct}
             aria-valuemin={0}
@@ -239,7 +239,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
                 key={member.user_id || member.id}
                 name={member.display_name || "成员"}
                 seed={member.user_id || member.id}
-                size="sm"
+                size="xs"
                 className="border-2 border-white"
               />
             ))}
@@ -256,8 +256,8 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
           <span className="shrink-0 text-[9px] text-stone-400">{memberCount}人</span>
         </div>
 
-        {/* 三个内容切换：圆润胶囊 */}
-        <div className="mt-1.5 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-0.5" role="tablist" aria-label="协同内容">
+        {/* 三个内容切换 */}
+        <div className="mt-1 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-0.5" role="tablist" aria-label="协同内容">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -266,7 +266,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
               aria-selected={view === tab.key}
               onClick={() => switchView(tab.key)}
               className={cn(
-                "relative min-h-[30px] rounded-full text-[12px] transition-colors",
+                "relative min-h-[28px] rounded-full text-[11px] transition-colors",
                 view === tab.key ? "bg-white font-medium text-stone-900 shadow-sm" : "text-stone-500"
               )}
             >

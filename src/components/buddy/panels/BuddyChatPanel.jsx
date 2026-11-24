@@ -69,12 +69,36 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask, arti
       }
     }
     if (buddy.id === "travel" && state.itinerary?.days) {
-      // 让聊天本身也知道当前行程，用户问「第三天是什么」时不会答不上来
-      const planBrief = state.itinerary.days
-        .map((day, i) => `${day.day || `D${i + 1}`} ${day.title || ""}${day.note ? `：${day.note}` : ""}`)
+      // 让聊天本身也知道当前完整行程，用户问「第三天是什么/交通是什么」时不会答不上来
+      const itinerary = state.itinerary;
+      const topBits = [
+        itinerary.summary,
+        itinerary.transport ? `交通：${itinerary.transport}` : "",
+        itinerary.stay ? `住宿：${itinerary.stay}` : "",
+        itinerary.budget ? `预算：${itinerary.budget}` : "",
+      ]
+        .filter(Boolean)
+        .join("；");
+      const planBrief = itinerary.days
+        .map((day, i) => {
+          const activities = Array.isArray(day.activities) && day.activities.length > 0
+            ? day.activities
+                .map((activity) => `${activity.time ? `${activity.time} ` : ""}${activity.name || ""}${activity.detail ? `（${activity.detail}）` : ""}`)
+                .join("；")
+            : day.note || "";
+          const extras = [
+            day.transport ? `交通：${day.transport}` : "",
+            day.stay ? `住宿：${day.stay}` : "",
+            day.food ? `餐饮：${day.food}` : "",
+            day.tip ? `提示：${day.tip}` : "",
+          ]
+            .filter(Boolean)
+            .join("｜");
+          return `${day.day || `D${i + 1}`} ${day.title || ""}${activities ? `：${activities}` : ""}${extras ? `｜${extras}` : ""}`;
+        })
         .join("；")
-        .slice(0, 700);
-      bits.push(`当前行程：${planBrief}`);
+        .slice(0, 900);
+      bits.push(`当前行程：${[topBits, planBrief].filter(Boolean).join("；").slice(0, 1300)}`);
     }
     if (buddy.id === "study" && state.weekly?.done_count != null) bits.push(`本周已打卡 ${state.weekly.done_count}/7 天`);
     if (buddy.id === "running") {

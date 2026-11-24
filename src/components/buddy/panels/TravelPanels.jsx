@@ -1,12 +1,31 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Loader2, RefreshCw } from "lucide-react";
+import { CloudRain, Home, Loader2, MapPin, RefreshCw, Route, Sparkles, Utensils, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import { useListSubtasks } from "@/components/buddy/useListSubtasks";
 import { PanelCard, TintButton, useBuddyAgent, useBuddyState } from "./shared";
 import BuddyChatPanel from "./BuddyChatPanel";
+
+const TRAVEL_QUICK_ACTIONS = [
+  {
+    label: "下雨了，换一个行程",
+    note: "下雨了，请把受影响的户外安排换成具体的雨天备选/室内安排，并保持其他天和字段尽量不变。",
+  },
+  {
+    label: "今天想躺平",
+    note: "今天想躺平，请减少当天的安排和步行，留出休息时间，其他天尽量不变。",
+  },
+  {
+    label: "少走点路",
+    note: "同行人不想多走路，请减少步行和爬坡，优先打车/索道/短距离安排，其他天尽量不变。",
+  },
+  {
+    label: "预算再省点",
+    note: "预算再省一点，请把住宿/餐饮/交通换成更省的选择，保留核心体验，其他天尽量不变。",
+  },
+];
 
 function resolveTravelDestination(profile, state) {
   const raw = String(state?.itinerary?.dest || profile?.answers?.dest || "").trim();
@@ -23,15 +42,164 @@ function resolveTravelStyle(profile, state, note = "") {
   );
 }
 
-function itineraryIntensity(day) {
-  const text = `${day?.title || ""}${day?.note || ""}`;
-  if (/(登山|徒步|暴走|全天|长途|高强度|爬|骑行)/.test(text)) return 88;
-  if (/(休息|自由|躺平|咖啡|发呆|慢|闲逛|温泉)/.test(text)) return 34;
-  return 60;
+function splitLegacyActivities(note) {
+  return String(note || "")
+    .split(/[；;。]\s*/)
+    .map((text) => text.trim())
+    .filter(Boolean)
+    .map((text) => ({ time: "", name: text, detail: "", type: "activity" }));
 }
 
-function ItineraryArtifact({ itinerary, tint, generating, canSync, childByKey, missingCount, syncing, autoError, onRetrySync }) {
-  const days = itinerary?.days || [];
+function normalizeTravelDay(day, index) {
+  const hasStructuredActivities = Array.isArray(day?.activities) && day.activities.length > 0;
+  const activities = hasStructuredActivities
+    ? day.activities
+        .map((activity, activityIndex) => ({
+          time: String(activity?.time || "").slice(0, 10),
+          name: String(activity?.name || activity?.title || "").slice(0, 40) || `安排 ${activityIndex + 1}`,
+          detail: String(activity?.detail || activity?.note || "").slice(0, 120),
+          type: String(activity?.type || "activity"),
+        }))
+        .filter((activity) => activity.name)
+    : splitLegacyActivities(day?.note);
+
+  return {
+    day: String(day?.day || `D${index + 1}`).slice(0, 10),
+    title: String(day?.title || "当天安排").slice(0, 40),
+    area: String(day?.area || "").slice(0, 30),
+    pace: String(day?.pace || "").slice(0, 10),
+    weather: String(day?.weather || "").slice(0, 20),
+    rain_backup: String(day?.rain_backup || "").slice(0, 80),
+    activities,
+    food: String(day?.food || "").slice(0, 80),
+    stay: String(day?.stay || "").slice(0, 80),
+    transport: String(day?.transport || "").slice(0, 80),
+    budget: String(day?.budget || "").slice(0, 40),
+    // 新版用 tip 放避坑提示；旧版没有 activities，note 就是当天的安排，避免重复展示
+    tip: String(day?.tip || (hasStructuredActivities ? day?.note || "" : "")).slice(0, 120),
+  };
+}
+
+function normalizeTravelTrip(itinerary) {
+  const days = (Array.isArray(itinerary?.days) ? itinerary.days : []).map(normalizeTravelDay);
+  return {
+    dest: String(itinerary?.dest || "").slice(0, 30),
+    style: String(itinerary?.style || "").slice(0, 20),
+    summary: String(itinerary?.summary || "").slice(0, 100),
+    area: String(itinerary?.area || "").slice(0, 50),
+    transport: String(itinerary?.transport || "").slice(0, 100),
+    stay: String(itinerary?.stay || "").slice(0, 100),
+    budget: String(itinerary?.budget || "").slice(0, 60),
+    highlights: (Array.isArray(itinerary?.highlights) ? itinerary.highlights : [])
+      .map((item) => String(item || "").slice(0, 30))
+      .filter(Boolean)
+      .slice(0, 4),
+    booking: (Array.isArray(itinerary?.booking) ? itinerary.booking : [])
+      .map((item) => String(item || "").slice(0, 60))
+      .filter(Boolean)
+      .slice(0, 4),
+    changes: (Array.isArray(itinerary?.changes) ? itinerary.changes : [])
+      .map((item) => String(item || "").slice(0, 60))
+      .filter(Boolean)
+      .slice(0, 4),
+    days,
+  };
+}
+
+function travelDayIntensity(day) {
+  const text = `${day?.title || ""}${(day?.activities || []).map((a) => `${a.name}${a.detail}`).join("")}${day?.tip || ""}`;
+  if (/(登山|徒步|暴走|全天|长途|高强度|爬|骑行|赶路)/.test(text)) return 92;
+  if (/(休息|自由|躺平|咖啡|发呆|慢|闲逛|温泉|酒店)/.test(text)) return 32;
+  if (/(适中|充实)/.test(`${day?.pace || ""}`)) return 62;
+  return 56;
+}
+
+function travelDaySummary(day) {
+  const activities = (day.activities || [])
+    .map((activity) => `${activity.time ? `${activity.time} ` : ""}${activity.name}${activity.detail ? `（${activity.detail}）` : ""}`)
+    .join("；");
+  return [
+    activities,
+    day.food ? `餐饮：${day.food}` : "",
+    day.tip ? `提示：${day.tip}` : "",
+  ]
+    .filter(Boolean)
+    .join("；")
+    .slice(0, 300);
+}
+
+function serializeTravelTrip(trip) {
+  const top = [
+    trip.summary ? `概述：${trip.summary}` : "",
+    trip.area ? `区域：${trip.area}` : "",
+    trip.transport ? `交通：${trip.transport}` : "",
+    trip.stay ? `住宿：${trip.stay}` : "",
+    trip.budget ? `预算：${trip.budget}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const days = trip.days
+    .map((day) => {
+      const activities = (day.activities || [])
+        .map((activity) => `${activity.time ? `${activity.time} ` : ""}${activity.name}${activity.detail ? `（${activity.detail}）` : ""}`)
+        .join("；");
+      return `${day.day} ${day.title}｜区域：${day.area}｜节奏：${day.pace}｜天气：${day.weather}｜安排：${activities}｜交通：${day.transport}｜住宿：${day.stay}｜餐饮：${day.food}｜预算：${day.budget}｜雨天备选：${day.rain_backup}｜提示：${day.tip}`;
+    })
+    .join("\n");
+  return [top, days].filter(Boolean).join("\n").slice(0, 5000);
+}
+
+function classifyTravelAdjustment(text) {
+  const t = String(text || "");
+  if (/(下雨|雨天|天气)/.test(t)) {
+    return "只改受天气影响的户外安排，用具体可执行的室内/雨天备选取代；其他天和字段尽量保持不变。";
+  }
+  if (/(高铁|动车|火车|飞机|航班|自驾|包车|租车|大巴|打车)/.test(t)) {
+    return "只改交通方式及受影响的当天交通、时间安排；其他天和字段尽量保持不变。";
+  }
+  if (/(酒店|民宿|客栈|住|洱海|古城)/.test(t)) {
+    return "只改住宿区域/酒店及受影响的每天住宿行；其他天和字段尽量保持不变。";
+  }
+  if (/(吃|美食|火锅|素食|清真|餐厅)/.test(t)) {
+    return "只改餐饮推荐和受影响的用餐安排；其他天和字段尽量保持不变。";
+  }
+  if (/(预算|省钱|便宜|贵)/.test(t)) {
+    return "只改与预算相关的住宿/餐饮/交通选择，保留核心体验；其他天和字段尽量保持不变。";
+  }
+  if (/(累|躺平|少走|轻松|老人|小孩|亲子|膝盖)/.test(t)) {
+    return "只调节奏和体力相关安排：减少步行/爬坡，增加休息和打车；其他天和字段尽量保持不变。";
+  }
+  return "只改与新要求直接相关的行/天；其他安排尽量保持原样。";
+}
+
+function ItineraryArtifact({
+  itinerary,
+  tint,
+  generating,
+  canSync,
+  childByKey,
+  missingCount,
+  syncing,
+  autoError,
+  onRetrySync,
+  onQuickAdjust,
+}) {
+  const trip = useMemo(() => normalizeTravelTrip(itinerary), [itinerary]);
+  const days = trip.days;
+  const [selected, setSelected] = useState(0);
+  const bodyRef = useRef(null);
+
+  useEffect(() => {
+    if (selected >= days.length) setSelected(0);
+  }, [days.length, selected]);
+
+  // 每次重排后把卡片滚回顶部，让「本次调整」和新的第一天先被看到
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [itinerary?.generated_at]);
+
+  const day = days[Math.min(selected, Math.max(0, days.length - 1))] || null;
+  const child = day ? childByKey?.get(`day-${Math.min(selected, days.length - 1) + 1}`) : null;
   const syncLabel = !canSync
     ? "已收进搭子空间"
     : autoError
@@ -40,10 +208,12 @@ function ItineraryArtifact({ itinerary, tint, generating, canSync, childByKey, m
         ? "正在同步到约定"
         : "已同步到约定";
 
+  if (!day) return null;
+
   return (
     <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] tracking-widest text-stone-400">行程图</span>
+        <span className="text-[10px] tracking-widest text-stone-400">定制行程</span>
         {autoError && canSync && !generating ? (
           <button
             type="button"
@@ -56,7 +226,7 @@ function ItineraryArtifact({ itinerary, tint, generating, canSync, childByKey, m
           <span className="inline-flex items-center gap-1 text-[10px] text-stone-400">
             {generating ? (
               <>
-                <Loader2 className="h-3 w-3 animate-spin" /> 正在重排
+                <Loader2 className="h-3 w-3 animate-spin" /> 正在按你的要求调整
               </>
             ) : (
               syncLabel
@@ -64,65 +234,201 @@ function ItineraryArtifact({ itinerary, tint, generating, canSync, childByKey, m
           </span>
         )}
       </div>
-      <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <h3 className="text-[15px] font-semibold text-stone-900">
-          {itinerary?.dest} · {days.length}天
-        </h3>
-        {itinerary?.style && <span className="text-[11px] text-stone-400">{itinerary.style}</span>}
-      </div>
 
-      {/* 每日节奏图：每根柱代表一天，越高安排越满 */}
-      <div className="mt-3 flex items-end gap-1.5" aria-label="每日行程强度图">
-        {days.map((d, i) => (
-          <div key={`bar-${i}`} className="min-w-0 flex-1 text-center">
-            <div className="relative h-12 overflow-hidden rounded-md bg-[#F3F1EC]">
-              <div
-                className="absolute inset-x-0 bottom-0 rounded-t-md transition-[height] duration-500"
-                style={{ height: `${itineraryIntensity(d)}%`, background: tint[2], opacity: i === 0 ? 1 : 0.7 }}
-              />
-            </div>
-            <div className="mt-1 whitespace-nowrap text-[9px] leading-none text-stone-400">{d.day || `D${i + 1}`}</div>
-            <div className="mt-0.5 line-clamp-2 min-h-[22px] text-[9px] leading-tight text-stone-500">{d.title}</div>
+      <div
+        ref={bodyRef}
+        className="mt-2 max-h-[min(290px,32dvh)] space-y-2 overflow-y-auto pr-1"
+      >
+        {trip.changes.length > 0 && (
+          <div className="rounded-lg px-2.5 py-1.5 text-[10px] leading-relaxed" style={{ background: tint[0], color: tint[2] }}>
+            本次调整：{trip.changes.slice(0, 3).join("；")}
           </div>
-        ))}
-      </div>
-      <p className="mt-1 text-[10px] text-stone-400">每日节奏 · 柱越高安排越满</p>
+        )}
 
-      <details className="group mt-2">
-        <summary className="flex cursor-pointer list-none items-center justify-between py-1 text-[10px] text-stone-400 [&::-webkit-details-marker]:hidden">
-          <span>展开每天安排</span>
-          <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="mt-1.5 space-y-1.5">
-          {days.map((d, i) => {
-            const child = childByKey?.get(`day-${i + 1}`);
-            return (
-              <div key={`day-${i}`} className="flex gap-2.5 rounded-xl bg-[#FAF9F7] px-2.5 py-2">
-                <span
-                  className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
-                  style={{ background: tint[0], color: tint[2] }}
-                >
-                  {d.day || `D${i + 1}`}
+        <div
+          className="relative overflow-hidden rounded-xl px-3 py-2.5"
+          style={{ background: `linear-gradient(135deg, ${tint[0]} 0%, #ffffff 78%)` }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                <h3 className="truncate text-[18px] font-semibold text-stone-900">{trip.dest || "目的地"}</h3>
+                <span className="text-[11px] text-stone-500">
+                  {days.length}天{trip.style ? ` · ${trip.style}` : ""}
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate text-[12px] font-medium text-stone-800">{d.title}</span>
-                    {child && (
-                      <span className="shrink-0 text-[9px] text-stone-400">
-                        {isTaskEffectivelyCompleted(child) ? "已完成" : "已列入约定"}
-                      </span>
-                    )}
-                  </div>
-                  {d.note && <p className="mt-0.5 text-[11px] leading-relaxed text-stone-500">{d.note}</p>}
-                </div>
               </div>
+              {trip.summary && <p className="mt-1 text-[11px] leading-relaxed text-stone-600">{trip.summary}</p>}
+            </div>
+            <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[9px] text-stone-500">
+              {generating ? "调整中" : "实时更新"}
+            </span>
+          </div>
+
+          <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-[9px] leading-snug text-stone-500">
+            {trip.area && (
+              <span className="inline-flex items-center gap-0.5">
+                <MapPin className="h-2.5 w-2.5 shrink-0" /> {trip.area}
+              </span>
+            )}
+            {trip.transport && (
+              <span className="inline-flex items-center gap-0.5">
+                <Route className="h-2.5 w-2.5 shrink-0" /> {trip.transport}
+              </span>
+            )}
+            {trip.stay && (
+              <span className="inline-flex items-center gap-0.5">
+                <Home className="h-2.5 w-2.5 shrink-0" /> {trip.stay}
+              </span>
+            )}
+            {trip.budget && (
+              <span className="inline-flex items-center gap-0.5">
+                <Wallet className="h-2.5 w-2.5 shrink-0" /> {trip.budget}
+              </span>
+            )}
+          </div>
+
+          {trip.highlights.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {trip.highlights.slice(0, 3).map((highlight) => (
+                <span key={highlight} className="rounded-full border border-white/70 bg-white/70 px-2 py-0.5 text-[9px] text-stone-500">
+                  {highlight}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="sticky top-0 z-10 -mx-1 flex gap-1.5 overflow-x-auto bg-white/95 px-1 py-1 backdrop-blur scrollbar-hide">
+          {days.map((item, index) => {
+            const active = index === selected;
+            const intensity = travelDayIntensity(item);
+            return (
+              <button
+                type="button"
+                key={`${item.day}-${index}`}
+                onClick={() => setSelected(index)}
+                className={`min-w-[76px] shrink-0 rounded-lg border px-2 py-1.5 text-left transition-colors ${
+                  active ? "text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
+                }`}
+                style={active ? { background: tint[2], borderColor: tint[2] } : undefined}
+              >
+                <div className="flex items-center justify-between gap-1">
+                  <span className={`text-[9px] ${active ? "text-white/70" : "text-stone-400"}`}>{item.day}</span>
+                  {item.pace && (
+                    <span className={`text-[8px] ${active ? "text-white/70" : "text-stone-400"}`}>{item.pace}</span>
+                  )}
+                </div>
+                <div className="mt-0.5 line-clamp-1 text-[10px] font-medium">{item.title}</div>
+                <div className="mt-1 h-1 overflow-hidden rounded-full bg-black/10">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${intensity}%`, background: active ? "rgba(255,255,255,0.8)" : tint[2] }}
+                  />
+                </div>
+              </button>
             );
           })}
         </div>
-      </details>
 
-      <p className="mt-2 text-[10px] leading-relaxed text-stone-400">
-        想改哪天，直接在下面聊天框说「今天累了」「下雨了」「预算有限」。
+        <div className="rounded-xl border border-stone-100 bg-[#FAF9F7] p-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-baseline gap-x-1.5">
+                <h4 className="text-[13px] font-semibold text-stone-900">{day.title}</h4>
+                {day.area && <span className="text-[9px] text-stone-400">{day.area}</span>}
+              </div>
+              <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
+                {day.pace && <span className="rounded-full bg-white px-1.5 py-0.5 text-stone-500">{day.pace}</span>}
+                {day.weather && <span className="rounded-full bg-white px-1.5 py-0.5 text-stone-500">{day.weather}</span>}
+                {child && (
+                  <span className="rounded-full px-1.5 py-0.5" style={{ background: tint[0], color: tint[2] }}>
+                    {isTaskEffectivelyCompleted(child) ? "已完成" : "已列入约定"}
+                  </span>
+                )}
+              </div>
+            </div>
+            <span
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+              style={{ background: tint[0], color: tint[2] }}
+            >
+              {day.day}
+            </span>
+          </div>
+
+          {day.activities.length > 0 ? (
+            <div className="mt-2 space-y-1.5">
+              {day.activities.map((activity, activityIndex) => (
+                <div key={`${activity.name}-${activityIndex}`} className="flex gap-2">
+                  <span className="w-9 shrink-0 pt-0.5 text-[9px] tabular-nums text-stone-400">
+                    {activity.time || "—"}
+                  </span>
+                  <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: tint[2] }} />
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[11px] font-medium text-stone-800">{activity.name}</span>
+                    {activity.detail && (
+                      <span className="ml-1 text-[10px] leading-relaxed text-stone-500">{activity.detail}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-[11px] leading-relaxed text-stone-500">{day.tip || "当天以休息和自由活动为主。"}</p>
+          )}
+
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            {[
+              { label: "交通", value: day.transport, Icon: Route },
+              { label: "住宿", value: day.stay, Icon: Home },
+              { label: "餐饮", value: day.food, Icon: Utensils },
+              { label: "当天预算", value: day.budget, Icon: Wallet },
+            ]
+              .filter((item) => item.value)
+              .map(({ label, value, Icon }) => (
+                <div key={label} className="rounded-lg bg-white px-2 py-1.5">
+                  <div className="flex items-center gap-1 text-[8px] text-stone-400">
+                    <Icon className="h-2.5 w-2.5" /> {label}
+                  </div>
+                  <div className="mt-0.5 line-clamp-2 text-[9px] leading-snug text-stone-600">{value}</div>
+                </div>
+              ))}
+          </div>
+
+          {day.rain_backup && (
+            <p className="mt-1.5 rounded-lg bg-white px-2 py-1.5 text-[9px] leading-relaxed text-stone-500">
+              <CloudRain className="mr-1 inline h-3 w-3" /> 雨天备选：{day.rain_backup}
+            </p>
+          )}
+          {day.tip && day.activities.length > 0 && (
+            <p className="mt-1.5 rounded-lg bg-white px-2 py-1.5 text-[9px] leading-relaxed text-stone-500">
+              <Sparkles className="mr-1 inline h-3 w-3" /> {day.tip}
+            </p>
+          )}
+        </div>
+
+        {trip.booking.length > 0 && (
+          <div className="rounded-lg border border-amber-100 bg-amber-50/60 px-2 py-1.5 text-[9px] leading-relaxed text-amber-700">
+            预约提醒：{trip.booking.slice(0, 3).join("；")}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
+        {TRAVEL_QUICK_ACTIONS.map((action) => (
+          <button
+            type="button"
+            key={action.label}
+            onClick={() => onQuickAdjust(action.note, action.label)}
+            disabled={generating}
+            className="shrink-0 rounded-full border px-2.5 py-1 text-[10px] transition-colors disabled:opacity-50"
+            style={{ borderColor: tint[1], color: tint[2] }}
+          >
+            {action.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[9px] leading-relaxed text-stone-400">
+        也可以直接说「坐高铁去」「住洱海边」「想吃菌子火锅」，相关行会实时调整。
       </p>
     </div>
   );
@@ -130,8 +436,8 @@ function ItineraryArtifact({ itinerary, tint, generating, canSync, childByKey, m
 
 /**
  * 旅游搭子的第一栏：只保留一个聊天输入口。
- * 认领后自动把行程排进对话；之后用户每一句调整（累了/下雨/预算…）都直接触发重排，
- * 行程以柱状节奏图 + 逐日图文卡片的形式留在聊天面板里，不再有第二套生成/调整按钮。
+ * 认领后自动把行程排进对话；之后每一句调整（累了/下雨/换交通/换住宿…）都直接触发重排，
+ * 行程以专业行程板的形式留在聊天面板里：顶部是整体信息，中间按天切换，下面是可点的快捷调整。
  */
 export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
   const { call } = useBuddyAgent("travel");
@@ -140,13 +446,14 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
   const generatingRef = useRef(false);
   const autoTriedRef = useRef(false);
 
-  const days = state.itinerary?.days || null;
+  const trip = useMemo(() => normalizeTravelTrip(state.itinerary), [state.itinerary]);
+  const days = trip.days;
   const itineraryItems = useMemo(
     () =>
-      (days || []).map((d, i) => ({
-        key: `day-${i + 1}`,
-        title: `${d.day || `D${i + 1}`} · ${d.title}`,
-        description: d.note || "",
+      days.map((day, index) => ({
+        key: `day-${index + 1}`,
+        title: `${day.day || `D${index + 1}`} · ${day.title}`,
+        description: travelDaySummary(day),
       })),
     [days]
   );
@@ -156,9 +463,9 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
     "travel_itinerary"
   );
 
-  const generateItinerary = async (note) => {
+  const generateItinerary = async (note, options = {}) => {
     if (generatingRef.current) {
-      toast.info("上一版还在重排，等它出来再改这一句");
+      toast.info("上一版还在调整，等它出来再改这一句");
       return;
     }
     const { dest, dayMatch: destDayMatch } = resolveTravelDestination(profile, state);
@@ -166,17 +473,16 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
       toast.info("先告诉我目的地，我就能把行程排进对话里");
       return;
     }
-    const existingDays = days?.length || 0;
+    const existingDays = days.length;
     const textDayMatch = String(note || "").match(/(\d+)\s*(天|日)/);
     const totalDays = Math.max(2, Math.min(9, Number(textDayMatch?.[1] || existingDays || destDayMatch?.[1] || 5)));
     const style = resolveTravelStyle(profile, state, note);
 
-    // 已有行程时把当前版本带进 prompt，让模型只改受影响的部分，而不是推倒重来
-    const currentPlan = (days || [])
-      .map((d, i) => `${d.day || `D${i + 1}`} ${d.title}：${d.note || ""}`)
-      .join("\n");
+    // 已有行程时把当前完整方案带进 prompt，让模型只改相关行，而不是推倒重来
+    const currentPlan = existingDays > 0 ? serializeTravelTrip(trip) : "";
+    const adjustmentHint = existingDays > 0 ? classifyTravelAdjustment(note) : "";
     const finalNote = currentPlan
-      ? `当前行程：\n${currentPlan}\n\n用户的新要求：${String(note || "").trim() || "按当前方向优化"}\n请保留合适的部分，只调整需要改的地方，输出完整逐日行程。`
+      ? `当前行程：\n${currentPlan}\n\n用户的新要求：${String(note || "").trim() || "按当前方向优化"}\n调整范围：${adjustmentHint}\n请只改相关行/天，其他安排尽量保持原样；输出完整行程，并用 changes 列出实际改动。`
       : String(note || "").trim();
 
     generatingRef.current = true;
@@ -187,11 +493,34 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
         payload: { dest, style, days: totalDays, note: finalNote },
       });
       if (!Array.isArray(data?.days) || data.days.length === 0) throw new Error("empty");
+      const modelChanges = (Array.isArray(data.changes) ? data.changes : [])
+        .map((item) => String(item || "").slice(0, 60))
+        .filter(Boolean)
+        .slice(0, 4);
+      const fallbackChange = options.label || (existingDays > 0 ? "已按你的要求调整" : "");
       patch({
         itinerary: {
           dest,
           style,
-          days: data.days.slice(0, totalDays),
+          summary: String(data.summary || "").slice(0, 120),
+          area: String(data.area || "").slice(0, 60),
+          transport: String(data.transport || "").slice(0, 120),
+          stay: String(data.stay || "").slice(0, 120),
+          budget: String(data.budget || "").slice(0, 80),
+          highlights: (Array.isArray(data.highlights) ? data.highlights : [])
+            .map((item) => String(item || "").slice(0, 30))
+            .filter(Boolean)
+            .slice(0, 4),
+          booking: (Array.isArray(data.booking) ? data.booking : [])
+            .map((item) => String(item || "").slice(0, 60))
+            .filter(Boolean)
+            .slice(0, 4),
+          days: data.days.slice(0, totalDays).map((day, index) => ({
+            ...day,
+            day: String(day?.day || `D${index + 1}`).slice(0, 10),
+            title: String(day?.title || "").trim() || `第 ${index + 1} 天`,
+          })),
+          changes: modelChanges.length > 0 ? modelChanges : fallbackChange ? [fallbackChange] : [],
           generated_at: new Date().toISOString(),
         },
       });
@@ -207,11 +536,14 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
   const shouldGenerateFromChat = (text) => {
     const t = String(text || "").trim();
     if (!t) return false;
-    const hasItinerary = Boolean(days?.length);
+    const hasItinerary = days.length > 0;
     const explicit = /(重新规划|重新排|再排一版|生成行程|排一版|改行程|调整行程)/.test(t);
-    const adjustment = /(累了|下雨|天气不好|天气变了|预算有限|预算不够|超预算|压低预算|预算紧张|调整|改|换|删|加上|提前|推迟|压缩|老人|小孩|不想去|少走|多留|太赶|太满)/.test(t);
+    const situational = /(累了|下雨|天气不好|天气变了|预算有限|预算不够|超预算|压低预算|预算紧张|老人|小孩|少走|多留|太赶|太满)/.test(t);
+    const changeIntent = /(改|换|调整|选|坐|住|想吃|要住|要坐|不去|想去|提前|推迟|压缩)/.test(t);
+    const travelTopic = /(高铁|动车|火车|飞机|航班|自驾|包车|租车|大巴|打车|酒店|民宿|客栈|住|洱海|古城|吃|美食|火锅|素食|清真|景点|博物馆|路线|行程|安排)/.test(t);
     const creation = /(行程|攻略|安排|规划|计划|路线|几天|\d+\s*[天日]|想去|去.{0,10}玩|帮我排)/.test(t);
-    return explicit || (hasItinerary ? adjustment : creation);
+    if (explicit || situational) return true;
+    return hasItinerary ? changeIntent && travelTopic : creation;
   };
 
   const handleAfterSend = ({ text }) => {
@@ -219,18 +551,22 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
     generateItinerary(`用户刚在对话里说：${text}`);
   };
 
+  const handleQuickAdjust = (note, label) => {
+    generateItinerary(note, { quick: true, label });
+  };
+
   // 认领后第一次进入旅游搭子：按认领答案自动把行程排进聊天，不再需要单独的「生成行程」按钮
   useEffect(() => {
     if (autoTriedRef.current) return;
-    if (!resolveTravelDestination(profile, state).dest || days?.length) return;
+    if (!resolveTravelDestination(profile, state).dest || days.length) return;
     autoTriedRef.current = true;
     const timer = setTimeout(() => {
-      generateItinerary("按我认领时说的目的地、天数和风格，先排一版弹性行程");
+      generateItinerary("按我认领时说的目的地、天数和风格，先排一版专业、可执行的弹性行程");
     }, 700);
     return () => clearTimeout(timer);
-  }, [profile?.answers?.dest, days?.length]);
+  }, [profile?.answers?.dest, days.length]);
 
-  const artifact = days?.length ? (
+  const artifact = days.length ? (
     <ItineraryArtifact
       itinerary={state.itinerary}
       tint={tint}
@@ -241,6 +577,7 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
       syncing={syncing}
       autoError={autoError}
       onRetrySync={() => syncNow({ notify: true }).catch(() => {})}
+      onQuickAdjust={handleQuickAdjust}
     />
   ) : (
     <div className="rounded-2xl border border-dashed border-stone-200 bg-[#FAF9F7] px-3.5 py-3 text-[12px] leading-relaxed text-stone-500">
@@ -249,7 +586,7 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> 正在按你说的排行程…
         </span>
       ) : resolveTravelDestination(profile, state).dest ? (
-        "正在按你的目的地排一版弹性行程，马上放进对话里。"
+        "正在按你的目的地排一版专业行程，马上放进对话里。"
       ) : (
         "告诉我目的地、天数和想要的节奏，我直接在对话里把行程排出来。"
       )}

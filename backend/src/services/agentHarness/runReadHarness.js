@@ -9,6 +9,7 @@ const id = z.string().min(1).max(128);
 const decisionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("call"), tool: id, args: z.record(z.unknown()) }),
   z.object({ type: z.literal("ask"), question: z.string().trim().min(1).max(3000), choices: z.array(id).max(20).optional() }),
+  z.object({ type: z.literal("propose"), tool: id, args: z.record(z.unknown()), evidenceIds: z.array(id).min(1).max(MAX_STEPS) }),
   z.object({
     type: z.literal("finish"), reply: z.string().trim().min(1).max(3000),
     evidenceIds: z.array(id).min(1).max(MAX_STEPS),
@@ -42,7 +43,7 @@ function groundedChoices(choices, observations) {
   return choices.every((choice) => observedIds.has(choice));
 }
 
-async function withSignal(operation, signal) {
+export async function withSignal(operation, signal) {
   signal.throwIfAborted();
   let onAbort;
   const aborted = new Promise((_resolve, reject) => {
@@ -60,13 +61,18 @@ async function withSignal(operation, signal) {
 }
 
 function toolFailure(error) {
-  if (error?.code === "FORBIDDEN") return "FORBIDDEN";
+  const code = String(error?.code ?? "").toUpperCase();
+  if (code === "FORBIDDEN" || code === "PRECONDITION_CHANGED") return code;
   if (error?.name === "ZodError") return "INVALID_ARGUMENTS";
   return "TOOL_FAILURE";
 }
 
-/** Run one bounded read-only task with model decisions and server-registered tools. */
-export async function runReadHarness({ actorId, taskId, input, capabilities = [], decide, maxSteps = 6, signal }) {
+export function runReadHarness(options) {
+  return runHarnessDecision({ ...options, allowProposal: false });
+}
+
+/** Writes enter this loop solely as proposals. Applying them requires a separate confirm request. */
+export async function runHarnessDecision({ actorId, taskId, input, continuation, capabilities = [], decide, maxSteps = 6, signal, allowProposal = false }) {
   const runId = randomUUID();
   const validTaskId = id.safeParse(taskId).success;
   const currentTaskId = validTaskId ? taskId : randomUUID();
@@ -79,10 +85,13 @@ export async function runReadHarness({ actorId, taskId, input, capabilities = []
   if (typeof input !== "string" || !input.trim() || (taskId !== undefined && !validTaskId)) return blocked("INVALID_INPUT");
   if (!Number.isSafeInteger(maxSteps) || maxSteps < 1 || maxSteps > MAX_STEPS) return blocked("INVALID_STEP_BUDGET");
 
-  const readable = capabilities.filter((capability) => capability.effect === "read" && capability.modelInput);
-  const registry = new Map(readable.map((capability) => [capability.name, capability]));
-  if (registry.size !== readable.length) return blocked("DUPLICATE_CAPABILITY");
-  const tools = readable.map(({ name, description, modelInput }) => ({ name, description, input: modelInput }));
+  const visible = capabilities.filter((capability) => capability.modelInput && (capability.effect === "read"
+    || (allowProposal && typeof capability.prepare === "function" && typeof capability.verify === "function")));
+  const registry = new Map(visible.map((capability) => [capability.name, capability]));
+  if (registry.size !== visible.length) return blocked("DUPLICATE_CAPABILITY");
+  const tools = visible.map(({ name, description, effect, modelInput }) => ({
+    name, description, input: modelInput, ...(allowProposal ? { effect } : {}),
+  }));
   const deadline = AbortSignal.timeout(RUN_TIMEOUT_MS);
   const activeSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
   const cancelled = () => blocked(activeSignal.reason?.name === "TimeoutError" ? "RUN_TIMEOUT" : "RUN_ABORTED");
@@ -94,7 +103,7 @@ export async function runReadHarness({ actorId, taskId, input, capabilities = []
     try {
       raw = await withSignal(() => {
         modelCalls += 1;
-        return decide({ input, capabilities: structuredClone(tools), observations: structuredClone(observations), signal: activeSignal });
+        return decide({ input, continuation: structuredClone(continuation), capabilities: structuredClone(tools), observations: structuredClone(observations), signal: activeSignal });
       }, activeSignal);
     } catch {
       return activeSignal.aborted ? cancelled() : blocked("MODEL_FAILURE");
@@ -119,7 +128,7 @@ export async function runReadHarness({ actorId, taskId, input, capabilities = []
     const { tool, args } = decision;
     let key;
     try {
-      key = callKey(tool, args);
+      key = callKey(`${decision.type}:${tool}`, args);
     } catch {
       return blocked("INVALID_DECISION");
     }
@@ -128,10 +137,20 @@ export async function runReadHarness({ actorId, taskId, input, capabilities = []
 
     let result;
     const capability = registry.get(tool);
-    if (!capability) {
+    if (!capability || (decision.type === "call" ? capability.effect !== "read" : capability.effect !== "write")) {
       result = { ok: false, code: "UNKNOWN_TOOL" };
     } else {
       try {
+        if (decision.type === "propose") {
+          const cited = observations.filter((item) => decision.evidenceIds.includes(item.id) && item.result.ok);
+          if (cited.length !== new Set(decision.evidenceIds).size) return blocked("MISSING_EVIDENCE");
+          const normalized = capability.input.parse(args);
+          const preview = await withSignal(() => invokeCapability(capability, normalized, {
+            actorId, evidence: structuredClone(cited.flatMap(({ result }) => result.data)),
+          }, { signal: activeSignal, phase: "prepare" }), activeSignal);
+          trace.push({ step, type: "propose", tool, evidenceIds: decision.evidenceIds });
+          return outcome("awaiting_confirmation", { action: { capability: tool, args: normalized }, preview });
+        }
         const value = await withSignal(() => {
           toolCalls += 1;
           return invokeCapability(capability, structuredClone(args), { actorId }, { signal: activeSignal });

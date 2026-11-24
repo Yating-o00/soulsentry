@@ -14,11 +14,33 @@ import { retrievePersonalMemories, searchMemoryTranscript } from "../services/pe
 import { createMemory, ownedMemoryProposal, recallableMessageScope } from "../services/memoryStore.js";
 import { enqueueMemoryMessage } from "../services/memoryWorker.js";
 import { buildMemoryTopicSummary, loadMemoryContext, loadRememberedCommitments, RECENT_CHAT_WINDOW } from "../services/memoryContext.js";
+import { createTaskHarnessDecider } from "../services/agentHarness/readHarnessDecider.js";
+import { createTaskWorkflow } from "../services/agentHarness/runTaskWorkflow.js";
+import { ownedTaskCapabilities } from "../services/agentHarness/taskCapabilities.js";
+import { createTaskWorkflowStore } from "../services/agentHarness/taskWorkflowStore.js";
 import { resolveCompanionBuddyId, runBuddyChatFromCompanion } from "./buddies.js";
 
 export const companionRouter = Router();
 
 companionRouter.use(requireAuth);
+
+const workflow = createTaskWorkflow({ store: createTaskWorkflowStore(prisma), capabilities: ownedTaskCapabilities(prisma), decide: createTaskHarnessDecider() });
+const taskId = z.string().uuid();
+const workflowText = z.string().trim().min(1).max(3000);
+const workflowInput = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("message"), text: workflowText }).strict(),
+  z.object({ type: z.literal("reply"), taskId, text: workflowText }).strict(),
+  z.object({ type: z.literal("confirm"), taskId, proposal: z.object({ id: taskId, version: z.number().int().positive() }).strict() }).strict(),
+]);
+
+companionRouter.post("/harness", async (req, res) => {
+  const request = workflowInput.safeParse(req.body);
+  if (!request.success) return res.status(400).json({ error: "INVALID_INPUT", details: request.error.flatten() });
+  const outcome = await workflow({ ...request.data, actorId: req.user.id });
+  const status = outcome.code === "forbidden" ? 404
+    : ["stale_proposal", "precondition_changed", "task_changed"].includes(outcome.code) ? 409 : 200;
+  return res.status(status).json(outcome);
+});
 
 const serialize = (m) => ({
   id: m.id,

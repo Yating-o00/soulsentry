@@ -57,6 +57,26 @@ for (const fixture of generalCases) {
 node --test scripts/harness-eval/read-pilot.test.js
 ```
 
+真实 DeepSeek 评测从仓库根目录运行。使用与排程对照独立的 Token 统计，每个场景默认跑三次。
+
+```bash
+node backend/scripts/harness-eval/read-pilot-live.js --out /tmp/harness-m2-live.json
+```
+
+### M3 可续接任务
+
+`workflow-pilot.test.js` 让原 10 道题里的 8 道经过真正的任务运行时，再用独立 grader 校对。两道批量移动题保留给 M4。额外验证用户改口时旧确认被拦截、写入后进程丢失时从回执恢复，以及拒绝其他操作的回执。`run.test.js` 用实际 Express 和临时 SQLite 检查三次运行的完整链路，并验证确认前修改标题时旧提案失效，包括更新时间相同的情况。
+
+`POST /api/companion/harness` 使用当前账号的登录凭证，是新 Harness 的按需入口。正文使用以下三种结构，每次返回新的 `runId`。补答、修改提案和确认沿用 `taskId`。确认阶段复核已保存的动作并直接执行和核实。
+
+| 调用 | JSON 字段 | 成功结果 |
+| --- | --- | --- |
+| 初次请求 | `type: "message"`、`text` | 有证据的回答、待澄清问题或提案 |
+| 补答或修改 | `type: "reply"`、`taskId`、`text` | 新的运行结果。出提案时返回新版本 |
+| 确认 | `type: "confirm"`、`taskId`、`proposal: { id, version }` | 经核实的回执或 `unverified`。过期或数据已变更时返回 HTTP 409 |
+
+入口先支持查找和完成或重新打开本人普通顶层约定。状态和完成时间与回执在同一个 SQLite 事务内提交，回执为现有 `TaskChangeLog` 记录。运行间的状态保存在新的 `HarnessTask` 表，本地旧数据库用项目现有的 Prisma schema 流程更新。模型只有提案权限。已有聊天和排程的客户端按原路由使用。前端以后可以按这个协议接入对话卡和确认按钮。
+
 ## 原有排程的真实模型对照
 
 从仓库根目录执行以下命令。环境中需要已授权的 `DEEPSEEK_API_KEY`。可设置 `DEEPSEEK_MODEL`，同轮对照应使用相同模型标识。

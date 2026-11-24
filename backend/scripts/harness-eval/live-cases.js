@@ -96,6 +96,16 @@ export function stamp(child, field) {
   return child.date + "T" + child[field] + ":00+08:00";
 }
 
+export function asksForDuration(reply) {
+  const question = String(reply ?? "").split(/\n\s*参考记忆[：:]/, 1)[0];
+  const interrogatives = question.match(/[^。！？?!\n]+[？?]/g) ?? [];
+  if (interrogatives.some((part) => /分钟|小时|时长|时间|多久|上限/.test(part)
+    && /多少|多长|多久|几分钟|几小时|多大|上限.{0,10}[？?]/.test(part))) return true;
+  // A valid clarification can ask the user to select between remembered limits.
+  const alternatives = /\d+\s*(?:分钟|小时)?\s*(?:和|或是?|还是|、|与|\/|／)\s*\d+\s*(?:分钟|小时)/;
+  return alternatives.test(question) && /(?:按|用|选|确认)\s*哪(?:个|一个|档|项|种)(?:来|为准)?\s*[？?]/.test(question);
+}
+
 function dayOffset(date) {
   return (Date.parse(date) - Date.parse(firstDay)) / 86400000;
 }

@@ -11,22 +11,22 @@ const pilotInputs = new Map([
 export function createReadPilotDriver({ invoke, maxSteps, signal } = {}) {
   const decide = createReadHarnessDecider({ invoke });
   return ({ capabilities }) => async ({ actorId, taskId, text }, { callTool }) => {
-    // The benchmark binds callTool to the authenticated actor on each invocation.
-    const reads = capabilities.filter(({ name, effect }) => effect === "read" && pilotInputs.has(name))
-      .map(({ name, description, input }) => defineCapability({
-        name,
-        description,
-        effect: "read",
-        input: pilotInputs.get(name),
-        modelInput: input,
-        authorize: (_args, context) => context.actorId === actorId,
-        execute: async (args) => {
-          const result = await callTool(name, args);
-          if (result.ok) return result.data;
-          const code = result.code === "forbidden" ? "FORBIDDEN" : "READ_FAILED";
-          throw Object.assign(new Error(code), { code });
-        },
-      }));
+    const reads = pilotReadCapabilities(capabilities, actorId, callTool);
     return runReadHarness({ actorId, taskId, input: text, capabilities: reads, decide, maxSteps, signal });
   };
+}
+
+export function pilotReadCapabilities(capabilities, actorId, callTool) {
+  // The benchmark binds callTool to the authenticated actor on each invocation.
+  return capabilities.filter(({ name, effect }) => effect === "read" && pilotInputs.has(name))
+    .map(({ name, description, input }) => defineCapability({
+      name, description, effect: "read", input: pilotInputs.get(name), modelInput: input,
+      authorize: (_args, context) => context.actorId === actorId,
+      execute: async (args) => {
+        const result = await callTool(name, args);
+        if (result.ok) return result.data;
+        const code = result.code === "forbidden" ? "FORBIDDEN" : "READ_FAILED";
+        throw Object.assign(new Error(code), { code });
+      },
+    }));
 }

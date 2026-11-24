@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { ChevronDown, Check, CheckCircle2, Filter, X, Trash2, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2 } from "lucide-react";
+import { ChevronDown, Check, CheckCircle2, Filter, Search, X, Trash2, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -52,6 +52,7 @@ export default function Tasks() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [combineOpen, setCombineOpen] = useState(false);
+  const [buddyOnly, setBuddyOnly] = useState(false);
   const [filters, setFilters] = useState({ 
     category: 'all', 
     priority: 'all', 
@@ -531,29 +532,56 @@ export default function Tasks() {
         <section id="mobile-task-create-anchor" className="mb-4 scroll-mt-20 md:mb-8">
           <QuickTaskComposer
             onCreateTask={handleAddTask}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            onGlobalSearch={() => setGlobalSearchOpen(true)}
             onCreateCollab={() => setCollabDialog({ open: true, target: null })}
           />
         </section>
 
-        {/* Toolbar: 仅保留筛选与多选 */}
-        <div className="mb-4 flex items-center justify-end gap-2 md:mb-6">
-          <button
-            onClick={() => {
-              setIsSelectionMode(!isSelectionMode);
-              setSelectedTaskIds([]);
-            }}
-            className={cn(
-              "hidden items-center justify-center rounded-xl border px-3 py-1.5 text-[12px] transition-all sm:inline-flex",
-              isSelectionMode
-                ? "bg-blue-50 text-blue-600 border-blue-200"
-                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+        {/* 顶部工具栏：全部/搭子切换 + 搜索 + 筛选 + 多选 */}
+        <div className="mb-4 flex flex-wrap items-center justify-end gap-2 md:mb-6">
+          <div className="flex rounded-xl border border-stone-200 bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => setBuddyOnly(false)}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
+                !buddyOnly ? "bg-[#384877] text-white" : "text-stone-500 hover:text-stone-800"
+              )}
+            >
+              全部
+            </button>
+            <button
+              type="button"
+              onClick={() => setBuddyOnly(true)}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
+                buddyOnly ? "bg-[#384877] text-white" : "text-stone-500 hover:text-stone-800"
+              )}
+            >
+              来自搭子
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-2.5 py-1 transition-colors focus-within:border-[#384877]">
+            <Search className="h-3.5 w-3.5 text-stone-400" />
+            <input
+              type="text"
+              placeholder="搜索…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && searchQuery.trim()) {
+                  e.preventDefault();
+                  setGlobalSearchOpen(true);
+                }
+              }}
+              className="w-24 bg-transparent text-[13px] text-stone-800 placeholder:text-stone-400 outline-none sm:w-32"
+            />
+            {searchQuery && (
+              <button type="button" onClick={() => setSearchQuery("")} className="text-stone-400 hover:text-stone-600">
+                <X className="h-3.5 w-3.5" />
+              </button>
             )}
-          >
-            {isSelectionMode ? "取消选择" : "多选"}
-          </button>
+          </div>
 
           <AdvancedTaskFilters
             filters={filters}
@@ -562,7 +590,7 @@ export default function Tasks() {
           >
             <button
               className={cn(
-                "flex items-center gap-1 rounded-xl border px-3 py-1.5 text-[12px] transition-all",
+                "flex items-center gap-1 rounded-xl border px-2.5 py-1 text-[12px] transition-all",
                 Object.values(filters).some(v => v !== 'all' && v !== undefined && (!Array.isArray(v) || v.length > 0))
                   ? "bg-blue-50 text-blue-600 border-blue-200"
                   : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
@@ -572,11 +600,26 @@ export default function Tasks() {
               <span>筛选</span>
             </button>
           </AdvancedTaskFilters>
+
+          <button
+            onClick={() => {
+              setIsSelectionMode(!isSelectionMode);
+              setSelectedTaskIds([]);
+            }}
+            className={cn(
+              "hidden items-center justify-center rounded-xl border px-2.5 py-1 text-[12px] transition-all sm:inline-flex",
+              isSelectionMode
+                ? "bg-blue-50 text-blue-600 border-blue-200"
+                : "bg-white text-slate-500 border-slate-200 hover:bg-slate-50"
+            )}
+          >
+            {isSelectionMode ? "取消选择" : "多选"}
+          </button>
         </div>
 
         {/* 2 区：概览 */}
         <div className="space-y-10">
-          {buddyCollabTasks.length > 0 && (
+          {buddyOnly ? (
             <SmartGroupSection
               title="来自搭子的协同约定"
               description="与搭子共创中的约定"
@@ -584,7 +627,7 @@ export default function Tasks() {
               iconBg="bg-[#eef2ff]"
               iconColor="text-[#384877]"
               tasks={buddyCollabTasks}
-              emptyHint={null}
+              emptyHint="暂无来自搭子的协同约定"
               getSubtasks={getSubtasks}
               commentCountMap={commentCountMap}
               isSelectionMode={isSelectionMode}
@@ -601,7 +644,8 @@ export default function Tasks() {
               onDelete={(task) => deleteTask(task.id)}
               getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
             />
-          )}
+          ) : (
+            <>
 
           <SmartGroupSection
             title="现在能做"
@@ -702,6 +746,8 @@ export default function Tasks() {
             onDelete={(task) => deleteTask(task.id)}
             getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
           />
+            </>
+          )}
 
           {/* 已完成约定 - 点击展开 */}
           <div className="mt-8 pt-8 border-t border-stone-200">

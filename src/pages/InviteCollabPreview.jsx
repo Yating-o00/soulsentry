@@ -276,12 +276,6 @@ export default function InviteCollabPreview() {
 
         {tab === "knowledge" && (
           <section className="space-y-2.5">
-            {data.consensus && (
-              <div className="rounded-2xl border p-4" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
-                <p className="text-[11px] font-medium" style={{ color: "#384877" }}>共识</p>
-                <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-5" style={{ color: "#57534d" }}>{data.consensus}</p>
-              </div>
-            )}
             {knowledgeDocs.map((doc, index) => (
               <button
                 key={`${doc.title}-${index}`}
@@ -297,7 +291,7 @@ export default function InviteCollabPreview() {
                 </span>
               </button>
             ))}
-            {!data.consensus && knowledgeDocs.length === 0 && (
+            {knowledgeDocs.length === 0 && (
               <div className="rounded-2xl border p-6 text-center text-xs" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9", color: "#8a867e" }}>
                 暂无沉淀
               </div>

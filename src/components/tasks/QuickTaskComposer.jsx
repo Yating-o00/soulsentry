@@ -4,7 +4,7 @@ import { invokeAI } from "@/components/utils/aiHelper";
 import { normalizeTaskTime, toShanghaiTimeStr } from "@/lib/timeCore";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Mic, MicOff, Paperclip, Send, Loader2, Search, Users2, Footprints, Sparkles, X } from "lucide-react";
+import { Mic, MicOff, Paperclip, Send, Loader2, Users2, Footprints, Sparkles } from "lucide-react";
 
 const EXAMPLES = [
   { label: "协同约定：一起讨论产品方案", icon: Users2, value: "和伙伴一起讨论产品方案，落地切入点" },
@@ -14,9 +14,6 @@ const EXAMPLES = [
 
 export default function QuickTaskComposer({
   onCreateTask,
-  searchQuery,
-  onSearchChange,
-  onGlobalSearch,
   onCreateCollab,
 }) {
   const [input, setInput] = useState("");
@@ -162,79 +159,55 @@ export default function QuickTaskComposer({
 
   return (
     <div className="space-y-2">
-      {/* 输入 + 搜索：黄金比例 ~1.618 : 1 */}
-      <div className="flex flex-col gap-2 md:flex-row">
-        <div className="flex flex-[1.618] items-end gap-1.5 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm transition-colors focus-within:border-[#384877]">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={isUploading}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877] disabled:opacity-50"
-            title="上传图片或文档"
-          >
-            {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-          </button>
-          <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf,.doc,.docx,.txt" onChange={handleFileSelect} />
+      {/* 极简输入：搜索与操作已整合进顶部工具栏 */}
+      <div className="flex items-end gap-1.5 rounded-2xl border border-stone-200 bg-white p-1.5 shadow-sm transition-colors focus-within:border-[#384877]">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={isUploading}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877] disabled:opacity-50"
+          title="上传图片或文档"
+        >
+          {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+        </button>
+        <input ref={fileRef} type="file" className="hidden" accept="image/*,.pdf,.doc,.docx,.txt" onChange={handleFileSelect} />
 
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            placeholder="一句话描述约定…"
-            rows={1}
-            className="min-h-[34px] w-full resize-none border-0 bg-transparent py-2 text-[14px] leading-5 text-stone-800 placeholder:text-stone-400 focus-visible:outline-none"
-          />
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSubmit();
+            }
+          }}
+          placeholder="一句话描述约定…"
+          rows={1}
+          className="min-h-[34px] w-full resize-none border-0 bg-transparent py-2 text-[14px] leading-5 text-stone-800 placeholder:text-stone-400 focus-visible:outline-none"
+        />
 
-          <button
-            type="button"
-            onClick={toggleRecording}
-            className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-              isRecording ? "bg-rose-50 text-rose-500" : "text-stone-400 hover:bg-stone-100 hover:text-[#384877]"
-            )}
-            title={isRecording ? "停止语音输入" : "语音输入"}
-          >
-            {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isProcessing || !input.trim()}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#384877] text-white transition-colors hover:bg-[#2d3a60] disabled:opacity-50"
-            title="创建约定"
-          >
-            {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </button>
-        </div>
-
-        <div className="flex flex-1 items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 shadow-sm transition-colors focus-within:border-[#384877]">
-          <Search className="h-4 w-4 text-stone-400" />
-          <input
-            type="text"
-            placeholder="搜索约定…"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && searchQuery.trim() && onGlobalSearch) {
-                e.preventDefault();
-                onGlobalSearch();
-              }
-            }}
-            className="h-10 w-full border-0 bg-transparent text-[14px] text-stone-800 placeholder:text-stone-400 focus-visible:outline-none"
-          />
-          {searchQuery && (
-            <button type="button" onClick={() => onSearchChange("")} className="text-stone-400 hover:text-stone-600">
-              <X className="h-3.5 w-3.5" />
-            </button>
+        <button
+          type="button"
+          onClick={toggleRecording}
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+            isRecording ? "bg-rose-50 text-rose-500" : "text-stone-400 hover:bg-stone-100 hover:text-[#384877]"
           )}
-        </div>
+          title={isRecording ? "停止语音输入" : "语音输入"}
+        >
+          {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+        </button>
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={isProcessing || !input.trim()}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#384877] text-white transition-colors hover:bg-[#2d3a60] disabled:opacity-50"
+          title="创建约定"
+        >
+          {isProcessing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </button>
       </div>
 
       {/* 示例 */}

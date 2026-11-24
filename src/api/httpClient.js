@@ -1,3 +1,4 @@
+import { getChatAiProvider, setChatAiProvider } from "./aiPreference";
 import { standaloneApiBaseUrl } from "./platformConfig";
 
 const ACCESS_TOKEN_KEY = "soulsentry_access_token";
@@ -52,6 +53,8 @@ export function buildApiUrl(path) {
 
 export async function httpRequest(path, { method = "GET", body, headers = {} } = {}) {
   const token = getAccessToken();
+  const chatProvider = method === "POST" && (["/api/companion/messages", "/api/chat"].includes(path) || /^\/api\/buddies\/[^/]+\/agent$/.test(path) || path === "/api/functions/analyzeHeartSign")
+    ? getChatAiProvider() : "";
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
 
   const response = await fetch(buildApiUrl(path), {
@@ -59,6 +62,7 @@ export async function httpRequest(path, { method = "GET", body, headers = {} } =
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(chatProvider ? { "X-Chat-AI-Provider": chatProvider } : {}),
       ...headers
     },
     body: isFormData ? body : (body ? JSON.stringify(body) : undefined)
@@ -75,6 +79,13 @@ export async function httpRequest(path, { method = "GET", body, headers = {} } =
     error.status = response.status;
     error.data = { raw, html: /^\s*</.test(raw) };
     throw error;
+  }
+
+  // The experiment can be switched off while a browser still holds a choice.
+  // The server rejects before processing the message, so retrying default is safe.
+  if (response.status === 403 && data?.error === "AI_EXPERIMENT_DISABLED" && chatProvider && !headers["X-Chat-AI-Provider"]) {
+    try { setChatAiProvider(""); } catch { /* Storage may be disabled. */ }
+    return httpRequest(path, { method, body, headers: { ...headers, "X-Chat-AI-Provider": "" } });
   }
 
   if (!response.ok) {

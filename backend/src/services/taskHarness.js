@@ -77,14 +77,18 @@ export function resolvePlanningRequest(request, messages, memories, now = new Da
   const values = new Set(remembered.map(({ minutes }) => minutes));
   const selected = asksForMemory && !explicit ? (values.size === 1 ? remembered[0] : null) : explicit;
   let clarification = null;
+  const projectPlan = /(产品|上新|发布|上线|项目|运营|营销|活动|装修|婚礼|写作|作品|创业|launch|product|project|business)/i.test(
+    `${request.goal || ""} ${context}`
+  );
   if (!request.horizon_days) {
-    clarification = { field: "horizon_days", fallback: "这个计划想坚持多少天？比如 7 天、14 天或 21 天～" };
-  } else if (!selected) {
+    clarification = { field: "horizon_days", fallback: "这个计划想坚持多少天？比如 7 天、14 天或 60 天～" };
+  } else if (!selected && (!request.daily_minutes || !projectPlan)) {
+    // 只有工作/项目型计划允许模型填入默认时长；学习/训练类需要用户给出真实可用时长
     clarification = {
       field: "daily_minutes",
       fallback: asksForMemory ? "这项安排每次最多能用多少分钟？我按你的上限来排～" : "每次大概能投入多少分钟？",
     };
-  } else if (selected.minutes < 10 || selected.minutes > 180) {
+  } else if (selected && (selected.minutes < 10 || selected.minutes > 180)) {
     clarification = { fallback: "每次可以安排 10 到 180 分钟，你想用多少分钟？" };
   }
   const resolved = { ...request, daily_minutes: selected?.minutes ?? request.daily_minutes };

@@ -295,7 +295,7 @@ function slotFromInsights(insights, i) {
 
 export function buildFallbackPlan({ goal, horizonDays, dailyMinutes, insights = null, now = new Date() } = {}) {
   const g = String(goal || "新的计划").trim().slice(0, 40) || "新的计划";
-  const days = clampInt(horizonDays, 2, 30, 7);
+  const days = clampInt(horizonDays, 2, 90, 7);
   const minutes = clampInt(dailyMinutes, 15, 180, 30);
   const parent = {
     title: `${g}（${days}天计划）`.slice(0, 60),
@@ -351,7 +351,7 @@ export function reexpandPlan(patterns, { goal, horizonDays, dailyMinutes, prefer
   if (!Array.isArray(patterns) || patterns.length === 0) return null;
   const ctx = {
     goal: String(goal || "智能规划").slice(0, 60),
-    horizonDays: clampInt(horizonDays, 2, 30, 7),
+    horizonDays: clampInt(horizonDays, 2, 90, 7),
     dailyMinutes: clampInt(dailyMinutes, 15, 180, 30)
   };
   const targetHour = targetHourFromPreferences(preferences, insights);
@@ -787,7 +787,7 @@ export function rebuildPatternsFromChildren(children) {
 export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, preferences, memoryContext, existing = [], insights = null, now = new Date(), constraints = {}, invoke = invokeDashboardAi, maxRepairs = 1, signal, onAttempt } = {}) {
   const ctx = {
     goal: String(goal || "").trim().slice(0, 80),
-    horizonDays: clampInt(horizonDays, 2, 30, 7),
+    horizonDays: clampInt(horizonDays, 2, 90, 7),
     dailyMinutes: clampInt(dailyMinutes, constraints.checkWindows ? 10 : 15, 180, 30),
     fixedSessions: Boolean(constraints.checkWindows && constraints.sessionsPerWeek),
   };
@@ -811,7 +811,7 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
       },
       patterns: {
         type: "array",
-        description: "日型模板 1-5 条：把计划按内容归类（如工作日训练/周末强化/饮食配合），同类项共用一个模板，不要逐日展开",
+        description: "日型模板 1-5 条：把计划按内容归类（如产品卖点准备/渠道排期/上线检查，或工作日训练/周末强化/饮食配合），同类项共用一个模板，不要逐日展开",
         items: {
           type: "object",
           properties: {
@@ -821,8 +821,8 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
             applies_to: { type: "string", description: "适用日：daily / weekday / weekend / mon..sun / 周一..周日，可逗号组合" },
             start_time: { type: "string", description: "HH:MM，24小时制，避开 23:00-7:00，贴合用户活跃时段" },
             duration_minutes: { type: "number", description: "单次时长，10-240" },
-            title: { type: "string", description: "≤16字，内容要点，如「慢跑+拉伸」" },
-            description: { type: "string", description: "可执行动作+量化标准，≤30字，如「慢跑3公里，前后拉伸各5分钟」" },
+            title: { type: "string", description: "≤16字，内容要点，如「卖点文案初稿」「慢跑+拉伸」" },
+            description: { type: "string", description: "可执行动作+量化标准，≤30字，如「完成3条卖点文案并发给团队」「慢跑3公里，前后拉伸各5分钟」" },
             note: { type: "string", description: "可选，执行小提示，≤20字" },
             weekly_progression: { type: "string", description: "可选，每周进阶，如「每周+5分钟」或「第2周加速」" }
           },
@@ -861,6 +861,10 @@ export async function planCommitmentWithKimi({ goal, horizonDays, dailyMinutes, 
     : constraints.sessionMinutes != null || constraints.sessionsPerWeek
       ? `每次主要活动恰好 ${constraints.sessionMinutes ?? ctx.dailyMinutes} 分钟。`
       : "";
+  const projectLike = /(产品|上新|发布|上线|项目|运营|营销|活动|装修|婚礼|写作|作品|创业|launch|product|project|business|发布)/i.test(ctx.goal);
+  const projectInstruction = projectLike
+    ? "这是工作/项目型计划：把目标拆成 1-5 条工作流模板（如卖点与素材、渠道排期、上线检查、复盘），每条 description 写清可交付成果与完成标准；weekly_progression 用来写阶段里程碑；不要套用训练/恢复模板。"
+    : "";
   const prompt = `用户想规划：「${ctx.goal}」，共 ${ctx.horizonDays} 天（自 ${today} 起），每天累计约 ${ctx.dailyMinutes} 分钟。偏好：${String(preferences || "无").slice(0, 100)}
 ${memoryContext ? renderMemoryContext(memoryContext) : ""}
 ${bits.join("\n")}
@@ -868,6 +872,7 @@ ${frequencyInstruction}
 ${durationInstruction}
 ${slotInstruction}
 ${templateInstruction}
+${projectInstruction}
 ${constraints.noWeekdayEvenings ? "硬约束：周一至周五所有主要活动必须在18:00前结束。请安排工作日白天或周末，检查开始时刻加活动时长，避免任何跨过18:00的工作日安排。" : ""}
 ${constraints.weekdayEveningsOnly ? "硬约束：主要活动只可以在周一至周五18:00之后安排。" : ""}
 ${constraints.dumbbellOnly ? "器械限制：用户只有哑铃。只安排哑铃或徒手动作。" : ""}
@@ -884,8 +889,8 @@ ${constraints.training ? "训练日的 description 必须列出具体动作及�
       const timeout = AbortSignal.timeout(fetchTimeout);
       try {
         ({ data, usage } = await invoke({
-          prompt: `${prompt}\n每条模板必须包含 session_type，主要训练或学习填 session，休息恢复填 recovery。${errors.length ? `上一版存在问题，请修正：${errors.join("；")}` : ""}`,
-          systemPrompt: "你是约定规划师。把长期目标拆成母约定 + 1-5 个日型模板。只输出 JSON，不要长篇思考。",
+          prompt: `${prompt}\n每条模板必须包含 session_type，主要推进填 session，休息/恢复填 recovery。${errors.length ? `上一版存在问题，请修正：${errors.join("；")}` : ""}`,
+          systemPrompt: "你是约定规划师，也是通用任务规划师。把长期目标拆成母约定 + 1-5 个日型模板；工作/项目型计划写成可交付的工作流，学习/训练型计划写成可执行练习。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,
           model: "kimi-k3",
           maxTokens: 8000,

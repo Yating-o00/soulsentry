@@ -80,7 +80,7 @@ function sanitizeExtracted(raw) {
       type: "plan",
       plan_request: {
         goal,
-        horizon_days: Number.isFinite(horizon) ? Math.min(30, Math.max(2, Math.round(horizon))) : null,
+        horizon_days: Number.isFinite(horizon) ? Math.min(90, Math.max(2, Math.round(horizon))) : null,
         daily_minutes: Number.isFinite(daily) ? Math.min(180, Math.max(15, Math.round(daily))) : null,
         preferences: trim(req.preferences, 200) || null
       }
@@ -521,7 +521,7 @@ async function loadActivePlanFromDb({ userId, prisma }) {
     const cnDates = best.kids
       .map((c) => new Date(new Date(c.reminderTime).getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10))
       .sort();
-    const horizonDays = Math.min(30, Math.max(2, Math.round(
+    const horizonDays = Math.min(90, Math.max(2, Math.round(
       (new Date(`${cnDates[cnDates.length - 1]}T00:00:00+08:00`).getTime() - new Date(`${today}T00:00:00+08:00`).getTime()) / 86400000
     ) + 1));
     return {
@@ -780,7 +780,7 @@ ${recalled}
 - type=task（立约定）：用户想在未来某个时间做某件事。title 是从内容提炼的简短标题（≤12字），不要包含时间词（今天/明天/下午等，时间已由 due_at 单独表达）；description 必须保留用户说这件事的原话，方便日后回看。due_at 必须是带 +08:00 的 ISO8601 时间。category 从 ${CATEGORIES.join("/")} 中选，priority 从 high/medium/low 中选。用户明确说「打卡/签到」，或想长期重复坚持同一件事（如每天跑步、每日阅读、练琴打卡），category 用 checkin（打卡约定，每次做到点一下记一次）。
 - type=task（网页办事）：用户想"打开某个网址做事"——如打开网页查询/搜索/填写/预约/订票/报名/提交，或描述里带 http 链接并让你去办。同样输出 type=task，description 必须原样保留完整网址和原话，due_at 可以为 null。回复时告诉用户：确认后心栈会派浏览器小助手替你打开网页一步步办理，遇到登录等需要你出面的环节会暂停问你，进度和结果在守护记录里随时可看。
 - type=heart（记心签）：用户在表达情绪、心情、感悟、瞬间。content 保留用户原话。心签有六种分类（情绪/灵感/资料/备忘/分享/账本），用户纠正分类时（如"这是账本签""改成灵感"）extracted.heart_category 更新为目标类型，reply 口吻跟着换：账本签轻松吐槽、灵感签推一把落地、备忘签极简确认、资料签补上下文、情绪签温柔托举。
-- type=plan（智能约定规划）：用户提出一类需要持续多天做的事，希望你能帮忙整体规划——如"帮我规划一周英语学习""21天减脂""备考复习计划""每天练琴坚持一个月"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 时段偏好；用户提到的体重、伤病、运动基础、饮食禁忌、作息等个性化条件也必须写进 preferences，规划器会据此调整强度与内容），绝对不要自己把规划拆成 task 列表。缺关键信息（通常是天数或每天时长）时 plan_request 里留 null，reply 只问那一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。用户想在规划里新增一项（如"周六下午3点加半小时瑜伽""每天加冥想"）时用 field="add"，value=新项名称（如"瑜伽"），并带上 start_time（如"15:00"）与 duration_minutes（如 30），target 为适用日。
+- type=plan（通用个人任务规划）：任何需要持续多天推进的目标都可以规划，不限学习或运动——如"帮我规划一周的产品上新计划""帮我排一个2个月的半马计划""装修6周计划""写一本书的12周计划"。只填 plan_request（goal 必填，一句话概括目标；能推断时填 horizon_days 天数、daily_minutes 每天分钟数、preferences 偏好与约束；用户提到的交付物、阶段、团队、体重、伤病、运动基础、饮食禁忌、作息等个性化条件也必须写进 preferences，规划器会据此调整内容），绝对不要自己把规划拆成 task 列表。两个月按约60天、三个月按约90天换算；最多支持90天。工作/产品/项目类计划如果用户没给每天时长，可填一个合理的默认值（如45分钟），不要为了问时长而停下来；训练/学习类关键参数缺失时再留 null 并只问一个最关键的问题。用户调整已有规划时分两种情况：整体变化（"改成早上"/"每天加到一小时"/"延长到三周"）更新 plan_request 对应字段；定向修改（"周末加到一小时""周六改到早上""把长跑换成游泳"）保持 goal/horizon/daily 不变，写进 plan_request.adjustments（target=周末/工作日/每天/组名，field=duration/start_time/content，value=新值），可多条，reply 用一句话复述你理解到的修改。用户想在规划里新增一项（如"周六下午3点加半小时瑜伽""每天加冥想"）时用 field="add"，value=新项名称（如"瑜伽"），并带上 start_time（如"15:00"）与 duration_minutes（如 30），target 为适用日。
 - type=link（存链接）：用户发来网址仅仅想存起来看看（没有让你去网页上办事）。text 保留用户原话。
 - 纯聊天，或意图还不足以判断类型：extracted 为 null。
 

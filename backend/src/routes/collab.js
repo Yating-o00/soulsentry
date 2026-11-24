@@ -12,6 +12,7 @@ import { runCollabAgent, postAgentMessage, cascadeNodeCompletion } from "../serv
 import { scheduleCollabDrive } from "../services/collabDrive.js";
 import { collectSubtasks, logCollabChange, nestSubtasks } from "../services/collabSpace.js";
 import { AGENT_DOMAINS, AGENT_TEMPLATES, findAgentTemplate } from "../services/agentStore.js";
+import { normalizeAgentSettings, sendCollabWelcome } from "../services/collabAutomation.js";
 import { BUDDY_NAMES } from "./buddies.js";
 
 export const collabRouter = Router();
@@ -199,6 +200,69 @@ collabRouter.post("/:taskId/agent", async (req, res) => {
   ]);
 
   return res.json({ agent, template });
+});
+
+// PATCH /api/collab/:taskId/agent-settings — 自定义空间 Agent：欢迎语 / 每日打卡公布 / 沟通语言
+const agentSettingsSchema = z.object({
+  language: z.enum(["auto", "zh", "en", "ja", "es", "fr"]).optional(),
+  welcome: z.object({
+    enabled: z.boolean().optional(),
+    template: z.string().max(800).optional(),
+  }).optional(),
+  checkinDigest: z.object({
+    enabled: z.boolean().optional(),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式需为 HH:MM").optional(),
+    mentionMissing: z.boolean().optional(),
+  }).optional(),
+});
+
+collabRouter.patch("/:taskId/agent-settings", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  const { task } = result;
+  if (task.userId !== req.user.id) {
+    return res.status(403).json({ error: "FORBIDDEN", message: "只有协同发起人可以修改 Agent 自动化设置" });
+  }
+  const payload = agentSettingsSchema.safeParse(req.body || {});
+  if (!payload.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: payload.error.issues?.[0]?.message || "设置格式不正确" });
+  }
+  const collab = task.metadata?.collab || {};
+  const agent = { ...(collab.agent || { enabled: true }) };
+  const current = normalizeAgentSettings(agent);
+  const nextSettings = {
+    ...current,
+    ...(payload.data.language ? { language: payload.data.language } : {}),
+    welcome: { ...current.welcome, ...(payload.data.welcome || {}) },
+    checkinDigest: { ...current.checkinDigest, ...(payload.data.checkinDigest || {}) },
+  };
+  nextSettings.welcome.template = String(nextSettings.welcome.template || "").slice(0, 800);
+  nextSettings.checkinDigest.time = String(nextSettings.checkinDigest.time || "21:00");
+  const nextAgent = { ...agent, settings: nextSettings };
+  const metadata = { ...(task.metadata || {}), collab: { ...collab, agent: nextAgent } };
+  await prisma.task.update({ where: { id: task.id }, data: { metadata } });
+
+  await logCollabChange(req.user.id, task, "collab_agent_settings", [
+    {
+      field: "agent_automation",
+      field_label: "Agent 自动化",
+      new_value: `欢迎语${nextSettings.welcome.enabled ? "开" : "关"}；每日打卡${nextSettings.checkinDigest.enabled ? ` ${nextSettings.checkinDigest.time}` : "关"}；语言 ${nextSettings.language}`,
+    },
+  ]);
+  return res.json({ agent: nextAgent, settings: nextSettings });
+});
+
+// POST /api/collab/:taskId/welcome — 成员第一次进入空间时发送入群欢迎语（后端幂等，不扣 AI 点数）
+collabRouter.post("/:taskId/welcome", async (req, res) => {
+  const result = await loadCollabSpace(req, res);
+  if (!result) return;
+  try {
+    const welcome = await sendCollabWelcome(result.task.id, req.user.id);
+    return res.json(welcome);
+  } catch (error) {
+    console.error("[collab] welcome failed:", error?.message || error);
+    return res.status(500).json({ error: "WELCOME_FAILED", message: "欢迎语暂时没发出去" });
+  }
 });
 
 // POST /api/collab/:taskId/topics — 新建讨论主题（聊天窗口）

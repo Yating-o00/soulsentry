@@ -1,6 +1,6 @@
 // Agent 抽屉（右侧 Sheet）：Agent 形象 + 专业方案（Agent 市场入口）+ 能力清单 + 主动推动说明 + 暂停/恢复开关
 import React from "react";
-import { Bot, ChevronRight, FileText, ListChecks, MessageCircleMore, Pause, Play, Sparkles, Store, Wifi, Zap } from "lucide-react";
+import { Bot, ChevronRight, FileText, ListChecks, MessageCircleMore, Pause, Play, Settings2, Sparkles, Store, Wifi, Zap } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
   Sheet, SheetContent, SheetTitle,
@@ -18,7 +18,7 @@ const CAPABILITIES = [
   { icon: Bot, label: "停滞时主动推动", description: "空间停滞超 24h 或节点临期时主动出面" },
 ];
 
-export default function AgentDrawer({ open, onOpenChange, agentEnabled, agentPaused, agentMeta, toggling, onToggleAgent, driveEnabled, togglingDrive, onToggleDrive, onOpenStore }) {
+export default function AgentDrawer({ open, onOpenChange, agentEnabled, agentPaused, agentMeta, toggling, onToggleAgent, driveEnabled, togglingDrive, onToggleDrive, onOpenStore, onOpenAutomation }) {
   const templateName = agentMeta?.templateName;
   const templateDomain = agentMeta?.templateDomain;
   return (
@@ -83,6 +83,41 @@ export default function AgentDrawer({ open, onOpenChange, agentEnabled, agentPau
               </button>
             </div>
           </div>
+
+          {/* 空间自动化：欢迎语 / 每日打卡公布 / 沟通语言 */}
+          {agentEnabled && (
+            <div className="mt-4 rounded-md border p-3.5" style={{ borderColor: "#dcdad3", backgroundColor: "#faf9f5" }}>
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: "#e4e6f8", color: "#384877" }}>
+                  <Settings2 className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-semibold" style={{ color: "#3b3734" }}>空间自动化</div>
+                  <p className="mt-1 text-[10px] leading-4" style={{ color: "#77736c" }}>
+                    入群欢迎、每天 21:00 打卡公布、跨语言沟通，都可以按这个空间单独设置。
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[9px]" style={{ color: "#6f6b64", border: "1px solid #e5e4df" }}>
+                      欢迎语{agentMeta?.settings?.welcome?.enabled ? "开" : "关"}
+                    </span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[9px]" style={{ color: "#6f6b64", border: "1px solid #e5e4df" }}>
+                      打卡公布{agentMeta?.settings?.checkinDigest?.enabled ? ` ${agentMeta.settings.checkinDigest.time || "21:00"}` : "关"}
+                    </span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[9px]" style={{ color: "#6f6b64", border: "1px solid #e5e4df" }}>
+                      {agentMeta?.settings?.language === "auto" || !agentMeta?.settings?.language ? "跟随成员语言" : agentMeta.settings.language.toUpperCase()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onOpenAutomation}
+                    className="mt-2 inline-flex min-h-7 items-center gap-1 text-[11px] font-medium text-[#384877] hover:underline underline-offset-2"
+                  >
+                    自定义功能 <ChevronRight className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 边界说明 */}
           <div className="rounded-md border p-4" style={{ borderColor: "#dcdfe8", backgroundColor: "#eef0f8" }}>

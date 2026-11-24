@@ -34,3 +34,19 @@ test("planner propagates a provider outage instead of returning a fallback propo
     invoke: async () => { throw new Error("provider unavailable"); }
   }), /AI 服务暂不可用/);
 });
+
+test("planner supports a two-month project plan without truncating at 30 days", async () => {
+  const invoke = async () => ({
+    data: {
+      parent: { title: "产品上新", description: "60 天推进上新", category: "work", priority: "high" },
+      patterns: [{
+        plan_group: "上新", session_type: "session", applies_to: "daily", start_time: "10:00",
+        duration_minutes: 45, title: "当天推进", description: "完成当天可交付的一步",
+      }],
+    },
+  });
+  const result = await planCommitmentWithKimi({ goal: "产品上新", horizonDays: 60, dailyMinutes: 45, invoke });
+  const dates = new Set(result.children.map((child) => child.date));
+  assert.ok(result.children.length >= 50, `expected a long plan, got ${result.children.length}`);
+  assert.ok(dates.size >= 50);
+});

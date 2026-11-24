@@ -273,6 +273,24 @@ test("routes a complete home workout through the same workflow", async () => {
   assert.equal(plannerCalls().length, 1);
 });
 
+test("plans a work project with a model default and supports a two-month goal", async () => {
+  intent({ goal: "产品上新", minutes: 45 });
+  draft({ minutes: 45 });
+  const project = await send("帮我规划一周的产品上新计划");
+  assert.equal(project.extracted?.type, "plan");
+  assert.ok((project.extracted?.plan?.children || []).length > 0);
+  assert.equal(plannerCalls().length, 1);
+
+  intent({ goal: "半马备赛", days: 60, minutes: 45 });
+  draft({ minutes: 45 });
+  const long = await send("帮我排一个2个月的半马备赛计划，每次45分钟");
+  assert.equal(long.extracted?.type, "plan");
+  const dates = [...new Set((long.extracted?.plan?.children || []).map((child) => child.date))].sort();
+  assert.ok(dates.length > 20);
+  assert.ok(new Date(dates.at(-1)).getTime() - new Date(dates[0]).getTime() > 30 * 86400000);
+  assert.equal(plannerCalls().length, 2);
+});
+
 test("asks for a missing duration and continues with the user's second turn", async () => {
   const question = "每次背单词，你想留多长时间？";
   intent({ minutes: null, reply: question, clarificationField: "daily_minutes" });

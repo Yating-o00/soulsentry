@@ -19,6 +19,7 @@ import DigestCard from "@/components/collab/DigestCard";
 import ConversationPane from "@/components/collab/ConversationPane";
 import AgentDrawer from "@/components/collab/AgentDrawer";
 import AgentStoreDialog from "@/components/collab/AgentStoreDialog";
+import CollabAutomationSettings from "@/components/collab/CollabAutomationSettings";
 import MobileNav from "@/components/collab/MobileNav";
 import CollabInviteDialog from "@/components/tasks/CollabInviteDialog";
 import CollabCreateDialog from "@/components/tasks/CollabCreateDialog";
@@ -33,6 +34,7 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
   const [inviteOpen, setInviteOpen] = useState(false);
   const [agentDrawerOpen, setAgentDrawerOpen] = useState(false);
   const [agentStoreOpen, setAgentStoreOpen] = useState(false);
+  const [automationOpen, setAutomationOpen] = useState(false);
   const enterChatDirectly = Boolean(searchParams.get("view"));
   const initialView = ["discussion", "activity"].includes(searchParams.get("view"))
     ? searchParams.get("view")
@@ -103,6 +105,16 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
   const task = summary?.task;
   const collab = task?.metadata?.collab;
   const members = summary?.members || [];
+  const ownerMember = members.find((member) => member.role === "owner");
+  const canEditAutomation = Boolean(ownerMember?.user_id && ownerMember.user_id === currentUser?.id);
+  const welcomeSentRef = useRef(null);
+
+  // 成员首次进入空间时触发后端欢迎语；后端按成员幂等，重复进入不会刷屏
+  useEffect(() => {
+    if (!taskId || !task || welcomeSentRef.current === taskId) return;
+    welcomeSentRef.current = taskId;
+    httpRequest(`/api/collab/${taskId}/welcome`, { method: "POST" }).catch(() => {});
+  }, [taskId, task]);
 
   // 邀请接受后带 view=discussion：手机端直接滚到聊天，立刻能发言
   useEffect(() => {
@@ -387,6 +399,19 @@ export default function CollabSpace({ taskId: taskIdProp, embedded = false, mini
         togglingDrive={togglingDrive}
         onToggleDrive={handleToggleDrive}
         onOpenStore={() => setAgentStoreOpen(true)}
+        onOpenAutomation={() => {
+          setAgentDrawerOpen(false);
+          setAutomationOpen(true);
+        }}
+      />
+
+      <CollabAutomationSettings
+        open={automationOpen}
+        onOpenChange={setAutomationOpen}
+        taskId={taskId}
+        agentMeta={collab?.agent}
+        canEdit={canEditAutomation}
+        onSaved={invalidateAll}
       />
 
       <AgentStoreDialog

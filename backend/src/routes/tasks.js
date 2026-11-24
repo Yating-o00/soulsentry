@@ -447,7 +447,7 @@ tasksRouter.post("/plan", async (req, res) => {
     proposal_id: z.string().uuid(),
     memory_proposal_id: z.string().min(1).max(100).optional(),
     parent: taskInputSchema,
-    children: z.array(taskInputSchema).min(1).max(100),
+    children: z.array(taskInputSchema).min(1).max(360),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });

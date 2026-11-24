@@ -131,6 +131,14 @@ const SCENARIO_TAILS = {
   custom: "当前是自定义约定空间：语气中性平和、清晰高效。"
 };
 
+const LANGUAGE_NAMES = {
+  zh: "中文",
+  en: "English",
+  ja: "日本語",
+  es: "Español",
+  fr: "Français",
+};
+
 export function buildSystem(scenario, agentMeta, persona = null) {
   // 人格是表达方式，优先级高于场景默认语气，但不改变中立、不评判、不替人做决定的底线
   const personaTail = COLLAB_PERSONA_TAILS[persona] || "";
@@ -162,6 +170,13 @@ export function buildSystem(scenario, agentMeta, persona = null) {
     layers.push(
       `创建者给这颗搭子上传了专属资料。优先依据这些资料给出专业建议；不要把资料原文整段复述给成员，只提炼成可执行的建议。资料没有覆盖的内容就明说「资料里没写到」，不要编造：\n${agentMeta.materialContext}`
     );
+  }
+  // 沟通语言：auto 跟随成员最新消息；固定语言时整个空间的 Agent 回复/整理都使用该语言。
+  const language = agentMeta?.settings?.language || "auto";
+  if (language === "auto") {
+    layers.push("回复语言：跟随成员最新消息使用的语言（中文/English/日本語/Español/Français 等）；无法判断时使用中文。");
+  } else {
+    layers.push(`回复语言：本空间统一使用${LANGUAGE_NAMES[language] || LANGUAGE_NAMES.zh}沟通与整理；即使成员使用其他语言提问，也用该语言回复。`);
   }
   return layers.filter(Boolean).join("\n\n");
 }

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowUpRight, CheckCircle2, Circle, Loader2, Plus, Sparkles } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, Circle, Loader2, Plus, Settings2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
@@ -9,6 +9,7 @@ import { createPageUrl } from "@/utils";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
 import { cn } from "@/lib/utils";
 import ConversationPane from "./ConversationPane";
+import CollabAutomationSettings from "./CollabAutomationSettings";
 import CollabInviteDialog from "@/components/tasks/CollabInviteDialog";
 import Orb from "@/components/buddy/Orb";
 import { MemberAvatar } from "./Common";
@@ -42,6 +43,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
   const queryClient = useQueryClient();
   const [view, setView] = useState("chat");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [automationOpen, setAutomationOpen] = useState(false);
   const [busyId, setBusyId] = useState(null);
   // Agent 从讨论里新整理出约定/沉淀时，在对应切换上点一个未读点，不弹提示
   const [fresh, setFresh] = useState({ pacts: false, knowledge: false });
@@ -72,6 +74,16 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
   const collab = task?.metadata?.collab;
   const agentActive = collab?.agent?.enabled !== false && !collab?.agent?.paused;
   const members = summary?.members || [];
+  const ownerMember = members.find((member) => member.role === "owner");
+  const canEditAutomation = Boolean(ownerMember?.user_id && ownerMember.user_id === currentUser?.id);
+  const welcomeSentRef = useRef(null);
+
+  // 成员第一次进入轻量协同空间时也触发欢迎语，后端按成员幂等
+  useEffect(() => {
+    if (!taskId || !task || welcomeSentRef.current === taskId) return;
+    welcomeSentRef.current = taskId;
+    httpRequest(`/api/collab/${taskId}/welcome`, { method: "POST" }).catch(() => {});
+  }, [taskId, task]);
   const tree = summary?.subtasks || [];
   const docs = summary?.docs || [];
   const digest = docs.find((doc) => doc.doc_type === "digest");
@@ -230,6 +242,15 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
               </button>
             </div>
             <span className="hidden shrink-0 text-[9px] text-stone-400 sm:inline">{memberCount}人</span>
+            <button
+              type="button"
+              onClick={() => setAutomationOpen(true)}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877] md:h-6 md:w-6"
+              title="Agent 自动化：欢迎语 / 打卡公布 / 语言"
+              aria-label="Agent 自动化设置"
+            >
+              <Settings2 className="h-3 w-3" />
+            </button>
             <Link
               to={fullSpaceUrl}
               className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877] md:h-6 md:w-6"
@@ -418,6 +439,15 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
         subtasks={tree}
         onClose={() => setInviteOpen(false)}
         onChanged={refresh}
+      />
+
+      <CollabAutomationSettings
+        open={automationOpen}
+        onOpenChange={setAutomationOpen}
+        taskId={taskId}
+        agentMeta={collab?.agent}
+        canEdit={canEditAutomation}
+        onSaved={refresh}
       />
     </div>
   );

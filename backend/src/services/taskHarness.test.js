@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { runTaskHarness, validateScheduledSessions } from "./taskHarness.js";
+import { resolvePlanningRequest, runTaskHarness, validateScheduledSessions } from "./taskHarness.js";
 import { trainingClarification } from "./trainingWorkflow.js";
 
 function plan(count, minutes = 45) {
@@ -57,4 +57,19 @@ test("checks each complete week separately in a multiweek schedule", () => {
   const constraints = { sessionsPerWeek: 3, sessionMinutes: 45, horizonDays: 14, startDate: "2026-11-16" };
   assert.deepEqual(validateScheduledSessions({ children: [...first, ...second] }, constraints), []);
   assert.match(validateScheduledSessions({ children: [...first, ...second.slice(1)] }, constraints)[0], /第 2 周/);
+});
+
+test("accepts a model default duration only for work/project plans", () => {
+  const project = resolvePlanningRequest(
+    { goal: "一周产品上新计划", horizon_days: 7, daily_minutes: 45 },
+    ["帮我规划一周的产品上新计划"],
+    []
+  );
+  assert.equal(project.clarification, null);
+  const study = resolvePlanningRequest(
+    { goal: "英语词汇复习", horizon_days: 7, daily_minutes: 20 },
+    ["帮我规划一周英语词汇复习，每周三次"],
+    []
+  );
+  assert.equal(study.clarification?.field, "daily_minutes");
 });

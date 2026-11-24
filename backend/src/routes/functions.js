@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { aiRequestContext, aiTrace } from "../lib/aiContext.js";
 import { requireAuth } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { invokeKimiText, invokeKimiWebSearch, callKimiChat, parseModelJson, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
@@ -1414,7 +1415,7 @@ async function generateMoodRiverWithAI(userId, period) {
   }
 }
 
-functionsRouter.post("/:name", async (req, res) => {
+functionsRouter.post("/:name", aiRequestContext, async (req, res) => {
   const { name } = req.params;
   const payload = req.body || {};
 
@@ -3506,7 +3507,8 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           emotional_response: parsed.emotional_response || "",
           response_tag: parsed.response_tag || (parsed.is_emotional ? "感性回应" : "收录"),
           analyzed_at: new Date().toISOString(),
-          source: usedFallback ? "local_fallback" : "kimi",
+          source: usedFallback ? "local_fallback" : (aiTrace("ai")?.provider || "ai"),
+          ai: aiTrace(usedFallback ? "fallback" : "ai"),
           note_type: parsed.note_type || null,
           table_md: parsed.table_md || null,
           ledger: parsed.ledger || null
@@ -3536,6 +3538,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
             "分享": "收到这份分享，已好好安放。",
             "情绪": "收到了，都在。"
           };
+          ai_analysis.reply_source = "local_template";
           ai_analysis.emotional_response = FALLBACK_REPLY[ai_analysis.category] || "收到了，都在。";
         }
 

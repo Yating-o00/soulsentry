@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { aiRequestContext } from "../lib/aiContext.js";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { prisma } from "../lib/prisma.js";
@@ -35,7 +36,7 @@ const chatBodySchema = z.object({
  * type=plan 时为智能约定规划：extracted.plan = { parent, children[] }（母约定+逐日具体时刻的子约定），
  * agent 非空表示浏览器小助手已出发（{ executionId, status }），客户端轮询 agent-state 获取进度与结果。
  */
-chatRouter.post("/", async (req, res) => {
+chatRouter.post("/", aiRequestContext, async (req, res) => {
   const parsed = chatBodySchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: "INVALID_INPUT", message: "对话内容不合法" });

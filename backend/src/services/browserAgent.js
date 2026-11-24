@@ -251,7 +251,7 @@ const AGENT_SYSTEM = `你是 SoulSentry「心栈」内置的浏览器操作 Agen
 7. 选平台要符合国内用户的常规习惯：订机票/火车票/酒店/门票优先用携程、飞猪、同程、美团这类综合平台（可以一次对比多家供应商的时间与价格），而不是直接扎进某一家航空公司/铁路官网；查通用信息（天气、资讯、百科）优先用百度/必应搜索；查快递用菜鸟裹裹或快递公司官网。用户给了明确网址则以用户为准。
 8. 查询对比类目标（比价、查班次、查余票）不要陷入逐条翻页：收集到 2-3 个有代表性的选项后，用 ask_user 把关键差异（时间/价格/耗时）列给用户选，用户选完再继续下一步。
 9. 快照里 tag=card 的条目是页面上的信息块（一趟航班、一个班次、一条商品、一条搜索结果），text 已含它的关键信息，click 卡片等于选中它；tag=link 是 SPA 里的可点击元素，同样可以 click。
-10. 选定一个平台就坚持办完：先填搜索表单，再看卡片列表，用 extract 记录候选，最后 ask_user 让用户选。同一平台连续两次失败才换下一个，不要到处开网站。
+10. 选定一个平台就优先办完：先填搜索表单，再看卡片列表，用 extract 记录候选，最后 ask_user 让用户选。如果页面打不开、被安全验证拦住、或关键信息（航班/价格/余票/商品）缺失，不要死磕，可以直接用 search_web 或 goto 自主换到其他网页继续查，直到能给用户可比较的结果；有明确理由再换，不要无目的地到处开网站。
 11. 日期/日历控件：优先直接在日期输入框填入日期（YYYY-MM-DD 或 MM月DD日），填完按 Enter；若是弹出的日历面板，就 click 面板里的具体日期数字。
 12. 页面打开后内容没加载出来（快照里几乎没东西）时，先等一拍再重新看快照，必要时 scroll 一下触发懒加载。
 13. 以结果为导向：订/买/约类任务，每个阶段的目标都是"把可对比的选项交给用户"。查到的候选用 extract 记录关键差异（时间/价格/时长/评分），凑够 2-3 个就 ask_user 让用户选，用户选定后再继续执行。登录、验证码、付款一律 ask_user 把主动权交回用户。网页被安全验证拦截时不要反复重试，直接向用户说明并给选择；页面信息不全或被拦时可用 search_web 联网搜索补齐时刻、价格等关键信息——但 search_web 只能用来补齐信息，不能用它代替用户要的办事结果：订/买/约/发布类目标必须真正在网页上完成，卡住时就 ask_user 说明卡点让用户接管。
@@ -533,6 +533,8 @@ async function runLoop(session) {
       const result = await callKimiChat({
         messages,
         tools: AGENT_TOOLS,
+        // 网页操作每步都等 K3 太慢；先用高速 Kimi，失败再退 K3
+        models: ["kimi-k2.7-code-highspeed", "kimi-k3"],
         maxTokens: 1200,
         fetchTimeout: KIMI_CALL_TIMEOUT
       });
@@ -889,17 +891,23 @@ async function ensureScreencast(session) {
   session.live.casting = true;
 }
 
-// 订阅实时画面：进入接管模式（Agent 挂起），返回退订函数
-export async function subscribeAgentLive(executionId, onFrame) {
+// 订阅实时画面：默认进入接管模式（Agent 挂起）；view 模式只观看，不打断 Agent。
+export async function subscribeAgentLive(executionId, onFrame, { takeover = true } = {}) {
   const s = sessions.get(executionId);
   if (!s) return { ok: false, message: "会话不存在或已结束" };
   if (s.live.subscribers.size >= 1) return { ok: false, message: "已有其他窗口在接管，请稍后再试" };
   s.live.subscribers.add(onFrame);
-  s.takeover = true;
+  const didTakeover = takeover === true;
   const wasPostmortem = !!s.postmortem;
-  s.status = "takeover";
-  logStep(s, "live_takeover", {}, wasPostmortem ? "用户打开实时窗口接管失败现场" : "用户打开实时窗口接管");
-  persist(s);
+  if (didTakeover) {
+    s.takeover = true;
+    s.status = "takeover";
+    logStep(s, "live_takeover", {}, wasPostmortem ? "用户打开实时窗口接管失败现场" : "用户打开实时窗口接管");
+    persist(s);
+  } else {
+    logStep(s, "live_view", {}, "用户打开实时窗口观看");
+    persist(s);
+  }
   await ensureScreencast(s).catch(() => {});
   // 保活：老 headless 的 screencast 只在页面变化时推帧，超过 1.2s 无帧则主动截图补一帧
   if (!s.live.keepAlive) {
@@ -918,13 +926,14 @@ export async function subscribeAgentLive(executionId, onFrame) {
   return {
     ok: true,
     postmortem: wasPostmortem,
+    takeover: didTakeover,
     unsubscribe: async () => {
       s.live.subscribers.delete(onFrame);
       if (s.live.subscribers.size === 0) {
         await stopScreencast(s).catch(() => {});
         if (s.live.keepAlive) { clearInterval(s.live.keepAlive); s.live.keepAlive = null; }
-        // 无人接管时自动交还 AI；若 Agent 正停在提问处，先解开它的挂起
-        if (s.takeover) {
+        // 只有真正接管过的窗口关闭时才交还 AI；纯观看不打断 Agent
+        if (didTakeover && s.takeover) {
           s.takeover = false;
           if (s.pendingResolve) {
             s.pendingResolve({ choice: "", text: "（用户关闭了实时窗口，把网页交还给小助手继续）" });

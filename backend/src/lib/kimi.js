@@ -11,10 +11,10 @@ export const FAST_TEXT_MODELS = String(process.env.FAST_TEXT_MODELS || "kimi-k2.
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
-// 今日页小助手对话：只走 Kimi K3 旗舰，再由 callKimiChat 自动切 DeepSeek 兜底。
-// 不把 K2.6 放进这条链——它在本项目的 JSON 对话里多次出现超时/空内容，
-// 会拖长等待时间，最后仍要落到 DeepSeek，反而损害连续对话体验。
-export const DASHBOARD_TEXT_MODELS = String(process.env.DASHBOARD_TEXT_MODELS || "kimi-k3")
+// 今日页小助手对话：优先 Kimi K2.7 code-highspeed（实测 1-3 秒返回），
+// 再由 callKimiChat 自动切 DeepSeek 兜底。K3 虽然质量更稳，但对话首包常要 15-30 秒，
+// 首页连续问答体感太慢；规划器仍单独使用 K3 保证复杂计划质量。
+export const DASHBOARD_TEXT_MODELS = String(process.env.DASHBOARD_TEXT_MODELS || "kimi-k2.7-code-highspeed")
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);

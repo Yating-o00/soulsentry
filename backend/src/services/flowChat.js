@@ -806,7 +806,8 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
     models: DASHBOARD_TEXT_MODELS,
     // K3 的推理 token 也计入 max_tokens，给 JSON 留足预算。
     maxTokens: 2500,
-    fetchTimeout: 30000,
+    // 首页对话优先快：K2.7 正常 1-3 秒；超过 15 秒直接切 DeepSeek，不让用户干等 30 秒
+    fetchTimeout: 15000,
     signal,
     singleAttempt,
     withUsage: true

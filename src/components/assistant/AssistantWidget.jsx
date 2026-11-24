@@ -5,13 +5,14 @@
 // - 确认执行后失效 react-query 缓存，产品各页面数据即时刷新
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AtSign, FileText, Loader2, Mic, Paperclip, X } from "lucide-react";
+import { AtSign, FileText, Loader2, Mic, Monitor, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { applyBuddyCapture } from "@/lib/buddyCapture";
 import { getAllBuddies } from "@/lib/customBuddies";
 import { BUDDY_TINTS } from "@/lib/buddies";
 import Orb from "@/components/buddy/Orb";
+import AgentLiveWindow from "@/components/automation/AgentLiveWindow";
 import assistantPlanet from "@/assets/assistant-planet.png";
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划", collab: "协同约定" };
@@ -107,6 +108,13 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
   const [mentionIndex, setMentionIndex] = useState(0);
   const [recording, setRecording] = useState(false);
   const [voiceText, setVoiceText] = useState("");
+  const [agentExecId, setAgentExecId] = useState(null);
+  const [agentLiveOpen, setAgentLiveOpen] = useState(false);
+  const [agentActive, setAgentActive] = useState(false);
+  const [agentWaiting, setAgentWaiting] = useState(null);
+  const [agentReplyText, setAgentReplyText] = useState("");
+  const [agentResponding, setAgentResponding] = useState(false);
+  const [agentTakeoverRequested, setAgentTakeoverRequested] = useState(0);
   const fileInputRef = useRef(null);
   const recognitionRef = useRef(null);
   const voiceTranscriptRef = useRef("");
@@ -241,6 +249,84 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
   useEffect(() => {
     if (open) loadMentionBuddies();
   }, [open, loadMentionBuddies]);
+
+  // 浏览器小助手：等真实浏览器会话启动后自动打开实时小窗；结束时把结果送回对话
+  useEffect(() => {
+    if (!agentExecId) return undefined;
+    let cancelled = false;
+    let opened = false;
+    let sawActive = false;
+    let inactiveTicks = 0;
+    const check = async () => {
+      try {
+        const state = await httpRequest(`/api/task-executions/${agentExecId}/agent-state`);
+        if (cancelled) return;
+        if (state?.active) {
+          sawActive = true;
+          inactiveTicks = 0;
+          setAgentActive(true);
+          setAgentWaiting(state.status === "waiting_input" ? state.waiting || null : null);
+          if (!opened) {
+            opened = true;
+            setAgentLiveOpen(true);
+          }
+          return;
+        }
+        const status = String(state?.execution_status || "").toLowerCase();
+        const terminal = ["completed", "failed", "cancelled"].includes(status);
+        if (!sawActive && !terminal) return;
+        if (sawActive) inactiveTicks += 1;
+        // 会话结束后执行单还要落库；等终态或一小段宽限再收尾，避免把结果弄丢
+        if (!terminal && inactiveTicks < 12) return;
+
+        const summary = state?.automation_result?.data?.agent?.summary
+          || state?.automation_result?.preview
+          || "";
+        if (summary) {
+          const content = `浏览器小助手办好了：${String(summary).slice(0, 800)}`;
+          const doneMsg = {
+            id: `agent-done-${Date.now()}`,
+            role: "assistant",
+            content,
+            kind: "chat",
+            created_date: new Date().toISOString(),
+          };
+          messagesRef.current = [...messagesRef.current, doneMsg];
+          setMessages(messagesRef.current);
+          lastIdRef.current = doneMsg.id;
+          httpRequest("/api/companion/messages", { method: "POST", body: { assistant_echo: content } }).catch(() => {});
+          requestAnimationFrame(() => scrollToBottom());
+        } else if (terminal && status === "failed") {
+          const content = "浏览器小助手这次没能完成，过程和现场保留在守护记录里，可以稍后再试一次。";
+          const failMsg = {
+            id: `agent-fail-${Date.now()}`,
+            role: "assistant",
+            content,
+            kind: "chat",
+            created_date: new Date().toISOString(),
+          };
+          messagesRef.current = [...messagesRef.current, failMsg];
+          setMessages(messagesRef.current);
+          lastIdRef.current = failMsg.id;
+          httpRequest("/api/companion/messages", { method: "POST", body: { assistant_echo: content } }).catch(() => {});
+          requestAnimationFrame(() => scrollToBottom());
+        }
+        setAgentExecId(null);
+        setAgentLiveOpen(false);
+        setAgentActive(false);
+        setAgentWaiting(null);
+        setAgentReplyText("");
+      } catch (_error) {
+        // 执行单可能还在创建中，下一轮再试
+      }
+    };
+    check();
+    const timer = setInterval(check, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [agentExecId]);
 
   const mentionResults = useMemo(() => {
     const query = String(mentionQuery ?? "").trim();
@@ -531,6 +617,35 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
     }
   }, [queryClient, loadMentionBuddies]);
 
+  const respondToBrowserAgent = async (payload) => {
+    if (!agentExecId || agentResponding) return;
+    setAgentResponding(true);
+    try {
+      await httpRequest(`/api/task-executions/${agentExecId}/agent-respond`, { method: "POST", body: payload });
+      setAgentWaiting(null);
+      setAgentReplyText("");
+    } catch (error) {
+      toast.error(error?.message || "回应没送到，再试一次");
+    } finally {
+      setAgentResponding(false);
+    }
+  };
+
+  const takeoverBrowserAgent = async () => {
+    if (!agentExecId || agentResponding) return;
+    setAgentResponding(true);
+    try {
+      await httpRequest(`/api/task-executions/${agentExecId}/agent-takeover`, { method: "POST", body: {} });
+      setAgentWaiting(null);
+      setAgentTakeoverRequested((value) => value + 1);
+      setAgentLiveOpen(true);
+    } catch (error) {
+      toast.error(error?.message || "接管没成功，再试一次");
+    } finally {
+      setAgentResponding(false);
+    }
+  };
+
   const sendText = useCallback(async (text, lastExtracted = null, options = {}) => {
     const t = String(text || "").trim();
     const sentAttachments = Array.isArray(options.attachments) ? options.attachments : [];
@@ -592,6 +707,14 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
             setPending(pendingFromFlow);
           }
           setActions(Array.isArray(res?.actions) && res.actions.length > 0 ? res.actions : null);
+          if (res?.agent?.executionId) {
+            setAgentExecId(res.agent.executionId);
+            setAgentActive(false);
+            setAgentLiveOpen(false);
+            setAgentWaiting(null);
+            setAgentReplyText("");
+            setAgentTakeoverRequested(0);
+          }
           scrollToBottom();
           if (res?.capture && res?.buddy?.id) {
             await applyCaptureFromMain(res, sentAttachments);
@@ -1180,6 +1303,73 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
         </div>
       )}
 
+      {agentExecId && agentWaiting?.question && (
+        <div className="mx-3 mb-2 rounded-2xl border border-amber-200 bg-amber-50/80 p-3">
+          <p className="max-h-56 overflow-y-auto whitespace-pre-wrap text-[12.5px] leading-relaxed text-stone-800">
+            {agentWaiting.question}
+          </p>
+          {Array.isArray(agentWaiting.choices) && agentWaiting.choices.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {agentWaiting.choices.map((choice) => (
+                <button
+                  key={choice}
+                  type="button"
+                  disabled={agentResponding}
+                  onClick={() => {
+                    if (String(choice).includes("我自己来操作")) takeoverBrowserAgent();
+                    else respondToBrowserAgent({ choice });
+                  }}
+                  className="rounded-full border border-[#384877]/30 bg-white px-3 py-1.5 text-[11.5px] text-[#384877] transition-colors hover:bg-[#384877]/8 disabled:opacity-50"
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mt-2 flex items-center gap-1.5">
+            <input
+              value={agentReplyText}
+              onChange={(event) => setAgentReplyText(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && agentReplyText.trim()) respondToBrowserAgent({ text: agentReplyText.trim() });
+              }}
+              placeholder="补充说明（可选）…"
+              className="min-h-[34px] min-w-0 flex-1 rounded-full border border-stone-200 bg-white px-3 text-[12px] text-stone-800 placeholder:text-stone-400 focus:border-[#384877] focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={agentResponding || !agentReplyText.trim()}
+              onClick={() => respondToBrowserAgent({ text: agentReplyText.trim() })}
+              className="shrink-0 rounded-full bg-[#384877] px-3 py-1.5 text-[11.5px] font-medium text-white disabled:opacity-50"
+            >
+              回应
+            </button>
+          </div>
+          <button
+            type="button"
+            disabled={agentResponding}
+            onClick={takeoverBrowserAgent}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#384877]/30 px-3 py-1.5 text-[11.5px] font-medium text-[#384877] disabled:opacity-50"
+          >
+            <Monitor className="h-3.5 w-3.5" /> 我自己来操作网页
+          </button>
+        </div>
+      )}
+
+      {agentExecId && !agentLiveOpen && !agentWaiting?.question && (
+        <button
+          type="button"
+          onClick={() => agentActive && setAgentLiveOpen(true)}
+          disabled={!agentActive}
+          className="mx-3 mb-2 flex items-center gap-2 rounded-2xl border px-3 py-2 text-left text-[12px] shadow-sm disabled:opacity-70"
+          style={{ borderColor: "#dbe3f2", background: "#fff", color: "#384877" }}
+        >
+          {agentActive ? <Monitor className="h-4 w-4 shrink-0" /> : <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}
+          <span className="min-w-0 flex-1 truncate">{agentActive ? "浏览器小助手正在操作网页" : "浏览器小助手准备中…"}</span>
+          {agentActive && <span className="shrink-0 text-[11px] text-[#63666e]">查看小窗 →</span>}
+        </button>
+      )}
+
       {/* 输入区：@搭子 / 图片文件视频 / 长按语音 */}
       <div className="shrink-0 px-3 py-2.5" style={inline ? { background: "transparent" } : { background: "#fff", borderTop: "1px solid #e8ecef" }}>
         <div className="relative">
@@ -1442,6 +1632,15 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
           onChange={(e) => handleFiles(e.target.files)}
         />
       </div>
+
+      {agentExecId && agentLiveOpen && (
+        <AgentLiveWindow
+          executionId={agentExecId}
+          compact
+          takeoverRequested={agentTakeoverRequested}
+          onClose={() => setAgentLiveOpen(false)}
+        />
+      )}
     </>
   );
 

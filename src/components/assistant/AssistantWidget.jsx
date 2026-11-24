@@ -458,7 +458,7 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
       body: { messages: history, last_extracted: lastExtracted || undefined }
     });
     const reply = String(res?.reply || "").trim() || "我在听，你继续说～";
-    appendMessage({ id: `local-a-${Date.now()}`, role: "assistant", content: reply, kind: "chat", created_date: new Date().toISOString() });
+    appendMessage({ id: `local-a-${Date.now()}`, role: "assistant", content: reply, kind: "chat", meta: { ai: res?.ai }, created_date: new Date().toISOString() });
     setPending(res?.extracted?.type === "plan" ? { ...res.extracted, proposal_id: crypto.randomUUID() } : res?.extracted || null);
     setActions(null);
     scrollToBottom();
@@ -1030,6 +1030,11 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
               </div>
             </div>
           )}
+          {!mine && m.meta?.ai && <span className="text-[10px] mt-1" style={{ color: "#9ca0a8" }}>
+            {m.meta.ai.source === "ai" && m.meta.ai.provider
+              ? (m.meta.ai.provider === "deepseek" ? "DeepSeek" : "Kimi")
+              : ["fallback", "error"].includes(m.meta.ai.source) ? "基础回复 · AI 暂不可用" : "系统回复"}
+          </span>}
           <span className="text-[10px] mt-1" style={{ color: "#9ca0a8" }}>{fmtTime(m.created_date)}</span>
         </div>
       </div>

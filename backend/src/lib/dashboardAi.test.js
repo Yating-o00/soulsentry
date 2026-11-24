@@ -53,6 +53,38 @@ test("今日对话优先 Kimi，Kimi 不可用时自动切换 DeepSeek", async (
   assert.equal(calls[0].body.model, "kimi-k3");
 });
 
+test("规划类单次尝试模式下 Kimi 欠费仍会切换 DeepSeek 兜底", async (t) => {
+  preserveEnv(t);
+  process.env.KIMI_API_KEY = "test-kimi-key";
+  process.env.DEEPSEEK_API_KEY = "test-deepseek-key";
+  const calls = [];
+  t.mock.method(globalThis, "fetch", async (url, request) => {
+    calls.push({ url, body: JSON.parse(request.body) });
+    if (String(url).includes("moonshot")) {
+      return new Response(JSON.stringify({ error: { message: "Your account is suspended due to insufficient balance" } }), { status: 429 });
+    }
+    assert.equal(url, "https://api.deepseek.com/v1/chat/completions");
+    assert.equal(JSON.parse(request.body).model, "deepseek-chat");
+    return jsonResponse('{"reply":"deepseek plan answer"}');
+  });
+
+  const result = await invokeDashboardAi({
+    prompt: "帮我查看今日的几个约定",
+    systemPrompt: "return JSON",
+    responseJsonSchema: { type: "object" },
+    models: ["kimi-k3"],
+    maxTokens: 2500,
+    singleAttempt: true,
+    withUsage: true,
+  });
+
+  assert.equal(result.data.reply, "deepseek plan answer");
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].url, /moonshot/);
+  assert.equal(calls[0].body.model, "kimi-k3");
+  assert.match(calls[1].url, /deepseek/);
+});
+
 test("Kimi 正常时只调用 Kimi，不会浪费 DeepSeek 请求", async (t) => {
   preserveEnv(t);
   process.env.KIMI_API_KEY = "test-kimi-key";

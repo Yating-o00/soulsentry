@@ -146,11 +146,14 @@ export async function callKimiChat({
 
   console.log(`[callKimiChat] start: models=${candidateModels.join(",")}, endpoints=${endpoints.map((e) => e.label).join(",")}, timeout=${fetchTimeout}ms, msgCount=${messages?.length || 0}`);
 
-  for (const endpoint of singleAttempt ? endpoints.slice(0, 1) : endpoints) {
+  // singleAttempt 只限制每个端点只试一个模型（控制计划类请求的延迟），
+  // 不能把后续端点一起砍掉——Kimi 欠费/故障时仍必须轮到 DeepSeek 兜底。
+  for (const endpoint of endpoints) {
     // DeepSeek 等兜底端点自带模型列表，不沿用 Kimi 候选模型
     const modelsForEndpoint = Array.isArray(endpoint.models) && endpoint.models.length > 0 ? endpoint.models : candidateModels;
+    const modelsToTry = singleAttempt ? modelsForEndpoint.slice(0, 1) : modelsForEndpoint;
 
-    for (const candidateModel of singleAttempt ? modelsForEndpoint.slice(0, 1) : modelsForEndpoint) {
+    for (const candidateModel of modelsToTry) {
       signal?.throwIfAborted();
       const body = {
         model: candidateModel,

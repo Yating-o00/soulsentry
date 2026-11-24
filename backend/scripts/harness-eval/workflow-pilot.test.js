@@ -6,27 +6,7 @@ import { createTaskWorkflow } from "../../src/services/agentHarness/runTaskWorkf
 import { generalCases } from "./general-cases.js";
 import { runGeneralCase } from "./general-runner.js";
 import { pilotReadCapabilities } from "./read-pilot.js";
-
-function memoryStore() {
-  const rows = new Map();
-  return {
-    async create({ id, actorId, data }) {
-      const row = { id, userId: actorId, revision: 0, data };
-      rows.set(id, row);
-      return structuredClone(row);
-    },
-    async get(id, actorId) {
-      const row = rows.get(id);
-      return row?.userId === actorId ? structuredClone(row) : null;
-    },
-    async replace(row, data) {
-      if (rows.get(row.id)?.revision !== row.revision) return null;
-      const next = { ...row, revision: row.revision + 1, data };
-      rows.set(row.id, next);
-      return structuredClone(next);
-    },
-  };
-}
+import { createWorkflowPilotDriver, memoryStore } from "./workflow-pilot.js";
 
 function writes({ description, input }, callTool) {
   return defineCapability({
@@ -66,14 +46,7 @@ function decide({ input, continuation, observations }) {
   return { type: "propose", tool: "set_status", args: { id: record.id, version: record.version, status: input.includes("暂缓") ? "paused" : "done" }, evidenceIds: [source.id] };
 }
 
-function driver({ capabilities }) {
-  const store = memoryStore();
-  return (input, { callTool }) => createTaskWorkflow({
-    store,
-    capabilities: [...pilotReadCapabilities(capabilities, input.actorId, callTool), writes(capabilities.find(({ name }) => name === "set_status"), callTool)],
-    decide,
-  })(input);
-}
+const driver = createWorkflowPilotDriver({ decide, writeAdapters: new Map([["set_status", writes]]) });
 
 for (const fixture of generalCases.filter(({ holdout }) => !holdout)) {
   test(`M3 passes the independent grader through the workflow: ${fixture.id}`, async () => {

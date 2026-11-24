@@ -77,6 +77,21 @@ node backend/scripts/harness-eval/read-pilot-live.js --out /tmp/harness-m2-live.
 
 入口先支持查找和完成或重新打开本人普通顶层约定。状态和完成时间与回执在同一个 SQLite 事务内提交，回执为现有 `TaskChangeLog` 记录。运行间的状态保存在新的 `HarnessTask` 表，本地旧数据库用项目现有的 Prisma schema 流程更新。模型只有提案权限。已有聊天和排程的客户端按原路由使用。前端以后可以按这个协议接入对话卡和确认按钮。
 
+### M4 留出的批量移动能力
+
+`bulk-move-pilot.js` 注册一个写入适配器，复用通用决策提示词、执行循环、确认状态机和独立 grader。适配器根据查到的来源记录、目标版本和容量生成一份只允许整批执行的提案。确认时再查版本和容量。模拟工具在一次原子操作内复验并写入，核实时按操作 ID 查回执并检查两条记录都在目标集合。
+
+- 原第 7 题验证两条记录一起移动到评审箱。原第 10 题验证确认前名额被占时整批拦下，用户换到备用箱后再确认新版本。
+- 额外离线用例在适配器复验之后、实际提交之前抢占容量，验证工具拒绝写入，重试确认也不会重复发起写入。
+- DeepSeek Flash 每道留出题各跑三次，6/6 通过，共调用模型 28 次。批量移动通过模拟工具评测，产品入口承载 M3 的普通约定操作。
+
+从仓库根目录运行以下命令。真实模型评测需要已经配置的 `DEEPSEEK_API_KEY`。
+
+```bash
+node --test backend/scripts/harness-eval/bulk-move-pilot.test.js
+node backend/scripts/harness-eval/bulk-move-live.js --out /tmp/harness-m4-live.json
+```
+
 ## 原有排程的真实模型对照
 
 从仓库根目录执行以下命令。环境中需要已授权的 `DEEPSEEK_API_KEY`。可设置 `DEEPSEEK_MODEL`，同轮对照应使用相同模型标识。

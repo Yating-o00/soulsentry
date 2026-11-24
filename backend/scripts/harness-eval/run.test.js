@@ -548,13 +548,16 @@ test("legacy homepage confirmation uses the canonical proposal and shares its id
   assert.equal(await db.taskExecution.count({ where: { userId: user.id } }), 0);
 });
 
-test("defaults to Kimi and sends one HTTP invocation to repair invalid model JSON", async (t) => {
+test("with only Kimi configured the harness repairs invalid planner JSON once", async (t) => {
   const original = process.env.CHAT_AI_PROVIDER;
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
   delete process.env.CHAT_AI_PROVIDER;
+  delete process.env.DEEPSEEK_API_KEY;
   process.env.KIMI_API_KEY = "local-test";
   process.env.KIMI_BASE_URL = "https://api.moonshot.cn/v1";
   t.after(() => {
     process.env.CHAT_AI_PROVIDER = original;
+    process.env.DEEPSEEK_API_KEY = deepseekKey;
     process.env.KIMI_API_KEY = "";
     delete process.env.KIMI_BASE_URL;
   });
@@ -565,6 +568,24 @@ test("defaults to Kimi and sends one HTTP invocation to repair invalid model JSO
   assert.equal(calls.length, 3);
   assert.ok(calls.every(({ model }) => model.startsWith("kimi-")));
   assert.equal(plannerCalls().length, 2);
+});
+
+test("uses the available DeepSeek transport fallback for malformed Kimi planner output", async (t) => {
+  const original = process.env.CHAT_AI_PROVIDER;
+  delete process.env.CHAT_AI_PROVIDER;
+  process.env.KIMI_API_KEY = "local-test";
+  process.env.KIMI_BASE_URL = "https://api.moonshot.cn/v1";
+  t.after(() => {
+    process.env.CHAT_AI_PROVIDER = original;
+    process.env.KIMI_API_KEY = "";
+    delete process.env.KIMI_BASE_URL;
+  });
+  const { DASHBOARD_TEXT_MODELS } = await import("../../src/lib/kimi.js");
+  intent();
+  answers.push({ phase: "planner", raw: "{broken" });
+  draft();
+  assertSchedule(await send(study), 20);
+  assert.deepEqual(calls.map(({ model }) => model), [DASHBOARD_TEXT_MODELS[0], "kimi-k3", "deepseek-chat"]);
 });
 
 test("forgetting a remembered limit invalidates its proposal and restores the clarification gate", async () => {
@@ -616,7 +637,7 @@ test("replays the same invalid first draft with zero repairs and with one repair
   assertSchedule({ extracted: { plan: result } }, 20);
 });
 
-test("keeps Kimi K3 and DeepSeek fallback for the upstream today chat route", async (t) => {
+test("keeps the configured Kimi model and DeepSeek fallback for the upstream today chat route", async (t) => {
   const original = process.env.CHAT_AI_PROVIDER;
   delete process.env.CHAT_AI_PROVIDER;
   process.env.KIMI_API_KEY = "local-test";
@@ -631,5 +652,6 @@ test("keeps Kimi K3 and DeepSeek fallback for the upstream today chat route", as
   const result = await post("/api/chat", { messages: [{ role: "user", content: "今天想整理一下思路。" }] });
   assert.equal(result.status, 200);
   assert.equal(result.data.reply, "我听着呢。");
-  assert.deepEqual(calls.map(({ model }) => model), ["kimi-k3", "deepseek-chat"]);
+  const { DASHBOARD_TEXT_MODELS } = await import("../../src/lib/kimi.js");
+  assert.deepEqual(calls.map(({ model }) => model), [DASHBOARD_TEXT_MODELS[0], "deepseek-chat"]);
 });

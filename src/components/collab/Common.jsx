@@ -33,8 +33,8 @@ export function MemberAvatar({ name, seed, size = "md", className }) {
 }
 
 export function AgentAvatar({ size = "md", className, breathing = false }) {
-  const dim = size === "sm" ? "h-7 w-7" : size === "lg" ? "h-14 w-14" : "h-9 w-9";
-  const icon = size === "sm" ? "h-3.5 w-3.5" : size === "lg" ? "h-6 w-6" : "h-4 w-4";
+  const dim = size === "xs" ? "h-5 w-5" : size === "sm" ? "h-7 w-7" : size === "lg" ? "h-14 w-14" : "h-9 w-9";
+  const icon = size === "xs" ? "h-3 w-3" : size === "sm" ? "h-3.5 w-3.5" : size === "lg" ? "h-6 w-6" : "h-4 w-4";
   return (
     <span
       className={cn(

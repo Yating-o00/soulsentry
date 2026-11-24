@@ -672,8 +672,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     return (
       <React.Fragment key={message.id}>
         {showDay && (
-          <div className="my-2 flex justify-center">
-            <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[10px] text-stone-400">
+          <div className={cn("flex justify-center", compact ? "my-1" : "my-2")}>
+            <span className={cn("rounded-full bg-stone-100 text-[10px] text-stone-400", compact ? "px-2 py-0" : "px-2.5 py-0.5")}>
               {dayLabel(message.created_date)}
             </span>
           </div>
@@ -681,17 +681,18 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
         <div
           id={`collab-msg-${message.id}`}
           className={cn(
-            "group flex gap-2 py-1",
+            "group flex",
+            compact ? "gap-1.5 py-0.5" : "gap-2 py-1",
             mine ? "justify-end" : "items-start",
             flashingId === message.id && "collab-msg-flash"
           )}
         >
           {!mine && (isAgent
-            ? <AgentAvatar size="sm" />
-            : <MemberAvatar name={message.created_by_name || "成员"} seed={message.created_by} size="sm" className="border-white" />)}
+            ? <AgentAvatar size={compact ? "xs" : "sm"} />
+            : <MemberAvatar name={message.created_by_name || "成员"} seed={message.created_by} size={compact ? "xs" : "sm"} className="border-white" />)}
           <div className={cn("min-w-0 max-w-[86%] md:max-w-[76%]", mine && "flex flex-col items-end")}>
             {!mine && (
-              <div className="mb-0 flex max-w-full items-center gap-1.5 truncate px-1 text-[10px]" style={{ color: "#8a867e" }}>
+              <div className={cn("flex max-w-full items-center gap-1.5 truncate px-1 text-[10px]", compact ? "mb-0" : "mb-0")} style={{ color: "#8a867e" }}>
                 <span>{isAgent ? "心栈 Agent" : message.created_by_name || "成员"}</span>
                 {message.reply_to_name && (
                   <span style={{ color: "#a8a29e" }}>· 回复 {message.reply_to_name}</span>
@@ -700,7 +701,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             )}
             <div
               className={cn(
-                "max-w-full whitespace-pre-wrap break-words px-3.5 py-2.5 text-[14px] leading-relaxed",
+                "max-w-full whitespace-pre-wrap break-words text-[14px]",
+                compact ? "px-3 py-1.5 leading-snug" : "px-3.5 py-2.5 leading-relaxed",
                 mine
                   ? "rounded-2xl rounded-tr-md bg-[#384877] text-[#FAF9F7] shadow-sm"
                   : isAgent
@@ -710,7 +712,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             >
               {message.content}
             </div>
-            <div className={cn("mt-1 flex flex-wrap items-center gap-1.5 px-1 text-[9px]", mine && "justify-end")} style={{ color: "#a8a29e" }}>
+            <div className={cn("flex flex-wrap items-center gap-1.5 px-1 text-[9px]", compact ? "mt-0" : "mt-1", mine && "justify-end")} style={{ color: "#a8a29e" }}>
               <span>{formatTime(message.created_date)}</span>
               {message.topic && (
                 <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[#8a867e]">{message.topic}</span>
@@ -752,10 +754,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           搭子空间内的紧凑聊天不显示主题筛选，把空间留给消息。 */}
       {!compact && (
       <div
-        className={cn(
-          "flex shrink-0 items-center gap-1.5 overflow-x-auto border-b",
-          compact ? "px-3 py-1.5" : "px-4 py-2.5 sm:px-6"
-        )}
+        className="flex shrink-0 items-center gap-1 overflow-x-auto border-b px-3 py-1.5 sm:px-6"
         style={{ borderColor: C.lineSoft }}
         role="group"
         aria-label="讨论主题"
@@ -765,7 +764,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           aria-pressed={topicFilter === "all"}
           onClick={() => setTopicFilter("all")}
           className={cn(
-            "shrink-0 rounded-full border px-2.5 text-[11px] transition-colors min-h-7",
+            "shrink-0 rounded-full border px-2 text-[11px] transition-colors min-h-6",
             topicFilter === "all" ? "border-transparent text-white" : ""
           )}
           style={topicFilter === "all" ? { backgroundColor: "#384877" } : { borderColor: "#d8d6cf", color: "#77736c" }}
@@ -778,7 +777,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             type="button"
             aria-pressed={topicFilter === topicName}
             onClick={() => setTopicFilter(topicName)}
-            className={cn("shrink-0 rounded-full border px-2.5 text-[11px] transition-colors min-h-7")}
+            className={cn("shrink-0 rounded-full border px-2 text-[11px] transition-colors min-h-6")}
             style={topicFilter === topicName
               ? { backgroundColor: "#384877", borderColor: "#384877", color: "#fff" }
               : { borderColor: "#d8d6cf", color: "#77736c" }}
@@ -801,7 +800,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
               maxLength={20}
               placeholder="主题"
               aria-label="新主题名称"
-              className="h-7 w-24 rounded-full border bg-transparent px-2.5 text-[11px] outline-none focus:border-[#384877]"
+              className="h-6 w-20 rounded-full border bg-transparent px-2 text-[11px] outline-none focus:border-[#384877]"
               style={{ borderColor: "#d8d6cf", color: "#45413d" }}
               onKeyDown={(e) => {
                 if (e.key === "Escape") {
@@ -813,10 +812,10 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             <button
               type="submit"
               disabled={savingTopic || !newTopicName.trim()}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-[#384877] disabled:opacity-40"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[#384877] disabled:opacity-40"
               aria-label="创建主题"
             >
-              {savingTopic ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {savingTopic ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
             </button>
             <button
               type="button"
@@ -824,17 +823,17 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 setAddingTopic(false);
                 setNewTopicName("");
               }}
-              className="flex h-7 w-7 items-center justify-center rounded-full text-[#99958d]"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[#99958d]"
               aria-label="取消"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3 w-3" />
             </button>
           </form>
         ) : (
           <button
             type="button"
             onClick={() => setAddingTopic(true)}
-            className="shrink-0 rounded-full border border-dashed px-2.5 text-[11px] transition-colors min-h-7 hover:text-[#384877]"
+            className="shrink-0 rounded-full border border-dashed px-2 text-[11px] transition-colors min-h-6 hover:text-[#384877]"
             style={{ borderColor: "#d8d6cf", color: "#8a867e" }}
           >
             ＋ 主题
@@ -848,7 +847,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
         <div
           ref={streamRef}
           onScroll={handleStreamScroll}
-          className="h-full overflow-y-auto px-4 py-2 sm:px-6"
+          className="h-full overflow-y-auto px-3 py-1 sm:px-6 sm:py-2"
         >
           {isLoading ? (
             <div className="flex items-center justify-center py-10 text-sm" style={{ color: "#99958d" }}>
@@ -869,15 +868,15 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             flatMessages.map((m, index) => renderMessage(m, index))
           )}
 
-          {/* 聊天快捷回应：只在最后一条是搭子时出现，点一下就能继续聊 */}
+          {/* 聊天快捷回应：保持在同一行，字和框图压缩 */}
           {compact && !agentPendingSince && flatMessages[flatMessages.length - 1]?.agent && (
-            <div className="flex flex-wrap gap-1.5 px-1 pb-1.5 pt-0.5">
+            <div className="scrollbar-hide flex flex-nowrap gap-1 overflow-x-auto px-1 pb-1 pt-0.5">
               {["收到，我来跟进", "这一步再商量一下", "帮我整理成约定"].map((label) => (
                 <button
                   key={label}
                   type="button"
                   onClick={() => handleSend(label)}
-                  className="min-h-[28px] rounded-full border border-[#d8d6cf] bg-white px-2.5 text-[11px] text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
+                  className="shrink-0 rounded-full border border-[#d8d6cf] bg-white px-2 py-1 text-[11px] leading-4 text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
                 >
                   {label}
                 </button>
@@ -929,11 +928,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
       </div>
 
       {/* 输入区 */}
-      <div className={compact ? "relative shrink-0 border-t p-1.5" : "relative shrink-0 border-t p-4 sm:px-6"} style={{ borderColor: C.line, backgroundColor: C.card }}>
+      <div className={compact ? "relative shrink-0 border-t p-1" : "relative shrink-0 border-t p-2 sm:p-4 sm:px-6"} style={{ borderColor: C.line, backgroundColor: C.card }}>
         {/* @ 自动弹出：选择心栈 Agent */}
         {mentionOpen && (
           <div
-            className="absolute bottom-full left-4 right-4 mb-2 overflow-hidden rounded-xl border shadow-lg sm:left-6 sm:right-6"
+            className="absolute bottom-full left-2 right-2 mb-2 overflow-hidden rounded-xl border shadow-lg sm:left-6 sm:right-6"
             style={{ borderColor: C.line, backgroundColor: "#fdfcf9" }}
             role="listbox"
             aria-label="召唤 Agent"
@@ -1053,18 +1052,26 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
           </div>
         )}
         {compact ? (
-          // 手机搭子空间：贴底单条输入，按钮与输入同高，尽量减少占地
-          <div className="rounded-full border border-stone-200 bg-white px-1.5 py-1 transition-colors focus-within:border-[#384877]">
+          // 手机搭子空间：仅保留一行输入，紧贴底部栏
+          <div className="rounded-full border border-stone-200 bg-white px-1 py-1 transition-colors focus-within:border-[#384877]">
             <div className="flex items-center gap-1">
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                className="hidden"
+                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md"
+                onChange={(e) => handlePickFiles(e.target.files)}
+              />
               <button
                 type="button"
                 onClick={() => fileRef.current?.click()}
                 disabled={uploading || attachments.length >= 10}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-[#384877] disabled:opacity-50"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-[#384877] disabled:opacity-50"
                 title="插入图片、文件或视频"
                 aria-label="插入图片、文件或视频"
               >
-                {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+                {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Paperclip className="h-3 w-3" />}
               </button>
               <Textarea
                 ref={inputRef}
@@ -1077,10 +1084,10 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 onPaste={handlePasteFiles}
                 placeholder={
                   topicFilter === "all"
-                    ? "@ 召唤搭子总结 · 把讨论变成约定…"
+                    ? "@ 召唤搭子总结…"
                     : `在「${topicFilter}」里说…`
                 }
-                className="min-h-[34px] max-h-[120px] flex-1 resize-none border-0 bg-transparent py-1.5 text-[13px] leading-5 text-stone-700 placeholder:text-stone-400 focus-visible:ring-0"
+                className="!min-h-[30px] max-h-[120px] flex-1 resize-none border-0 bg-transparent py-1 text-[13px] leading-5 text-stone-700 placeholder:text-stone-400 focus-visible:ring-0"
                 rows={1}
                 onKeyDown={(e) => {
                   if (mentionOpen) {
@@ -1106,7 +1113,7 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   size="sm"
                   onClick={() => handleSend()}
                   disabled={uploading || voiceBusy}
-                  className="h-8 flex-shrink-0 rounded-full bg-[#384877] px-3 text-[12px] font-medium text-white hover:bg-[#2d3a60] disabled:opacity-50"
+                  className="h-7 flex-shrink-0 rounded-full bg-[#384877] px-2.5 text-[12px] font-medium text-white hover:bg-[#2d3a60] disabled:opacity-50"
                   aria-label="发送讨论"
                 >
                   发送
@@ -1130,32 +1137,20 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                     }
                   }}
                   disabled={uploading || voiceBusy}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50"
                   style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
                   title="按住说话，松开发送"
                   aria-label="按住说话，发送语音"
                 >
-                  <Mic className="h-3.5 w-3.5" />
+                  <Mic className="h-3 w-3" />
                 </button>
               )}
             </div>
           </div>
         ) : (
-          <div className="rounded-md border bg-[#fdfcf9] p-2.5 focus-within:border-[#384877]" style={{ borderColor: "#d4d2cb" }}>
-            <div className="flex items-start gap-2">
-              <div className="mt-0.5 flex flex-shrink-0 flex-col gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading || attachments.length >= 10}
-                  className="flex h-7 w-7 items-center justify-center rounded-md border text-[#99958d] transition-colors hover:text-[#57534d] disabled:opacity-50 min-h-7"
-                  style={{ borderColor: "#d8d6cf" }}
-                  title="插入图片或文档"
-                  aria-label="插入图片或文档"
-                >
-                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
-                </button>
-              </div>
+          // 协同空间会话窗输入：手机端单行圆角贴底，桌面端保留多行
+          <div className="rounded-full border bg-white p-1 transition-colors focus-within:border-[#384877] sm:rounded-md sm:bg-[#fdfcf9] sm:p-2.5" style={{ borderColor: "#d4d2cb" }}>
+            <div className="flex items-center gap-1 sm:items-start sm:gap-2">
               <input
                 ref={fileRef}
                 type="file"
@@ -1164,6 +1159,17 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                 accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md"
                 onChange={(e) => handlePickFiles(e.target.files)}
               />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading || attachments.length >= 10}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:text-[#384877] disabled:opacity-50 sm:mt-0.5 sm:h-7 sm:w-7 sm:rounded-md sm:border sm:text-[#99958d]"
+                style={{ borderColor: "#d8d6cf" }}
+                title="插入图片、文件或视频"
+                aria-label="插入图片、文件或视频"
+              >
+                {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Paperclip className="h-3.5 w-3.5" />}
+              </button>
               <Textarea
                 ref={inputRef}
                 value={content}
@@ -1178,8 +1184,8 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                     ? "发消息，输入 @ 可召唤 Agent…"
                     : `在「${topicFilter}」里说…`
                 }
-                className="min-h-[52px] max-h-40 flex-1 resize-none border-0 bg-transparent p-0 text-[13px] leading-6 focus-visible:ring-0"
-                rows={2}
+                className="!min-h-[36px] max-h-[120px] flex-1 resize-none border-0 bg-transparent py-2 text-[14px] leading-5 placeholder:text-stone-400 focus-visible:ring-0 sm:!min-h-[52px] sm:max-h-40 sm:p-0 sm:text-[13px] sm:leading-6"
+                rows={1}
                 onKeyDown={(e) => {
                   if (mentionOpen) {
                     if (e.key === "Enter" || e.key === "Tab") {
@@ -1204,11 +1210,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                   size="sm"
                   onClick={() => handleSend()}
                   disabled={uploading || voiceBusy}
-                  className="h-9 w-9 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90"
+                  className="h-8 w-8 flex-shrink-0 p-0 rounded-full text-[#faf9f5] hover:opacity-90 sm:h-9 sm:w-9"
                   style={{ backgroundColor: BRAND }}
                   aria-label="发送讨论"
                 >
-                  <ArrowUp className="w-4 h-4" />
+                  <ArrowUp className="h-4 w-4" />
                 </Button>
               ) : (
                 <button
@@ -1229,12 +1235,12 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
                     }
                   }}
                   disabled={uploading || voiceBusy}
-                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50"
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#eef2ff] text-[#384877] disabled:opacity-50 sm:h-9 sm:w-9"
                   style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none" }}
                   title="按住说话，松开发送"
                   aria-label="按住说话，发送语音"
                 >
-                  <Mic className="w-4 h-4" />
+                  <Mic className="h-4 w-4" />
                 </button>
               )}
             </div>
@@ -1312,10 +1318,10 @@ export default function ConversationPane({
       style={{ backgroundColor: C.pane }}
     >
       {!compact && (
-      <div className="shrink-0 border-b px-4 pt-3 sm:px-6" style={{ borderColor: C.line }}>
-        <div className="flex items-center justify-between gap-3">
+      <div className="shrink-0 border-b px-3 py-2 sm:px-6" style={{ borderColor: C.line }}>
+        <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <h2 className="truncate text-[17px] font-semibold tracking-[-0.01em]" style={{ color: "#302c2a" }}>
+            <h2 className="truncate text-[15px] font-semibold tracking-[-0.01em]" style={{ color: "#302c2a" }}>
               {view === "discussion" ? "协同聊天" : "协同动态"}
             </h2>
             {view === "discussion" && (
@@ -1324,43 +1330,44 @@ export default function ConversationPane({
                 实时
               </span>
             )}
+            {/* 1区整体一行：标题、状态与聊天/动态切换在同一行 */}
+            <div className="ml-1 flex shrink-0 rounded-full bg-stone-100 p-0.5" role="tablist" aria-label="谈话内容切换">
+              <button
+                id="discussion-tab"
+                type="button"
+                role="tab"
+                aria-selected={view === "discussion"}
+                aria-controls="section-discussion"
+                onClick={() => onViewChange("discussion")}
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-none",
+                  view === "discussion" ? "bg-white text-[#384877] shadow-sm" : "text-stone-500 hover:text-stone-700"
+                )}
+              >
+                聊天
+              </button>
+              <button
+                id="activity-tab"
+                type="button"
+                role="tab"
+                aria-selected={view === "activity"}
+                onClick={() => onViewChange("activity")}
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors focus-visible:outline-none",
+                  view === "activity" ? "bg-white text-[#384877] shadow-sm" : "text-stone-500 hover:text-stone-700"
+                )}
+              >
+                动态
+              </button>
+            </div>
           </div>
           <button
             type="button"
             onClick={onOpenAgent}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition-colors hover:border-[#384877] hover:text-[#384877] min-h-8"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors hover:border-[#384877] hover:text-[#384877] min-h-7"
             style={{ borderColor: "#d4d2cb", color: "#5b5751" }}
           >
-            <Bot className="h-3.5 w-3.5" />Agent
-          </button>
-        </div>
-        <div className="mt-2 flex gap-5" role="tablist" aria-label="谈话内容切换">
-          <button
-            id="discussion-tab"
-            type="button"
-            role="tab"
-            aria-selected={view === "discussion"}
-            aria-controls="section-discussion"
-            onClick={() => onViewChange("discussion")}
-            className="border-b-2 px-0 pb-2 text-xs font-medium transition-colors min-h-8 focus-visible:outline-none"
-            style={view === "discussion"
-              ? { borderColor: "#384877", color: "#384877" }
-              : { borderColor: "transparent", color: "#77736c" }}
-          >
-            聊天
-          </button>
-          <button
-            id="activity-tab"
-            type="button"
-            role="tab"
-            aria-selected={view === "activity"}
-            onClick={() => onViewChange("activity")}
-            className="border-b-2 px-0 pb-2 text-xs font-medium transition-colors min-h-8 focus-visible:outline-none"
-            style={view === "activity"
-              ? { borderColor: "#384877", color: "#384877" }
-              : { borderColor: "transparent", color: "#77736c" }}
-          >
-            动态
+            <Bot className="h-3 w-3" />Agent
           </button>
         </div>
       </div>

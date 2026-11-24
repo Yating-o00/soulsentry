@@ -59,9 +59,9 @@ export default function InviteCollabPreview() {
     () => [
       { key: "pacts", label: `约定 ${pacts.length}` },
       { key: "discussion", label: "讨论" },
-      { key: "knowledge", label: `沉淀 ${docs.length + (data?.sediment?.digest ? 1 : 0)}` },
+      { key: "knowledge", label: `沉淀 ${docs.length}` },
     ],
-    [pacts.length, discussion.length, docs.length, data?.sediment?.digest]
+    [pacts.length, discussion.length, docs.length]
   );
 
   const isMember = !!data?.viewer?.is_member;
@@ -274,12 +274,6 @@ export default function InviteCollabPreview() {
 
         {tab === "knowledge" && (
           <section className="space-y-2.5">
-            {data.sediment?.digest && (
-              <div className="rounded-2xl border p-4" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
-                <p className="text-[11px] font-medium" style={{ color: "#384877" }}>执行概览</p>
-                <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-5" style={{ color: "#57534d" }}>{data.sediment.digest}</p>
-              </div>
-            )}
             {data.consensus && (
               <div className="rounded-2xl border p-4" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9" }}>
                 <p className="text-[11px] font-medium" style={{ color: "#384877" }}>共识</p>

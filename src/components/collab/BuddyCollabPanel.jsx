@@ -77,9 +77,6 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
   const digest = docs.find((doc) => doc.doc_type === "digest");
   const sediments = docs.filter((doc) => doc.doc_type !== "digest");
   const pactRows = useMemo(() => flatten(tree), [tree]);
-  const confirmedPacts = pactRows.map((row) => row.node).filter((node) => node.metadata?.collab?.state !== "draft");
-  const doneCount = confirmedPacts.filter((node) => isTaskEffectivelyCompleted(node)).length;
-  const pct = confirmedPacts.length ? Math.round((doneCount / confirmedPacts.length) * 100) : 0;
   const fullSpaceUrl = `${createPageUrl("CollabSpace")}?taskId=${taskId}&from=buddy&buddy=${buddy.id}&collab=${taskId}${
     guest ? "&guest=1&view=discussion" : ""
   }`;
@@ -213,20 +210,8 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
           </Link>
         </div>
 
-        {/* 进度 + 成员：一行紧凑展示，头像/邀请按钮与"我"同大 */}
-        <div className="mt-1 flex items-center gap-2">
-          <div
-            className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-200/70"
-            role="progressbar"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-          >
-            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, background: tint[2] }} />
-          </div>
-          <span className="shrink-0 text-[9px] tabular-nums text-stone-400">
-            {pct}% · {doneCount}/{confirmedPacts.length}
-          </span>
+        {/* 成员：只呈现空间人员，添加按钮与用户圈同大并以品牌色标识 */}
+        <div className="mt-1 flex items-center gap-1.5">
           <div className="flex shrink-0 -space-x-1">
             <span
               className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#8B6F47] text-[8px] font-medium text-white"
@@ -246,7 +231,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
             <button
               type="button"
               onClick={() => setInviteOpen(true)}
-              className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-dashed border-stone-300 bg-white text-stone-400 transition-colors hover:border-[#384877] hover:text-[#384877]"
+              className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-dashed border-[#384877]/40 bg-[#eef2ff] text-[#384877] transition-colors hover:border-[#384877]"
               title="邀请成员"
               aria-label="邀请成员"
             >
@@ -256,8 +241,8 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
           <span className="shrink-0 text-[9px] text-stone-400">{memberCount}人</span>
         </div>
 
-        {/* 三个内容切换 */}
-        <div className="mt-1 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-0.5" role="tablist" aria-label="协同内容">
+        {/* 三个内容切换：上下压缩 */}
+        <div className="mt-0.5 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-0.5" role="tablist" aria-label="协同内容">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -266,7 +251,7 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
               aria-selected={view === tab.key}
               onClick={() => switchView(tab.key)}
               className={cn(
-                "relative min-h-[28px] rounded-full text-[11px] transition-colors",
+                "relative min-h-[24px] rounded-full text-[11px] transition-colors",
                 view === tab.key ? "bg-white font-medium text-stone-900 shadow-sm" : "text-stone-500"
               )}
             >

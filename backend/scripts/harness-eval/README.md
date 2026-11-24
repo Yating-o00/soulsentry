@@ -1,4 +1,4 @@
-# 小助手规划 Harness Eval
+# Harness Eval
 
 运行环境为 Node.js 22+，先在 `backend` 安装依赖并生成 Prisma Client。
 
@@ -8,9 +8,48 @@ npm run eval:harness
 npm run eval:memory -- --retrieval-only
 ```
 
-`eval:harness` 使用临时 SQLite、合成账户、固定中国时间、真实 Express 路由和假 provider。它检查提案时长、追问与补答、修复上限、忙碌时段、改期、权限及确认后的数据库。默认 Kimi 与 DeepSeek 都覆盖。成功标准由用例独立定义，模型请求不会出网。确认操作检查任务写入与记忆确认信号，普通任务创建兼容原路由。
+`eval:harness` 运行通用 Harness 评测器的自测，以及现有排程 Harness 的离线回归。排程回归使用临时 SQLite、合成账户、固定中国时间、真实 Express 路由和假 provider。它检查提案时长、追问与补答、修复上限、忙碌时段、改期、权限及确认后的数据库。默认 Kimi 与 DeepSeek 都覆盖。成功标准由用例独立定义。确认操作检查任务写入与记忆确认信号，普通任务创建兼容原路由。
 
-## 真实模型对照
+## 通用 Harness 专项题
+
+用合成记录和固定初始状态验证工具选择、运行续接、确认和写入。每道题重新初始化环境。两个批量移动题留给 M4，检验新适配器能否复用同一套运行规则。
+
+| 题目 | 输入和处理轨迹 | 通过条件 |
+| --- | --- | --- |
+| 1. 带同名诱饵的查询 | 问周报 A 是否已完成。集合里有同名项，另一账号还有一条同名且已完成的记录 | 读取本人周报 A，回答仍开着，零写入 |
+| 2. 追问后续接 | 用户说「把那条还开着的周报标记为完成」。查到 A、B 后追问。用户选 B，再确认提案 | 三个不同 `runId` 共享 `taskId`，只修改 B，确认前零写入 |
+| 3. 软偏好无需追问 | 查询周报 B 在哪个集合，格式由 Agent 决定，偏好简短 | 读取记录与所属集合，直接返回收件箱，零写入 |
+| 4. 旧提案失效 | 先提议标为完成。用户改为暂缓，依次提交旧提案和新提案的确认 | 旧确认被拒绝，只应用新提案中的暂缓 |
+| 5. 并发确认 | 对同一个提案并行发出两次确认 | 两次结果都指向已处理的动作，同一操作 ID，实际只提交一次 |
+| 6. 跨账号确认 | 另一账号先确认，然后本人确认同一提案 | 外账号不拿到提案内容且无写入尝试，本人确认成功 |
+| 7. 批量读后写（M4 留出） | 查收件箱和评审箱容量，预览一次性移动 A、B，再确认 | 提案引用查到的记录和目标版本。一次原子提交，两条都移动 |
+| 8. 提交后超时 | 模拟工具完成写入，但第一次响应只返回超时 | 用操作 ID 查到提交结果再报告成功，写工具只调用一次 |
+| 9. 核实服务不可用 | 模拟工具完成写入后超时，同时查证接口不可用 | 返回 `unverified`，保留待核实状态，写工具只调用一次 |
+| 10. 确认前容量变化（M4 留出） | 生成批量移动提案后，外部动作占用一个名额。旧确认被拦截，用户改选备用箱，再确认 | 旧提案零写入。重查目标并生成新提案，最终两条一起进备用箱 |
+
+从 `backend` 单独运行评测器自测，无需 API key。
+
+```bash
+node --test scripts/harness-eval/general-cases.test.js
+```
+
+自测用脚本提供已知正确和错误的处理轨迹，验证 grader 和模拟环境。真实 Harness 接入后，向 `runGeneralCase` 传入它的驱动即可测同一批题。
+
+```js
+import { generalCases } from "./scripts/harness-eval/general-cases.js";
+import { runGeneralCase } from "./scripts/harness-eval/general-runner.js";
+
+for (const fixture of generalCases) {
+  const report = await runGeneralCase(fixture, createDriver);
+  console.log(JSON.stringify(report));
+}
+```
+
+`createDriver({ capabilities })` 为每个试次创建一个驱动，返回 `run(input, { callTool })`。输入提供经过验证的 `actorId`、消息或确认、续接时的 `taskId`，以及确认时的 `proposal: { id, version }`。驱动输出 `status`、`taskId`、`runId`，并在适用时附带 `code`、`facts`、`question` 和 `choices`，或 `proposal: { id, version, actions }`。每个动作包含 `capability` 和 `args`。运行时用 `callTool(name, args, operationId)` 调用写工具，并在写入结果中返回同一个 `operationId`。这个操作 ID 由驱动负责关联到已确认的动作。
+
+报告记录每步输入、运行结果、实际工具调用、提交次数和最终记录。grader 从工具环境读取证据，接受不同的有效调用顺序。期望值和实际状态只由评测器读取。
+
+## 原有排程的真实模型对照
 
 从仓库根目录执行以下命令。环境中需要已授权的 `DEEPSEEK_API_KEY`。可设置 `DEEPSEEK_MODEL`，同轮对照应使用相同模型标识。
 

@@ -49,6 +49,14 @@ for (const fixture of generalCases) {
 
 报告记录每步输入、运行结果、实际工具调用、提交次数和最终记录。grader 从工具环境读取证据，接受不同的有效调用顺序。期望值和实际状态只由评测器读取。
 
+### M2 只读试跑
+
+`read-pilot.test.js` 让第 1、3 题和第 2 题的首轮澄清经过真实的 Harness 循环与模型决策适配器，再交给通用 grader。测试注入模型响应，调用的是按账号隔离的记录和集合模拟工具。第 2 题的续接和确认属于 M3。
+
+```bash
+node --test scripts/harness-eval/read-pilot.test.js
+```
+
 ## 原有排程的真实模型对照
 
 从仓库根目录执行以下命令。环境中需要已授权的 `DEEPSEEK_API_KEY`。可设置 `DEEPSEEK_MODEL`，同轮对照应使用相同模型标识。

@@ -6,8 +6,14 @@ const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
 const DEFAULT_TEXT_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
 const DEFAULT_WEB_MODELS = ["kimi-k3", "kimi-k2.7-code-highspeed", "kimi-k2.6"];
 // 交互式对话（小助手/搭子）优先走更快的模型，失败再降级到旗舰 K3；
-// 复杂任务（解题/行程/周报）仍走 DEFAULT_TEXT_MODELS。
-export const FAST_TEXT_MODELS = String(process.env.FAST_TEXT_MODELS || "kimi-k2.6,kimi-k3")
+// 复杂任务（解题/周报）仍走 DEFAULT_TEXT_MODELS；行程/灵感走 STRUCTURED_TEXT_MODELS。
+export const FAST_TEXT_MODELS = String(process.env.FAST_TEXT_MODELS || "kimi-k2.7-code-highspeed,kimi-k3")
+  .split(",")
+  .map((m) => m.trim())
+  .filter(Boolean);
+// 结构化生成（行程/灵感）：K2.7 code-highspeed 出 JSON 通常 6-8 秒；
+// 它的推理 token 会占输出预算，调用方需给到 6000 max_tokens。超时/失败再由 DeepSeek 兜底。
+export const STRUCTURED_TEXT_MODELS = String(process.env.STRUCTURED_TEXT_MODELS || "kimi-k2.7-code-highspeed")
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);

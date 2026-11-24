@@ -19,7 +19,7 @@ import {
  * 自由提问由搭子的人格 + 领域专业知识 + 领域档案 + 实时上下文回答。
  * 对话历史持久化在搭子板块状态里（本搭子可见，跨搭子隔离）。
  */
-export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
+export default function BuddyChatPanel({ buddy, profile, tint, projectTask, artifacts = null, onAfterSend = null }) {
   const { call } = useBuddyAgent(buddy.id);
   const { state, patch, patchAsync } = useBuddyState(buddy.id);
   const queryClient = useQueryClient();
@@ -59,8 +59,23 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       projectTask ? `项目约定「${projectTask.title}」今日状态：${projectTask.done_today || projectTask.status === "completed" ? "已完成" : "待赴约"}` : null,
     ];
     // 领域特有上下文
-    if (buddy.id === "reading" && state.mins?.[today]) bits.push(`今日已读 ${state.mins[today]} 分钟`);
-    if (buddy.id === "travel" && state.itinerary?.days) bits.push(`行程已排好 ${state.itinerary.days.length} 天`);
+    if (buddy.id === "reading") {
+      bits.push(`正在读《${state.current_book || profile?.answers?.book || "人类简史"}》`);
+      if (state.daily_question) bits.push(`当前共读问题：${String(state.daily_question).slice(0, 80)}`);
+      if (state.mins?.[today]) bits.push(`今日已读 ${state.mins[today]} 分钟`);
+      const lastTalk = [...(Array.isArray(state.notes) ? state.notes : [])].reverse().find((note) => note?.reply);
+      if (lastTalk) {
+        bits.push(`最近一次讲书：${String(lastTalk.text || "").slice(0, 60)}；搭子问：${String(lastTalk.question || "").slice(0, 60)}`);
+      }
+    }
+    if (buddy.id === "travel" && state.itinerary?.days) {
+      // 让聊天本身也知道当前行程，用户问「第三天是什么」时不会答不上来
+      const planBrief = state.itinerary.days
+        .map((day, i) => `${day.day || `D${i + 1}`} ${day.title || ""}${day.note ? `：${day.note}` : ""}`)
+        .join("；")
+        .slice(0, 700);
+      bits.push(`当前行程：${planBrief}`);
+    }
     if (buddy.id === "study" && state.weekly?.done_count != null) bits.push(`本周已打卡 ${state.weekly.done_count}/7 天`);
     if (buddy.id === "running") {
       const rs = getRunningStatus(profile?.answers || {}, profile, state);
@@ -282,6 +297,15 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
     } finally {
       setSending(false);
     }
+    // 对话结束后，让搭子把这次沟通整理成聊天内产物（如旅游行程图）；
+    // 不 await，避免把对话输入卡在第二次生成上。
+    if (onAfterSend) {
+      try {
+        onAfterSend({ text, attachments: sentAttachments });
+      } catch (_error) {
+        // 产物生成失败不打断聊天
+      }
+    }
   };
 
   // 切换这颗搭子的陪伴人格：只影响本搭子，不动全局小助手人格
@@ -375,7 +399,14 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
       </div>
 
       {chat.length > 0 && (
-        <div ref={scrollRef} className="mt-3 max-h-[min(380px,calc(100dvh_-_420px))] min-h-[180px] space-y-3 overflow-y-auto pr-1 md:max-h-[340px]">
+        <div
+          ref={scrollRef}
+          className={`mt-3 space-y-3 overflow-y-auto pr-1 ${
+            artifacts
+              ? "max-h-[min(220px,calc(100dvh_-_560px))] min-h-[100px] md:max-h-[240px]"
+              : "max-h-[min(380px,calc(100dvh_-_420px))] min-h-[180px] md:max-h-[340px]"
+          }`}
+        >
           {chat.map((m, i) =>
             m.role === "user" ? (
               <div key={i} className="flex justify-end">
@@ -472,6 +503,9 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask }) {
           )}
         </div>
       )}
+
+      {/* 搭子面板的聊天内产物（行程图等）：固定在对话区下方、输入框上方，聊天和调整都只用一个输入口 */}
+      {artifacts && <div className="mt-3">{artifacts}</div>}
 
       {chat.length === 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">

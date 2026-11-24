@@ -1,50 +1,93 @@
-import React, { useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
-import { BuddyMsg, PanelCard, ProgressBar, TintButton, useBuddyAgent, useBuddyState, todayKey } from "./shared";
+import { PanelCard, ProgressBar, TintButton, useBuddyAgent, useBuddyState, todayKey } from "./shared";
+import BuddyChatPanel from "./BuddyChatPanel";
 
 const parseGoal = (mins) => parseInt(String(mins || "20"), 10) || 20;
 
+function ReadingArtifact({ book, done, goal, pct, tint, dailyQuestion, lastTalk, talking }) {
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] tracking-widest text-stone-400">在读</span>
+        <span className="text-[10px] text-stone-400">{talking ? "搭子在回应…" : "讲出来，才算读懂"}</span>
+      </div>
+      <div className="mt-1 flex items-baseline justify-between gap-2">
+        <h3 className="truncate text-[15px] font-semibold text-stone-900">《{book}》</h3>
+        <span className="shrink-0 text-[11px] text-stone-500">
+          <span className="font-semibold" style={{ color: tint[2] }}>{done}</span> / {goal} 分钟
+        </span>
+      </div>
+      <div className="mt-2">
+        <ProgressBar pct={pct} tint={tint} />
+      </div>
+      <p className="mt-2.5 rounded-xl bg-[#FAF9F7] px-3 py-2 text-[12px] leading-relaxed text-stone-600">
+        {dailyQuestion}
+      </p>
+      {lastTalk?.reply && (
+        <div className="mt-2 rounded-xl border border-stone-100 bg-white px-3 py-2 text-[11px] leading-relaxed text-stone-500">
+          <p className="line-clamp-3">搭子说：{lastTalk.reply}</p>
+        </div>
+      )}
+      <p className="mt-2 text-[10px] leading-relaxed text-stone-400">
+        读了多久、读到什么，直接在下面聊天框说；讲一段，搭子会接着问。
+      </p>
+    </div>
+  );
+}
+
 /**
- * 在读（读书搭子首页板块）：在读卡（今日分钟数持久化）+ 输出式「讲给搭子听」——
- * 讲一段，搭子回应并抛下一个问题；讲述同时存成笔记（板块状态 + 心签）。
+ * 读书搭子第一栏：只保留一个聊天输入口。
+ * 今日进度、搭子的问题、讲书后的回应，全部收进聊天面板里的「在读」卡片；
+ * 用户说「读了 20 分钟」会自动记时，讲一段书会得到回应 + 下一问，不再需要第二个输入框。
  */
-export function ReadingNowPanel({ profile, tint, persona, projectTask = null }) {
+export function ReadingChatPanel({ buddy, profile, tint, projectTask = null }) {
   const { call } = useBuddyAgent("reading");
   const { state, patch } = useBuddyState("reading");
-  const [talkInput, setTalkInput] = useState("");
+  const queryClient = useQueryClient();
   const [talking, setTalking] = useState(false);
-  const [reply, setReply] = useState(null);
+  const [lastTalk, setLastTalk] = useState(() => {
+    const notes = Array.isArray(state.notes) ? state.notes : [];
+    const last = [...notes].reverse().find((note) => note?.reply);
+    return last ? { text: last.text || "", book: last.book || "", reply: last.reply, question: last.question || "" } : null;
+  });
+  const talkingRef = useRef(false);
 
   const book = state.current_book || profile?.answers?.book || "人类简史";
   const goal = parseGoal(profile?.answers?.mins);
   const today = todayKey();
   const done = state.mins?.[today] || 0;
   const pct = Math.min(100, Math.round((done / goal) * 100));
+  // 换书后不要继续显示上一本书的回应
+  const lastTalkForBook = lastTalk && (!lastTalk.book || lastTalk.book === book) ? lastTalk : null;
+  const dailyQuestion = lastTalkForBook?.question || state.daily_question || `读完今天这段——《${book}》里哪个观点最戳你？`;
 
-  const greeting = {
-    gentle: `今天读 ${goal} 分钟就好，读到哪算哪。`,
-    strict: `今日任务：${goal} 分钟。读完我要提问。`,
-    buddy: "我也在「读」同一本——今天谁先读完谁抛问题！",
-  };
-
-  const addMins = (n) => patch({ mins: { [today]: done + n } });
-
-  const talk = async () => {
-    const text = talkInput.trim();
-    if (!text || talking) return;
+  const talk = async (text) => {
+    if (!text || talkingRef.current) return;
+    talkingRef.current = true;
     setTalking(true);
     try {
       const data = await call({ mode: "talk", payload: { book, text } });
-      setReply(data);
-      setTalkInput("");
-      const note = { text, book, day: today, reply: data.reply, question: data.question };
-      patch({ notes: [...(state.notes || []), note] });
-      // 同步收进心签（讲出来才算读懂——这是最值得留住的；带来源徽标：读书搭子 · 讲书共读）
+      const reply = String(data?.reply || "").trim();
+      const question = String(data?.question || "").trim();
+      setLastTalk({ text, book, reply, question });
+      // 上一轮对话的 capture 可能已经追加了读书记录，从最新缓存取 notes，避免把新记录覆盖掉
+      const latestMine = queryClient.getQueryData(["buddies", "mine"]);
+      const latestNotes = latestMine?.buddies?.reading?.state?.notes || state.notes || [];
+      patch({
+        daily_question: question || state.daily_question || null,
+        notes: [
+          ...latestNotes,
+          { text, book, day: today, reply, question },
+        ].slice(-200),
+      });
+      // 讲出来的内容同步收进心签（讲书共读）
       base44.entities.Note.create({
         title: `讲书 · 《${book}》`,
-        content: `我讲：${text}\n搭子说：${data.reply}\n下一问：${data.question}`,
+        content: `我讲：${text}\n搭子说：${reply}\n下一问：${question}`,
         source_type: "buddy_reading",
         tags: ["读书笔记", "心签"],
         metadata: {
@@ -56,84 +99,49 @@ export function ReadingNowPanel({ profile, tint, persona, projectTask = null }) 
           },
         },
       }).catch(() => {});
-    } catch (e) {
-      toast.error(e?.message || "搭子走神了，再试一次");
+    } catch (_error) {
+      toast.error("搭子走神了，再讲一次好吗");
     } finally {
+      talkingRef.current = false;
       setTalking(false);
     }
   };
 
+  const shouldTalkFromChat = (text) => {
+    const t = String(text || "").trim();
+    if (t.length < 8) return false;
+    if (/(讲给|讲书|我讲|共读|分享一下)/.test(t)) return true;
+    const reflective = /(我觉得|我认为|这段|这句话|作者|观点|感受|感觉|想到|启发|让我|喜欢|不喜欢|书里|印象深刻|有意思)/.test(t);
+    // 只是报「读了多少分钟/页」交给读书记录，不必再走一遍讲书回应，避免重复记录
+    if (/(\d+\s*(分钟|页)|读了|读到|看完|读完)/.test(t) && !reflective) return false;
+    if (!reflective) return false;
+    // 纯提问交给聊天回答；带自己看法的讨论才进入「讲书」回应
+    if (/[?？]$/.test(t) && !/(我觉得|我认为|这段|这句话|感受|感觉|想到|启发|让我)/.test(t)) return false;
+    return true;
+  };
+
   return (
-    <div className="space-y-4">
-      <BuddyMsg tint={tint}>{greeting[persona] || greeting.gentle}</BuddyMsg>
-
-      {/* 在读卡片 */}
-      <PanelCard>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-xl font-semibold text-stone-900">《{book}》</div>
-            <div className="mt-0.5 text-sm text-stone-400">共读中</div>
-          </div>
-          <span className="rounded-full px-2.5 py-1 text-[11px] font-medium" style={{ background: tint[0], color: tint[2] }}>
-            {pct}%
-          </span>
-        </div>
-        <div className="mt-4">
-          <div className="flex items-baseline justify-between text-sm">
-            <span className="text-stone-400">今日阅读</span>
-            <span className="text-stone-600">
-              <span className="font-semibold" style={{ color: tint[2] }}>{done}</span> / {goal} 分钟
-            </span>
-          </div>
-          <div className="mt-1.5">
-            <ProgressBar pct={pct} tint={tint} />
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <TintButton tint={tint} outline onClick={() => addMins(10)}>＋10 分钟</TintButton>
-            <TintButton tint={tint} onClick={() => addMins(20)}>读满 20 分钟</TintButton>
-          </div>
-        </div>
-      </PanelCard>
-
-      {/* 输出式：讲给搭子听 */}
-      <PanelCard dark>
-        <div className="text-xs tracking-widest opacity-70">讲出来，才算读懂</div>
-        <p className="mt-2 text-[15px] leading-relaxed">
-          {state.daily_question || `读完今天这段——《${book}》里哪个观点最戳你？`}
-        </p>
-        {reply ? (
-          <div className="mt-3 space-y-2">
-            <p className="rounded-xl bg-white/10 p-3 text-sm leading-relaxed">{reply.reply}</p>
-            <p className="rounded-xl bg-white/10 p-3 text-sm leading-relaxed opacity-90">下一问：{reply.question}</p>
-            <button onClick={() => setReply(null)} className="text-xs underline underline-offset-4 opacity-70 hover:opacity-100">
-              再讲一段
-            </button>
-          </div>
-        ) : (
-          <form
-            className="mt-3 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              talk();
-            }}
-          >
-            <input
-              value={talkInput}
-              onChange={(e) => setTalkInput(e.target.value)}
-              placeholder="用一两句话，讲讲你的想法…"
-              className="min-h-[44px] flex-1 rounded-full bg-white/10 px-4 text-sm text-[#FAF9F7] placeholder:text-[#FAF9F7]/50 focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={!talkInput.trim() || talking}
-              className="min-h-[44px] rounded-full bg-[#FAF9F7] px-4 text-sm font-medium text-stone-900 transition-transform active:scale-95 disabled:opacity-50"
-            >
-              {talking ? <Loader2 className="w-4 h-4 animate-spin" /> : "讲给ta听"}
-            </button>
-          </form>
-        )}
-      </PanelCard>
-    </div>
+    <BuddyChatPanel
+      buddy={buddy}
+      profile={profile}
+      tint={tint}
+      projectTask={projectTask}
+      artifacts={
+        <ReadingArtifact
+          book={book}
+          done={done}
+          goal={goal}
+          pct={pct}
+          tint={tint}
+          dailyQuestion={dailyQuestion}
+          lastTalk={lastTalkForBook}
+          talking={talking}
+        />
+      }
+      onAfterSend={({ text }) => {
+        if (shouldTalkFromChat(text)) talk(text);
+      }}
+    />
   );
 }
 

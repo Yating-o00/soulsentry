@@ -4,7 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { beijingToday, beijingDayRange } from "../lib/behavior.js";
 import crypto from "node:crypto";
-import { invokeKimiText, FAST_TEXT_MODELS, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
+import { invokeKimiText, FAST_TEXT_MODELS, STRUCTURED_TEXT_MODELS, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
 import { readAttachmentText } from "../services/readAttachment.js";
 import { assertAICredits, chargeAICredits, usageCost } from "../services/aiCredits.js";
 import { BUDDY_DEFAULT_PERSONA, pickBuddyPersona } from "../services/buddyPersona.js";
@@ -1048,7 +1048,8 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
       const dest = String(payload.dest || "目的地").slice(0, 30);
       const style = String(payload.style || "躺平度假").slice(0, 20);
       const days = Math.min(9, Math.max(2, Number(payload.days) || 5));
-      const note = String(payload.note || "").slice(0, 300);
+      // 动态调整时前端会把当前行程一起带进来，留足长度避免只看到前三天
+      const note = String(payload.note || "").slice(0, 1500);
       return {
         systemPrompt: `${base}你是弹性行程规划师：按用户风格排行程，每天最多 2-3 件事，留白 20%，标注坑点（高原/温差/预约门槛/体力强度）。当用户给出动态调整要求（时间变化、天气、人员状态、费用预算等）时，必须针对性重排：累了砍强度、下雨改室内、超预算换免费/低价方案、有老人小孩降步行量。所有安排必须与目的地「${dest}」严格匹配，绝不出现其他城市的景点。`,
         prompt: `为「${dest}」规划 ${days} 天弹性行程，旅行风格「${style}」。${note ? `\n动态调整要求（必须逐条体现）：${note}\n` : ""}只输出 JSON：{"days":[{"day":"D1","title":"当天主题（10字内）","note":"2-3 件安排 + 1 条坑点提示（60字内）"}]}`,
@@ -1324,8 +1325,13 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
   // 复杂问题（小组/规划/备考/长文本/带附件）用旗舰模型换专业度；短闲聊继续走快速模型
   const isComplex =
     hasAttachments ||
-    lastUserText.length > 60 ||
-    /(小组|协同|计划|规划|方案|目标|考公|考研|英语|数学|复习|安排|成立|创建|跑步|跑量|配速|半马|全马|马拉松|伤痛|膝盖)/.test(lastUserText);
+    lastUserText.length > (buddyId === "travel" ? 120 : 60) ||
+    // 旅游的「规划/安排」由独立的行程生成器接手，聊天本身用快速模型回一句即可，
+    // 避免用户在等行程图时还被 K3 的 15-30 秒拖着
+    (buddyId !== "travel" && /(小组|协同|计划|规划|方案|目标|考公|考研|英语|数学|复习|安排|成立|创建|跑步|跑量|配速|半马|全马|马拉松|伤痛|膝盖)/.test(lastUserText));
+  // 行程/灵感是结构化生成：K2.7 code-highspeed 通常 6-8 秒出 JSON；
+  // 给足输出预算（推理 token 也占预算），超时/失败自动切 DeepSeek。
+  const isStructured = ["itinerary", "inspiration"].includes(parsed.data.mode);
   const useFast = isInteractive && !isComplex;
 
   if (isInteractive) {
@@ -1344,14 +1350,14 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
         prompt: built.prompt,
         systemPrompt: built.systemPrompt,
         responseJsonSchema: true,
-        models: useFast ? FAST_TEXT_MODELS : undefined,
-        // Kimi K3 的推理 token 也占输出预算，预算太小会返回空内容；
+        models: isStructured ? STRUCTURED_TEXT_MODELS : useFast ? FAST_TEXT_MODELS : undefined,
+        // Kimi K3 / K2.7 的推理 token 也占输出预算，预算太小会返回空内容；
         // 留足预算，失败时再由 callKimiChat 切 DeepSeek
-        maxTokens: useFast ? 1500 : 2500,
-        fetchTimeout: useFast ? 20000 : 45000,
+        maxTokens: isStructured ? 6000 : useFast ? 1500 : 2500,
+        fetchTimeout: isStructured ? 12000 : useFast ? 20000 : 45000,
       }),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("AGENT_TIMEOUT")), useFast ? 28000 : 60000)
+        setTimeout(() => reject(new Error("AGENT_TIMEOUT")), isStructured ? 20000 : useFast ? 28000 : 60000)
       ),
     ]);
     if (parsed.data.mode === "solve_locate" && payload.attachment_text) {

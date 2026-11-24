@@ -9,7 +9,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mock } from "node:test";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
-import { firstDay, fixtures, gradePlan, stamp } from "./live-cases.js";
+import { asksForDuration, firstDay, fixtures, gradePlan, stamp } from "./live-cases.js";
 
 const { values } = parseArgs({ options: { checkout: { type: "string" }, repeats: { type: "string", default: "2" }, out: { type: "string" }, repeats: { type: "string", default: "2" } }, strict: true });
 if (!values.checkout || !values.out || !process.env.DEEPSEEK_API_KEY?.trim()) {
@@ -187,8 +187,7 @@ async function runScenario(fixture, trial, post, account, stranger) {
   if (fixture.mode === "clarify" || fixture.mode === "clarify_then_plan") {
     if (turn.extracted?.plan || turn.plannerCalls !== 0) errors.push("planned_before_clarification");
     // The question must solicit a duration instead of only presenting one.
-    if (!/(?:多少|多长|多久|几分钟|几小时|多大|能用多久|上限.{0,10}[？?])/.test(turn.reply || "")
-      || !/分钟|时长|时间|多久|上限/.test(turn.reply || "")) errors.push("missing_duration_question");
+    if (!asksForDuration(turn.reply)) errors.push("missing_duration_question");
     if (fixture.mode === "clarify") {
       trial.terminal = "clarification";
       return;

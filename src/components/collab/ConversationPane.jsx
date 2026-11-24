@@ -868,15 +868,15 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
             flatMessages.map((m, index) => renderMessage(m, index))
           )}
 
-          {/* 聊天快捷回应：保持在同一行，字和框图压缩 */}
+          {/* 聊天快捷回应：4区，单行且上下压缩 */}
           {compact && !agentPendingSince && flatMessages[flatMessages.length - 1]?.agent && (
-            <div className="scrollbar-hide flex flex-nowrap gap-1 overflow-x-auto px-1 pb-1 pt-0.5">
+            <div className="scrollbar-hide flex flex-nowrap gap-0.5 overflow-x-auto px-1 pb-0.5 pt-0">
               {["收到，我来跟进", "这一步再商量一下", "帮我整理成约定"].map((label) => (
                 <button
                   key={label}
                   type="button"
                   onClick={() => handleSend(label)}
-                  className="shrink-0 rounded-full border border-[#d8d6cf] bg-white px-2 py-1 text-[11px] leading-4 text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
+                  className="shrink-0 rounded-full border border-[#d8d6cf] bg-white px-1.5 py-0.5 text-[11px] leading-4 text-stone-600 transition-colors hover:border-[#B89A6A] hover:text-[#8B6F47]"
                 >
                   {label}
                 </button>
@@ -886,11 +886,11 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
 
           {/* 空间还空时，给出一个显眼的邀请入口 */}
           {compact && !agentPendingSince && flatMessages[flatMessages.length - 1]?.agent && members.length <= 1 && onInvite && (
-            <div className="pb-2 pl-9 pt-0.5">
+            <div className="pb-1 pl-9 pt-0">
               <button
                 type="button"
                 onClick={onInvite}
-                className="rounded-full border border-[#B89A6A] bg-white px-4 py-1.5 text-[12px] font-medium text-[#8B6F47] transition-colors hover:bg-[#F5F0E8]"
+                className="rounded-full border border-[#B89A6A] bg-white px-3 py-1 text-[12px] font-medium text-[#8B6F47] transition-colors hover:bg-[#F5F0E8]"
               >
                 邀请伙伴加入
               </button>

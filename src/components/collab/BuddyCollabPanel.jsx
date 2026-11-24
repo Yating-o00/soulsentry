@@ -180,10 +180,10 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
   return (
     <div className={cn("flex h-[calc(100dvh-140px)] min-h-[320px] flex-col overflow-hidden rounded-t-2xl rounded-b-none border border-stone-200 border-b-0 bg-white shadow-[0_1px_2px_rgba(36,36,36,0.05)] md:h-[calc(100dvh-180px)] md:min-h-[540px] md:max-h-[820px] md:rounded-3xl md:border-b", className)}>
       {/* 手机优先的协同头：压到最薄，把高度让给聊天 */}
-      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-1 pt-1.5 md:px-4 md:pb-2 md:pt-3">
-        {/* 第一行：头像、共创标题、Agent 状态、完整入口 */}
-        <div className="flex items-center gap-1.5">
-          <Orb size={26} tint={tint} />
+      <header className="shrink-0 border-b border-stone-100 bg-[#FAF9F7] px-3 pb-1 pt-1 md:px-4 md:pb-1.5 md:pt-2">
+        {/* 第一行：标题居左，成员（1区）放右上角，完整入口紧随其后 */}
+        <div className="flex items-start gap-1.5">
+          <Orb size={24} tint={tint} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className="shrink-0 rounded-full bg-[#F3F0E8] px-1.5 py-0 text-[9px] font-medium text-[#6b5c45]">共创中</span>
@@ -200,49 +200,49 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
               </span>
             </div>
           </div>
-          <Link
-            to={fullSpaceUrl}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877] md:h-7 md:w-7"
-            title="完整协同空间"
-            aria-label="打开完整协同空间"
-          >
-            <ArrowUpRight className="h-3 w-3 md:h-3.5 md:w-3.5" />
-          </Link>
-        </div>
 
-        {/* 成员：只呈现空间人员，添加按钮与用户圈同大并以品牌色标识 */}
-        <div className="mt-1 flex items-center gap-1.5">
-          <div className="flex shrink-0 -space-x-1">
-            <span
-              className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#8B6F47] text-[8px] font-medium text-white"
-              title="我"
+          {/* 成员：只呈现空间人员，添加按钮与用户圈同大并以品牌色标识 */}
+          <div className="flex shrink-0 items-center gap-1.5 pt-0.5">
+            <div className="flex shrink-0 -space-x-1">
+              <span
+                className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-[#8B6F47] text-[8px] font-medium text-white"
+                title="我"
+              >
+                我
+              </span>
+              {otherMembers.slice(0, 2).map((member) => (
+                <MemberAvatar
+                  key={member.user_id || member.id}
+                  name={member.display_name || "成员"}
+                  seed={member.user_id || member.id}
+                  size="xs"
+                  className="border-2 border-white"
+                />
+              ))}
+              <button
+                type="button"
+                onClick={() => setInviteOpen(true)}
+                className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-dashed border-[#384877]/40 bg-[#eef2ff] text-[#384877] transition-colors hover:border-[#384877]"
+                title="邀请成员"
+                aria-label="邀请成员"
+              >
+                <Plus className="h-2.5 w-2.5" />
+              </button>
+            </div>
+            <span className="hidden shrink-0 text-[9px] text-stone-400 sm:inline">{memberCount}人</span>
+            <Link
+              to={fullSpaceUrl}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877] md:h-6 md:w-6"
+              title="完整协同空间"
+              aria-label="打开完整协同空间"
             >
-              我
-            </span>
-            {otherMembers.slice(0, 2).map((member) => (
-              <MemberAvatar
-                key={member.user_id || member.id}
-                name={member.display_name || "成员"}
-                seed={member.user_id || member.id}
-                size="xs"
-                className="border-2 border-white"
-              />
-            ))}
-            <button
-              type="button"
-              onClick={() => setInviteOpen(true)}
-              className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-dashed border-[#384877]/40 bg-[#eef2ff] text-[#384877] transition-colors hover:border-[#384877]"
-              title="邀请成员"
-              aria-label="邀请成员"
-            >
-              <Plus className="h-2.5 w-2.5" />
-            </button>
+              <ArrowUpRight className="h-3 w-3" />
+            </Link>
           </div>
-          <span className="shrink-0 text-[9px] text-stone-400">{memberCount}人</span>
         </div>
 
-        {/* 三个内容切换：上下压缩 */}
-        <div className="mt-0.5 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-0.5" role="tablist" aria-label="协同内容">
+        {/* 三个内容切换：2区，上下压缩 */}
+        <div className="mt-1 grid grid-cols-3 gap-1 rounded-full bg-[#F3F0E8] p-0.5" role="tablist" aria-label="协同内容">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -251,13 +251,13 @@ export default function BuddyCollabPanel({ taskId, buddy, tint, profile = null, 
               aria-selected={view === tab.key}
               onClick={() => switchView(tab.key)}
               className={cn(
-                "relative min-h-[24px] rounded-full text-[11px] transition-colors",
+                "relative min-h-[22px] rounded-full text-[11px] transition-colors leading-none",
                 view === tab.key ? "bg-white font-medium text-stone-900 shadow-sm" : "text-stone-500"
               )}
             >
               {tab.label}
               {fresh[tab.key] && (
-                <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tint[2] }} />
+                <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tint[2] }} />
               )}
             </button>
           ))}

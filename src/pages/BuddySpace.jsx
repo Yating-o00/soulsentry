@@ -22,8 +22,8 @@ import CustomBuddyDesigner from "@/components/buddy/CustomBuddyDesigner";
 import SolvePanel from "@/components/buddy/panels/SolvePanel";
 import CustomMaterialsPanel from "@/components/buddy/panels/CustomMaterialsPanel";
 import WeekPanel from "@/components/buddy/panels/WeekPanel";
-import { ItineraryPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
-import { ReadingNowPanel, ShelfPanel, ReadingNotesPanel } from "@/components/buddy/panels/ReadingPanels";
+import { TravelChatPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
+import { ReadingChatPanel, ShelfPanel, ReadingNotesPanel } from "@/components/buddy/panels/ReadingPanels";
 import { MorningCheckPanel, HabitChainPanel } from "@/components/buddy/panels/MorningPanels";
 import {
   RunningTodayPanel,
@@ -416,31 +416,15 @@ export default function BuddySpace() {
           </div>
         )}
         {activeTab === sections[0] && buddyId === "travel" && (
-          <div className="space-y-4">
-            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <ItineraryPanel buddy={buddy} profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
-            <BuddyProjectsSection
-              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
-              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
-              onCreateProject={() => setNewProjectOpen(true)}
-              onCreateCollab={() => setNewCollabOpen(true)}
-              onDeleteCollab={setDeleteCollabTarget}
-            />
+          <div className="space-y-3">
+            {/* 旅游第一栏只留聊天：行程自动排进对话里，调整也直接在对话里说 */}
+            <TravelChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "reading" && (
-          <div className="space-y-4">
-            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <ReadingNowPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
-            {projectTask && <ProjectTaskCard task={projectTask} tint={tint} />}
-            <BuddyProjectsSection
-              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
-              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
-              onCreateProject={() => setNewProjectOpen(true)}
-              onCreateCollab={() => setNewCollabOpen(true)}
-              onDeleteCollab={setDeleteCollabTarget}
-            />
+          <div className="space-y-3">
+            {/* 读书第一栏只留聊天：进度、问题、讲书回应都放进聊天里的「在读」卡片 */}
+            <ReadingChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "morning" && (
@@ -992,14 +976,14 @@ function CollabSection({
   // 已开启协同：小组切换 + 极简协同面板（讨论为主，约定/沉淀按需查看）
   if (activeCollab) {
     return (
-      <div className="space-y-1">
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+      <div>
+        <div className="flex gap-1 overflow-x-auto scrollbar-hide">
           {myCollabs.map((t) => (
             <button
               key={t.id}
               type="button"
               onClick={() => onSelectCollab?.(t.id)}
-              className={`max-w-[140px] shrink-0 truncate rounded-full px-2.5 py-0.5 text-[10px] transition-colors ${
+              className={`max-w-[140px] shrink-0 truncate rounded-full px-2 py-0 text-[10px] transition-colors ${
                 t.id === activeCollab.id
                   ? "bg-[#384877] text-white"
                   : "border border-stone-200 bg-white text-stone-500 hover:text-[#384877]"
@@ -1011,7 +995,7 @@ function CollabSection({
           <button
             type="button"
             onClick={onCreateCollab}
-            className="shrink-0 rounded-full border border-dashed border-stone-300 px-2.5 py-0.5 text-[10px] text-stone-400 hover:text-[#384877]"
+            className="shrink-0 rounded-full border border-dashed border-stone-300 px-2 py-0 text-[10px] text-stone-400 hover:text-[#384877]"
           >
             ＋ 新建小组
           </button>

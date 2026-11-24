@@ -52,6 +52,8 @@ export default function InviteCollabPreview() {
   }, [code]);
 
   const docs = data?.sediment?.docs || [];
+  // 扫码预览的沉淀区不展示 digest 类型的总结，避免大段内容挤占首屏
+  const knowledgeDocs = docs.filter((d) => d.doc_type !== "digest");
   const pacts = data?.pacts || [];
   const discussion = data?.discussion || [];
   const progress = data?.progress || { done: 0, total: 0, percent: 0 };
@@ -59,9 +61,9 @@ export default function InviteCollabPreview() {
     () => [
       { key: "pacts", label: `约定 ${pacts.length}` },
       { key: "discussion", label: "讨论" },
-      { key: "knowledge", label: `沉淀 ${docs.length}` },
+      { key: "knowledge", label: `沉淀 ${knowledgeDocs.length}` },
     ],
-    [pacts.length, discussion.length, docs.length]
+    [pacts.length, discussion.length, knowledgeDocs.length]
   );
 
   const isMember = !!data?.viewer?.is_member;
@@ -280,7 +282,7 @@ export default function InviteCollabPreview() {
                 <p className="mt-1.5 whitespace-pre-wrap text-[12px] leading-5" style={{ color: "#57534d" }}>{data.consensus}</p>
               </div>
             )}
-            {docs.map((doc, index) => (
+            {knowledgeDocs.map((doc, index) => (
               <button
                 key={`${doc.title}-${index}`}
                 type="button"
@@ -295,7 +297,7 @@ export default function InviteCollabPreview() {
                 </span>
               </button>
             ))}
-            {!data.sediment?.digest && !data.consensus && docs.length === 0 && (
+            {!data.consensus && knowledgeDocs.length === 0 && (
               <div className="rounded-2xl border p-6 text-center text-xs" style={{ borderColor: "#dcdad3", backgroundColor: "#fdfcf9", color: "#8a867e" }}>
                 暂无沉淀
               </div>

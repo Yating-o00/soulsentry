@@ -60,7 +60,19 @@ model User {
   collabDocs        CollabDoc[]
   collabInvites     CollabInvite[]
   companionMessages CompanionMessage[]
+  harnessTasks      HarnessTask[]
   buddyMaterials    BuddyMaterial[]
+}
+
+model HarnessTask {
+  id        String   @id
+  userId    String
+  revision  Int      @default(0)
+  data      Json
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // 小助手陪伴对话：用户消息与助手回复都落库（巡检主动消息 kind=proactive），跨端/重进可读

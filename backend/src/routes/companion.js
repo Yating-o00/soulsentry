@@ -8,12 +8,17 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { runFlowChat } from "../services/flowChat.js";
 import { moveProposalWeekday } from "../services/planCommitment.js";
-import { loadPlanningBusy, resolvePlanningRequest, validateScheduledSessions } from "../services/taskHarness.js";
+import { resolvePlanningRequest } from "../services/taskHarness.js";
+import { checkSchedule } from "../services/scheduleCapability.js";
 import { extractActions, executeActions } from "../services/assistantActions.js";
 import { retrievePersonalMemories, searchMemoryTranscript } from "../services/personalMemory.js";
 import { createMemory, ownedMemoryProposal, recallableMessageScope } from "../services/memoryStore.js";
 import { enqueueMemoryMessage } from "../services/memoryWorker.js";
 import { buildMemoryTopicSummary, loadMemoryContext, loadRememberedCommitments, RECENT_CHAT_WINDOW } from "../services/memoryContext.js";
+import { createTaskHarnessDecider } from "../services/agentHarness/readHarnessDecider.js";
+import { createTaskWorkflow } from "../services/agentHarness/runTaskWorkflow.js";
+import { ownedTaskCapabilities } from "../services/agentHarness/taskCapabilities.js";
+import { createTaskWorkflowStore } from "../services/agentHarness/taskWorkflowStore.js";
 import { resolveCompanionBuddyId, runBuddyChatFromCompanion } from "./buddies.js";
 
 export const companionRouter = Router();
@@ -24,6 +29,24 @@ companionRouter.get("/ai-options", (_req, res) => res.json({
   defaultProvider: process.env.CHAT_AI_PROVIDER?.trim() || "kimi",
   deepseekAvailable: Boolean(process.env.DEEPSEEK_API_KEY?.trim()),
 }));
+
+const workflow = createTaskWorkflow({ store: createTaskWorkflowStore(prisma), capabilities: ownedTaskCapabilities(prisma), decide: createTaskHarnessDecider() });
+const taskId = z.string().uuid();
+const workflowText = z.string().trim().min(1).max(3000);
+const workflowInput = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("message"), text: workflowText }).strict(),
+  z.object({ type: z.literal("reply"), taskId, text: workflowText }).strict(),
+  z.object({ type: z.literal("confirm"), taskId, proposal: z.object({ id: taskId, version: z.number().int().positive() }).strict() }).strict(),
+]);
+
+companionRouter.post("/harness", async (req, res) => {
+  const request = workflowInput.safeParse(req.body);
+  if (!request.success) return res.status(400).json({ error: "INVALID_INPUT", details: request.error.flatten() });
+  const outcome = await workflow({ ...request.data, actorId: req.user.id });
+  const status = outcome.code === "forbidden" ? 404
+    : ["stale_proposal", "precondition_changed", "task_changed"].includes(outcome.code) ? 409 : 200;
+  return res.status(status).json(outcome);
+});
 
 const serialize = (m) => ({
   id: m.id,
@@ -281,15 +304,13 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
         messages.filter(({ role }) => role === "user").map(({ content }) => content),
         [...memoryContext.profile, ...memories],
       ).constraints;
-      constraints.busy ??= await loadPlanningBusy(prisma, req.user.id, constraints);
-      const errors = validateScheduledSessions(extracted.plan, constraints);
+      const { snapshot, errors } = await checkSchedule({ plan: extracted.plan, constraints }, { db: prisma, actorId: req.user.id });
       if (errors.length || planRun.signal.aborted) {
         extracted = null;
         planRun.status = planRun.signal.aborted ? "timeout" : "invalid";
         planRun.validation = errors.map((error) => error.match(/^([A-Z_]+)：/)?.[1] || "DOMAIN_RULE");
         replyText = errors.length ? `这份计划还不符合要求：${errors.join("；")}。请调整后再试。` : "规划超时，请稍后重试。";
       } else {
-        const { busy: _busy, ...snapshot } = constraints;
         planDraft = { extracted, constraints: snapshot };
         planRun.status = "ready";
       }

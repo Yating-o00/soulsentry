@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fixtures, gradePlan } from "./live-cases.js";
+import { asksForDuration, fixtures, gradePlan } from "./live-cases.js";
 
 const byId = new Map(fixtures.map((fixture) => [fixture.id, fixture]));
+
+test("accepts a question that asks the user to choose between conflicting limits", () => {
+  assert.equal(asksForDuration("单次时长我这边看到过45分钟和20分钟两个说法，现在按哪个来？\n\n参考记忆：45分钟"), true);
+  assert.equal(asksForDuration("每次大概能投入多少分钟？"), true);
+  assert.equal(asksForDuration("这周有多少天？\n\n参考记忆：每次45分钟"), false);
+  assert.equal(asksForDuration("我建议每次20分钟。这周练多少天？"), false);
+  assert.equal(asksForDuration("可以按45分钟或20分钟。你喜欢哪个颜色？"), false);
+  assert.equal(asksForDuration("我帮你按45分钟执行。"), false);
+});
 
 function row(date, start_time = "10:00", end_time = "10:25") {
   return { date, start_time, end_time, session_type: "session", title: "练习", description: "用纸质词卡练习" };

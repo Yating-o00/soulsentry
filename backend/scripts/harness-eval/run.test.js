@@ -63,13 +63,15 @@ before(async () => {
       "https://api.moonshot.cn/v1/chat/completions",
     ].includes(String(url)), "external network is disabled");
     const body = JSON.parse(options.body);
-    const phase = body.messages[0].content.startsWith("你是约定规划师") ? "planner" : "chat";
+    const system = body.messages[0].content;
+    const phase = system.startsWith("你是约定规划师") ? "planner" : system.startsWith("你是一个工具驱动的约定助手") ? "harness" : "chat";
     calls.push({ phase, model: body.model, prompt: body.messages[1].content });
     const next = answers.shift();
     if (!next || next.phase !== phase) return new Response("unexpected fixture call", { status: 500 });
     if (next.timeout) throw new DOMException("synthetic timeout", "TimeoutError");
     if (next.status) return new Response("fixture provider error", { status: next.status });
-    return Response.json({ choices: [{ message: { content: next.raw ?? JSON.stringify(next.data) } }] });
+    const data = typeof next.data === "function" ? next.data(JSON.parse(body.messages[1].content)) : next.data;
+    return Response.json({ choices: [{ message: { content: next.raw ?? JSON.stringify(data) } }] });
   });
   server = app.listen(0, "127.0.0.1");
   await once(server, "listening");
@@ -102,6 +104,91 @@ function intent({ goal = "英语词汇复习", days = 7, minutes = 20, reply = "
 function chatOnly() {
   answers.push({ phase: "chat", data: { reply: "我听着呢。", extracted: null } });
 }
+
+const workflowPath = "/api/companion/harness";
+const workflowDecision = (data) => answers.push({ phase: "harness", data });
+const readWorkflowTasks = () => workflowDecision({ type: "call", tool: "find_tasks", args: { query: "周报" } });
+function proposeWorkflowTask(title) {
+  workflowDecision(({ observations: [evidence] }) => {
+    const record = evidence.result.data.find(({ title: candidate }) => candidate === title);
+    return { type: "propose", tool: "set_task_status", args: { id: record.id, version: record.version, status: "DONE" }, evidenceIds: [evidence.id] };
+  });
+}
+
+const approval = (outcome) => ({
+  type: "confirm", taskId: outcome.taskId, proposal: { id: outcome.proposal.id, version: outcome.proposal.version },
+});
+
+test("the real companion workflow resumes a clarification and verifies one acknowledged write", async () => {
+  const a = await db.task.create({ data: { userId: user.id, title: "周报 A" } });
+  const b = await db.task.create({ data: { userId: user.id, title: "周报 B" } });
+  const foreign = await db.task.create({ data: { userId: other.id, title: "周报（他人）" } });
+  readWorkflowTasks();
+  workflowDecision(({ observations: [evidence] }) => {
+    assert.deepEqual(evidence.result.data.map(({ id }) => id).sort(), [a.id, b.id].sort());
+    return { type: "ask", question: "你指周报 A 还是周报 B？", choices: [a.id, b.id] };
+  });
+  const first = await post(workflowPath, { type: "message", text: "请把那条周报标为完成。" });
+  assert.equal(first.status, 200);
+  assert.equal(first.data.status, "awaiting_input");
+
+  workflowDecision(({ input, continuation }) => {
+    assert.equal(input, "是周报 B");
+    assert.equal(continuation.request, "请把那条周报标为完成。");
+    assert.deepEqual(continuation.choices, [a.id, b.id]);
+    return { type: "call", tool: "find_tasks", args: { id: b.id } };
+  });
+  proposeWorkflowTask("周报 B");
+  const second = await post(workflowPath, { type: "reply", taskId: first.data.taskId, text: "是周报 B" });
+  assert.equal(second.data.status, "awaiting_confirmation");
+  assert.equal(second.data.proposal.preview.title, "周报 B");
+  assert.equal(await db.taskChangeLog.count({ where: { userId: user.id } }), 0);
+  const persisted = await db.harnessTask.findUnique({ where: { id: first.data.taskId } });
+  assert.equal(persisted.data.status, "awaiting_confirmation");
+
+  const body = approval(second.data);
+  const unauthorized = await post(workflowPath, body, other);
+  assert.equal(unauthorized.status, 404);
+  assert.equal(unauthorized.data.proposal, undefined);
+  const [third, replay] = await Promise.all([post(workflowPath, body), post(workflowPath, body)]);
+  for (const result of [third, replay]) {
+    assert.equal(result.status, 200);
+    assert.equal(result.data.status, "completed");
+    assert.equal(result.data.taskId, first.data.taskId);
+    assert.equal(result.data.receipt.record.id, b.id);
+  }
+  assert.equal(new Set([first, second, third, replay].map(({ data }) => data.runId)).size, 4);
+  assert.equal(third.data.operationId, replay.data.operationId);
+  assert.equal((await db.task.findUnique({ where: { id: b.id } })).status, "DONE");
+  assert.equal((await db.task.findUnique({ where: { id: a.id } })).status, "TODO");
+  assert.equal((await db.task.findUnique({ where: { id: foreign.id } })).status, "TODO");
+  assert.equal(await db.taskChangeLog.count({ where: { taskId: b.id, changeType: "harness_status" } }), 1);
+  assert.equal(calls.length, 4);
+});
+
+test("an edit after preview blocks the old version until a fresh proposal is confirmed", async () => {
+  const row = await db.task.create({ data: { userId: user.id, title: "周报 A" } });
+  readWorkflowTasks();
+  proposeWorkflowTask("周报 A");
+  const start = await post(workflowPath, { type: "message", text: "把周报 A 标为完成。" });
+  assert.equal(start.data.status, "awaiting_confirmation");
+  await db.task.update({ where: { id: row.id }, data: { title: "周报 A（修改）", updatedAt: row.updatedAt } });
+  const blocked = await post(workflowPath, approval(start.data));
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.data.code, "precondition_changed");
+  assert.equal(await db.taskChangeLog.count({ where: { taskId: row.id } }), 0);
+
+  readWorkflowTasks();
+  proposeWorkflowTask("周报 A（修改）");
+  const revision = await post(workflowPath, { type: "reply", taskId: start.data.taskId, text: "按改过标题的周报 A 继续。" });
+  assert.equal(revision.data.proposal.version, start.data.proposal.version + 1);
+  const stale = await post(workflowPath, approval(start.data));
+  assert.equal(stale.data.code, "stale_proposal");
+  const done = await post(workflowPath, approval(revision.data));
+  assert.equal(done.data.status, "completed");
+  assert.equal((await db.task.findUnique({ where: { id: row.id } })).status, "DONE");
+  assert.equal(await db.taskChangeLog.count({ where: { taskId: row.id } }), 1);
+});
 
 function draft({ days = "周一,周三,周六", start = "10:00", minutes = 20, training = false } = {}) {
   answers.push({ phase: "planner", data: {
@@ -461,7 +548,29 @@ test("legacy homepage confirmation uses the canonical proposal and shares its id
   assert.equal(await db.taskExecution.count({ where: { userId: user.id } }), 0);
 });
 
-test("defaults to Kimi and preserves production DeepSeek recovery for invalid planner JSON", async (t) => {
+test("with only Kimi configured the harness repairs invalid planner JSON once", async (t) => {
+  const original = process.env.CHAT_AI_PROVIDER;
+  const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  delete process.env.CHAT_AI_PROVIDER;
+  delete process.env.DEEPSEEK_API_KEY;
+  process.env.KIMI_API_KEY = "local-test";
+  process.env.KIMI_BASE_URL = "https://api.moonshot.cn/v1";
+  t.after(() => {
+    process.env.CHAT_AI_PROVIDER = original;
+    process.env.DEEPSEEK_API_KEY = deepseekKey;
+    process.env.KIMI_API_KEY = "";
+    delete process.env.KIMI_BASE_URL;
+  });
+  intent();
+  answers.push({ phase: "planner", raw: "{broken" });
+  draft();
+  assertSchedule(await send(study), 20);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every(({ model }) => model.startsWith("kimi-")));
+  assert.equal(plannerCalls().length, 2);
+});
+
+test("uses the available DeepSeek transport fallback for malformed Kimi planner output", async (t) => {
   const original = process.env.CHAT_AI_PROVIDER;
   delete process.env.CHAT_AI_PROVIDER;
   process.env.KIMI_API_KEY = "local-test";
@@ -471,15 +580,12 @@ test("defaults to Kimi and preserves production DeepSeek recovery for invalid pl
     process.env.KIMI_API_KEY = "";
     delete process.env.KIMI_BASE_URL;
   });
+  const { DASHBOARD_TEXT_MODELS } = await import("../../src/lib/kimi.js");
   intent();
   answers.push({ phase: "planner", raw: "{broken" });
   draft();
   assertSchedule(await send(study), 20);
-  assert.equal(calls.length, 3);
-  assert.ok(calls[0].model.startsWith("kimi-"));
-  assert.equal(calls[1].model, "kimi-k3");
-  assert.equal(calls[2].model, "deepseek-chat");
-  assert.equal(plannerCalls().length, 2);
+  assert.deepEqual(calls.map(({ model }) => model), [DASHBOARD_TEXT_MODELS[0], "kimi-k3", "deepseek-chat"]);
 });
 
 test("forgetting a remembered limit invalidates its proposal and restores the clarification gate", async () => {
@@ -531,7 +637,7 @@ test("replays the same invalid first draft with zero repairs and with one repair
   assertSchedule({ extracted: { plan: result } }, 20);
 });
 
-test("keeps production Kimi K2.7 and DeepSeek fallback for both today chat routes", async (t) => {
+test("keeps the configured Kimi model and DeepSeek fallback for both today chat routes", async (t) => {
   const original = process.env.CHAT_AI_PROVIDER;
   delete process.env.CHAT_AI_PROVIDER;
   process.env.KIMI_API_KEY = "local-test";
@@ -546,11 +652,12 @@ test("keeps production Kimi K2.7 and DeepSeek fallback for both today chat route
   const result = await post("/api/chat", { messages: [{ role: "user", content: "今天想整理一下思路。" }] });
   assert.equal(result.status, 200);
   assert.equal(result.data.reply, "我听着呢。");
-  assert.deepEqual(calls.map(({ model }) => model), ["kimi-k2.7-code-highspeed", "deepseek-chat"]);
+  const { DASHBOARD_TEXT_MODELS } = await import("../../src/lib/kimi.js");
+  assert.deepEqual(calls.map(({ model }) => model), [DASHBOARD_TEXT_MODELS[0], "deepseek-chat"]);
   answers.push({ phase: "chat", status: 401 });
   chatOnly();
   const companion = await send("连通性测试，请只回复收到。");
   assert.equal(companion.reply.content, "我听着呢。");
   assert.equal(companion.reply.meta.ai.provider, "deepseek");
-  assert.deepEqual(calls.slice(-2).map(({ model }) => model), ["kimi-k2.7-code-highspeed", "deepseek-chat"]);
+  assert.deepEqual(calls.slice(-2).map(({ model }) => model), [DASHBOARD_TEXT_MODELS[0], "deepseek-chat"]);
 });

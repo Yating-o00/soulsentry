@@ -23,16 +23,18 @@ import SolvePanel from "@/components/buddy/panels/SolvePanel";
 import CustomMaterialsPanel from "@/components/buddy/panels/CustomMaterialsPanel";
 import WeekPanel from "@/components/buddy/panels/WeekPanel";
 import { TravelChatPanel, InspirationPanel } from "@/components/buddy/panels/TravelPanels";
+import { StudyChatPanel } from "@/components/buddy/panels/StudyPanels";
 import { ReadingChatPanel, ShelfPanel, ReadingNotesPanel } from "@/components/buddy/panels/ReadingPanels";
-import { MorningCheckPanel, HabitChainPanel } from "@/components/buddy/panels/MorningPanels";
+import { MorningChatPanel, HabitChainPanel } from "@/components/buddy/panels/MorningPanels";
 import {
-  RunningTodayPanel,
+  RunningChatPanel,
   RunningLogPanel,
   RunningBodyPanel,
   RunningGearPanel,
   RunningProfilePanel,
 } from "@/components/buddy/panels/RunningPanels";
 import BuddyChatPanel from "@/components/buddy/panels/BuddyChatPanel";
+import CustomChatPanel from "@/components/buddy/panels/CustomChatPanel";
 import { useBuddyState } from "@/components/buddy/panels/shared";
 import { useListSubtasks } from "@/components/buddy/useListSubtasks";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
@@ -390,29 +392,15 @@ export default function BuddySpace() {
       {/* 板块内容 */}
       <div className="mt-3 md:mt-5">
         {activeTab === sections[0] && buddy?.custom && (
-          <div className="space-y-4">
-            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <BuddyProjectsSection
-              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
-              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
-              onCreateProject={() => setNewProjectOpen(true)}
-              onCreateCollab={() => setNewCollabOpen(true)}
-              onDeleteCollab={setDeleteCollabTarget}
-            />
+          <div className="space-y-3">
+            {/* 自定义搭子第一栏只留聊天：关键信息由对话生成，整理进聊天里的手记卡 */}
+            <CustomChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "study" && (
-          <div className="space-y-4">
-            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <HomeSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <BuddyProjectsSection
-              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
-              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
-              onCreateProject={() => setNewProjectOpen(true)}
-              onCreateCollab={() => setNewCollabOpen(true)}
-              onDeleteCollab={setDeleteCollabTarget}
-            />
+          <div className="space-y-3">
+            {/* 学习第一栏只留聊天：打卡、周进度、本周小结都放进聊天里的学习卡 */}
+            <StudyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "travel" && (
@@ -428,29 +416,15 @@ export default function BuddySpace() {
           </div>
         )}
         {activeTab === sections[0] && buddyId === "morning" && (
-          <div className="space-y-4">
-            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <MorningCheckPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
-            <BuddyProjectsSection
-              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
-              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
-              onCreateProject={() => setNewProjectOpen(true)}
-              onCreateCollab={() => setNewCollabOpen(true)}
-              onDeleteCollab={setDeleteCollabTarget}
-            />
+          <div className="space-y-3">
+            {/* 早起第一栏只留聊天：打卡、本周 7 天、起床趋势都放进聊天里的打卡卡 */}
+            <MorningChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
         {activeTab === sections[0] && buddyId === "running" && (
-          <div className="space-y-4">
-            <BuddyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
-            <RunningTodayPanel profile={profile} tint={tint} persona={persona} projectTask={projectTask} />
-            <BuddyProjectsSection
-              buddy={buddy} tint={tint} primaryTask={projectTask} tasks={buddyTasks}
-              onSelectCollab={(id) => { setSelectedCollabId(id); setTab("协同"); }}
-              onCreateProject={() => setNewProjectOpen(true)}
-              onCreateCollab={() => setNewCollabOpen(true)}
-              onDeleteCollab={setDeleteCollabTarget}
-            />
+          <div className="space-y-3">
+            {/* 跑步第一栏只留聊天：今日课表/周进度/身体信号都放进聊天里的训练卡 */}
+            <RunningChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
         {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}

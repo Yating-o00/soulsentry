@@ -135,6 +135,7 @@ export async function callKimiChat({
   maxTokens = 4000,
   tools,
   fetchTimeout = 30000,
+  endpointFetchTimeouts = null,
   signal,
   singleAttempt = false,
   allowDeepSeekFallback = true
@@ -180,10 +181,13 @@ export async function callKimiChat({
       let response;
       let timeoutId;
       const startAt = Date.now();
+      // 结构化长 JSON 需要给 DeepSeek 更长的生成时间；Kimi 仍用短窗口先试，
+      // 避免 Kimi 想太久把整次请求拖到 20 秒以上。
+      const attemptTimeout = Number(endpointFetchTimeouts?.[endpoint.label]) || fetchTimeout;
       try {
-        console.log(`[callKimiChat] attempt: endpoint=${endpoint.label}(${endpoint.baseUrl}), model=${candidateModel}`);
+        console.log(`[callKimiChat] attempt: endpoint=${endpoint.label}(${endpoint.baseUrl}), model=${candidateModel}, timeout=${attemptTimeout}ms`);
         const controller = new AbortController();
-        timeoutId = setTimeout(() => controller.abort(), fetchTimeout);
+        timeoutId = setTimeout(() => controller.abort(), attemptTimeout);
         response = await fetch(`${endpoint.baseUrl}/chat/completions`, {
           method: "POST",
           headers: {
@@ -279,6 +283,7 @@ export async function invokeKimiText({
   temperature,
   maxTokens,
   fetchTimeout,
+  endpointFetchTimeouts,
   signal,
   singleAttempt,
   withUsage = false,
@@ -298,6 +303,7 @@ export async function invokeKimiText({
     temperature,
     maxTokens,
     fetchTimeout,
+    endpointFetchTimeouts,
     signal,
     singleAttempt,
     allowDeepSeekFallback

@@ -10,7 +10,7 @@ import BuddyChatPanel from "./BuddyChatPanel";
 
 const TRAVEL_QUICK_ACTIONS = [
   {
-    label: "下雨了，换一个行程",
+    label: "下雨换行程",
     note: "下雨了，请把受影响的户外安排换成具体的雨天备选/室内安排，并保持其他天和字段尽量不变。",
   },
   {
@@ -22,7 +22,7 @@ const TRAVEL_QUICK_ACTIONS = [
     note: "同行人不想多走路，请减少步行和爬坡，优先打车/索道/短距离安排，其他天尽量不变。",
   },
   {
-    label: "预算再省点",
+    label: "省点预算",
     note: "预算再省一点，请把住宿/餐饮/交通换成更省的选择，保留核心体验，其他天尽量不变。",
   },
 ];
@@ -50,18 +50,33 @@ function splitLegacyActivities(note) {
     .map((text) => ({ time: "", name: text, detail: "", type: "activity" }));
 }
 
+function normalizeActivities(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((activity, activityIndex) => {
+      if (typeof activity === "string") {
+        return {
+          time: "",
+          name: activity.trim().slice(0, 40) || `安排 ${activityIndex + 1}`,
+          detail: "",
+          type: "activity",
+        };
+      }
+      return {
+        time: String(activity?.time || "").slice(0, 10),
+        name: String(activity?.name || activity?.title || "").slice(0, 40) || `安排 ${activityIndex + 1}`,
+        detail: String(activity?.detail || activity?.note || "").slice(0, 120),
+        type: String(activity?.type || "activity"),
+      };
+    })
+    .filter((activity) => activity.name);
+}
+
 function normalizeTravelDay(day, index) {
   const hasStructuredActivities = Array.isArray(day?.activities) && day.activities.length > 0;
   const activities = hasStructuredActivities
-    ? day.activities
-        .map((activity, activityIndex) => ({
-          time: String(activity?.time || "").slice(0, 10),
-          name: String(activity?.name || activity?.title || "").slice(0, 40) || `安排 ${activityIndex + 1}`,
-          detail: String(activity?.detail || activity?.note || "").slice(0, 120),
-          type: String(activity?.type || "activity"),
-        }))
-        .filter((activity) => activity.name)
+    ? normalizeActivities(day.activities)
     : splitLegacyActivities(day?.note);
+  const rainActivities = normalizeActivities(day?.rain_activities);
 
   return {
     day: String(day?.day || `D${index + 1}`).slice(0, 10),
@@ -70,6 +85,7 @@ function normalizeTravelDay(day, index) {
     pace: String(day?.pace || "").slice(0, 10),
     weather: String(day?.weather || "").slice(0, 20),
     rain_backup: String(day?.rain_backup || "").slice(0, 80),
+    rain_activities: rainActivities,
     activities,
     food: String(day?.food || "").slice(0, 80),
     stay: String(day?.stay || "").slice(0, 80),
@@ -102,6 +118,7 @@ function normalizeTravelTrip(itinerary) {
       .map((item) => String(item || "").slice(0, 60))
       .filter(Boolean)
       .slice(0, 4),
+    weather_mode: itinerary?.weather_mode === "rain" ? "rain" : "clear",
     days,
   };
 }
@@ -172,6 +189,23 @@ function classifyTravelAdjustment(text) {
   return "只改与新要求直接相关的行/天；其他安排尽量保持原样。";
 }
 
+function detectQuickTravelRow(text) {
+  const t = String(text || "").trim();
+  if (!t) return null;
+  // 问句交给聊天回答，不擅自改行程
+  if (/[？?]|多久|怎么|几点|哪里|吗/.test(t)) return null;
+  const mode = t.match(/(高铁|动车|火车|飞机|航班|自驾|包车|租车|大巴)/);
+  if (mode && /(坐|改|换|选|要|走|定)/.test(t)) {
+    return { transport: `${mode[1]}优先；当地交通按当天安排` };
+  }
+  const stay = t.match(/(?:住|住宿|酒店|民宿|客栈)(?:在|去|到|选|换到|换)?\s*([\u4e00-\u9fa5A-Za-z0-9·\s]{2,18})/);
+  if (stay) {
+    const value = stay[1].replace(/[吧呢啊哈。！!，,].*$/, "").trim();
+    if (value) return { stay: value };
+  }
+  return null;
+}
+
 function ItineraryArtifact({
   itinerary,
   tint,
@@ -183,23 +217,52 @@ function ItineraryArtifact({
   autoError,
   onRetrySync,
   onQuickAdjust,
+  onToggleRain,
 }) {
   const trip = useMemo(() => normalizeTravelTrip(itinerary), [itinerary]);
   const days = trip.days;
   const [selected, setSelected] = useState(0);
   const bodyRef = useRef(null);
+  const dayPanelRef = useRef(null);
+  const shouldScrollToDayRef = useRef(false);
 
   useEffect(() => {
     if (selected >= days.length) setSelected(0);
   }, [days.length, selected]);
+
+  // 点日期后把当天的详细安排滚进卡片可视区，避免点了没反应
+  useEffect(() => {
+    if (!shouldScrollToDayRef.current) return;
+    shouldScrollToDayRef.current = false;
+    const body = bodyRef.current;
+    const panel = dayPanelRef.current;
+    if (!body || !panel) return;
+    const top = panel.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 44;
+    body.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  }, [selected]);
 
   // 每次重排后把卡片滚回顶部，让「本次调整」和新的第一天先被看到
   useEffect(() => {
     bodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [itinerary?.generated_at]);
 
+  const selectDay = (index) => {
+    shouldScrollToDayRef.current = true;
+    setSelected(index);
+  };
+
   const day = days[Math.min(selected, Math.max(0, days.length - 1))] || null;
   const child = day ? childByKey?.get(`day-${Math.min(selected, days.length - 1) + 1}`) : null;
+  const rainMode = trip.weather_mode === "rain";
+  const dayActivities = !day
+    ? []
+    : rainMode
+      ? day.rain_activities.length > 0
+        ? day.rain_activities
+        : day.rain_backup
+          ? [{ time: "", name: "雨天备选", detail: day.rain_backup, type: "rest" }]
+          : day.activities
+      : day.activities;
   const syncLabel = !canSync
     ? "已收进搭子空间"
     : autoError
@@ -237,11 +300,20 @@ function ItineraryArtifact({
 
       <div
         ref={bodyRef}
-        className="mt-2 max-h-[min(290px,32dvh)] space-y-2 overflow-y-auto pr-1"
+        className="mt-2 max-h-[min(290px,31dvh)] space-y-2 overflow-y-auto pr-1"
       >
         {trip.changes.length > 0 && (
           <div className="rounded-lg px-2.5 py-1.5 text-[10px] leading-relaxed" style={{ background: tint[0], color: tint[2] }}>
             本次调整：{trip.changes.slice(0, 3).join("；")}
+          </div>
+        )}
+
+        {rainMode && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-sky-50 px-2.5 py-1.5 text-[10px] text-sky-700">
+            <span>雨天模式：户外安排已换成室内/备选</span>
+            <button type="button" onClick={() => onToggleRain(false)} className="shrink-0 underline">
+              恢复原计划
+            </button>
           </div>
         )}
 
@@ -287,15 +359,6 @@ function ItineraryArtifact({
             )}
           </div>
 
-          {trip.highlights.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {trip.highlights.slice(0, 3).map((highlight) => (
-                <span key={highlight} className="rounded-full border border-white/70 bg-white/70 px-2 py-0.5 text-[9px] text-stone-500">
-                  {highlight}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="sticky top-0 z-10 -mx-1 flex gap-1.5 overflow-x-auto bg-white/95 px-1 py-1 backdrop-blur scrollbar-hide">
@@ -306,7 +369,7 @@ function ItineraryArtifact({
               <button
                 type="button"
                 key={`${item.day}-${index}`}
-                onClick={() => setSelected(index)}
+                onClick={() => selectDay(index)}
                 className={`min-w-[76px] shrink-0 rounded-lg border px-2 py-1.5 text-left transition-colors ${
                   active ? "text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-300"
                 }`}
@@ -330,7 +393,7 @@ function ItineraryArtifact({
           })}
         </div>
 
-        <div className="rounded-xl border border-stone-100 bg-[#FAF9F7] p-2.5">
+        <div ref={dayPanelRef} className="rounded-xl border border-stone-100 bg-[#FAF9F7] p-2.5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex flex-wrap items-baseline gap-x-1.5">
@@ -339,7 +402,8 @@ function ItineraryArtifact({
               </div>
               <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
                 {day.pace && <span className="rounded-full bg-white px-1.5 py-0.5 text-stone-500">{day.pace}</span>}
-                {day.weather && <span className="rounded-full bg-white px-1.5 py-0.5 text-stone-500">{day.weather}</span>}
+                {day.weather && !rainMode && <span className="rounded-full bg-white px-1.5 py-0.5 text-stone-500">{day.weather}</span>}
+                {rainMode && <span className="rounded-full bg-sky-50 px-1.5 py-0.5 text-sky-700">雨天模式</span>}
                 {child && (
                   <span className="rounded-full px-1.5 py-0.5" style={{ background: tint[0], color: tint[2] }}>
                     {isTaskEffectivelyCompleted(child) ? "已完成" : "已列入约定"}
@@ -355,9 +419,9 @@ function ItineraryArtifact({
             </span>
           </div>
 
-          {day.activities.length > 0 ? (
+          {dayActivities.length > 0 ? (
             <div className="mt-2 space-y-1.5">
-              {day.activities.map((activity, activityIndex) => (
+              {dayActivities.map((activity, activityIndex) => (
                 <div key={`${activity.name}-${activityIndex}`} className="flex gap-2">
                   <span className="w-9 shrink-0 pt-0.5 text-[9px] tabular-nums text-stone-400">
                     {activity.time || "—"}
@@ -394,17 +458,27 @@ function ItineraryArtifact({
               ))}
           </div>
 
-          {day.rain_backup && (
+          {!rainMode && day.rain_backup && (
             <p className="mt-1.5 rounded-lg bg-white px-2 py-1.5 text-[9px] leading-relaxed text-stone-500">
               <CloudRain className="mr-1 inline h-3 w-3" /> 雨天备选：{day.rain_backup}
             </p>
           )}
-          {day.tip && day.activities.length > 0 && (
+          {day.tip && dayActivities.length > 0 && (
             <p className="mt-1.5 rounded-lg bg-white px-2 py-1.5 text-[9px] leading-relaxed text-stone-500">
               <Sparkles className="mr-1 inline h-3 w-3" /> {day.tip}
             </p>
           )}
         </div>
+
+        {trip.highlights.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {trip.highlights.slice(0, 4).map((highlight) => (
+              <span key={highlight} className="rounded-full border border-stone-200 bg-white px-2 py-0.5 text-[9px] text-stone-500">
+                {highlight}
+              </span>
+            ))}
+          </div>
+        )}
 
         {trip.booking.length > 0 && (
           <div className="rounded-lg border border-amber-100 bg-amber-50/60 px-2 py-1.5 text-[9px] leading-relaxed text-amber-700">
@@ -413,8 +487,17 @@ function ItineraryArtifact({
         )}
       </div>
 
-      <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-hide">
-        {TRAVEL_QUICK_ACTIONS.map((action) => (
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={() => onToggleRain(!rainMode)}
+          disabled={generating}
+          className="shrink-0 rounded-full border px-2.5 py-1 text-[10px] transition-colors disabled:opacity-50"
+          style={{ borderColor: tint[1], color: tint[2] }}
+        >
+          {rainMode ? "恢复原计划" : "下雨换行程"}
+        </button>
+        {TRAVEL_QUICK_ACTIONS.filter((action) => action.label !== "下雨换行程").map((action) => (
           <button
             type="button"
             key={action.label}
@@ -428,7 +511,7 @@ function ItineraryArtifact({
         ))}
       </div>
       <p className="mt-1.5 text-[9px] leading-relaxed text-stone-400">
-        也可以直接说「坐高铁去」「住洱海边」「想吃菌子火锅」，相关行会实时调整。
+        上下滑动看完整安排；也可以直接说「坐高铁」「住洱海边」，相关行会实时调整。
       </p>
     </div>
   );
@@ -448,6 +531,8 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
 
   const trip = useMemo(() => normalizeTravelTrip(state.itinerary), [state.itinerary]);
   const days = trip.days;
+  const rainMode = state.itinerary?.weather_mode === "rain";
+  const hasRainData = days.some((day) => day.rain_activities.length > 0 || day.rain_backup);
   const itineraryItems = useMemo(
     () =>
       days.map((day, index) => ({
@@ -546,8 +631,49 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
     return hasItinerary ? changeIntent && travelTopic : creation;
   };
 
+  const handleToggleRain = (next) => {
+    if (next && !hasRainData) {
+      // 旧行程没有结构化雨天备选时，才让 AI 补一版
+      generateItinerary("下雨了，请把受影响的户外安排换成具体可执行的室内/雨天备选，并保持其他天和字段尽量不变。", {
+        quick: true,
+        label: "下雨换行程",
+      });
+      return;
+    }
+    patch({ itinerary: { weather_mode: next ? "rain" : "clear" } });
+    toast.success(next ? "已切换为雨天备选，户外安排已替换" : "已恢复原计划");
+  };
+
   const handleAfterSend = ({ text }) => {
-    if (!shouldGenerateFromChat(text)) return;
+    const t = String(text || "").trim();
+    if (!t) return;
+
+    // 下雨/雨停是本地即时切换，不需要等 AI，卡片立刻变成雨天安排
+    if (/(雨停了|天气好了|恢复原计划)/.test(t)) {
+      handleToggleRain(false);
+      return;
+    }
+    if (/(下雨|雨天|天气不好|天气变了)/.test(t)) {
+      if (!rainMode) {
+        if (hasRainData) {
+          handleToggleRain(true);
+          return;
+        }
+        generateItinerary("用户说下雨了，请把受影响的户外安排换成具体可执行的室内/雨天备选，并保持其他天和字段尽量不变。");
+        return;
+      }
+      return;
+    }
+
+    // 交通/住宿这类明确选择先本地改对应行，立刻可见；再让 AI 在后台细化每天安排
+    const quickRow = detectQuickTravelRow(t);
+    if (quickRow) {
+      patch({ itinerary: quickRow });
+      generateItinerary(`用户刚在对话里说：${text}`);
+      return;
+    }
+
+    if (!shouldGenerateFromChat(t)) return;
     generateItinerary(`用户刚在对话里说：${text}`);
   };
 
@@ -578,6 +704,7 @@ export function TravelChatPanel({ buddy, profile, tint, projectTask = null }) {
       autoError={autoError}
       onRetrySync={() => syncNow({ notify: true }).catch(() => {})}
       onQuickAdjust={handleQuickAdjust}
+      onToggleRain={handleToggleRain}
     />
   ) : (
     <div className="rounded-2xl border border-dashed border-stone-200 bg-[#FAF9F7] px-3.5 py-3 text-[12px] leading-relaxed text-stone-500">

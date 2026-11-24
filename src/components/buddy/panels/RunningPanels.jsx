@@ -22,7 +22,8 @@ import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
 import { httpRequest } from "@/api/httpClient";
 import { cn } from "@/lib/utils";
-import { BuddyMsg, PanelCard, TintButton, useBuddyAgent, useBuddyState, todayKey } from "./shared";
+import { BuddyMsg, PanelCard, ProgressBar, TintButton, useBuddyAgent, useBuddyState, todayKey } from "./shared";
+import BuddyChatPanel from "./BuddyChatPanel";
 import {
   RUNNING_KNOWLEDGE,
   activeInjuries,
@@ -82,6 +83,274 @@ function runnerGreeting(persona, session) {
 /* =====================================================================
    今日课表（首页）：周期化周课表 + 今日卡 + 动态调整 + 打卡记录
    ===================================================================== */
+
+function RunningArtifact({ status, stats, injuries, body, tint, onSoften, onRest, onKnee }) {
+  const session = status.todaySession || {};
+  const doneToday = (status.logsToday || []).length > 0;
+  const weekPct = status.plannedKm > 0 ? Math.min(100, Math.round((status.doneKm / status.plannedKm) * 100)) : 0;
+  const weekSessions = Object.values(status.schedule || {}).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const bodyTired = Boolean(
+    body && (Number(body.fatigue) >= 4 || (Number(body.sleep_h) > 0 && Number(body.sleep_h) < 6))
+  );
+  const lastLog = stats.lastLog;
+  const restDay = !session.planned || session.type === "rest";
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] tracking-widest text-stone-400">今日课表</span>
+        <span className="text-[10px] text-stone-400">
+          {doneToday ? "今天已跑" : restDay ? "休息日" : "待出发"}
+        </span>
+      </div>
+
+      <div className="mt-2 max-h-[min(260px,30dvh)] space-y-2 overflow-y-auto pr-1">
+        <div
+          className="rounded-xl px-3 py-2.5"
+          style={{ background: `linear-gradient(135deg, ${tint[0]} 0%, #ffffff 78%)` }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="text-[16px] font-semibold text-stone-900">{session.title || "今天休息"}</h3>
+              <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-stone-600">
+                {session.km > 0 && <span>{session.km} km</span>}
+                {session.pace > 0 && <span>配速 {formatPace(session.pace)}</span>}
+                {session.duration_min > 0 && <span>{formatDuration(session.duration_min)}</span>}
+                {session.clock && <span>{session.clock}</span>}
+              </div>
+            </div>
+            <span className="shrink-0 rounded-full bg-white/80 px-2 py-0.5 text-[9px] text-stone-500">
+              {restDay ? "恢复" : "训练"}
+            </span>
+          </div>
+          {session.detail && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-stone-600">{session.detail}</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-stone-100 bg-[#FAF9F7] p-2.5">
+          <div className="flex items-center justify-between gap-2 text-[10px] text-stone-500">
+            <span>本周进度</span>
+            <span>
+              {status.injuryHold
+                ? "伤病恢复中 · 跑课已暂停"
+                : `${status.doneDays.length}/${status.runDays.length} 次 · ${Math.round(status.doneKm)}/${Math.round(status.plannedKm)} km`}
+            </span>
+          </div>
+          <div className="mt-1.5">
+            <ProgressBar pct={weekPct} tint={tint} />
+          </div>
+          <div className="mt-2 flex gap-1">
+            {weekSessions.map((item) => {
+              const done = (status.doneDays || []).some((day) => day.date === item.date);
+              const isToday = item.date === status.today;
+              return (
+                <div key={item.date} className="min-w-0 flex-1 text-center">
+                  <div
+                    className={`mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[9px] ${
+                      done
+                        ? "font-semibold text-white"
+                        : isToday
+                          ? "border-2 bg-white font-semibold"
+                          : item.planned
+                            ? "bg-stone-100 text-stone-400"
+                            : "bg-[#EEF2EF] text-[#6B7B72]"
+                    }`}
+                    style={done ? { background: tint[2] } : isToday ? { borderColor: tint[2], color: tint[2] } : undefined}
+                  >
+                    {done ? "✓" : item.planned ? (isToday ? "今" : "·") : "休"}
+                  </div>
+                  <div className="mt-0.5 text-[8px] text-stone-400">{weekdayLabel(item.date)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {injuries.length > 0 && (
+          <div className="flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-[9px] leading-relaxed text-amber-700">
+            <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+            正在跟踪：{injuries.map((item) => item.area).join("、")}。先恢复，别硬扛。
+          </div>
+        )}
+        {bodyTired && (
+          <div className="flex items-start gap-1.5 rounded-lg border border-amber-100 bg-amber-50/70 px-2 py-1.5 text-[9px] leading-relaxed text-amber-700">
+            <Moon className="mt-0.5 h-3 w-3 shrink-0" />
+            最近疲劳或睡眠不足，今天可以主动降级。
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-1.5">
+          {[
+            ["累计", `${Math.round(stats.totalKm)} km`],
+            ["连跑", `${stats.streakWeeks} 周`],
+            ["最佳配速", stats.bestPace ? formatPace(stats.bestPace) : "—"],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg bg-[#FAF9F7] px-2 py-1.5 text-center">
+              <div className="text-[8px] text-stone-400">{label}</div>
+              <div className="mt-0.5 text-[11px] font-semibold text-stone-700">{value}</div>
+            </div>
+          ))}
+        </div>
+
+        {lastLog && (
+          <p className="text-[9px] leading-relaxed text-stone-400">
+            最近一次：{lastLog.date} · {lastLog.distance_km || 0} km
+            {lastLog.duration_min ? ` · ${lastLog.duration_min} 分钟` : ""}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={onSoften}
+          disabled={doneToday || injuries.length > 0}
+          className="rounded-full border px-2.5 py-1 text-[10px] transition-colors disabled:opacity-40"
+          style={{ borderColor: tint[1], color: tint[2] }}
+        >
+          今天轻松跑
+        </button>
+        <button
+          type="button"
+          onClick={onRest}
+          disabled={doneToday}
+          className="rounded-full border px-2.5 py-1 text-[10px] transition-colors disabled:opacity-40"
+          style={{ borderColor: tint[1], color: tint[2] }}
+        >
+          今天休息
+        </button>
+        <button
+          type="button"
+          onClick={onKnee}
+          className="rounded-full border border-amber-200 px-2.5 py-1 text-[10px] text-amber-700 transition-colors"
+        >
+          膝盖不舒服
+        </button>
+      </div>
+      <p className="mt-1.5 text-[9px] leading-relaxed text-stone-400">
+        说一句跑量/传截图会自动记录；说「累了」我会把课调轻。
+      </p>
+    </div>
+  );
+}
+
+/**
+ * 跑步搭子第一栏：聊天 + 聊天内的训练卡。
+ * 用户说「今天累了/膝盖疼」或点卡片按钮，都会直接改当天课表；跑量/截图由聊天自动落记录。
+ */
+export function RunningChatPanel({ buddy, profile, tint, projectTask = null }) {
+  const { state, patch } = useBuddyState("running");
+  const status = useMemo(() => getRunningStatus(profile?.answers || {}, profile, state), [profile, state]);
+  const stats = useMemo(() => computeRunningStats(state), [state]);
+  const injuries = activeInjuries(state);
+  const body = latestBody(state);
+  const doneToday = (status.logsToday || []).length > 0;
+
+  const softenToday = () => {
+    if (doneToday) return;
+    const base = status.todaySession;
+    if (base.type === "strength") {
+      patch({
+        plan_overrides: {
+          [status.today]: {
+            type: "rest",
+            detail: "今天不做力量也不跑，散步和拉伸 10 分钟就好。",
+          },
+        },
+      });
+      toast.success("已把今天改成轻量恢复");
+      return;
+    }
+    const km = Math.max(1, Math.round((Number(base.km) || 3) * 0.65 * 2) / 2);
+    const duration = Math.max(10, Math.round((Number(base.duration_min) || 25) * 0.7));
+    patch({
+      plan_overrides: {
+        [status.today]: {
+          type: "easy",
+          title: "轻松跑（状态日）",
+          detail: "今天只求动起来：能说完整句子，跑完不喘就对了。",
+          km,
+          duration_min: duration,
+          pace: status.runner.easyPace,
+          planned: true,
+          clock: base.clock,
+        },
+      },
+    });
+    toast.success("已把今天降级为轻松跑，状态回来了再加量");
+  };
+
+  const restToday = () => {
+    if (doneToday) return;
+    patch({
+      plan_overrides: {
+        [status.today]: {
+          type: "rest",
+          detail: "今天安排休息，散步或拉伸 10 分钟就好；缺的课不补。",
+        },
+      },
+    });
+    toast.success("今天改成休息日，不内耗");
+  };
+
+  const reportKnee = () => {
+    if (injuries.some((item) => String(item.area || "").includes("膝盖"))) {
+      toast.info("膝盖已经在跟踪中，先休息观察，别重复加记录");
+      return;
+    }
+    const injury = {
+      id: `${Date.now()}`,
+      area: "膝盖",
+      note: "跑步相关疼痛，已自动停跑，观察 48-72 小时",
+      started_at: status.today,
+      status: "active",
+    };
+    patch({
+      injuries: [injury, ...(state.injuries || [])].slice(0, 40),
+      plan_overrides: {
+        [status.today]: {
+          type: "rest",
+          detail: "膝盖不适先停跑。可冰敷 15 分钟，明天改游泳/骑行/椭圆机。",
+        },
+      },
+    });
+    toast.success("今天先停跑，已记进伤病档案");
+  };
+
+  const handleAfterSend = ({ text }) => {
+    const t = String(text || "");
+    if (/(膝盖|膝|疼|痛|受伤|不适)/.test(t)) {
+      reportKnee();
+      return;
+    }
+    if (/(累了|不想跑|状态不好|休息|轻松跑|少跑)/.test(t)) {
+      softenToday();
+    }
+  };
+
+  return (
+    <BuddyChatPanel
+      buddy={buddy}
+      profile={profile}
+      tint={tint}
+      projectTask={projectTask}
+      artifacts={
+        <RunningArtifact
+          status={status}
+          stats={stats}
+          injuries={injuries}
+          body={body}
+          tint={tint}
+          onSoften={softenToday}
+          onRest={restToday}
+          onKnee={reportKnee}
+        />
+      }
+      onAfterSend={handleAfterSend}
+    />
+  );
+}
 
 export function RunningTodayPanel({ profile, tint, persona, projectTask }) {
   const { state, patch } = useBuddyState("running");

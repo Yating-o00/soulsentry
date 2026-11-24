@@ -1055,8 +1055,8 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
         systemPrompt: `${base}你是资深自由行定制师，行程必须能直接执行：地理顺序合理、交通耗时真实、每天 2-3 个主要安排、留 20% 空白、避开闭馆日和高峰、标注预约门槛、给出雨天备选和人均预算。绝不编造不存在的地点或营业信息；不确定的预约信息提醒用户查官方。所有安排必须与目的地「${dest}」严格匹配，绝不出现其他城市的景点。`,
         prompt: `为「${dest}」规划 ${days} 天弹性行程，旅行风格「${style}」。${note ? `\n用户/当前行程信息：\n${note}\n` : ""}
 只输出严格 JSON，结构如下：
-{"summary":"整体节奏一句话（30字内）","area":"主要区域（15字内）","transport":"往返+当地交通（30字内）","stay":"住宿区域/类型（30字内）","budget":"人均预算区间（20字内）","highlights":["亮点1（12字内）","亮点2","亮点3"],"booking":["需要提前预约/注意的事项（20字内，最多3条）"],"days":[{"day":"D1","title":"当天主题（10字内）","area":"当天区域（10字内）","pace":"轻松|适中|充实","weather":"室内为主|户外为主|看天气","rain_backup":"下雨备选（20字内）","activities":[{"time":"09:30","name":"安排（12字内）","detail":"怎么去/玩多久（25字内）","type":"transport|sight|food|stay|rest"}],"food":"餐饮（20字内）","stay":"当晚住宿（20字内）","transport":"当天交通（25字内）","budget":"当天人均（20字内）","tip":"避坑/预约提示（30字内）"}],"changes":["本次实际改动（20字内，最多3条；首次生成可为空数组）"]}
-要求：每天 2-3 个 activities，时间顺序正确；同一区域优先；交通写明方式和大致耗时；不要排得过满；下雨备选必须具体可执行。${hasCurrent ? "\n当前已有行程：只调整与新要求相关的天和字段，其他安排尽量原样保留；不要无故重排；changes 必须列出实际改动。" : ""}`,
+{"summary":"整体节奏一句话（30字内）","area":"主要区域（15字内）","transport":"往返+当地交通（30字内）","stay":"住宿区域/类型（30字内）","budget":"人均预算区间（20字内）","highlights":["亮点1（12字内）","亮点2","亮点3"],"booking":["需要提前预约/注意的事项（20字内，最多3条）"],"days":[{"day":"D1","title":"当天主题（10字内）","area":"当天区域（10字内）","pace":"轻松|适中|充实","weather":"室内为主|户外为主|看天气","rain_backup":"下雨备选概述（20字内）","rain_activities":[{"time":"10:00","name":"雨天室内安排（12字内）","detail":"怎么去/玩多久（25字内）","type":"sight|food|rest"}],"activities":[{"time":"09:30","name":"安排（12字内）","detail":"怎么去/玩多久（25字内）","type":"transport|sight|food|stay|rest"}],"food":"餐饮（20字内）","stay":"当晚住宿（20字内）","transport":"当天交通（25字内）","budget":"当天人均（20字内）","tip":"避坑/预约提示（30字内）"}],"changes":["本次实际改动（20字内，最多3条；首次生成可为空数组）"]}
+要求：每天 2-3 个 activities，时间顺序正确；同一区域优先；交通写明方式和大致耗时；不要排得过满；有户外安排的天必须给 1-2 个具体可执行的 rain_activities（室内/雨天备选）。${hasCurrent ? "\n当前已有行程：只调整与新要求相关的天和字段，其他安排尽量原样保留；不要无故重排；changes 必须列出实际改动。" : ""}`,
       };
     }
     case "inspiration": {
@@ -1338,8 +1338,11 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
   const isItinerary = parsed.data.mode === "itinerary";
   const isStructured = ["itinerary", "inspiration"].includes(parsed.data.mode);
   const structuredMaxTokens = isItinerary ? 8000 : 4000;
-  const structuredFetchTimeout = isItinerary ? 18000 : 12000;
-  const structuredOuterTimeout = isItinerary ? 26000 : 20000;
+  // K2.7 在长 JSON 上经常想很久；给 Kimi 3 秒先试，超时立刻走 DeepSeek。
+  // DeepSeek 生成完整行程约 6 秒，给它 15 秒窗口，避免被 Kimi 的短超时一起截断。
+  const structuredFetchTimeout = isItinerary ? 15000 : 12000;
+  const structuredEndpointTimeouts = isItinerary ? { primary: 3000, fallback: 3000, deepseek: 15000 } : undefined;
+  const structuredOuterTimeout = isItinerary ? 22000 : 20000;
   const useFast = isInteractive && !isComplex;
 
   if (isInteractive) {
@@ -1363,6 +1366,7 @@ buddiesRouter.post("/:id/agent", async (req, res) => {
         // 留足预算，失败时再由 callKimiChat 切 DeepSeek
         maxTokens: isStructured ? structuredMaxTokens : useFast ? 1500 : 2500,
         fetchTimeout: isStructured ? structuredFetchTimeout : useFast ? 20000 : 45000,
+        endpointFetchTimeouts: isStructured ? structuredEndpointTimeouts : undefined,
       }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error("AGENT_TIMEOUT")), isStructured ? structuredOuterTimeout : useFast ? 28000 : 60000)

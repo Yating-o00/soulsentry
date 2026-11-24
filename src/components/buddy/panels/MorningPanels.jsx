@@ -3,11 +3,201 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useCheckins, useCreateCheckin } from "@/components/checkins/useCheckins";
 import { BuddyMsg, PanelCard, useBuddyState, todayKey, weekDays } from "./shared";
+import BuddyChatPanel from "./BuddyChatPanel";
 
 /**
  * 打卡（早起搭子核心板块）：大打卡按钮（真实 checkin 数据）+ 本周 7 天 + 起床时刻趋势。
  * 数据来自项目约定的打卡记录——打卡时刻就是起床时刻的证据。
  */
+function MorningArtifact({ target, week, trend, weekCount, total, todayDone, canCheckin, pending, tint, onCheckin }) {
+  const maxH = Math.max(...trend.map((t) => t.hour), 10);
+  const minH = Math.min(...trend.map((t) => t.hour), 5);
+
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] tracking-widest text-stone-400">早起打卡</span>
+        <span className="text-[10px] text-stone-400">{target ? `目标 ${target}` : "今天慢慢来"}</span>
+      </div>
+
+      <div className="mt-2 max-h-[min(250px,30dvh)] space-y-2 overflow-y-auto pr-1">
+        <div
+          className="rounded-xl px-3 py-2.5"
+          style={{ background: `linear-gradient(135deg, ${tint[0]} 0%, #ffffff 78%)` }}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="text-[10px] text-stone-500">本周已打卡</div>
+              <div className="mt-0.5">
+                <span className="text-[20px] font-semibold text-stone-900">{weekCount}</span>
+                <span className="text-[11px] text-stone-500"> / 7 天</span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-stone-500">今天</div>
+              <div className="mt-0.5 text-[12px] font-semibold" style={{ color: todayDone ? tint[2] : "#78716c" }}>
+                {todayDone ? "已打卡" : "待打卡"}
+              </div>
+            </div>
+          </div>
+          <p className="mt-1.5 text-[10px] leading-relaxed text-stone-600">
+            {total > 0 ? `累计打卡 ${total} 次，连续就是胜利。` : "第一次打卡，从今天开始。"}
+            {target ? ` 目标 ${target}，起晚一点也算数。` : ""}
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-stone-100 bg-[#FAF9F7] p-2.5">
+          <div className="flex items-center justify-between text-[10px] text-stone-500">
+            <span>本周 7 天</span>
+            <span>{weekCount}/7</span>
+          </div>
+          <div className="mt-2 flex gap-1">
+            {week.map((day) => (
+              <div key={day.key} className="min-w-0 flex-1 text-center">
+                <span
+                  className="mx-auto flex h-6 w-6 items-center justify-center rounded-full text-[9px]"
+                  style={{
+                    background: day.state === "done" ? tint[2] : day.state === "miss" ? "#f5f5f4" : "transparent",
+                    color: day.state === "done" ? "#fff" : day.state === "miss" ? "#a8a29e" : tint[2],
+                    border: day.state === "today" || day.state === "future" ? `1.5px dashed ${tint[2]}` : "none",
+                  }}
+                >
+                  {day.state === "done" ? "✓" : day.state === "miss" ? "·" : day.state === "today" ? "今" : "·"}
+                </span>
+                <div className="mt-0.5 text-[8px] text-stone-400">{day.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-stone-100 bg-[#FAF9F7] p-2.5">
+          <div className="flex items-center justify-between text-[10px] text-stone-500">
+            <span>起床时刻趋势</span>
+            <span>近 7 天</span>
+          </div>
+          {trend.length > 0 ? (
+            <div className="mt-2 flex items-end gap-1.5">
+              {trend.map((item, index) => (
+                <div key={`${item.label}-${index}`} className="flex min-w-0 flex-1 flex-col items-center">
+                  <span className="text-[8px] text-stone-400">{item.text}</span>
+                  <div
+                    className="mt-1 w-full rounded-t-md"
+                    style={{
+                      height: 10 + ((maxH - item.hour) / (maxH - minH || 1)) * 34,
+                      background: index === trend.length - 1 ? tint[2] : tint[0],
+                    }}
+                  />
+                  <span className="mt-0.5 text-[8px] text-stone-400">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-[10px] text-stone-400">打卡后生成你的起床趋势。</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onCheckin}
+        disabled={todayDone || pending || !canCheckin}
+        className="mt-2 w-full rounded-full px-3 py-2 text-[11px] font-medium text-white transition-transform active:scale-[0.99] disabled:opacity-50"
+        style={{ background: tint[2] }}
+      >
+        {todayDone ? "今天已打卡，明天见" : pending ? "正在打卡…" : "我已起床，打卡"}
+      </button>
+      <p className="mt-1.5 text-[9px] leading-relaxed text-stone-400">
+        也可以直接在聊天框说「我起床了」，会自动打卡。
+      </p>
+    </div>
+  );
+}
+
+/**
+ * 早起搭子第一栏：聊天 + 聊天内的打卡卡。
+ * 用户说「我起床了」由聊天 capture 自动打卡；也可以点卡片按钮。
+ */
+export function MorningChatPanel({ buddy, profile, tint, projectTask = null }) {
+  const queryClient = useQueryClient();
+  const isCheckin = projectTask?.category === "checkin";
+  const { data: checkinData } = useCheckins(projectTask?.id || "", { enabled: isCheckin && !!projectTask });
+  const createCheckin = useCreateCheckin(projectTask?.id || "");
+  const target = profile?.answers?.target || "7:00";
+  const todayDone = Boolean(checkinData?.done_today);
+
+  const week = useMemo(() => {
+    const items = checkinData?.items || [];
+    const byDay = new Map();
+    items.forEach((item) => {
+      const raw = item.created_at || item.created_date || item.createdAt;
+      const time = new Date(raw);
+      if (!raw || Number.isNaN(time.getTime())) return;
+      const key = new Date(time.getTime() + 8 * 3600000).toISOString().slice(0, 10);
+      if (!byDay.has(key)) byDay.set(key, time);
+    });
+    const today = todayKey();
+    if (checkinData?.done_today && !byDay.has(today)) {
+      // 打卡刚成功、items 还没刷回来时，先用 done_today 把今天标上
+      byDay.set(today, new Date());
+    }
+    return weekDays().map((day) => ({
+      ...day,
+      state: byDay.has(day.key) ? "done" : day.key < today ? "miss" : day.key === today ? "today" : "future",
+      time: byDay.get(day.key) || null,
+    }));
+  }, [checkinData]);
+
+  const weekCount = week.filter((day) => day.state === "done").length;
+  const trend = useMemo(
+    () =>
+      week
+        .filter((day) => day.time)
+        .map((day) => ({
+          label: day.label,
+          hour: new Date(day.time).getHours() + new Date(day.time).getMinutes() / 60,
+          text: `${String(new Date(day.time).getHours()).padStart(2, "0")}:${String(new Date(day.time).getMinutes()).padStart(2, "0")}`,
+        })),
+    [week]
+  );
+
+  const doCheckin = () => {
+    if (todayDone || createCheckin.isPending || !projectTask) return;
+    createCheckin.mutate(
+      {},
+      {
+        onSuccess: () => {
+          toast.success("打卡成功，又赢回一个早晨～");
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        },
+        onError: (error) => toast.error(error?.message || "打卡没成功，再点一下试试"),
+      }
+    );
+  };
+
+  return (
+    <BuddyChatPanel
+      buddy={buddy}
+      profile={profile}
+      tint={tint}
+      projectTask={projectTask}
+      artifacts={
+        <MorningArtifact
+          target={target}
+          week={week}
+          trend={trend}
+          weekCount={weekCount}
+          total={checkinData?.total ?? 0}
+          todayDone={todayDone}
+          canCheckin={isCheckin}
+          pending={createCheckin.isPending}
+          tint={tint}
+          onCheckin={doCheckin}
+        />
+      }
+    />
+  );
+}
+
 export function MorningCheckPanel({ profile, tint, persona, projectTask }) {
   const queryClient = useQueryClient();
   const isCheckin = projectTask?.category === "checkin";

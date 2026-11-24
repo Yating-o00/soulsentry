@@ -427,7 +427,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask, arti
           ref={scrollRef}
           className={`mt-3 space-y-3 overflow-y-auto pr-1 ${
             artifacts
-              ? "max-h-[min(220px,calc(100dvh_-_560px))] min-h-[100px] md:max-h-[240px]"
+              ? "max-h-[min(120px,calc(100dvh_-_620px))] min-h-[70px] md:max-h-[170px]"
               : "max-h-[min(380px,calc(100dvh_-_420px))] min-h-[180px] md:max-h-[340px]"
           }`}
         >

@@ -637,7 +637,7 @@ test("replays the same invalid first draft with zero repairs and with one repair
   assertSchedule({ extracted: { plan: result } }, 20);
 });
 
-test("keeps the configured Kimi model and DeepSeek fallback for the upstream today chat route", async (t) => {
+test("keeps the configured Kimi model and DeepSeek fallback for both today chat routes", async (t) => {
   const original = process.env.CHAT_AI_PROVIDER;
   delete process.env.CHAT_AI_PROVIDER;
   process.env.KIMI_API_KEY = "local-test";
@@ -654,4 +654,10 @@ test("keeps the configured Kimi model and DeepSeek fallback for the upstream tod
   assert.equal(result.data.reply, "我听着呢。");
   const { DASHBOARD_TEXT_MODELS } = await import("../../src/lib/kimi.js");
   assert.deepEqual(calls.map(({ model }) => model), [DASHBOARD_TEXT_MODELS[0], "deepseek-chat"]);
+  answers.push({ phase: "chat", status: 401 });
+  chatOnly();
+  const companion = await send("连通性测试，请只回复收到。");
+  assert.equal(companion.reply.content, "我听着呢。");
+  assert.equal(companion.reply.meta.ai.provider, "deepseek");
+  assert.deepEqual(calls.slice(-2).map(({ model }) => model), [DASHBOARD_TEXT_MODELS[0], "deepseek-chat"]);
 });

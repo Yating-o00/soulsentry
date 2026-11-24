@@ -173,7 +173,9 @@ function parseCnAmount(raw) {
 
 // 「现在就去网页办事」识别（排除"以后再提醒"的约定类表述）
 const LATER_REMIND_RE = /提醒我|记得|别忘了|以后再|到时(候)?再/;
-const NOW_BROWSE_RE = /(?:帮我|给我|麻烦|请问|帮).{0,12}(?:查|搜|看|找|订|预约)|(?:查|搜)一下?(?:天气|资料|信息|价格|股价|机票|火车票|高铁|余票|快递|物流|酒店|路线|成绩|排名)|订(?:机票|火车票|高铁票|酒店|门票|外卖)|点外卖|天气怎么(?:样|的)|气温/;
+// 只把「明确的网页/实时信息诉求」交给浏览器小助手；
+// 「帮我查看今日约定」这类本地数据查询不能被当成网页办事。
+const NOW_BROWSE_RE = /(?:帮我|给我|麻烦|请问|帮).{0,12}(?:查|搜|找).{0,10}(?:天气|资料|信息|价格|股价|机票|火车票|高铁|余票|快递|物流|酒店|路线|航班|汇率|新闻|景点|餐厅|网页|网址|网站|电话|地址)|(?:帮我|给我|麻烦|请问|帮).{0,12}(?:订|预约|报名|买).{0,6}(?:机票|火车票|高铁票|酒店|门票|外卖|餐厅|景点|课程|体检)|(?:打开|访问|登录).{0,10}(?:网页|网址|网站|链接|https?:\/\/)|(?:查|搜)一下?.{0,8}(?:天气|资料|信息|价格|股价|机票|火车票|高铁|余票|快递|物流|酒店|路线|成绩|排名|航班|汇率|新闻)|订(?:机票|火车票|高铁票|酒店|门票|外卖)|点外卖|天气怎么(?:样|的)|气温/;
 const BROWSE_URL_INTENT_RE = /打开|帮我|查|搜|填|预约|订|报名|提交|看看|找|下载|登录/;
 
 // 智能约定规划意图（兜底路径用：Kimi 不在线但用户想要一份计划）
@@ -811,12 +813,16 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   });
 
   const { data: result, usage } = resultAndUsage;
-  if (!result || typeof result !== "object" || typeof result.reply !== "string") {
+  if (!result || typeof result !== "object") {
     throw new Error("invalid chat response");
   }
-  // 语气词只做轻量修正，不丢弃模型已经给出的有效回答；
-  // 之前直接 throw 会让一次成功的模型调用退化成固定兜底话术，反而破坏连续对话
-  let safeReply = String(result.reply || "");
+  // 模型偶尔会漏掉 reply 但仍给出提案/办事目标：不能因为少一句措辞就把整次成功调用判死
+  const rawReply = typeof result.reply === "string" ? result.reply : "";
+  if (!rawReply && !result.agent_goal && !result.extracted) {
+    console.warn("[flowChat] model response missing reply:", JSON.stringify(result).slice(0, 300));
+    throw new Error("invalid chat response");
+  }
+  let safeReply = rawReply || (result.agent_goal ? "好，我去网页上看看，稍后把结果带回来。" : "我在，接着说就好。");
   if (PRESSURE_WORDS.test(safeReply)) {
     const before = safeReply;
     safeReply = safeReply
@@ -1315,7 +1321,8 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
   } catch (err) {
     if (planRun) planRun.status = planRun.signal.aborted || err?.name === "TimeoutError" ? "timeout" : "provider_failure";
-    else console.warn("[flowChat] Kimi chat failed, fallback:", err?.message || err);
+    // 带 planRun 时也必须留下失败原因，否则只剩 provider_failure 无法定位
+    console.warn("[flowChat] chat failed, fallback:", err?.stack || err?.message || err);
     // "设为约定"这类指令常指代上文：把最近的用户消息倒序传给兜底，供标题提取
     const recentUserTexts = safeMessages
       .filter((m) => m.role === "user")

@@ -456,19 +456,73 @@ export async function postAgentMessage(taskId, { content, parentId = null, topic
     include: { members: { include: { user: true } }, user: true }
   });
   const users = [task?.user, ...(task?.members || []).map((m) => m.user)].filter(Boolean);
-  const mentionedIds = new Set(
-    (Array.isArray(mentions) ? mentions : []).filter((id) => typeof id === "string" && id)
-  );
-  const mentionAll = /@\s*(全体|所有人|all)/i.test(text);
-  for (const user of users) {
-    if (mentionAll) {
-      mentionedIds.add(user.id);
-      continue;
+
+  // 约束：在成员没有回答之前，Agent 只保留一条最新讨论消息。
+  // 若上一条仍是 Agent，则将新内容追加到该消息，而不是再发一条。
+  const latestComment = await prisma.comment.findFirst({
+    where: { taskId },
+    orderBy: { createdAt: "desc" }
+  });
+
+  const resolveMentionIds = (contentText, baseMentions) => {
+    const mentionedIds = new Set(
+      (Array.isArray(baseMentions) ? baseMentions : []).filter((id) => typeof id === "string" && id)
+    );
+    const mentionAll = /@\s*(全体|所有人|all)/i.test(contentText);
+    for (const user of users) {
+      if (mentionAll) {
+        mentionedIds.add(user.id);
+        continue;
+      }
+      const names = [user.displayName, user.email, user.phone].filter(Boolean).map(String);
+      if (names.some((name) => contentText.includes(`@${name}`))) mentionedIds.add(user.id);
     }
-    const names = [user.displayName, user.email, user.phone].filter(Boolean).map(String);
-    if (names.some((name) => text.includes(`@${name}`))) mentionedIds.add(user.id);
+    return [...mentionedIds].filter((id) => users.some((u) => u.id === id));
+  };
+
+  if (latestComment?.agent) {
+    const mergedContent = [latestComment.content, text].filter(Boolean).join("\n\n").slice(0, 5000);
+    const mergedAttachments = [
+      ...(Array.isArray(latestComment.attachments) ? latestComment.attachments : []),
+      ...(Array.isArray(attachments) ? attachments : [])
+    ];
+    const mentionIds = resolveMentionIds(mergedContent, [
+      ...(Array.isArray(latestComment.mentions) ? latestComment.mentions : []),
+      ...(Array.isArray(mentions) ? mentions : [])
+    ]);
+
+    const updated = await prisma.comment.update({
+      where: { id: latestComment.id },
+      data: {
+        content: mergedContent,
+        attachments: mergedAttachments.length > 0 ? mergedAttachments : undefined,
+        mentions: mentionIds
+      }
+    });
+
+    const previousMentions = new Set(Array.isArray(latestComment.mentions) ? latestComment.mentions : []);
+    for (const userId of mentionIds) {
+      if (previousMentions.has(userId)) continue;
+      try {
+        await prisma.notification.create({
+          data: {
+            userId,
+            title: "心栈 Agent @ 了你",
+            body: `在「${task?.title || "协同约定"}」的讨论里：${mergedContent.replace(/\s+/g, " ").slice(0, 80)}`,
+            channel: "in_app",
+            status: "SENT",
+            payload: { type: "collab_agent_mention", taskId, link: `/collabspace?taskId=${taskId}` }
+          }
+        });
+      } catch (error) {
+        console.warn("[collabAgent] mention notification failed:", error?.message || error);
+      }
+    }
+
+    return updated;
   }
-  const mentionIds = [...mentionedIds].filter((id) => users.some((u) => u.id === id));
+
+  const mentionIds = resolveMentionIds(text, mentions);
 
   const comment = await prisma.comment.create({
     data: {

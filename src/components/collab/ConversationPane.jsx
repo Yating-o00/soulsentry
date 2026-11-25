@@ -352,11 +352,14 @@ function DiscussionView({ taskId, highlightId, onClearHighlight, currentUserId, 
     onClearHighlight?.();
   }, [highlightId, messages, onClearHighlight]);
 
-  // @Agent 兜底：轮询发现比 @消息更新的 agent 消息 → 撤指示器、滚到底、高亮 2 秒
+  // @Agent 兜底：轮询发现比 @消息更新（创建或更新）的 agent 消息 → 撤指示器、滚到底、高亮 2 秒
   useEffect(() => {
     if (!agentPendingSince) return;
     const latestAgent = [...messages].reverse().find(
-      (m) => m.agent && new Date(m.created_date).getTime() > agentPendingSince
+      (m) => m.agent && (
+        new Date(m.created_date).getTime() > agentPendingSince ||
+        new Date(m.updated_date).getTime() > agentPendingSince
+      )
     );
     if (latestAgent) {
       setAgentPendingSince(null);

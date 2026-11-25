@@ -16,6 +16,10 @@ import AgentLiveWindow from "@/components/automation/AgentLiveWindow";
 import assistantPlanet from "@/assets/assistant-planet.png";
 
 const TYPE_LABEL = { task: "约定", heart: "心签", link: "链接", plan: "智能规划", collab: "协同约定" };
+// 首页对话只呈现「心栈」，不向用户暴露底层模型/供应商品牌；
+// 同时兜住模型偶尔在正文里自称供应商的情况。
+const PROVIDER_BRAND_RE = /(?:Kimi|DeepSeek)/gi;
+const withoutProviderBrand = (value) => String(value ?? "").replace(PROVIDER_BRAND_RE, "心栈");
 const TYPE_ICON = { task: "🤝", heart: "💌", link: "🔗", plan: "🗓️", collab: "👥" };
 
 function fmtTime(iso) {
@@ -979,7 +983,7 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
                 : { background: "#eef1f9", color: "#1c1c1e", border: "1px solid #dbe3f2", borderTopLeftRadius: 6 }
             }
           >
-            {m.content}
+            {mine ? m.content : withoutProviderBrand(m.content)}
             {sentAttachments.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {sentAttachments.map((att, index) =>
@@ -1031,9 +1035,9 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
             </div>
           )}
           {!mine && m.meta?.ai && <span className="text-[10px] mt-1" style={{ color: "#9ca0a8" }}>
-            {m.meta.ai.source === "ai" && m.meta.ai.provider
-              ? (m.meta.ai.provider === "deepseek" ? "DeepSeek" : "Kimi")
-              : ["fallback", "error"].includes(m.meta.ai.source) ? "基础回复 · AI 暂不可用" : "系统回复"}
+            {m.meta.ai.source === "ai"
+              ? "心栈"
+              : ["fallback", "error"].includes(m.meta.ai.source) ? "基础回复" : "系统回复"}
           </span>}
           <span className="text-[10px] mt-1" style={{ color: "#9ca0a8" }}>{fmtTime(m.created_date)}</span>
         </div>
@@ -1193,7 +1197,7 @@ function AssistantWidget({ inline = false, newUser = false, summary = "", quickA
               <p className="text-[15px] leading-relaxed" style={{ color: "#1c1c1e" }}>
                 {newUser
                   ? "今天想做点什么？日程、情绪、随便聊聊都可以找我；你的搭子们也在各自的岗位上待命。"
-                  : summary || "欢迎回来。想从哪件开始，还是先说点别的？"}
+                  : withoutProviderBrand(summary) || "欢迎回来。想从哪件开始，还是先说点别的？"}
               </p>
             </div>
           </div>

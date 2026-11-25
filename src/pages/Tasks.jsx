@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "../components/TranslationContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { ChevronDown, Check, CheckCircle2, Filter, Search, X, Trash2, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2 } from "lucide-react";
+import { ChevronDown, Check, CheckCircle2, Filter, Search, X, Trash2, Zap, AlarmClock, Lightbulb, CalendarClock, Archive as ArchiveIcon, ArrowRight, Layers, Undo2, Users2, Flag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTaskOperations } from "../components/hooks/useTaskOperations";
@@ -52,7 +52,7 @@ export default function Tasks() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedTaskIds, setSelectedTaskIds] = useState([]);
   const [combineOpen, setCombineOpen] = useState(false);
-  const [buddyOnly, setBuddyOnly] = useState(false);
+  const [viewTab, setViewTab] = useState('all'); // 'all' | 'collab' | 'milestone'
   const [filters, setFilters] = useState({ 
     category: 'all', 
     priority: 'all', 
@@ -216,7 +216,7 @@ export default function Tasks() {
   }, [allComments]);
 
   // Filter tasks
-  const { buddyCollabTasks, completedTasks, smartGroups, stats } = useMemo(() => {
+  const { collabTasks, milestoneTasks, completedTasks, visibleCompletedTasks, smartGroups, stats } = useMemo(() => {
     // Apply search filter
     const searchLower = searchQuery.toLowerCase();
     let filteredTasks = allTasks.filter(t => 
@@ -257,9 +257,18 @@ export default function Tasks() {
     const completed = filteredTasks.filter(isTaskEffectivelyCompleted);
 
     const roots = active.filter((t) => !t.parent_task_id);
-    const isBuddyCollab = (t) => t.metadata?.collab || t.metadata?._extraFields?.buddy_id || t.buddy_id;
-    const buddyCollabTasks = roots.filter(isBuddyCollab);
-    const normalRoots = roots.filter((t) => !isBuddyCollab(t));
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    const isCollab = (t) => t.metadata?.collab || t.metadata?._extraFields?.buddy_id || t.buddy_id;
+    const isMilestone = (t) => {
+      const reminderTs = t.reminder_time ? new Date(t.reminder_time).getTime() : null;
+      const endTs = t.end_time ? new Date(t.end_time).getTime() : null;
+      const hasHorizon = t.planning_horizon && t.planning_horizon !== 'none';
+      const longSpan = reminderTs !== null && endTs !== null && (endTs - reminderTs) > oneDayMs;
+      return hasHorizon || longSpan;
+    };
+    const collabTasks = roots.filter(isCollab);
+    const milestoneTasks = roots.filter((t) => !isCollab(t) && isMilestone(t));
+    const normalRoots = roots.filter((t) => !isCollab(t));
 
     // 综合排序：置顶(urgent) > 优先级 > 时间紧迫度 > AI 风险等级
     // 适用于所有分组与 milestone/life 列表，保证用户置顶的约定始终排在最上方
@@ -322,7 +331,6 @@ export default function Tasks() {
     }).length;
 
     // Smart 4-group classification: hard rules + AI scoring for "现在能做"
-    const oneDayMs = 24 * 60 * 60 * 1000;
     const dueSoon = [];      // 即将截止: 已逾期 或 24h 内到期
     const fixedSchedule = []; // 固定安排: 重复任务 或 >24h 后的明确时间
     const candidates = [];    // 待评估候选 -> 现在能做 / 智能建议
@@ -441,8 +449,15 @@ export default function Tasks() {
 
     // 综合排序：在保留分组打分逻辑的基础上，统一让"置顶(urgent) + 时间紧迫 + 重要性"决定卡片顺序
     return {
-      buddyCollabTasks: [...buddyCollabTasks].sort(sortByPriorityTimeImportance),
+      collabTasks: [...collabTasks].sort(sortByPriorityTimeImportance),
+      milestoneTasks: [...milestoneTasks].sort(sortByPriorityTimeImportance),
       completedTasks: completed,
+      visibleCompletedTasks: completed.filter((t) => {
+        if (t.parent_task_id) return false;
+        if (viewTab === 'collab') return isCollab(t);
+        if (viewTab === 'milestone') return !isCollab(t) && isMilestone(t);
+        return true;
+      }),
       smartGroups: {
         canDoNow: [...canDoNow].sort(sortByPriorityTimeImportance),
         dueSoon: [...dueSoon].sort(sortByPriorityTimeImportance),
@@ -455,7 +470,7 @@ export default function Tasks() {
         completedToday: completedTodayCount
       }
     };
-  }, [allTasks, searchQuery, filters]);
+  }, [allTasks, searchQuery, filters, viewTab]);
 
   const getSubtasks = (parentId) => {
     return allTasks.filter((t) => t.parent_task_id === parentId && !t.deleted_at);
@@ -539,26 +554,23 @@ export default function Tasks() {
         {/* 顶部工具栏：全部/搭子切换 + 搜索 + 筛选 + 多选 */}
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2 md:mb-6">
           <div className="flex rounded-xl border border-stone-200 bg-white p-0.5">
-            <button
-              type="button"
-              onClick={() => setBuddyOnly(false)}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
-                !buddyOnly ? "bg-[#384877] text-white" : "text-stone-500 hover:text-stone-800"
-              )}
-            >
-              全部
-            </button>
-            <button
-              type="button"
-              onClick={() => setBuddyOnly(true)}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
-                buddyOnly ? "bg-[#384877] text-white" : "text-stone-500 hover:text-stone-800"
-              )}
-            >
-              来自搭子
-            </button>
+            {[
+              { key: 'all', label: '全部' },
+              { key: 'collab', label: '协同约定' },
+              { key: 'milestone', label: '里程碑约定' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setViewTab(tab.key)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
+                  viewTab === tab.key ? "bg-[#384877] text-white" : "text-stone-500 hover:text-stone-800"
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-1.5 rounded-xl border border-stone-200 bg-white px-2.5 py-1 transition-colors focus-within:border-[#384877]">
@@ -619,30 +631,65 @@ export default function Tasks() {
 
         {/* 2 区：概览 */}
         <div className="space-y-10">
-          {buddyOnly ? (
+          {viewTab === 'collab' ? (
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setCollabDialog({ open: true, target: null })}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl border border-dashed border-[#384877]/30 bg-[#eef2ff]/40 p-4 text-sm font-medium text-[#384877] hover:bg-[#eef2ff] transition-colors"
+              >
+                <Users2 className="w-4 h-4" />
+                创建协同约定
+              </button>
+              <SmartGroupSection
+                title="协同约定"
+                description="多人共创中的约定，点击进入协同空间"
+                icon={Users2}
+                iconBg="bg-[#eef2ff]"
+                iconColor="text-[#384877]"
+                tasks={collabTasks}
+                emptyHint="暂无协同约定"
+                getSubtasks={getSubtasks}
+                commentCountMap={commentCountMap}
+                isSelectionMode={isSelectionMode}
+                selectedTaskIds={selectedTaskIds}
+                onToggleSelection={toggleSelection}
+                onToggleSubtask={handleToggleSubtask}
+                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                onEdit={(task) => setEditingTask(task)}
+                onShare={(task) => setSharingTask(task)}
+                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                onSettleKnowledge={handleSettleKnowledge}
+                onEnableCollab={openEnableCollab}
+                onDelete={(task) => deleteTask(task.id)}
+                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
+              />
+            </div>
+          ) : viewTab === 'milestone' ? (
             <SmartGroupSection
-              title="来自搭子的协同约定"
-              description="与搭子共创中的约定"
-              icon={Users2}
-              iconBg="bg-[#eef2ff]"
-              iconColor="text-[#384877]"
-              tasks={buddyCollabTasks}
-              emptyHint="暂无来自搭子的协同约定"
+              title="里程碑约定"
+              description="长期目标与阶段性约定"
+              icon={Flag}
+              iconBg="bg-amber-50"
+              iconColor="text-amber-600"
+              tasks={milestoneTasks}
+              emptyHint="暂无里程碑约定"
               getSubtasks={getSubtasks}
               commentCountMap={commentCountMap}
               isSelectionMode={isSelectionMode}
               selectedTaskIds={selectedTaskIds}
               onToggleSelection={toggleSelection}
               onToggleSubtask={handleToggleSubtask}
-              onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
-              onEdit={(task) => setEditingTask(task)}
-              onShare={(task) => setSharingTask(task)}
-              onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
-              onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
-              onSettleKnowledge={handleSettleKnowledge}
-              onEnableCollab={openEnableCollab}
-              onDelete={(task) => deleteTask(task.id)}
-              getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
+                onComplete={(task, status) => handleComplete(task, allTasks, status ? 'completed' : 'pending')}
+                onEdit={(task) => setEditingTask(task)}
+                onShare={(task) => setSharingTask(task)}
+                onViewTab={(task, tab) => { setSelectedTask(task); setSelectedTab(tab); }}
+                onUpdateTask={(t, patch) => updateTaskAsync({ id: t.id, data: patch })}
+                onSettleKnowledge={handleSettleKnowledge}
+                onEnableCollab={openEnableCollab}
+                onDelete={(task) => deleteTask(task.id)}
+                getAutoExec={(task) => autoExecMap[task.id]?.autoExec}
             />
           ) : (
             <>
@@ -760,14 +807,14 @@ export default function Tasks() {
                   <ArchiveIcon className="w-5 h-5 text-white" />
                 </div>
                 <div className="text-left">
-                  <p className="text-sm font-semibold text-slate-800">已完成约定 ({completedTasks.filter(t => !t.parent_task_id).length})</p>
+                  <p className="text-sm font-semibold text-slate-800">已完成约定 ({visibleCompletedTasks.length})</p>
                   <p className="text-xs text-slate-500 mt-0.5">点击查看完成约定的记录或恢复</p>
                 </div>
               </div>
               <ChevronDown className={cn("w-5 h-5 text-slate-400 group-hover:text-[#384877] transition-transform", showCompleted && "rotate-180")} />
             </button>
 
-            {showCompleted && completedTasks.length > 0 && (() => {
+            {showCompleted && visibleCompletedTasks.length > 0 && (() => {
               // 按完成时间倒序（无 completed_at 排到最后）
               const byCompletedDesc = (a, b) => {
                 const ta = a.completed_at ? new Date(a.completed_at).getTime() : 0;
@@ -775,8 +822,8 @@ export default function Tasks() {
                 return tb - ta;
               };
 
-              const parents = completedTasks.filter(t => !t.parent_task_id).sort(byCompletedDesc);
-              const subs = completedTasks.filter(t => t.parent_task_id);
+              const parents = visibleCompletedTasks.filter(t => !t.parent_task_id).sort(byCompletedDesc);
+              const subs = visibleCompletedTasks.filter(t => t.parent_task_id);
               const taskById = new Map(allTasks.map(t => [t.id, t]));
 
               // 把已完成子约定按 parent_task_id 分组，并在组内按完成时间倒序

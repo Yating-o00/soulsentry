@@ -4,18 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Label } from "@/components/ui/label";
-import { Filter, X, Pin, Calendar as CalendarIcon, Tag, LayoutGrid, Users } from "lucide-react";
+import { Filter, X, Pin, Calendar as CalendarIcon, Tag, LayoutGrid } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { TYPE_META, TYPE_ORDER, getNoteType, getBuddySource } from "@/components/heartsign/heartSignMeta";
+import { TYPE_META, TYPE_ORDER, getNoteType } from "@/components/heartsign/heartSignMeta";
 
 export default function NoteFilters({ filters, onFiltersChange, allTags = [], notes = [], onCategorySelect, activeCategory = "all", onTogglePinned, activePinned = false }) {
   const [dateRange, setDateRange] = useState({ from: null, to: null });
   const [open, setOpen] = useState(false);
 
   const countOf = (key) => notes.filter((n) => getNoteType(n) === key).length;
-  const buddyCount = notes.filter((n) => getBuddySource(n)).length;
 
   const toggleTag = (tag) => {
     const newTags = filters.tags?.includes(tag)
@@ -49,17 +48,6 @@ export default function NoteFilters({ filters, onFiltersChange, allTags = [], no
       >
         <Pin className="w-3.5 h-3.5" />
         已置顶
-      </Button>
-
-      {/* 来自搭子：把所有搭子沉淀的心签罗列在一起（标注来源搭子与沉淀场景） */}
-      <Button
-        variant={activeCategory === "buddy" ? "default" : "outline"}
-        size="sm"
-        onClick={() => onCategorySelect?.(activeCategory === "buddy" ? "all" : "buddy")}
-        className={`h-8 shrink-0 gap-1.5 ${activeCategory === "buddy" ? 'bg-[#384877] text-white' : ''}`}
-      >
-        <Users className="w-3.5 h-3.5" />
-        来自搭子（{buddyCount}）
       </Button>
 
       {/* Advanced Filters Popover */}

@@ -184,11 +184,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       asChild
-                      className={`mb-1 rounded-xl transition-[color,transform] duration-150 active:scale-[0.99] ${
-                        isActive
-                          ? 'text-[#384877]'
-                          : 'text-stone-600 hover:text-stone-900'
-                      }`}
+                      isActive={isActive}
+                      className="mb-1 rounded-xl w-full transition-colors duration-150 data-[active=true]:bg-[#384877]/8 data-[active=true]:text-[#384877] hover:text-stone-900"
                     >
                       <Link
                         to={item.url}
@@ -199,7 +196,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
                           onNavigate?.();
                           handleMobileClick();
                         }}
-                        className="flex min-h-[40px] items-center gap-3 px-4 py-2.5"
+                        className="flex w-full min-h-[40px] items-center gap-3 px-4 py-2.5"
                       >
                         <item.icon className={`w-5 h-5 shrink-0 ${
                           isActive ? 'text-[#384877]' : 'text-stone-400'
@@ -223,12 +220,12 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
       <SidebarFooter className="p-3 border-t border-stone-200/60">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton 
+            <SidebarMenuButton
               onClick={() => {
                 setFeedbackOpen(true);
                 handleMobileClick();
               }}
-              className="mb-1 rounded-xl text-stone-600 transition-[color,transform] duration-150 hover:text-stone-900 active:scale-[0.99] cursor-pointer"
+              className="mb-1 rounded-xl w-full text-stone-600 transition-colors duration-150 hover:text-stone-900 hover:bg-stone-100 cursor-pointer"
             >
               <div className="flex items-center gap-3 px-4 py-3 w-full">
                 <MessageSquarePlus className="w-5 h-5 text-stone-400" />
@@ -240,11 +237,8 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className={`mb-1 rounded-xl transition-[color,transform] duration-150 active:scale-[0.99] ${
-                location.pathname === createPageUrl("Trash")
-                  ? 'text-[#384877]'
-                  : 'text-stone-600 hover:text-stone-900'
-              }`}
+              isActive={currentPath === createPageUrl("Trash").toLowerCase().replace(/\/+$/, "")}
+              className="mb-1 rounded-xl w-full transition-colors duration-150 data-[active=true]:bg-[#384877]/8 data-[active=true]:text-[#384877] hover:text-stone-900"
             >
               <Link
                 to={createPageUrl("Trash")}
@@ -254,7 +248,7 @@ function AppSidebar({ setSearchOpen, setFeedbackOpen, onNavigate }) {
                   onNavigate?.();
                   handleMobileClick();
                 }}
-                className="flex min-h-[40px] items-center gap-3 px-4 py-2.5"
+                className="flex w-full min-h-[40px] items-center gap-3 px-4 py-2.5"
               >
                 <Trash2 className={`w-5 h-5 shrink-0 ${
                   currentPath === createPageUrl("Trash") ? 'text-[#384877]' : 'text-stone-400'

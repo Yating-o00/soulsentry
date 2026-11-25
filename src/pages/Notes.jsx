@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StickyNote, Search, Plus, Grid, List as ListIcon, RotateCcw, CalendarIcon, Sparkles, Wand2, Brain, Mic, Globe, User, Lock, Dices, BookOpen, PenLine, Send } from "lucide-react";
+import { StickyNote, Search, Plus, CalendarIcon, Brain, Lock, Dices, BookOpen, PenLine, Send } from "lucide-react";
 import NoteEditor from "../components/notes/NoteEditor";
 import NoteCard from "../components/notes/NoteCard";
 import NoteFilters from "../components/notes/NoteFilters";
@@ -23,9 +23,9 @@ import ReviewDialog from "@/components/heartsign/ReviewDialog";
 import JournalDialog from "@/components/heartsign/JournalDialog";
 import VaultDialog from "@/components/heartsign/VaultDialog";
 import { detectSensitive } from "@/components/heartsign/detectSensitive";
-import { normalizeNote, getNoteType, getBuddySource, isPinnedNote, isVaultNote, DENSITY_KEY, DENSITY_OPTIONS, classifyNoteText, notePlainText } from "@/components/heartsign/heartSignMeta";
+import { normalizeNote, getNoteType, getBuddySource, isPinnedNote, isVaultNote, DENSITY_KEY, classifyNoteText, notePlainText } from "@/components/heartsign/heartSignMeta";
 import { isStandaloneMode } from "@/api/platformConfig";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+
 import MobileVoiceNoteInput from "../components/notes/MobileVoiceNoteInput";
 import { toast } from "sonner";
 import { createExecutionRecord } from "@/components/utils/trackExecution";
@@ -59,10 +59,10 @@ export default function Notes() {
   const [activeTab, setActiveTab] = useState("notes");
   const [filters, setFilters] = useState({});
   const [viewMode, setViewMode] = useState("grid");
-  const [onlyMine, setOnlyMine] = useState(false);
-  // 五类过滤 / 回应浓度 / 回顾 / 保险柜 / 定位闪动
+  // 来源范围：全部内容 / 来自搭子
+  const [sourceScope, setSourceScope] = useState("all");
+  // 五类过滤 / 已置顶 / 回顾 / 保险柜 / 定位闪动
   const [categoryFilter, setCategoryFilter] = useState("all");
-  const [density, setDensity] = useState(() => localStorage.getItem(DENSITY_KEY) || "light");
   const [reviewOpen, setReviewOpen] = useState(false);
   const [journalOpen, setJournalOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
@@ -552,14 +552,6 @@ export default function Notes() {
     setTimeout(() => setFlashId(null), 2400);
   };
 
-  // 回应浓度切换：持久化到 localStorage，后端 analyzeHeartSign / followupHeartSign 读取同一键
-  const handleDensityChange = (value) => {
-    setDensity(value);
-    localStorage.setItem(DENSITY_KEY, value);
-    toast.success(value === 'mute' ? '好，我只收不答，静静陪着你'
-      : value === 'light' ? '好，我轻轻回应就好' : '好，我会多陪你说说');
-  };
-
   // Get all unique tags
   const allTags = useMemo(() => {
     const tagSet = new Set();
@@ -575,17 +567,14 @@ export default function Notes() {
   const filteredNotes = useMemo(() => {
     let result = notes.filter((note) => !note.deleted_at);
 
-    // 只显示用户自建内容（过滤掉外部信息）
-    if (onlyMine) {
-      result = result.filter((note) => !EXTERNAL_SOURCES.includes(note.source_type));
+    // 来源范围：全部内容 / 来自搭子
+    if (sourceScope === 'buddy') {
+      result = result.filter((note) => getBuddySource(note));
     }
 
-    // 五类签过滤 / 已置顶 / 来自搭子（与小程序口径一致：source_type 优先，回落 ai 分类）
+    // 五类签过滤 / 已置顶（与小程序口径一致：source_type 优先，回落 ai 分类）
     if (categoryFilter === 'pinned') {
       result = result.filter((note) => isPinnedNote(note) || note.is_pinned === true);
-    } else if (categoryFilter === 'buddy') {
-      // 来源于搭子的内容罗列在一起（含搭子归属的协同沉淀）
-      result = result.filter((note) => getBuddySource(note));
     } else if (categoryFilter !== 'all') {
       result = result.filter((note) => getNoteType(note) === categoryFilter);
     }
@@ -640,7 +629,7 @@ export default function Notes() {
       if (!pa && pb) return 1;
       return new Date(b.created_date) - new Date(a.created_date);
     });
-  }, [notes, searchQuery, filters, onlyMine, categoryFilter]);
+  }, [notes, searchQuery, filters, sourceScope, categoryFilter]);
 
   // 更新心签活动时间
   const handleUpdateActivity = (note) => {
@@ -655,29 +644,27 @@ export default function Notes() {
 
   return (
     <div className="p-4 md:p-8 space-y-3 md:space-y-6 max-w-7xl mx-auto min-h-screen">
-      {/* Header Row1：品牌（桌面）+ 搜索 + 心签/知识库切换 */}
+      {/* Header Row1：品牌 / 搜索 / 心签·知识库切换按黄金比例排列 */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center gap-2 md:gap-3">
 
-        <div className="hidden sm:flex items-center gap-2.5 flex-shrink-0">
-          <div className="h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#384877] flex items-center justify-center shadow-sm">
+        <div className="hidden sm:flex items-center gap-2.5 flex-1 min-w-0">
+          <div className="h-9 w-9 md:h-10 md:w-10 rounded-lg md:rounded-xl bg-[#384877] flex items-center justify-center shadow-sm flex-shrink-0">
             <StickyNote className="w-4 h-4 md:w-6 md:h-6 text-white" />
           </div>
-          <div className="hidden sm:block leading-tight">
-            <h1 className="text-lg md:text-2xl font-bold text-slate-800">
-              灵感心签
-            </h1>
-            <p className="text-[11px] md:text-xs text-slate-500">说给另一个自己听</p>
+          <div className="leading-tight min-w-0">
+            <h1 className="text-lg md:text-2xl font-bold text-slate-800 truncate">灵感心签</h1>
+            <p className="text-[11px] md:text-xs text-slate-500 truncate">说给另一个自己听</p>
           </div>
         </div>
 
-        <div className="relative flex-1 max-w-md min-w-0">
+        <div className="relative flex-[1.618] min-w-0 max-w-2xl">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input
             placeholder="搜索心签…"
-            className="pl-9 pr-8 h-9 md:h-10 text-sm bg-white border-slate-200 rounded-xl focus:ring-2 focus:ring-[#384877]/20"
+            className="pl-9 pr-8 h-9 md:h-10 text-sm bg-white border-slate-200 rounded-xl focus:ring-2 focus:ring-[#384877]/20 w-full"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -691,7 +678,7 @@ export default function Notes() {
           )}
         </div>
 
-        {/* 心签 / 知识库 分段切换：手机端只留图标 */}
+        {/* 心签 / 知识库 分段切换 */}
         <div className="flex items-center bg-white border border-slate-200 rounded-xl p-0.5 flex-shrink-0 shadow-sm">
           {[
             { key: "notes", label: "心签", icon: StickyNote },
@@ -716,112 +703,75 @@ export default function Notes() {
 
       {activeTab === "notes" && (
         <>
-          {/* 工具行：手机端单行横滑，桌面自动换行 */}
+          {/* 工具 + 筛选：黄金比例排列，左侧工具 ~38.2%，右侧筛选 ~61.8% */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.05 }}
-            className="-mx-1 flex items-center gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+            className="flex items-center gap-2 md:gap-3 overflow-x-auto scrollbar-hide sm:overflow-visible"
           >
-            <Button
-              onClick={() => setJournalOpen(true)}
-              variant="outline"
-              size="sm"
-              title="心签手账：近 7 天的记录与情绪晴雨"
-              className="h-8 shrink-0 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">手账</span>
-            </Button>
-            <Button
-              onClick={() => setReviewOpen(true)}
-              variant="outline"
-              size="sm"
-              title="抽一签 / 按词回顾，与过去的自己重逢"
-              className="h-8 shrink-0 px-2.5 gap-1.5 border-[#384877]/30 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] text-xs"
-            >
-              <Dices className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">回顾</span>
-            </Button>
-            <Button
-              onClick={() => handleVaultRequest(null)}
-              variant="outline"
-              size="sm"
-              title="保险柜：密码保护的私密信息，AI 不会阅读"
-              className="h-8 shrink-0 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">保险柜</span>
-            </Button>
-            <div className="hidden flex-1 sm:block" />
-            <div className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500">
-              <span className="hidden sm:inline">回应</span>
-              <select
-                value={density}
-                onChange={(e) => handleDensityChange(e.target.value)}
-                title="回应浓度：AI 回应你的方式"
-                className="h-8 bg-white border border-slate-200 rounded-full px-2.5 text-xs text-slate-600 outline-none focus:border-[#384877]/50"
+            {/* 左侧：核心工具 */}
+            <div className="flex items-center gap-1.5 flex-1">
+              <Button
+                onClick={() => setJournalOpen(true)}
+                variant="outline"
+                size="sm"
+                title="心签手账：近 7 天的记录与情绪晴雨"
+                className="h-8 shrink-0 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
               >
-                {DENSITY_OPTIONS.map((o) => (
-                  <option key={o.key} value={o.key}>{o.label}</option>
-                ))}
-              </select>
+                <BookOpen className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">手账</span>
+              </Button>
+              <Button
+                onClick={() => setReviewOpen(true)}
+                variant="outline"
+                size="sm"
+                title="抽一签 / 按词回顾，与过去的自己重逢"
+                className="h-8 shrink-0 px-2.5 gap-1.5 border-[#384877]/30 bg-[#384877]/5 hover:bg-[#384877]/10 text-[#384877] text-xs"
+              >
+                <Dices className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">回顾</span>
+              </Button>
+              <Button
+                onClick={() => handleVaultRequest(null)}
+                variant="outline"
+                size="sm"
+                title="保险柜：密码保护的私密信息，AI 不会阅读"
+                className="h-8 shrink-0 px-2.5 gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">保险柜</span>
+              </Button>
             </div>
-            <Button
-              onClick={() => setOnlyMine((v) => !v)}
-              variant="outline"
-              size="sm"
-              title={onlyMine ? '当前只显示我自建的内容，点击显示全部' : '只显示我自建的内容，隐藏外部信息'}
-              className={`h-8 shrink-0 px-2 md:px-3 gap-1 md:gap-1.5 text-xs md:text-sm ${
-                onlyMine
-                  ? 'border-transparent bg-[#384877] hover:bg-[#2f3d63] text-white'
-                  : 'border-slate-300 bg-white hover:bg-slate-100 text-slate-700'
-              }`}
-            >
-              <User className="w-3.5 h-3.5 md:w-3.5 md:h-3.5" />
-              <span className="hidden sm:inline">{onlyMine ? '仅我的内容' : '全部内容'}</span>
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  title="AI 工具：问答 / 智能整理 / 扩展视野"
-                  className="h-8 shrink-0 px-2 md:px-3 gap-1 md:gap-1.5 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs md:text-sm"
-                >
-                  <Wand2 className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">工具</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onSelect={() => setShowKnowledgeBase(true)}>
-                  <Brain className="w-3.5 h-3.5 mr-2 text-blue-600" />
-                  AI 问答
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setShowAIOrganizer(true)}>
-                  <Wand2 className="w-3.5 h-3.5 mr-2 text-purple-600" />
-                  智能整理
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setShowExternalHorizon(true)}>
-                  <Globe className="w-3.5 h-3.5 mr-2 text-violet-600" />
-                  扩展视野
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <div className="hidden shrink-0 text-xs text-slate-500 whitespace-nowrap md:block md:text-sm">
-              <span className="font-semibold text-[#384877]">{filteredNotes.length}</span>
-              <span className="hidden md:inline"> 条心签</span>
-            </div>
-          </motion.div>
 
-          {/* Filters：手机端所有筛选控件合成一条可横滑的工具栏 */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.05 }}
-            className="-mx-1 flex items-center gap-1.5 overflow-x-auto scrollbar-hide px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:justify-between sm:overflow-visible sm:px-0"
-          >
-            <div className="shrink-0">
+            {/* 右侧：筛选与来源切换 */}
+            <div className="flex items-center gap-1.5 flex-[1.618] justify-end">
+              {/* 全部内容 / 来自搭子 单一切换 */}
+              <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-sm shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSourceScope("all")}
+                  className={`h-7 px-2.5 rounded-md text-xs transition-colors ${
+                    sourceScope === "all"
+                      ? "bg-[#384877] text-white"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  全部内容
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSourceScope("buddy")}
+                  className={`h-7 px-2.5 rounded-md text-xs transition-colors ${
+                    sourceScope === "buddy"
+                      ? "bg-[#384877] text-white"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  来自搭子
+                </button>
+              </div>
+
               <NoteFilters
                 filters={filters}
                 onFiltersChange={setFilters}
@@ -833,7 +783,6 @@ export default function Notes() {
                 activePinned={categoryFilter === 'pinned'}
               />
             </div>
-
           </motion.div>
 
           {/* 签列表（与小程序一致：无底部大输入框，每条内容一张签，整页滚动） */}

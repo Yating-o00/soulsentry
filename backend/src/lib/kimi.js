@@ -347,7 +347,7 @@ export async function invokeKimiText({
   return { text: result.content, model: result.model };
 }
 
-export async function invokeKimiWebSearch({ query, language = "zh" }) {
+export async function invokeKimiWebSearch({ query, language = "zh", maxRounds = 6, fetchTimeout } = {}) {
   const systemPrompt = language === "en"
     ? "You are a research assistant. Use the builtin web search tool to answer with concise, up-to-date information. End with references."
     : "你是一名联网研究助手。请使用内置联网搜索工具检索最新信息后作答，回答简洁并附上参考链接。";
@@ -366,13 +366,15 @@ export async function invokeKimiWebSearch({ query, language = "zh" }) {
 
   const references = [];
   let finalContent = "";
+  const rounds = Math.min(6, Math.max(1, Number(maxRounds) || 6));
 
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < rounds; i += 1) {
     const result = await callKimiChat({
       messages,
       tools,
       temperature: 0.2,
-      maxTokens: 3000
+      maxTokens: 3000,
+      ...(fetchTimeout ? { fetchTimeout } : {})
     });
 
     const message = result.message;

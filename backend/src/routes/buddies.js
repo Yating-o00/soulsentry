@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { beijingToday, beijingDayRange } from "../lib/behavior.js";
 import crypto from "node:crypto";
-import { invokeKimiText, FAST_TEXT_MODELS, STRUCTURED_TEXT_MODELS, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
+import { invokeKimiText, invokeKimiWebSearch, FAST_TEXT_MODELS, STRUCTURED_TEXT_MODELS, DASHBOARD_TEXT_MODELS } from "../lib/kimi.js";
 import { readAttachmentText } from "../services/readAttachment.js";
 import { assertAICredits, chargeAICredits, usageCost } from "../services/aiCredits.js";
 import { BUDDY_DEFAULT_PERSONA, pickBuddyPersona } from "../services/buddyPersona.js";
@@ -876,7 +876,7 @@ async function getActiveProfile(userId, buddyId) {
 const layoutModuleShape = z.object({
   id: z.string().trim().min(1).max(48),
   label: z.string().trim().min(1).max(12).optional(),
-  type: z.enum(["checklist", "notes", "tracker"]).optional(),
+  type: z.enum(["checklist", "notes", "tracker", "assistant"]).optional(),
   unit: z.string().trim().max(6).optional(),
   metric: z.string().trim().max(8).optional(),
   aggregate: z.enum(["sum", "avg", "latest"]).optional(),
@@ -884,6 +884,10 @@ const layoutModuleShape = z.object({
   preset: z.string().trim().max(40).optional(),
   icon: z.string().trim().max(24).optional(),
   items: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+  instructions: z.string().trim().max(800).optional(),
+  placeholder: z.string().trim().max(60).optional(),
+  examples: z.array(z.string().trim().min(1).max(60)).max(4).optional(),
+  web_research: z.boolean().optional(),
 });
 
 const layoutModuleSchema = z.object({
@@ -903,6 +907,10 @@ function storedLayoutModule(item) {
     ...(item.preset ? { preset: item.preset } : {}),
     ...(item.icon ? { icon: item.icon } : {}),
     ...(item.items ? { items: item.items } : {}),
+    ...(item.instructions ? { instructions: item.instructions } : {}),
+    ...(item.placeholder ? { placeholder: item.placeholder } : {}),
+    ...(item.examples ? { examples: item.examples } : {}),
+    ...(typeof item.web_research === "boolean" ? { web_research: item.web_research } : {}),
   };
 }
 
@@ -922,10 +930,362 @@ buddiesRouter.post("/:id/layout", async (req, res) => {
   }
   const modules = parsed.data.modules.map(storedLayoutModule);
   const archived = parsed.data.archived.map(storedLayoutModule);
+  // 智能功能是自定义搭子的能力入口，内置搭子继续使用固定专业板块。
+  if ([...modules, ...archived].some((item) => item.type === "assistant") && !getCustomBuddy(extra, buddyId)) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "只有自定义搭子可以添加智能功能" });
+  }
   const layout = { version: 1, modules, archived, updated_at: new Date().toISOString() };
   profiles[buddyId] = { ...profile, layout };
   await writeExtraFields(req.user.id, pref, { buddy_profiles: profiles });
   return res.json({ layout });
+});
+
+/* ---------- 自定义搭子的智能功能：自然语言生成入口 + 功能专属参考资料 ---------- */
+
+const FEATURE_ICONS = new Set([
+  "sparkles", "dumbbell", "chef-hat", "utensils", "gauge", "list-checks", "notebook-pen",
+  "wallet", "trophy", "heart-pulse", "calendar-check", "cloud-sun", "bot", "brain",
+  "briefcase", "messages-square",
+]);
+
+function featureMaterialScope(buddyId, featureId) {
+  return `${buddyId}::feature::${featureId}`;
+}
+
+function fallbackFeatureDraft(text) {
+  const raw = String(text || "").trim();
+  const kitchen = /(厨房|菜|食谱|做饭|烹饪|饮食|菜单)/.test(raw);
+  const fitness = /(健身|训练|运动|增肌|减脂|力量|康复)/.test(raw);
+  const icon = fitness ? "dumbbell"
+    : kitchen ? "chef-hat"
+      : /(预算|记账|理财|花费)/.test(raw) ? "wallet"
+        : /(计划|方案|复盘)/.test(raw) ? "briefcase"
+          : "sparkles";
+  const label = fitness ? "健身指导"
+    : kitchen ? "菜单指导"
+      : /(预算|记账|理财|花费)/.test(raw) ? "预算助手"
+        : /(计划|方案|复盘)/.test(raw) ? "方案定制"
+          : "智能功能";
+  const cleaned = raw
+    .replace(/^(帮我|请|想|要|增加|添加|新增|加|一个|做个|一个叫)+/g, "")
+    .replace(/^(一个)?(菜单|健身|训练|方案|计划)(功能|入口)?[，,：: ]*/g, "")
+    .trim();
+  return {
+    label,
+    hint: (cleaned || raw).slice(0, 60),
+    instructions: `围绕用户的需求给出具体、可执行的结果。优先参考用户为这个功能上传的方案、菜单或资料；资料没有覆盖时明确说明，不要编造。先确认最少的关键信息，再给出步骤、清单或方案。用户对这个功能的原始要求：${raw}`.slice(0, 800),
+    placeholder: kitchen ? "想吃什么？说说口味、现有食材和时间" : fitness ? "说说目标、训练时间和器械条件" : "说说你的需求…",
+    examples: kitchen
+      ? ["推荐几道低脂晚餐", "冰箱里有鸡蛋和西兰花，能做什么？"]
+      : fitness
+        ? ["按我的目标排一周训练", "膝盖不舒服，今天怎么调整？"]
+        : [],
+    icon,
+  };
+}
+
+function sanitizeFeatureDraft(raw, { text = "" } = {}) {
+  const source = raw && typeof raw === "object" ? raw : {};
+  const fallback = fallbackFeatureDraft(text);
+  const label = String(source.label || fallback.label).trim().slice(0, 12) || "智能功能";
+  const hint = String(source.hint || fallback.hint || "").trim().slice(0, 80);
+  const instructions = String(source.instructions || fallback.instructions || "").trim().slice(0, 800);
+  const placeholder = String(source.placeholder || fallback.placeholder || "").trim().slice(0, 60);
+  const examples = (Array.isArray(source.examples) ? source.examples : fallback.examples || [])
+    .map((item) => String(item || "").trim().slice(0, 60))
+    .filter(Boolean)
+    .slice(0, 4);
+  const icon = FEATURE_ICONS.has(source.icon) ? source.icon : fallback.icon;
+  return { label, hint, instructions, placeholder, examples, icon };
+}
+
+function cleanFeatureText(value, max = 200) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function sanitizeFeatureArtifact(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const cards = (Array.isArray(raw.cards) ? raw.cards : [])
+    .slice(0, 4)
+    .map((card) => ({
+      title: cleanFeatureText(card?.title, 24),
+      subtitle: cleanFeatureText(card?.subtitle, 60),
+      tags: (Array.isArray(card?.tags) ? card.tags : [])
+        .map((tag) => cleanFeatureText(tag, 16))
+        .filter(Boolean)
+        .slice(0, 5),
+      body: cleanFeatureText(card?.body, 260),
+    }))
+    .filter((card) => card.title);
+  const steps = (Array.isArray(raw.steps) ? raw.steps : [])
+    .slice(0, 8)
+    .map((step) => ({
+      title: cleanFeatureText(step?.title, 24),
+      detail: cleanFeatureText(step?.detail, 260),
+      minutes: Number.isFinite(Number(step?.minutes)) ? Math.max(0, Math.min(240, Number(step.minutes))) : null,
+    }))
+    .filter((step) => step.title || step.detail);
+  const title = cleanFeatureText(raw.title, 32);
+  const subtitle = cleanFeatureText(raw.subtitle, 80);
+  if (!title && !subtitle && cards.length === 0 && steps.length === 0) return null;
+  return {
+    title: title || "功能结果",
+    subtitle,
+    badges: (Array.isArray(raw.badges) ? raw.badges : [])
+      .map((badge) => cleanFeatureText(badge, 16))
+      .filter(Boolean)
+      .slice(0, 5),
+    cards,
+    steps,
+    tips: (Array.isArray(raw.tips) ? raw.tips : [])
+      .map((tip) => cleanFeatureText(tip, 120))
+      .filter(Boolean)
+      .slice(0, 6),
+    followups: (Array.isArray(raw.followups) ? raw.followups : [])
+      .map((item) => cleanFeatureText(item, 60))
+      .filter(Boolean)
+      .slice(0, 4),
+  };
+}
+
+function safeReferenceUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (!["http:", "https:"].includes(url.protocol)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function isPublicReferenceUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    if (!["http:", "https:"].includes(url.protocol)) return false;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    if (!host || host === "localhost" || host.endsWith(".local")) return false;
+    if (/^(127\.|10\.|192\.168\.|169\.254\.|0\.)/.test(host)) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(host)) return false;
+    if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchOpenGraphImage(url) {
+  if (!isPublicReferenceUrl(url)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: { "user-agent": "Mozilla/5.0 (compatible; SoulSentryBot/1.0)", accept: "text/html" },
+    });
+    if (!res.ok || !isPublicReferenceUrl(res.url || url)) return null;
+    const type = res.headers.get("content-type") || "";
+    if (!type.includes("text/html")) return null;
+    const html = (await res.text()).slice(0, 250000);
+    const patterns = [
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+    ];
+    const match = patterns.map((pattern) => html.match(pattern)).find(Boolean);
+    if (!match?.[1]) return null;
+    return safeReferenceUrl(new URL(match[1], url).toString());
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function enrichFeatureReferences(refs) {
+  const seen = new Set();
+  const references = (Array.isArray(refs) ? refs : [])
+    .map((ref) => ({
+      title: cleanFeatureText(ref?.title || ref?.url, 100),
+      url: safeReferenceUrl(ref?.url),
+    }))
+    .filter((ref) => {
+      if (!ref.url || seen.has(ref.url)) return false;
+      seen.add(ref.url);
+      return true;
+    })
+    .slice(0, 5);
+  const enriched = await Promise.all(references.map(async (ref) => ({
+    ...ref,
+    image: await fetchOpenGraphImage(ref.url),
+  })));
+  return enriched;
+}
+
+function sanitizeFeatureReferences(refs) {
+  const seen = new Set();
+  return (Array.isArray(refs) ? refs : [])
+    .map((ref) => ({
+      title: cleanFeatureText(ref?.title || ref?.url, 100),
+      url: safeReferenceUrl(ref?.url),
+      image: safeReferenceUrl(ref?.image),
+    }))
+    .filter((ref) => {
+      if (!ref.url || seen.has(ref.url)) return false;
+      seen.add(ref.url);
+      return true;
+    })
+    .slice(0, 5);
+}
+
+async function getCustomFeatureContext(req, res) {
+  const buddyId = req.params.id;
+  const { profile, extra } = await getActiveProfile(req.user.id, buddyId);
+  const customBuddy = getCustomBuddy(extra, buddyId);
+  if (!customBuddy) {
+    res.status(404).json({ error: "NOT_FOUND", message: "只有自定义搭子可以添加智能功能" });
+    return null;
+  }
+  if (!profile) {
+    res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
+    return null;
+  }
+  const featureId = String(req.params.featureId || "").trim().slice(0, 48);
+  const modules = Array.isArray(profile.layout?.modules) ? profile.layout.modules : [];
+  const feature = modules.find((item) => item?.id === featureId && item?.type === "assistant");
+  if (!feature) {
+    res.status(404).json({ error: "FEATURE_NOT_FOUND", message: "这个功能入口不存在，先在页面模块里添加" });
+    return null;
+  }
+  return { buddyId, profile, extra, customBuddy, feature };
+}
+
+const featureParseSchema = z.object({
+  text: z.string().trim().min(4).max(600),
+});
+
+// POST /api/buddies/:id/features/parse —— 把一句需求变成自定义搭子的功能入口草稿
+buddiesRouter.post("/:id/features/parse", async (req, res) => {
+  const buddyId = req.params.id;
+  const parsed = featureParseSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", message: "先用一句话说说想增加什么功能" });
+  }
+  const { profile, extra } = await getActiveProfile(req.user.id, buddyId);
+  const customBuddy = getCustomBuddy(extra, buddyId);
+  if (!customBuddy) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "只有自定义搭子可以添加智能功能" });
+  }
+  if (!profile) {
+    return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
+  }
+  const text = parsed.data.text;
+  const fallback = sanitizeFeatureDraft(null, { text });
+  try {
+    const result = await invokeKimiText({
+      systemPrompt: `你是心栈 SoulSentry 的自定义搭子功能设计师。用户要给自己的搭子增加一个可以点进去使用的功能入口，可能是健身指导、菜单与做菜指导、方案定制、资料查询等。功能必须：
+- 有清晰的输入和输出，用户输入需求后能得到具体、可执行的结果；
+- 如果需要参考资料，明确按「优先参考用户为这个功能上传的资料」执行；
+- 不编造用户没有提供的身体数据、食材、预算或事实；
+- 只输出严格 JSON，不要 markdown、代码块或解释。`,
+      prompt: `这颗自定义搭子叫「${customBuddy.name}」，定位：${customBuddy.expertise || customBuddy.slogan || "围绕用户目标提供具体帮助"}。它的能力：${(customBuddy.abilities || []).slice(0, 4).join("；")}。
+用户想增加的功能：
+「${text}」
+
+请把它设计成这个搭子空间里的一个功能入口，输出 JSON：
+{
+  "label": "入口名，2-8个字，如「个性化指导」「菜单」",
+  "hint": "一句话说明这个入口能做什么（40字内）",
+  "instructions": "给搭子的执行说明（150-500字）：用户会输入什么、你要输出什么、如何优先使用用户上传的参考资料、需要先追问哪些最少的关键信息、专业边界是什么；不要写空泛的陪伴话术",
+  "placeholder": "输入框提示，20字内",
+  "examples": ["用户可能这样问1（30字内）", "用户可能这样问2"],
+  "icon": "从 sparkles/dumbbell/chef-hat/utensils/gauge/list-checks/notebook-pen/wallet/trophy/heart-pulse/calendar-check/cloud-sun/bot/brain/briefcase/messages-square 里选一个"
+}`,
+      responseJsonSchema: true,
+      models: FAST_TEXT_MODELS,
+      maxTokens: 1200,
+      fetchTimeout: 25000,
+    });
+    return res.json({ feature: sanitizeFeatureDraft(result?.data, { text }) });
+  } catch (error) {
+    console.warn("[buddies/features] 功能设计 AI 失败，使用兜底:", error?.message || error);
+    return res.json({ feature: fallback, degraded: true });
+  }
+});
+
+function publicMaterial(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    file_url: row.fileUrl,
+    file_type: row.fileType,
+    chars: String(row.text || "").length,
+    created_at: row.createdAt,
+  };
+}
+
+buddiesRouter.get("/:id/features/:featureId/materials", async (req, res) => {
+  const ctx = await getCustomFeatureContext(req, res);
+  if (!ctx) return;
+  const rows = await prisma.buddyMaterial.findMany({
+    where: { userId: req.user.id, buddyId: featureMaterialScope(ctx.buddyId, ctx.feature.id) },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, fileUrl: true, fileType: true, text: true, createdAt: true },
+  });
+  return res.json({ materials: rows.map(publicMaterial), limit: 5 });
+});
+
+buddiesRouter.post("/:id/features/:featureId/materials", async (req, res) => {
+  const ctx = await getCustomFeatureContext(req, res);
+  if (!ctx) return;
+  const parsed = materialSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
+  }
+  const scope = featureMaterialScope(ctx.buddyId, ctx.feature.id);
+  const count = await prisma.buddyMaterial.count({ where: { userId: req.user.id, buddyId: scope } });
+  if (count >= 5) {
+    return res.status(400).json({ error: "LIMIT_REACHED", message: "这个功能最多保留 5 份参考资料，先删掉旧的再加" });
+  }
+  const text = await readAttachmentText({
+    url: parsed.data.file_url,
+    name: parsed.data.name,
+    type: parsed.data.type,
+  }).catch(() => "");
+  const extracted = String(text || "").trim();
+  if (!extracted || /不支持的文件类型|文件内容为空|文件内容提取失败|文件过大/.test(extracted)) {
+    return res.status(400).json({
+      error: "EMPTY_CONTENT",
+      message: "没有从这份资料里读到可用的文字；扫描件可以先转成文字，或换一份 PDF/Word/文本",
+    });
+  }
+  const material = await prisma.buddyMaterial.create({
+    data: {
+      userId: req.user.id,
+      buddyId: scope,
+      name: parsed.data.name.slice(0, 200),
+      fileUrl: parsed.data.file_url,
+      fileType: parsed.data.type || null,
+      text: String(text).slice(0, 12000),
+    },
+  });
+  return res.status(201).json({ material: publicMaterial(material) });
+});
+
+buddiesRouter.delete("/:id/features/:featureId/materials/:materialId", async (req, res) => {
+  const ctx = await getCustomFeatureContext(req, res);
+  if (!ctx) return;
+  const deleted = await prisma.buddyMaterial.deleteMany({
+    where: {
+      id: req.params.materialId,
+      userId: req.user.id,
+      buddyId: featureMaterialScope(ctx.buddyId, ctx.feature.id),
+    },
+  });
+  if (deleted.count === 0) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "资料不存在" });
+  }
+  return res.json({ ok: true });
 });
 
 // POST /api/buddies/:id/state —— 合并写入本搭子的板块状态（领域档案隔离：只动本搭子的 state）
@@ -979,7 +1339,7 @@ const PERSONA_TONES = {
 };
 
 const agentSchema = z.object({
-  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "inspiration", "weekly", "talk", "chat", "greeting", "run_parse", "read_parse"]),
+  mode: z.enum(["solve_locate", "solve_hint", "solve_quiz", "itinerary", "inspiration", "weekly", "talk", "chat", "greeting", "feature", "run_parse", "read_parse"]),
   payload: z.record(z.any()).optional().default({}),
 });
 
@@ -1071,7 +1431,10 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
   const materialLine = buddyMeta.materialContext
     ? `\n用户给这颗搭子上传了专属资料。回答时优先依据这些资料，给出具体的专业判断；资料没有覆盖的内容就说「资料里没写到，我按一般经验说说」，不要编造：\n${buddyMeta.materialContext}\n`
     : "";
-  const base = `你是心栈 SoulSentry 里的「${buddyName}」，人格：${personaTone}${profileLine}${customLine}${materialLine}说话用简体中文，语气像朋友，不要列表式说教。`;
+  const webLine = buddyMeta.webContext
+    ? `\n刚刚从公开网页检索到的背景资料如下。请用它补充专业细节和实际操作步骤，不要编造来源链接；如果网页信息与用户上传资料冲突，以用户资料为准：\n${buddyMeta.webContext}\n`
+    : "";
+  const base = `你是心栈 SoulSentry 里的「${buddyName}」，人格：${personaTone}${profileLine}${customLine}${materialLine}${webLine}说话用简体中文，语气像朋友，不要列表式说教。`;
 
   switch (mode) {
     case "solve_locate": {
@@ -1157,6 +1520,39 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
       return {
         systemPrompt: `${base}你们正在共读《${book}》。用户刚「讲书」——用自己的话讲了理解。讲出来才算读懂。`,
         prompt: `用户说：「${text}」\n\n只输出 JSON：{"reply":"对他这段讲述的回应：先具体肯定一个点，再轻轻推进一步（60字内）","question":"下一个值得想想的问题（30字内）"}`,
+      };
+    }
+    case "feature": {
+      const feature = buddyMeta.feature || {};
+      const message = String(payload.message || "").trim().slice(0, 3000);
+      const context = String(payload.context || "").slice(0, 800);
+      const history = Array.isArray(payload.history)
+        ? payload.history
+            .filter((m) => m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string")
+            .slice(-8)
+            .map((m) => `${m.role === "user" ? "用户" : buddyName}：${String(m.content).slice(0, 600)}`)
+            .join("\n")
+        : "";
+      return {
+        systemPrompt: `${base}你现在在执行用户自定义的功能「${feature.label || "智能功能"}」。这个功能的设定：${feature.instructions || "根据用户需求给出具体、可执行的结果。"}${feature.hint ? `入口说明：${feature.hint}。` : ""}请严格围绕功能设定和用户需求回答。有参考资料时优先依据资料；资料没有覆盖的部分，可以给一般性的专业参考，但要明确说明依据边界，不要编造用户数据、事实或医疗/安全结论。结果必须让用户能直接照着做：先给结论，再给具体步骤和关键提醒。回答用简体中文，内容要有设计感，适合用卡片、图文和步骤清单呈现。`,
+        prompt: `用户需求：${message || "（用户没有填写具体需求）"}\n${history ? `此前在这个功能里的对话：\n${history}\n` : ""}${context ? `用户当前上下文：${context}\n` : ""}\n请输出严格 JSON，不要输出 Markdown 代码块：
+{
+  "reply": "一两句话说明结果和最关键提醒（80字内）",
+  "artifact": {
+    "title": "结果标题（16字内）",
+    "subtitle": "一句说明（30字内）",
+    "badges": ["标签1（8字内）", "标签2"],
+    "cards": [
+      {"title": "菜名/训练日/方案项（14字内）", "subtitle": "口味、类型或适合场景（30字内）", "tags": ["标签（8字内）"], "body": "关键参考：食材、动作或为什么适合（100字内）"}
+    ],
+    "steps": [
+      {"title": "步骤名（14字内）", "detail": "具体怎么做（120字内）", "minutes": 5}
+    ],
+    "tips": ["关键提醒（40字内）"],
+    "followups": ["用户可继续问的一个问题（30字内）"]
+  }
+}
+要求：cards 2-4 个，steps 3-6 个；菜单/菜谱类 cards 放菜品选择，steps 放烹饪操作；训练/方案类 cards 放训练日或方案项，steps 放实际动作；所有用量、时间、动作要点必须具体可执行，不确定的写「按实际情况调整」。不要把来源链接写进 artifact，来源由系统另行附上。`,
       };
     }
     case "greeting": {
@@ -1326,21 +1722,61 @@ buddiesRouter.post("/:id/agent", aiRequestContext, async (req, res) => {
   const buddyPersona = pickBuddyPersona(profile, extra.persona, buddyId);
   const personaTone = PERSONA_TONES[buddyPersona] || PERSONA_TONES.gentle;
   const customBuddy = getCustomBuddy(extra, buddyId);
+  let payload = parsed.data.payload || {};
+  let feature = null;
+  if (parsed.data.mode === "feature") {
+    if (!customBuddy) {
+      return res.status(400).json({ error: "INVALID_INPUT", message: "只有自定义搭子可以执行智能功能" });
+    }
+    const featureId = String(payload.feature_id || "").trim().slice(0, 48);
+    const modules = Array.isArray(profile.layout?.modules) ? profile.layout.modules : [];
+    feature = modules.find((item) => item?.id === featureId && item?.type === "assistant") || null;
+    if (!feature) {
+      return res.status(404).json({ error: "FEATURE_NOT_FOUND", message: "这个功能入口不存在，先在页面模块里添加" });
+    }
+  }
   let materialContext = "";
   if (customBuddy) {
     try {
-      const materials = await prisma.buddyMaterial.findMany({
-        where: { userId: req.user.id, buddyId },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-        select: { name: true, text: true },
-      });
+      let materials = [];
+      if (feature) {
+        materials = await prisma.buddyMaterial.findMany({
+          where: { userId: req.user.id, buddyId: featureMaterialScope(buddyId, feature.id) },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: { name: true, text: true },
+        });
+      }
+      if (materials.length === 0) {
+        materials = await prisma.buddyMaterial.findMany({
+          where: { userId: req.user.id, buddyId },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: { name: true, text: true },
+        });
+      }
       materialContext = materials
         .map((item) => `【${item.name}】\n${item.text}`)
         .join("\n\n")
         .slice(0, 6000);
     } catch (error) {
       console.warn("[buddies/agent] 读取专属资料失败:", error?.message || error);
+    }
+  }
+  let webContext = "";
+  let webReferences = [];
+  if (feature && feature.web_research !== false) {
+    const query = [
+      customBuddy?.name,
+      feature.label,
+      String(payload.message || "").slice(0, 180),
+    ].filter(Boolean).join(" ").slice(0, 300);
+    try {
+      const search = await invokeKimiWebSearch({ query, maxRounds: 2, fetchTimeout: 12000 });
+      webContext = String(search.answer || "").slice(0, 5000);
+      webReferences = await enrichFeatureReferences(search.references);
+    } catch (error) {
+      console.warn("[buddies/agent] 功能联网检索失败，继续使用资料:", error?.message || error);
     }
   }
   const buddyMeta = customBuddy ? {
@@ -1352,12 +1788,22 @@ buddiesRouter.post("/:id/agent", aiRequestContext, async (req, res) => {
     actions: customBuddy.actions,
     memory: customBuddy.memory,
     materialContext,
+    webContext,
+    feature: feature ? {
+      id: feature.id,
+      label: feature.label,
+      hint: feature.hint,
+      instructions: feature.instructions,
+      placeholder: feature.placeholder,
+      web_research: feature.web_research !== false,
+    } : null,
   } : {};
-  let payload = parsed.data.payload || {};
-  const lastUserText = Array.isArray(payload.messages)
-    ? [...payload.messages].reverse().find((m) => m?.role === "user" && typeof m.content === "string")?.content || ""
-    : "";
-  const isInteractive = ["chat", "greeting", "talk"].includes(parsed.data.mode);
+  const lastUserText = parsed.data.mode === "feature"
+    ? String(payload.message || "").slice(0, 2000)
+    : Array.isArray(payload.messages)
+      ? [...payload.messages].reverse().find((m) => m?.role === "user" && typeof m.content === "string")?.content || ""
+      : "";
+  const isInteractive = ["chat", "greeting", "talk", "feature"].includes(parsed.data.mode);
 
   // 搭子对话/解题支持图片与文件：先提取图片 OCR / 文件文本，再交给领域提示词
   const attachments = Array.isArray(payload.attachments) ? payload.attachments.slice(0, 3) : [];
@@ -1430,6 +1876,17 @@ buddiesRouter.post("/:id/agent", aiRequestContext, async (req, res) => {
     ]);
     if (parsed.data.mode === "solve_locate" && payload.attachment_text) {
       return res.json({ data: { ...(data && typeof data === "object" ? data : {}), problem_text: payload.attachment_text } });
+    }
+    if (feature) {
+      const artifact = sanitizeFeatureArtifact(data?.artifact);
+      const reply = String(data?.reply || data?.text || artifact?.subtitle || "").trim().slice(0, 4000);
+      return res.json({
+        data: {
+          reply,
+          artifact,
+          references: sanitizeFeatureReferences(webReferences),
+        },
+      });
     }
     return res.json({ data });
   } catch (error) {

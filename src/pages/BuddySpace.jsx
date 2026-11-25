@@ -36,6 +36,7 @@ import CustomChatPanel from "@/components/buddy/panels/CustomChatPanel";
 import BuddyModuleManager from "@/components/buddy/BuddyModuleManager";
 import BuddyModuleIcon from "@/components/buddy/BuddyModuleIcon";
 import BuddyModulePanel from "@/components/buddy/panels/BuddyModulePanel";
+import BuddyFeaturePanel from "@/components/buddy/panels/BuddyFeaturePanel";
 import { useBuddyState } from "@/components/buddy/panels/shared";
 import { useListSubtasks } from "@/components/buddy/useListSubtasks";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
@@ -46,7 +47,8 @@ import { resolveBuddyModules } from "@/lib/buddyModules";
  * 同一套底座渲染：首页板块（计划 + 项目约定，真实数据）/ 协同（接入协同约定）/
  * 画像（领域档案 + 陪伴统计）/ 领域特色板块（清单、习惯链）/ 专业模块。
  * 用户可在每颗搭子内调整模块顺序、收起板块，或添加清单/笔记/追踪；
- * 首页聊天与协同固定在前面。领域档案隔离：这里只读取本搭子的档案。
+ * 自定义搭子还可以增加带参考资料的智能功能。首页聊天与协同固定在前面。
+ * 领域档案隔离：这里只读取本搭子的档案。
  */
 export default function BuddySpace() {
   const navigate = useNavigate();
@@ -468,6 +470,9 @@ export default function BuddySpace() {
         )}
         {activeModule && !activeModule.builtin && ["checklist", "notes", "tracker"].includes(activeModule.type) && (
           <BuddyModulePanel key={activeModule.id} module={activeModule} buddy={buddy} tint={tint} />
+        )}
+        {activeModule?.type === "assistant" && buddy.custom && !activeModule.builtin && (
+          <BuddyFeaturePanel key={activeModule.id} module={activeModule} buddy={buddy} tint={tint} />
         )}
         {activeModule?.type === "upcoming" && (
           <UpcomingSection buddy={buddy} tab={activeModule.label} tint={tint} />

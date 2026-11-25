@@ -34,7 +34,7 @@ const BUILTIN_RENDER = {
   running: { 记录: "running_log", 身体: "running_body", "装备与知识": "running_gear" },
 };
 
-const MODULE_TYPES = new Set(["checklist", "notes", "tracker"]);
+const MODULE_TYPES = new Set(["checklist", "notes", "tracker", "assistant"]);
 
 const PRO_TEMPLATES = {
   travel: [
@@ -252,6 +252,7 @@ const TYPE_LABELS = {
   custom_materials: "资料",
   notes: "笔记",
   tracker: "追踪",
+  assistant: "智能功能",
   upcoming: "预告",
 };
 
@@ -312,6 +313,9 @@ function safeCustomModule(entry) {
   const items = Array.isArray(entry.items)
     ? entry.items.map((item) => String(item || "").trim().slice(0, 40)).filter(Boolean).slice(0, 20)
     : undefined;
+  const examples = Array.isArray(entry.examples)
+    ? entry.examples.map((item) => String(item || "").trim().slice(0, 60)).filter(Boolean).slice(0, 4)
+    : undefined;
   return {
     id,
     label,
@@ -322,7 +326,11 @@ function safeCustomModule(entry) {
     metric: String(entry.metric || "").slice(0, 8),
     aggregate: ["sum", "avg", "latest"].includes(entry.aggregate) ? entry.aggregate : "latest",
     preset: String(entry.preset || "").slice(0, 40),
+    instructions: String(entry.instructions || "").slice(0, 800),
+    placeholder: String(entry.placeholder || "").slice(0, 60),
+    ...(type === "assistant" ? { web_research: entry.web_research !== false } : {}),
     ...(items ? { items } : {}),
+    ...(examples ? { examples } : {}),
     builtin: false,
     locked: false,
   };
@@ -401,19 +409,36 @@ export function serializeArchivedModules(modules = []) {
   }).filter(Boolean);
 }
 
-export function createCustomModule({ label, type, unit = "" } = {}) {
+export function createCustomModule({
+  label, type, unit = "", hint = "", instructions = "", placeholder = "", icon = "", examples = [],
+  webResearch = true,
+} = {}) {
   const cleanLabel = String(label || "").trim().slice(0, 12);
   if (!cleanLabel || !MODULE_TYPES.has(type)) return null;
+  const cleanExamples = (Array.isArray(examples) ? examples : [])
+    .map((item) => String(item || "").trim().slice(0, 60))
+    .filter(Boolean)
+    .slice(0, 4);
+  const defaultIcon = type === "checklist" ? "list-checks"
+    : type === "notes" ? "notebook-pen"
+      : type === "assistant" ? "sparkles"
+        : "gauge";
   return {
-    id: `pm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: type === "assistant"
+      ? `ft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+      : `pm_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     label: cleanLabel,
     type,
-    icon: type === "checklist" ? "list-checks" : type === "notes" ? "notebook-pen" : "gauge",
-    hint: "",
+    icon: String(icon || defaultIcon).slice(0, 24),
+    hint: String(hint || "").trim().slice(0, 80),
     unit: type === "tracker" ? String(unit || "").trim().slice(0, 6) : "",
     metric: type === "tracker" ? cleanLabel : "",
     aggregate: "latest",
+    instructions: type === "assistant" ? String(instructions || "").trim().slice(0, 800) : "",
+    placeholder: type === "assistant" ? String(placeholder || "").trim().slice(0, 60) : "",
     items: type === "checklist" ? [] : undefined,
+    ...(type === "assistant" ? { web_research: webResearch !== false } : {}),
+    ...(type === "assistant" && cleanExamples.length > 0 ? { examples: cleanExamples } : {}),
     builtin: false,
     locked: false,
   };

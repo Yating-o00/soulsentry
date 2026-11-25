@@ -1,9 +1,10 @@
 import React from "react";
 import {
-  ArrowDown, ArrowUp, Backpack, BadgeCheck, BarChart3, BookOpen, Bookmark, CalendarCheck,
-  CalendarDays, CheckCircle2, Circle, ClipboardList, CloudSun, FolderOpen, Footprints, Fuel,
-  Gauge, HeartPulse, LayoutGrid, Library, Lightbulb, ListChecks, MapPin, Moon, NotebookPen,
-  PenLine, Sparkles, StickyNote, Sun, Target, Trophy, UserCircle, Users, Wallet,
+  ArrowDown, ArrowUp, Backpack, BadgeCheck, BarChart3, BookOpen, Bookmark, Bot, Brain,
+  Briefcase, CalendarCheck, CalendarDays, CheckCircle2, ChefHat, Circle, ClipboardList, CloudSun,
+  Dumbbell, FolderOpen, Footprints, Fuel, Gauge, HeartPulse, LayoutGrid, Library, Lightbulb,
+  ListChecks, MapPin, MessagesSquare, Moon, NotebookPen, PenLine, Sparkles, StickyNote, Sun,
+  Target, Trophy, UserCircle, Users, Utensils, Wallet,
 } from "lucide-react";
 
 // 搭子模块图标：内置板块沿用原来的识别方式，新专业模块使用语义图标。
@@ -39,6 +40,13 @@ const MODULE_ICONS = {
   moon: Moon,
   "pen-line": PenLine,
   "layout-grid": LayoutGrid,
+  "chef-hat": ChefHat,
+  "dumbbell": Dumbbell,
+  "briefcase": Briefcase,
+  "messages-square": MessagesSquare,
+  "bot": Bot,
+  "brain": Brain,
+  "utensils": Utensils,
   "arrow-up": ArrowUp,
   "arrow-down": ArrowDown,
 };
@@ -50,6 +58,7 @@ const TYPE_ICONS = {
   checklist: ListChecks,
   notes: StickyNote,
   tracker: Gauge,
+  assistant: Sparkles,
 };
 
 /** 统一渲染搭子模块图标，避免每个页面各维护一套映射。 */

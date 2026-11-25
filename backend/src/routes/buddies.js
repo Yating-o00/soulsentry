@@ -873,6 +873,61 @@ async function getActiveProfile(userId, buddyId) {
   return { pref, profiles, profile, extra };
 }
 
+const layoutModuleShape = z.object({
+  id: z.string().trim().min(1).max(48),
+  label: z.string().trim().min(1).max(12).optional(),
+  type: z.enum(["checklist", "notes", "tracker"]).optional(),
+  unit: z.string().trim().max(6).optional(),
+  metric: z.string().trim().max(8).optional(),
+  aggregate: z.enum(["sum", "avg", "latest"]).optional(),
+  hint: z.string().trim().max(80).optional(),
+  preset: z.string().trim().max(40).optional(),
+  icon: z.string().trim().max(24).optional(),
+  items: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+});
+
+const layoutModuleSchema = z.object({
+  modules: z.array(layoutModuleShape).min(1).max(6),
+  archived: z.array(layoutModuleShape).max(12).optional().default([]),
+});
+
+function storedLayoutModule(item) {
+  return {
+    id: item.id,
+    ...(item.label ? { label: item.label } : {}),
+    ...(item.type ? { type: item.type } : {}),
+    ...(item.unit ? { unit: item.unit } : {}),
+    ...(item.metric ? { metric: item.metric } : {}),
+    ...(item.aggregate ? { aggregate: item.aggregate } : {}),
+    ...(item.hint ? { hint: item.hint } : {}),
+    ...(item.preset ? { preset: item.preset } : {}),
+    ...(item.icon ? { icon: item.icon } : {}),
+    ...(item.items ? { items: item.items } : {}),
+  };
+}
+
+// POST /api/buddies/:id/layout —— 保存这颗搭子的页面模块顺序与自定义模块
+buddiesRouter.post("/:id/layout", async (req, res) => {
+  const buddyId = req.params.id;
+  const parsed = layoutModuleSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: "INVALID_INPUT", details: parsed.error.flatten() });
+  }
+  const { pref, profiles, profile, extra } = await getActiveProfile(req.user.id, buddyId);
+  if (!isKnownBuddyId(BUDDY_IDS, extra, buddyId)) {
+    return res.status(404).json({ error: "NOT_FOUND", message: "这颗搭子还没有来到货架" });
+  }
+  if (!profile) {
+    return res.status(409).json({ error: "NOT_ACTIVE", message: "这段陪伴还没有开始，或已经毕业" });
+  }
+  const modules = parsed.data.modules.map(storedLayoutModule);
+  const archived = parsed.data.archived.map(storedLayoutModule);
+  const layout = { version: 1, modules, archived, updated_at: new Date().toISOString() };
+  profiles[buddyId] = { ...profile, layout };
+  await writeExtraFields(req.user.id, pref, { buddy_profiles: profiles });
+  return res.json({ layout });
+});
+
 // POST /api/buddies/:id/state —— 合并写入本搭子的板块状态（领域档案隔离：只动本搭子的 state）
 buddiesRouter.post("/:id/state", async (req, res) => {
   const buddyId = req.params.id;

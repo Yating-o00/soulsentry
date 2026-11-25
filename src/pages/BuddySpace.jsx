@@ -3,9 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft, Check, Footprints, GraduationCap, Loader2, Users2, Sparkles, Trash2, Pencil,
-  Sun, Lightbulb, Users, BarChart3, UserCircle, MapPin, ListChecks, BookOpen, Library,
-  StickyNote, CheckCircle2, CalendarCheck, CalendarDays, ClipboardList, HeartPulse,
-  Backpack, FolderOpen, Circle,
+  LayoutGrid,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createPageUrl } from "@/utils";
@@ -35,37 +33,20 @@ import {
 } from "@/components/buddy/panels/RunningPanels";
 import BuddyChatPanel from "@/components/buddy/panels/BuddyChatPanel";
 import CustomChatPanel from "@/components/buddy/panels/CustomChatPanel";
+import BuddyModuleManager from "@/components/buddy/BuddyModuleManager";
+import BuddyModuleIcon from "@/components/buddy/BuddyModuleIcon";
+import BuddyModulePanel from "@/components/buddy/panels/BuddyModulePanel";
 import { useBuddyState } from "@/components/buddy/panels/shared";
 import { useListSubtasks } from "@/components/buddy/useListSubtasks";
 import { isTaskEffectivelyCompleted } from "@/lib/taskStatus";
-
-// 手机端底部标签图标映射：把配置化的板块名称转成可识别的图标
-const SECTION_ICONS = {
-  今日: Sun,
-  解题: Lightbulb,
-  协同: Users,
-  周报: BarChart3,
-  画像: UserCircle,
-  行程: MapPin,
-  清单: ListChecks,
-  灵感: Sparkles,
-  在读: BookOpen,
-  书架: Library,
-  笔记: StickyNote,
-  打卡: CheckCircle2,
-  习惯: CalendarCheck,
-  课表: CalendarDays,
-  记录: ClipboardList,
-  身体: HeartPulse,
-  "装备与知识": Backpack,
-  资料: FolderOpen,
-};
+import { resolveBuddyModules } from "@/lib/buddyModules";
 
 /**
  * 搭子空间（二期）：配置驱动的空间脚手架——每颗搭子一套板块（buddy.sections），
  * 同一套底座渲染：首页板块（计划 + 项目约定，真实数据）/ 协同（接入协同约定）/
- * 画像（领域档案 + 陪伴统计）/ 领域特色板块（清单、习惯链）/ 其余板块预告。
- * 领域档案隔离：这里只读取并展示本搭子的档案，不看其他搭子的记忆。
+ * 画像（领域档案 + 陪伴统计）/ 领域特色板块（清单、习惯链）/ 专业模块。
+ * 用户可在每颗搭子内调整模块顺序、收起板块，或添加清单/笔记/追踪；
+ * 首页聊天与协同固定在前面。领域档案隔离：这里只读取本搭子的档案。
  */
 export default function BuddySpace() {
   const navigate = useNavigate();
@@ -87,6 +68,8 @@ export default function BuddySpace() {
   const profile = mine?.buddies?.[buddyId];
   // 每颗搭子独立人格：先看用户在这颗搭子下的设置，再用该搭子类型的默认人格
   const persona = profile?.persona || buddy?.defaultPersona || mine?.persona || DEFAULT_PERSONA;
+  // 页面模块由用户在该搭子下保存的布局决定；首页聊天和协同始终固定在前面。
+  const modules = useMemo(() => resolveBuddyModules(buddy, profile), [buddy, profile]);
 
   const { data: allTasks = [], isLoading: tasksLoading, isFetching: tasksFetching } = useQuery({
     queryKey: ["tasks", "with-subs"],
@@ -148,6 +131,14 @@ export default function BuddySpace() {
   const [deletingCollab, setDeletingCollab] = useState(false);
   const [designOpen, setDesignOpen] = useState(false);
   const [designBuddy, setDesignBuddy] = useState(null);
+  const [modulesOpen, setModulesOpen] = useState(false);
+
+  // 用户收起当前板块或保存布局后，回到首页，避免停在一个已经不存在的标签上。
+  const moduleSignature = modules.map((module) => module.id).join("|");
+  useEffect(() => {
+    if (!tab || !moduleSignature) return;
+    if (!moduleSignature.split("|").includes(tab)) setTab(null);
+  }, [moduleSignature, tab]);
 
   if (!buddy && isLoading) {
     return (
@@ -240,8 +231,8 @@ export default function BuddySpace() {
     );
   }
 
-  const sections = buddy.sections;
-  const activeTab = tab && sections.includes(tab) ? tab : sections[0];
+  const activeTab = tab && modules.some((module) => module.id === tab) ? tab : modules[0]?.id;
+  const activeModule = modules.find((module) => module.id === activeTab) || modules[0];
 
   const graduate = async () => {
     if (graduating) return;
@@ -332,7 +323,7 @@ export default function BuddySpace() {
     <div className="max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto px-3 pt-2 md:px-4 md:pt-10 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-10">
       {/* 页眉：搭子头 + 人格化问候（手机端返回按钮由全局页眉提供；
           协同页把空间让给对话框，手机端隐藏这一行） */}
-      <header className={cn("items-center gap-3", activeTab === "协同" ? "hidden md:flex" : "flex")}>
+      <header className={cn("items-center gap-3", activeModule?.type === "collab" ? "hidden md:flex" : "flex")}>
         <button
           onClick={() => navigate(createPageUrl("Dashboard"))}
           aria-label="返回"
@@ -361,6 +352,14 @@ export default function BuddySpace() {
           </button>
         )}
         <button
+          onClick={() => setModulesOpen(true)}
+          aria-label="调整页面模块"
+          title="按需要调整页面模块"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-[#384877]"
+        >
+          <LayoutGrid className="w-5 h-5" />
+        </button>
+        <button
           onClick={() => setGraduateOpen(true)}
           title="结束陪伴：毕业或先收起（内容会沉淀）"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-stone-400 transition-colors hover:bg-stone-100 hover:text-stone-700"
@@ -371,76 +370,76 @@ export default function BuddySpace() {
 
       {/* 板块标签（配置驱动）：桌面端顶部标签；手机端用底部标签导航 */}
       <nav className="hidden md:mt-5 md:flex md:gap-2 overflow-x-auto scrollbar-hide border-b border-stone-200">
-        {sections.map((s) => {
-          const active = s === activeTab;
+        {modules.map((module) => {
+          const active = module.id === activeTab;
           return (
             <button
-              key={s}
-              onClick={() => setTab(s)}
+              key={module.id}
+              onClick={() => setTab(module.id)}
               className={cn(
                 "shrink-0 px-3 py-2 text-[13px] border-b-2 -mb-px transition-colors md:px-4 md:py-2.5 md:text-sm",
                 active ? "font-semibold text-stone-900" : "border-transparent text-stone-400 hover:text-stone-600"
               )}
               style={active ? { borderColor: tint[2] } : undefined}
             >
-              {s}
+              {module.label}
             </button>
           );
         })}
       </nav>
 
-      {/* 板块内容 */}
+      {/* 板块内容：按用户在该搭子下保存的模块配置渲染 */}
       <div className="mt-3 md:mt-5">
-        {activeTab === sections[0] && buddy?.custom && (
+        {activeModule?.type === "chat" && buddy?.custom && (
           <div className="space-y-3">
             {/* 自定义搭子第一栏只留聊天：关键信息由对话生成，整理进聊天里的手记卡 */}
             <CustomChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
-        {activeTab === sections[0] && buddyId === "study" && (
+        {activeModule?.type === "chat" && buddyId === "study" && (
           <div className="space-y-3">
             {/* 学习第一栏只留聊天：打卡、周进度、本周小结都放进聊天里的学习卡 */}
             <StudyChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
-        {activeTab === sections[0] && buddyId === "travel" && (
+        {activeModule?.type === "chat" && buddyId === "travel" && (
           <div className="space-y-3">
             {/* 旅游第一栏只留聊天：行程自动排进对话里，调整也直接在对话里说 */}
             <TravelChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
-        {activeTab === sections[0] && buddyId === "reading" && (
+        {activeModule?.type === "chat" && buddyId === "reading" && (
           <div className="space-y-3">
             {/* 读书第一栏只留聊天：进度、问题、讲书回应都放进聊天里的「在读」卡片 */}
             <ReadingChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
-        {activeTab === sections[0] && buddyId === "morning" && (
+        {activeModule?.type === "chat" && buddyId === "morning" && (
           <div className="space-y-3">
             {/* 早起第一栏只留聊天：打卡、本周 7 天、起床趋势都放进聊天里的打卡卡 */}
             <MorningChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
-        {activeTab === sections[0] && buddyId === "running" && (
+        {activeModule?.type === "chat" && buddyId === "running" && (
           <div className="space-y-3">
             {/* 跑步第一栏只留聊天：今日课表/周进度/身体信号都放进聊天里的训练卡 */}
             <RunningChatPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
           </div>
         )}
-        {activeTab === "解题" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}
-        {activeTab === "周报" && <WeekPanel tint={tint} projectTask={projectTask} />}
-        {activeTab === "记录" && buddyId === "running" && <RunningLogPanel profile={profile} tint={tint} />}
-        {activeTab === "身体" && buddyId === "running" && <RunningBodyPanel profile={profile} tint={tint} />}
-        {activeTab === "装备与知识" && buddyId === "running" && <RunningGearPanel profile={profile} tint={tint} />}
-        {activeTab === "灵感" && (
+        {activeModule?.type === "solve" && <SolvePanel tint={tint} persona={persona} projectTask={projectTask} />}
+        {activeModule?.type === "weekly" && <WeekPanel tint={tint} projectTask={projectTask} />}
+        {activeModule?.type === "running_log" && <RunningLogPanel profile={profile} tint={tint} />}
+        {activeModule?.type === "running_body" && <RunningBodyPanel profile={profile} tint={tint} />}
+        {activeModule?.type === "running_gear" && <RunningGearPanel profile={profile} tint={tint} />}
+        {activeModule?.type === "inspiration" && (
           <InspirationPanel buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
         )}
-        {activeTab === "书架" && <ShelfPanel profile={profile} tint={tint} />}
-        {activeTab === "笔记" && <ReadingNotesPanel tint={tint} />}
-        {activeTab === "资料" && buddy.custom && (
+        {activeModule?.type === "shelf" && <ShelfPanel profile={profile} tint={tint} />}
+        {activeModule?.type === "reading_notes" && <ReadingNotesPanel tint={tint} />}
+        {activeModule?.type === "custom_materials" && buddy.custom && (
           <CustomMaterialsPanel buddy={buddy} tint={tint} />
         )}
-        {activeTab === "协同" && (
+        {activeModule?.type === "collab" && (
           <CollabSection
             buddy={buddy}
             tint={tint}
@@ -456,19 +455,23 @@ export default function BuddySpace() {
             tasksLoading={tasksLoading || tasksFetching}
           />
         )}
-        {activeTab === "画像" && (buddyId === "running" ? (
+        {activeModule?.type === "profile" && (buddyId === "running" ? (
           <RunningProfilePanel profile={profile} tint={tint} />
         ) : (
           <ProfileSection buddy={buddy} profile={profile} tint={tint} projectTask={projectTask} />
         ))}
-        {activeTab === "清单" && buddy.extras?.checklist && (
+        {activeModule?.type === "checklist" && activeModule.builtin && buddy.extras?.checklist && (
           <ChecklistSection items={buddy.extras.checklist} tint={tint} projectTask={projectTask} />
         )}
-        {activeTab === "习惯" && buddy.extras?.habitChain && (
+        {activeModule?.type === "habit_chain" && buddy.extras?.habitChain && (
           <HabitChainPanel chain={buddy.extras.habitChain} tint={tint} />
         )}
-        {!["协同", "资料", "画像", "清单", "习惯", "解题", "周报", "灵感", "书架", "笔记", "记录", "身体", "装备与知识"].includes(activeTab) &&
-          activeTab !== sections[0] && <UpcomingSection buddy={buddy} tab={activeTab} tint={tint} />}
+        {activeModule && !activeModule.builtin && ["checklist", "notes", "tracker"].includes(activeModule.type) && (
+          <BuddyModulePanel key={activeModule.id} module={activeModule} buddy={buddy} tint={tint} />
+        )}
+        {activeModule?.type === "upcoming" && (
+          <UpcomingSection buddy={buddy} tab={activeModule.label} tint={tint} />
+        )}
       </div>
 
       {/* 新建独立协同小组：按主题创建多个小组，归属本搭子 */}
@@ -484,6 +487,15 @@ export default function BuddySpace() {
           setTab("协同");
           queryClient.invalidateQueries({ queryKey: ["tasks"] });
         }}
+      />
+
+      {/* 页面模块：每颗搭子独立保存自己的板块顺序和专业模块 */}
+      <BuddyModuleManager
+        open={modulesOpen}
+        onOpenChange={setModulesOpen}
+        buddy={buddy}
+        profile={profile}
+        tint={tint}
       />
 
       {/* 自定义搭子：随时用自然语言调整设计，保存后立即生效 */}
@@ -632,22 +644,21 @@ export default function BuddySpace() {
         className="fixed bottom-0 left-0 right-0 z-50 md:hidden flex items-stretch justify-around border-t border-stone-200 bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
         aria-label="搭子空间标签"
       >
-        {sections.map((s) => {
-          const active = s === activeTab;
-          const Icon = SECTION_ICONS[s] || Circle;
+        {modules.map((module) => {
+          const active = module.id === activeTab;
           return (
             <button
-              key={s}
+              key={module.id}
               type="button"
-              onClick={() => setTab(s)}
+              onClick={() => setTab(module.id)}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex min-h-[48px] min-w-[56px] flex-1 flex-col items-center justify-center gap-0.5 px-2 transition-colors",
+                "flex min-h-[48px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 transition-colors",
                 active ? "text-[#B89A6A]" : "text-stone-400 hover:text-stone-600"
               )}
             >
-              <Icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.6} />
-              <span className={cn("text-[11px]", active && "font-medium")}>{s}</span>
+              <BuddyModuleIcon module={module} className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.6} />
+              <span className={cn("max-w-full truncate text-[10px]", active && "font-medium")}>{module.label}</span>
             </button>
           );
         })}

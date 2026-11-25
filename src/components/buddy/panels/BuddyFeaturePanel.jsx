@@ -43,11 +43,12 @@ export default function BuddyFeaturePanel({ module, buddy, tint }) {
   const recognitionRef = useRef(null);
   const accent = tint?.[2] || "#384877";
   const isLanguage = module.mode === "language";
-  const speechLang = /日语|Japanese/i.test(`${module.label} ${module.instructions}`) ? "ja-JP"
-    : /韩语|Korean/i.test(`${module.label} ${module.instructions}`) ? "ko-KR"
-      : /法语|French/i.test(`${module.label} ${module.instructions}`) ? "fr-FR"
-        : /西班牙语|Spanish/i.test(`${module.label} ${module.instructions}`) ? "es-ES"
-          : "en-US";
+  const speechLang = !isLanguage ? "zh-CN"
+    : /日语|Japanese/i.test(`${module.label} ${module.instructions}`) ? "ja-JP"
+      : /韩语|Korean/i.test(`${module.label} ${module.instructions}`) ? "ko-KR"
+        : /法语|French/i.test(`${module.label} ${module.instructions}`) ? "fr-FR"
+          : /西班牙语|Spanish/i.test(`${module.label} ${module.instructions}`) ? "es-ES"
+            : "en-US";
   const thread = Array.isArray(state?.feature_threads?.[module.id]) ? state.feature_threads[module.id] : [];
   const artifact = state?.feature_artifacts?.[module.id] && typeof state.feature_artifacts[module.id] === "object"
     ? state.feature_artifacts[module.id]
@@ -153,6 +154,10 @@ export default function BuddyFeaturePanel({ module, buddy, tint }) {
   const send = async (override) => {
     const text = String(typeof override === "string" ? override : input).trim();
     if (!text || sending || calling) return;
+    if (listening) {
+      recognitionRef.current?.stop?.();
+      setListening(false);
+    }
     const history = thread
       .filter((message) => message && (message.role === "user" || message.role === "assistant"))
       .slice(-8)
@@ -447,33 +452,33 @@ export default function BuddyFeaturePanel({ module, buddy, tint }) {
             value={input}
             onChange={(event) => setInput(event.target.value.slice(0, 2000))}
             rows={2}
-            placeholder={module.placeholder || (isLanguage ? "用英语回答，或点麦克风说…" : "说说你的需求…")}
+            placeholder={listening ? "正在听，说完再点一下麦克风…" : (module.placeholder || (isLanguage ? "用英语回答，或点麦克风说…" : "说说你的需求，或点麦克风…"))}
             className="w-full resize-none bg-transparent px-2 py-1 text-[12px] leading-relaxed text-stone-700 placeholder:text-stone-400 focus:outline-none"
           />
           <div className="flex items-center justify-between gap-2 px-1">
             <span className="truncate text-[9px] text-stone-400">
-              {isLanguage
-                ? (listening ? "正在听，说完点一下麦克风停止" : "可朗读英文，也可点麦克风说英语")
-                : (module.web_research !== false ? "优先参考资料，联网核对来源" : "优先参考上面的资料")}
+              {listening
+                ? "正在听，说完点一下麦克风停止"
+                : isLanguage
+                  ? "可朗读英文，也可点麦克风说英语"
+                  : (module.web_research !== false ? "可语音输入；优先参考资料，联网核对来源" : "可语音输入，优先参考上面的资料")}
             </span>
             <div className="flex shrink-0 items-center gap-1.5">
-              {isLanguage && (
-                <button
-                  type="button"
-                  onClick={toggleListening}
-                  disabled={busy}
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-40",
-                    listening
-                      ? "border-rose-200 bg-rose-50 text-rose-500"
-                      : "border-stone-200 text-stone-500 hover:border-stone-300 hover:text-stone-700"
-                  )}
-                  aria-label={listening ? "停止语音输入" : "语音输入"}
-                  title={listening ? "停止语音输入" : "语音输入"}
-                >
-                  {listening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={toggleListening}
+                disabled={busy}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-40",
+                  listening
+                    ? "border-rose-200 bg-rose-50 text-rose-500"
+                    : "border-stone-200 text-stone-500 hover:border-stone-300 hover:text-stone-700"
+                )}
+                aria-label={listening ? "停止语音输入" : "语音输入"}
+                title={listening ? "停止语音输入" : "语音输入"}
+              >
+                {listening ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+              </button>
               <button
                 type="button"
                 onClick={() => send()}

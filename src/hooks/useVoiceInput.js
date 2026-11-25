@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -57,6 +57,14 @@ export function useVoiceInput(onTranscript) {
     if (isListening) stop();
     else start();
   };
+
+  useEffect(() => () => {
+    try {
+      recognitionRef.current?.abort?.();
+    } catch {
+      // 页面卸载时忽略识别器清理错误
+    }
+  }, []);
 
   return { isListening, toggle, stop, supported };
 }

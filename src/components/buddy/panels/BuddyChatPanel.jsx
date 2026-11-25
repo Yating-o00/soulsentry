@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, ChevronDown, FileText, Loader2, Paperclip, Users2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, FileText, Loader2, Mic, MicOff, Paperclip, Users2, X } from "lucide-react";
 import { toast } from "sonner";
 import { httpRequest } from "@/api/httpClient";
 import { applyBuddyCapture } from "@/lib/buddyCapture";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { BuddyMsg, useBuddyAgent, useBuddyState, todayKey } from "./shared";
 import { PERSONAS, DEFAULT_PERSONA } from "@/lib/buddies";
 import {
@@ -33,6 +34,9 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask, arti
   const fileRef = useRef(null);
   const composerRef = useRef(null);
   const greetedRef = useRef(false);
+  const { isListening, toggle: toggleVoice, stop: stopVoice } = useVoiceInput((transcript) => {
+    setInput((prev) => `${prev}${prev && !/\s$/.test(prev) ? " " : ""}${transcript}`);
+  });
 
   // 每颗搭子独立人格：未单独设置时用搭子类型的默认人格
   const activePersonaKey = profile?.persona || buddy.defaultPersona || DEFAULT_PERSONA;
@@ -172,6 +176,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask, arti
   const send = async () => {
     const text = input.trim();
     if ((!text && attachments.length === 0) || sending || uploading) return;
+    stopVoice();
     const sentAttachments = attachments;
     setInput("");
     setAttachments([]);
@@ -603,6 +608,19 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask, arti
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </button>
+          <button
+            type="button"
+            onClick={toggleVoice}
+            disabled={sending || uploading}
+            aria-label={isListening ? "停止语音输入" : "语音输入"}
+            aria-pressed={isListening}
+            title={isListening ? "停止语音输入，说完再点一下" : "用语音输入"}
+            className={`mb-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-50 ${
+              isListening ? "bg-rose-50 text-rose-500" : "text-stone-400 hover:text-stone-600"
+            }`}
+          >
+            {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </button>
           <textarea
             ref={composerRef}
             rows={1}
@@ -621,7 +639,7 @@ export default function BuddyChatPanel({ buddy, profile, tint, projectTask, arti
                 handleFiles(files);
               }
             }}
-            placeholder={CAPTURE_PLACEHOLDERS[buddy.id] || "聊两句，或上传截图…"}
+            placeholder={isListening ? "正在听，说完再点一下麦克风…" : (CAPTURE_PLACEHOLDERS[buddy.id] || "聊两句，或上传截图…")}
             className="max-h-[120px] min-w-0 flex-1 resize-none bg-transparent py-2.5 text-[14px] leading-5 text-stone-800 placeholder:text-stone-400 focus:outline-none"
           />
         </div>

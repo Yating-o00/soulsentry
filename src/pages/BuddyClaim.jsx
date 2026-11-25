@@ -112,33 +112,36 @@ export default function BuddyClaim() {
     }, 900);
   };
 
-  const claim = async () => {
+  const claim = () => {
     if (claiming) return;
     setClaiming(true);
-    try {
-      await httpRequest(`/api/buddies/${buddy.id}/claim`, {
-        method: "POST",
-        body: {
-          answers,
-          persona,
-          plan_title: buddy.planTitle(answers),
-          plan_lines: buddy.planLines(answers),
-        },
+
+    const target = `${createPageUrl("BuddySpace")}?buddy=${buddy.id}&tab=协同&autoCollab=1`;
+    // 先跳转再后台完成认领：避免后端/网络波动时用户卡在原页面看到 Failed to fetch
+    navigate(target, { replace: true });
+
+    httpRequest(`/api/buddies/${buddy.id}/claim`, {
+      method: "POST",
+      body: {
+        answers,
+        persona,
+        plan_title: buddy.planTitle(answers),
+        plan_lines: buddy.planLines(answers),
+      },
+    })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ["buddies"] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        toast.success(`${buddy.name}开始陪你了`);
+      })
+      .catch((e) => {
+        if (e?.status === 409) {
+          toast("这颗搭子已经在陪你啦");
+        } else {
+          console.error("[BuddyClaim] claim failed:", e);
+          toast.error(e?.message || "认领请求未完成，进入空间后刷新试试");
+        }
       });
-      queryClient.invalidateQueries({ queryKey: ["buddies"] });
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast.success(`${buddy.name}开始陪你了`);
-      // 认领后直接落到协同栏，并自动把首个项目开成协同讨论，省掉「切 tab + 开启协同」两次点击
-      navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}&tab=协同&autoCollab=1`, { replace: true });
-    } catch (e) {
-      if (e?.status === 409) {
-        toast("这颗搭子已经在陪你啦");
-        navigate(`${createPageUrl("BuddySpace")}?buddy=${buddy.id}&tab=协同&autoCollab=1`, { replace: true });
-      } else {
-        toast.error(e?.message || "认领失败，请再试一次");
-        setClaiming(false);
-      }
-    }
   };
 
   return (

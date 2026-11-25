@@ -464,51 +464,88 @@ buddiesRouter.put("/custom/:id", async (req, res) => {
 });
 
 // DELETE /api/buddies/custom/:id —— 删除自己设计的搭子（项目和协同保留，转为普通内容）
+// 删除是幂等的：先解绑任务和资料，再移除搭子配置；如果上次中途被重启打断，重试即可完成。
 buddiesRouter.delete("/custom/:id", async (req, res) => {
   const customId = req.params.id;
-  const { pref, extra } = await readExtraFields(req.user.id);
+  const { extra } = await readExtraFields(req.user.id);
   const existing = extra.custom_buddies && typeof extra.custom_buddies === "object" ? { ...extra.custom_buddies } : {};
-  if (!existing[customId]) {
-    return res.status(404).json({ error: "NOT_FOUND", message: "这颗自定义搭子不存在" });
+  const hadCustom = Boolean(existing[customId]);
+
+  let detachedTasks = 0;
+  try {
+    // SQLite JSON1 一次更新完成解绑，避免逐个 update 让删除请求拖到网关超时。
+    detachedTasks = await prisma.$executeRaw`
+      UPDATE "Task"
+      SET "metadata" = json_remove("metadata", '$._extraFields.buddy_id', '$._extraFields.buddy_name')
+      WHERE "userId" = ${req.user.id}
+        AND json_extract("metadata", '$._extraFields.buddy_id') = ${customId}
+    `;
+  } catch (error) {
+    console.warn("[buddies/custom] JSON 解绑任务失败，回退逐条处理:", error?.message || error);
+    try {
+      const tasks = await prisma.task.findMany({
+        where: { userId: req.user.id },
+        select: { id: true, metadata: true },
+      });
+      for (const task of tasks) {
+        const extraFields = task.metadata?._extraFields;
+        if (!extraFields || extraFields.buddy_id !== customId) continue;
+        const nextExtraFields = { ...extraFields };
+        delete nextExtraFields.buddy_id;
+        delete nextExtraFields.buddy_name;
+        await prisma.task.update({
+          where: { id: task.id },
+          data: {
+            metadata: {
+              ...(task.metadata && typeof task.metadata === "object" ? task.metadata : {}),
+              _extraFields: nextExtraFields,
+            },
+          },
+        });
+        detachedTasks += 1;
+      }
+    } catch (fallbackError) {
+      console.warn("[buddies/custom] 回退解绑任务失败:", fallbackError?.message || fallbackError);
+    }
   }
-  const profiles = extra.buddy_profiles && typeof extra.buddy_profiles === "object" ? { ...extra.buddy_profiles } : {};
-  const profile = profiles[customId];
-  delete existing[customId];
-  delete profiles[customId];
-  await writeExtraFields(req.user.id, pref, { custom_buddies: existing, buddy_profiles: profiles });
-  await prisma.buddyMaterial.deleteMany({ where: { userId: req.user.id, buddyId: customId } }).catch((error) => {
+
+  // 先清资料（包括功能专属资料），即使后面进程重启，重试仍能接着完成。
+  await prisma.buddyMaterial.deleteMany({
+    where: {
+      userId: req.user.id,
+      OR: [
+        { buddyId: customId },
+        { buddyId: { startsWith: `${customId}::feature::` } },
+      ],
+    },
+  }).catch((error) => {
     console.warn("[buddies/custom] 删除搭子资料失败:", error?.message || error);
   });
 
-  // 关联的项目/协同保留下来，但摘掉已删除搭子的绑定，避免卡片继续跳到不存在的搭子空间
-  let detachedTasks = 0;
-  try {
-    const tasks = await prisma.task.findMany({
-      where: { userId: req.user.id },
-      select: { id: true, metadata: true },
-    });
-    for (const task of tasks) {
-      const extraFields = task.metadata?._extraFields;
-      if (!extraFields || extraFields.buddy_id !== customId) continue;
-      const nextExtraFields = { ...extraFields };
-      delete nextExtraFields.buddy_id;
-      delete nextExtraFields.buddy_name;
-      await prisma.task.update({
-        where: { id: task.id },
-        data: {
-          metadata: {
-            ...(task.metadata && typeof task.metadata === "object" ? task.metadata : {}),
-            _extraFields: nextExtraFields,
-          },
-        },
-      });
-      detachedTasks += 1;
-    }
-  } catch (error) {
-    console.warn("[buddies/custom] 解除项目/协同绑定失败:", error?.message || error);
-  }
+  // 重新读取最新偏好，避免删除期间的其他写入（对话/设置）被旧 metadata 覆盖。
+  const latest = await readExtraFields(req.user.id);
+  const latestExtra = latest.extra;
+  const latestCustom = latestExtra.custom_buddies && typeof latestExtra.custom_buddies === "object"
+    ? { ...latestExtra.custom_buddies }
+    : {};
+  const profiles = latestExtra.buddy_profiles && typeof latestExtra.buddy_profiles === "object"
+    ? { ...latestExtra.buddy_profiles }
+    : {};
+  const hadProfile = Boolean(profiles[customId]);
+  delete latestCustom[customId];
+  delete profiles[customId];
+  await writeExtraFields(req.user.id, latest.pref, {
+    custom_buddies: latestCustom,
+    buddy_profiles: profiles,
+  });
 
-  return res.json({ ok: true, had_profile: Boolean(profile), detached_tasks: detachedTasks });
+  return res.json({
+    ok: true,
+    had_profile: hadProfile,
+    had_custom: hadCustom,
+    already_deleted: !hadCustom && !hadProfile,
+    detached_tasks: Number(detachedTasks) || 0,
+  });
 });
 
 /* ---------- 专属搭子资料：让自定义搭子在特定方向更专业 ---------- */

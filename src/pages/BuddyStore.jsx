@@ -25,8 +25,29 @@ export default function BuddyStore() {
   const deleteBuddy = async () => {
     if (!deleteTarget || deleting) return;
     setDeleting(true);
+    let retryingNotified = false;
     try {
-      const result = await httpRequest(`/api/buddies/custom/${deleteTarget.id}`, { method: "DELETE" });
+      let result = null;
+      let lastError = null;
+      // 删除接口是幂等的。网关重启/部署窗口里可能短暂 502，自动重试几次而不是把 HTML 报错丢给用户。
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        try {
+          result = await httpRequest(`/api/buddies/custom/${deleteTarget.id}`, { method: "DELETE" });
+          break;
+        } catch (error) {
+          lastError = error;
+          const transient = error?.data?.gateway
+            || [502, 503, 504].includes(error?.status)
+            || /Failed to fetch|NetworkError|Load failed|network.*error/i.test(error?.message || "");
+          if (!transient || attempt === 3) throw error;
+          if (!retryingNotified) {
+            retryingNotified = true;
+            toast.info("服务刚刚重启，正在自动重试删除…");
+          }
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+        }
+      }
+      if (!result) throw lastError || new Error("删除失败，再试一次");
       queryClient.invalidateQueries({ queryKey: ["buddies", "mine"] });
       queryClient.invalidateQueries({ queryKey: ["buddies"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });

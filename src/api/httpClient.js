@@ -73,11 +73,16 @@ export async function httpRequest(path, { method = "GET", body, headers = {} } =
   try {
     data = raw ? JSON.parse(raw) : null;
   } catch (_parseError) {
-    // 后端可能返回 HTML（网关错误页），给前端一个可读的报错
+    // 网关 502/504 或 HTML 错误页统一转成用户能理解的提示，不把整段 HTML 弹给用户；
+    // 具体原始内容仍放在 error.data 里，方便开发排查。
     const snippet = raw ? raw.slice(0, 120).replace(/\s+/g, " ") : "";
-    const error = new Error(`服务端返回非 JSON 响应（${response.status}）：${snippet}`);
+    const html = /^\s*</.test(raw);
+    const gateway = [502, 503, 504].includes(response.status) || html;
+    const error = new Error(gateway
+      ? "服务正在重启或暂时不可用，请稍后重试"
+      : `服务端返回非 JSON 响应（${response.status}）：${snippet}`);
     error.status = response.status;
-    error.data = { raw, html: /^\s*</.test(raw) };
+    error.data = { raw, html, gateway };
     throw error;
   }
 

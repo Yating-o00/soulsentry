@@ -888,6 +888,7 @@ const layoutModuleShape = z.object({
   placeholder: z.string().trim().max(60).optional(),
   examples: z.array(z.string().trim().min(1).max(60)).max(4).optional(),
   web_research: z.boolean().optional(),
+  mode: z.enum(["guide", "language"]).optional(),
 });
 
 const layoutModuleSchema = z.object({
@@ -911,6 +912,7 @@ function storedLayoutModule(item) {
     ...(item.placeholder ? { placeholder: item.placeholder } : {}),
     ...(item.examples ? { examples: item.examples } : {}),
     ...(typeof item.web_research === "boolean" ? { web_research: item.web_research } : {}),
+    ...(item.mode ? { mode: item.mode } : {}),
   };
 }
 
@@ -1027,16 +1029,35 @@ function sanitizeFeatureArtifact(raw) {
     .filter((step) => step.title || step.detail);
   const title = cleanFeatureText(raw.title, 32);
   const subtitle = cleanFeatureText(raw.subtitle, 80);
-  if (!title && !subtitle && cards.length === 0 && steps.length === 0) return null;
+  const scenario = cleanFeatureText(raw.scenario, 120);
+  const phrases = (Array.isArray(raw.phrases) ? raw.phrases : [])
+    .slice(0, 6)
+    .map((phrase) => ({
+      en: cleanFeatureText(phrase?.en, 160),
+      zh: cleanFeatureText(phrase?.zh, 160),
+      tip: cleanFeatureText(phrase?.tip, 80),
+    }))
+    .filter((phrase) => phrase.en || phrase.zh);
+  const feedback = raw.feedback && typeof raw.feedback === "object"
+    ? {
+        good: cleanFeatureText(raw.feedback.good, 160),
+        improve: cleanFeatureText(raw.feedback.improve, 160),
+        next: cleanFeatureText(raw.feedback.next, 120),
+      }
+    : null;
+  if (!title && !subtitle && cards.length === 0 && steps.length === 0 && phrases.length === 0 && !feedback) return null;
   return {
     title: title || "功能结果",
     subtitle,
+    scenario,
     badges: (Array.isArray(raw.badges) ? raw.badges : [])
       .map((badge) => cleanFeatureText(badge, 16))
       .filter(Boolean)
       .slice(0, 5),
     cards,
     steps,
+    phrases,
+    feedback,
     tips: (Array.isArray(raw.tips) ? raw.tips : [])
       .map((tip) => cleanFeatureText(tip, 120))
       .filter(Boolean)
@@ -1533,6 +1554,33 @@ function buildAgentPrompt(buddyId, mode, payload, personaTone, answers, buddyMet
             .map((m) => `${m.role === "user" ? "用户" : buddyName}：${String(m.content).slice(0, 600)}`)
             .join("\n")
         : "";
+      if (feature.mode === "language") {
+        const targetLanguage = /日语|Japanese/i.test(`${feature.label} ${feature.instructions}`) ? "日语"
+          : /韩语|Korean/i.test(`${feature.label} ${feature.instructions}`) ? "韩语"
+            : /法语|French/i.test(`${feature.label} ${feature.instructions}`) ? "法语"
+              : /西班牙语|Spanish/i.test(`${feature.label} ${feature.instructions}`) ? "西班牙语"
+                : "英语";
+        return {
+          systemPrompt: `${base}你现在是双语口语陪练。先用自然、地道的${targetLanguage}回应用户（1-3 句），再给出准确中文翻译；根据用户刚才的表达给一个具体纠错或升级说法；最后只用${targetLanguage}的一个问题把对话继续下去。不要一次讲太多，不要替用户编造经历。用户上传的教材和网页检索结果可作为场景词汇、表达和纠错依据。`,
+          prompt: `用户刚说：${message || `（用户还没有开口，先由你发起一个简单的${targetLanguage}对话）`}\n${history ? `此前在这个功能里的对话：\n${history}\n` : ""}${context ? `用户当前上下文：${context}\n` : ""}\n请输出严格 JSON，不要输出 Markdown 代码块：
+{
+  "reply": "先用${targetLanguage}回应或追问（1-3句，自然口语）",
+  "translation": "reply 的忠实中文翻译",
+  "artifact": {
+    "title": "本轮练习主题（12字内）",
+    "subtitle": "场景说明（30字内）",
+    "scenario": "当前对话场景（40字内）",
+    "phrases": [
+      {"en": "实用${targetLanguage}表达", "zh": "中文意思", "tip": "发音或用法提示（30字内）"}
+    ],
+    "feedback": {"good": "用户这次做得好的具体点（40字内）", "improve": "一个可改进点（40字内）", "next": "下一步建议（30字内）"},
+    "tips": ["口语小提醒（40字内）"],
+    "followups": ["用户可以接着说的一句${targetLanguage}（30字内）"]
+  }
+}
+要求：phrases 2-4 条且必须双语；feedback 要针对用户这次真实表达，不能空泛；reply 用${targetLanguage}，translation 用中文且忠实；每轮只推进一个交流目标；如果用户用中文回答，先用${targetLanguage}复述并鼓励用${targetLanguage}说。不要把来源链接写进 artifact。`,
+        };
+      }
       return {
         systemPrompt: `${base}你现在在执行用户自定义的功能「${feature.label || "智能功能"}」。这个功能的设定：${feature.instructions || "根据用户需求给出具体、可执行的结果。"}${feature.hint ? `入口说明：${feature.hint}。` : ""}请严格围绕功能设定和用户需求回答。有参考资料时优先依据资料；资料没有覆盖的部分，可以给一般性的专业参考，但要明确说明依据边界，不要编造用户数据、事实或医疗/安全结论。结果必须让用户能直接照着做：先给结论，再给具体步骤和关键提醒。回答用简体中文，内容要有设计感，适合用卡片、图文和步骤清单呈现。`,
         prompt: `用户需求：${message || "（用户没有填写具体需求）"}\n${history ? `此前在这个功能里的对话：\n${history}\n` : ""}${context ? `用户当前上下文：${context}\n` : ""}\n请输出严格 JSON，不要输出 Markdown 代码块：
@@ -1796,6 +1844,7 @@ buddiesRouter.post("/:id/agent", aiRequestContext, async (req, res) => {
       instructions: feature.instructions,
       placeholder: feature.placeholder,
       web_research: feature.web_research !== false,
+      mode: feature.mode === "language" ? "language" : "guide",
     } : null,
   } : {};
   const lastUserText = parsed.data.mode === "feature"
@@ -1883,6 +1932,7 @@ buddiesRouter.post("/:id/agent", aiRequestContext, async (req, res) => {
       return res.json({
         data: {
           reply,
+          translation: feature.mode === "language" ? String(data?.translation || "").trim().slice(0, 1200) : "",
           artifact,
           references: sanitizeFeatureReferences(webReferences),
         },

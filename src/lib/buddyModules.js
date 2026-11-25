@@ -328,7 +328,10 @@ function safeCustomModule(entry) {
     preset: String(entry.preset || "").slice(0, 40),
     instructions: String(entry.instructions || "").slice(0, 800),
     placeholder: String(entry.placeholder || "").slice(0, 60),
-    ...(type === "assistant" ? { web_research: entry.web_research !== false } : {}),
+    ...(type === "assistant" ? {
+      web_research: entry.web_research !== false,
+      mode: entry.mode === "language" ? "language" : "guide",
+    } : {}),
     ...(items ? { items } : {}),
     ...(examples ? { examples } : {}),
     builtin: false,
@@ -411,7 +414,7 @@ export function serializeArchivedModules(modules = []) {
 
 export function createCustomModule({
   label, type, unit = "", hint = "", instructions = "", placeholder = "", icon = "", examples = [],
-  webResearch = true,
+  webResearch = true, featureMode = "guide",
 } = {}) {
   const cleanLabel = String(label || "").trim().slice(0, 12);
   if (!cleanLabel || !MODULE_TYPES.has(type)) return null;
@@ -437,7 +440,10 @@ export function createCustomModule({
     instructions: type === "assistant" ? String(instructions || "").trim().slice(0, 800) : "",
     placeholder: type === "assistant" ? String(placeholder || "").trim().slice(0, 60) : "",
     items: type === "checklist" ? [] : undefined,
-    ...(type === "assistant" ? { web_research: webResearch !== false } : {}),
+    ...(type === "assistant" ? {
+      web_research: webResearch !== false,
+      mode: featureMode === "language" ? "language" : "guide",
+    } : {}),
     ...(type === "assistant" && cleanExamples.length > 0 ? { examples: cleanExamples } : {}),
     builtin: false,
     locked: false,

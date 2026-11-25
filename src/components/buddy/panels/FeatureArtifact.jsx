@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Check, Clock3, ExternalLink, Globe2, Lightbulb, Sparkles } from "lucide-react";
+import { Check, Clock3, ExternalLink, Globe2, Lightbulb, Sparkles, Volume2 } from "lucide-react";
 
 const domainOf = (url) => {
   try {
@@ -14,7 +14,7 @@ const domainOf = (url) => {
  * 用图文头图 + 横向方案卡 + 可勾选操作步骤 + 来源卡片来呈现，
  * 避免把可执行的内容铺成一大段纯文字。
  */
-export default function FeatureArtifact({ artifact, tint, onFollowup }) {
+export default function FeatureArtifact({ artifact, tint, featureMode = "guide", onFollowup, onSpeak }) {
   const [doneSteps, setDoneSteps] = useState(() => new Set());
   const accent = tint?.[2] || "#384877";
   const cards = Array.isArray(artifact?.cards) ? artifact.cards : [];
@@ -23,6 +23,10 @@ export default function FeatureArtifact({ artifact, tint, onFollowup }) {
   const followups = Array.isArray(artifact?.followups) ? artifact.followups : [];
   const references = (Array.isArray(artifact?.references) ? artifact.references : [])
     .filter((reference) => reference?.url);
+  const phrases = (Array.isArray(artifact?.phrases) ? artifact.phrases : [])
+    .filter((phrase) => phrase?.en || phrase?.zh);
+  const feedback = artifact?.feedback && typeof artifact.feedback === "object" ? artifact.feedback : null;
+  const languageMode = featureMode === "language" || phrases.length > 0 || Boolean(feedback);
   const heroImage = references.find((reference) => reference.image)?.image || "";
   const doneCount = steps.filter((_, index) => doneSteps.has(index)).length;
   const progress = steps.length ? (doneCount / steps.length) * 100 : 0;
@@ -71,6 +75,9 @@ export default function FeatureArtifact({ artifact, tint, onFollowup }) {
           </div>
           <h3 className="mt-1.5 text-[18px] font-semibold leading-snug">{artifact.title}</h3>
           {artifact.subtitle && <p className="mt-1 text-[11px] leading-relaxed text-white/80">{artifact.subtitle}</p>}
+          {languageMode && artifact.scenario && (
+            <p className="mt-1 text-[10px] leading-relaxed text-white/65">场景：{artifact.scenario}</p>
+          )}
           {badges.length > 0 && (
             <div className="mt-2.5 flex flex-wrap gap-1">
               {badges.map((badge) => (
@@ -84,6 +91,59 @@ export default function FeatureArtifact({ artifact, tint, onFollowup }) {
       </div>
 
       <div className="space-y-3.5 p-3.5">
+        {languageMode && phrases.length > 0 && (
+          <div>
+            <div className="mb-1.5 text-[10px] tracking-widest text-stone-400">双语表达</div>
+            <div className="space-y-1.5">
+              {phrases.map((phrase, index) => (
+                <div key={`${phrase.en}-${index}`} className="rounded-xl border border-stone-100 bg-[#FAF9F7] p-2.5">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] font-medium leading-snug text-stone-800">{phrase.en}</p>
+                      <p className="mt-0.5 text-[10px] leading-relaxed text-stone-500">{phrase.zh}</p>
+                      {phrase.tip && <p className="mt-1 text-[9px] leading-relaxed text-stone-400">{phrase.tip}</p>}
+                    </div>
+                    {phrase.en && (
+                      <button
+                        type="button"
+                        onClick={() => onSpeak?.(phrase.en)}
+                        aria-label={`朗读 ${phrase.en}`}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-stone-400 hover:text-stone-700"
+                      >
+                        <Volume2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {languageMode && feedback && (
+          <div className="space-y-1.5">
+            <div className="text-[10px] tracking-widest text-stone-400">本轮反馈</div>
+            {feedback.good && (
+              <div className="rounded-xl bg-[#eef6ef] px-3 py-2">
+                <span className="text-[9px] font-medium text-[#456852]">做得好</span>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-stone-600">{feedback.good}</p>
+              </div>
+            )}
+            {feedback.improve && (
+              <div className="rounded-xl bg-[#fbf7ee] px-3 py-2">
+                <span className="text-[9px] font-medium text-[#8a6f48]">可以更好</span>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-stone-600">{feedback.improve}</p>
+              </div>
+            )}
+            {feedback.next && (
+              <div className="rounded-xl bg-[#eef2f8] px-3 py-2">
+                <span className="text-[9px] font-medium text-[#4d6180]">下一步</span>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-stone-600">{feedback.next}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {cards.length > 0 && (
           <div>
             <div className="mb-1.5 text-[10px] tracking-widest text-stone-400">方案参考</div>

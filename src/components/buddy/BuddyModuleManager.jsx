@@ -22,10 +22,9 @@ const CUSTOM_TYPES = [
   { value: "tracker", label: "追踪", hint: "记录数值" },
 ];
 
-const FEATURE_EXAMPLES = [
-  "增加一个个性化健身指导入口，结合我上传的训练方案，按目标和器械条件排计划",
-  "增加一个菜单入口，按菜系给菜谱参考，我问做法时能给具体步骤",
-  "增加一个项目方案入口，帮我拆目标、排节奏、做复盘",
+const FEATURE_MODES = [
+  { value: "guide", label: "内容指导" },
+  { value: "language", label: "双语口语" },
 ];
 
 function ModuleRow({ module, index, modules, tint, onMove, onRemove }) {
@@ -45,7 +44,9 @@ function ModuleRow({ module, index, modules, tint, onMove, onRemove }) {
           )}
         </div>
         <p className="mt-0.5 truncate text-[9px] text-stone-400">
-          {module.hint || (moduleTypeLabel(module.type) !== module.label ? moduleTypeLabel(module.type) : "")}
+          {module.type === "assistant" && module.mode === "language"
+            ? "双语口语"
+            : module.hint || (moduleTypeLabel(module.type) !== module.label ? moduleTypeLabel(module.type) : "")}
         </p>
       </div>
       {!module.locked && (
@@ -122,14 +123,10 @@ export default function BuddyModuleManager({ open, onOpenChange, buddy, profile,
   const [customLabel, setCustomLabel] = useState("");
   const [customType, setCustomType] = useState("checklist");
   const [customUnit, setCustomUnit] = useState("");
-  const [customHint, setCustomHint] = useState("");
   const [customInstructions, setCustomInstructions] = useState("");
   const [customPlaceholder, setCustomPlaceholder] = useState("");
-  const [customIcon, setCustomIcon] = useState("");
-  const [customExamples, setCustomExamples] = useState([]);
+  const [customFeatureMode, setCustomFeatureMode] = useState("guide");
   const [customWebResearch, setCustomWebResearch] = useState(true);
-  const [featureBrief, setFeatureBrief] = useState("");
-  const [parsingFeature, setParsingFeature] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // 只在打开时读取一次布局：自定义搭子的 buddy 对象每次父级渲染都会重建，
@@ -142,13 +139,10 @@ export default function BuddyModuleManager({ open, onOpenChange, buddy, profile,
     setCustomLabel("");
     setCustomType("checklist");
     setCustomUnit("");
-    setCustomHint("");
     setCustomInstructions("");
     setCustomPlaceholder("");
-    setCustomIcon("");
-    setCustomExamples([]);
+    setCustomFeatureMode("guide");
     setCustomWebResearch(true);
-    setFeatureBrief("");
   }, [open, buddy?.id]);
 
   const catalog = useMemo(() => moduleCatalogFor(buddy), [buddy]);
@@ -197,49 +191,30 @@ export default function BuddyModuleManager({ open, onOpenChange, buddy, profile,
     setModules((current) => current.filter((module) => module.id !== id || module.locked));
   };
 
-  const parseFeature = async () => {
-    const text = featureBrief.trim();
-    if (!text || parsingFeature) return;
-    setParsingFeature(true);
-    try {
-      const result = await httpRequest(`/api/buddies/${buddy.id}/features/parse`, {
-        method: "POST",
-        body: { text },
-      });
-      const feature = result?.feature;
-      if (!feature) throw new Error("empty feature");
-      setCustomType("assistant");
-      setCustomLabel(String(feature.label || "").slice(0, 12));
-      setCustomHint(String(feature.hint || "").slice(0, 80));
-      setCustomInstructions(String(feature.instructions || "").slice(0, 800));
-      setCustomPlaceholder(String(feature.placeholder || "").slice(0, 60));
-      setCustomIcon(String(feature.icon || "").slice(0, 24));
-      setCustomExamples(Array.isArray(feature.examples) ? feature.examples.slice(0, 4) : []);
-      setCustomOpen(true);
-      setFeatureBrief("");
-      toast.success(result.degraded ? "已生成功能草稿，可以再改改" : "功能已生成，确认后添加");
-    } catch (error) {
-      toast.error(error?.data?.message || error?.message || "这句话还没法变成功能，换个说法试试");
-    } finally {
-      setParsingFeature(false);
-    }
-  };
-
   const addCustom = () => {
-    if (customType === "assistant" && !customInstructions.trim()) {
-      toast.error("先说说这个功能怎么帮你");
+    const description = customInstructions.trim();
+    if (customType === "assistant" && !description) {
+      toast.error("先写一句这个功能怎么帮你");
       return;
     }
+    const icon = customType === "assistant"
+      ? (customFeatureMode === "language" ? "messages-square"
+        : /(菜单|菜谱|厨房|做饭|烹饪|饮食)/.test(`${customLabel} ${description}`) ? "chef-hat"
+          : /(健身|训练|运动|增肌|减脂|力量|康复)/.test(`${customLabel} ${description}`) ? "dumbbell"
+            : /(预算|记账|理财|花费)/.test(`${customLabel} ${description}`) ? "wallet"
+              : /(计划|方案|复盘)/.test(`${customLabel} ${description}`) ? "briefcase"
+                : "sparkles")
+      : "";
     const created = createCustomModule({
       label: customLabel,
       type: customType,
       unit: customUnit,
-      hint: customHint,
-      instructions: customInstructions,
+      hint: customType === "assistant" ? description.slice(0, 80) : "",
+      instructions: description,
       placeholder: customPlaceholder,
-      icon: customIcon,
-      examples: customExamples,
+      icon,
       webResearch: customWebResearch,
+      featureMode: customFeatureMode,
     });
     if (!created) {
       toast.error("先给这个模块起个名字");
@@ -256,11 +231,9 @@ export default function BuddyModuleManager({ open, onOpenChange, buddy, profile,
     setModules((current) => [...current, created]);
     setCustomLabel("");
     setCustomUnit("");
-    setCustomHint("");
     setCustomInstructions("");
     setCustomPlaceholder("");
-    setCustomIcon("");
-    setCustomExamples([]);
+    setCustomFeatureMode("guide");
     setCustomWebResearch(true);
     setCustomOpen(false);
     toast.success(created.type === "assistant" ? "功能已添加，保存后可以在功能页上传参考资料" : "模块已添加，记得保存");
@@ -425,53 +398,58 @@ export default function BuddyModuleManager({ open, onOpenChange, buddy, profile,
                 ))}
               </div>
               {customType === "assistant" && (
-                <div className="mt-2 rounded-lg border border-stone-200 bg-white p-2.5">
-                  <div className="text-[10px] font-medium text-stone-600">用一句话描述，让搭子生成功能</div>
-                  <textarea
-                    value={featureBrief}
-                    onChange={(event) => setFeatureBrief(event.target.value.slice(0, 600))}
-                    rows={2}
-                    placeholder="例如：增加一个菜单入口，能按菜系给菜谱参考，也能教我做菜"
-                    className="mt-1.5 w-full resize-none rounded-lg border border-stone-200 bg-[#FAF9F7] px-2.5 py-2 text-[11px] leading-relaxed text-stone-700 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none"
-                  />
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                    {FEATURE_EXAMPLES.slice(0, 2).map((example) => (
+                <p className="mt-2 text-[9px] leading-relaxed text-stone-400">
+                  填写功能名称和描述，添加后即可在搭子里使用。
+                </p>
+              )}
+              {customType === "assistant" && (
+                <>
+                  <div className="mt-2 text-[10px] text-stone-500">功能类型</div>
+                  <div className="mt-1 flex gap-1.5">
+                    {FEATURE_MODES.map((item) => (
                       <button
-                        key={example}
+                        key={item.value}
                         type="button"
-                        onClick={() => setFeatureBrief(example)}
-                        className="max-w-full truncate rounded-full border border-stone-200 px-2 py-0.5 text-[8px] text-stone-400 hover:text-stone-600"
+                        onClick={() => setCustomFeatureMode(item.value)}
+                        className={cn(
+                          "flex-1 rounded-lg border px-2 py-1.5 text-[10px] transition-colors",
+                          customFeatureMode === item.value
+                            ? "border-[#384877] bg-white font-medium text-[#384877]"
+                            : "border-stone-200 bg-white text-stone-500"
+                        )}
                       >
-                        {example}
+                        {item.label}
                       </button>
                     ))}
-                    <Button
-                      type="button"
-                      onClick={parseFeature}
-                      disabled={!featureBrief.trim() || parsingFeature}
-                      className="ml-auto min-h-[28px] px-2.5 text-[10px] text-white"
-                      style={{ backgroundColor: "#384877" }}
-                    >
-                      {parsingFeature ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Sparkles className="mr-1 h-3 w-3" />}
-                      生成
-                    </Button>
                   </div>
-                </div>
+                  {customFeatureMode === "language" && (
+                    <p className="mt-1.5 text-[9px] leading-relaxed text-stone-400">
+                      会提供英文对话、中文翻译、表达纠错和语音朗读。
+                    </p>
+                  )}
+                </>
+              )}
+              {customType === "assistant" && (
+                <div className="mt-2 text-[10px] text-stone-500">功能名称</div>
               )}
               <input
                 value={customLabel}
                 onChange={(event) => setCustomLabel(event.target.value.slice(0, 12))}
-                placeholder={customType === "assistant" ? "功能名称，如「个性化指导」" : "模块名称，如「康复记录」"}
-                className="mt-2 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-[12px] text-stone-700 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none"
+                placeholder={customType === "assistant" ? (customFeatureMode === "language" ? "如「英语口语陪练」" : "如「个性化指导」「菜单」") : "模块名称，如「康复记录」"}
+                className={cn(
+                  "w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-[12px] text-stone-700 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none",
+                  customType === "assistant" ? "mt-1" : "mt-2"
+                )}
               />
               {customType === "assistant" && (
                 <>
+                  <div className="mt-2 text-[10px] text-stone-500">功能描述</div>
                   <textarea
                     value={customInstructions}
                     onChange={(event) => setCustomInstructions(event.target.value.slice(0, 800))}
                     rows={3}
-                    placeholder="这个功能怎么帮你？例如：结合我上传的健身方案和身体数据，排每周训练，并给动作要点。"
-                    className="mt-2 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-[11px] leading-relaxed text-stone-700 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none"
+                    placeholder={customFeatureMode === "language" ? "描述陪练方式，例如：围绕日常场景用英语对话，给中文翻译、纠错和更自然的说法。" : "描述这个功能怎么帮你，例如：结合我上传的健身方案和身体数据，排每周训练，并给动作要点。"}
+                    className="mt-1 w-full resize-none rounded-lg border border-stone-200 bg-white px-3 py-2 text-[11px] leading-relaxed text-stone-700 placeholder:text-stone-400 focus:border-stone-400 focus:outline-none"
                   />
                   <input
                     value={customPlaceholder}

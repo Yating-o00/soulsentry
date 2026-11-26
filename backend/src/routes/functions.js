@@ -613,7 +613,7 @@ async function buildAiNote(task, subtasks, autoExec) {
       15000
     );
     const note = result?.aiNote?.trim();
-    console.log(`[buildAiNote] task=${task.id} note="${note?.slice(0, 80) || "(empty)"}"`);
+    console.log(`[buildAiNote] generated=${Boolean(note)}`);
     return note || buildRuleAiNote(task, subtasks, autoExec);
   } catch (err) {
     console.error(`[buildAiNote] task=${task.id} Kimi failed:`, err?.message || err);
@@ -1392,7 +1392,7 @@ async function generateMoodRiverWithAI(userId, period) {
       }),
       35000
     );
-    console.log(`[moodRiver] AI insight result:`, JSON.stringify(insightResult).slice(0, 400));
+    console.log("[moodRiver] AI insight completed");
 
     const insight = String(insightResult?.insight || "").trim() || generateLocalInsight(localSeries);
     return { series: localSeries, insight, source: "ai" };

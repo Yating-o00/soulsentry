@@ -1,4 +1,4 @@
-import { getAiContext, recordAiAttempt } from "./aiContext.js";
+import { activateAiContext, classifyAiError, getAiContext, recordAiAttempt, runAiTaskContext, upstreamErrorDetails } from "./aiContext.js";
 import { invokeKimiText, parseModelJson } from "./kimi.js";
 
 // Internal default for companion chat, planning and memory jobs. Only trusted
@@ -11,7 +11,12 @@ export function resolveDashboardAiProvider(provider) {
   return selected;
 }
 
-export async function invokeDashboardAi(options, { provider: internalProvider, model: internalModel } = {}) {
+export async function invokeDashboardAi(options, configuration = {}) {
+  return runAiTaskContext("model.dashboard", () => invokeDashboardAiInContext(options, configuration));
+}
+
+async function invokeDashboardAiInContext(options, { provider: internalProvider, model: internalModel } = {}) {
+  activateAiContext();
   const provider = resolveDashboardAiProvider(internalProvider);
   // Kimi 主用，DeepSeek 兜底：Kimi 欠费/超时/空内容时由 callKimiChat 自动切换，
   // 不再直接把失败抛给 flowChat 去走本地模板话术
@@ -43,7 +48,11 @@ export async function invokeDashboardAi(options, { provider: internalProvider, m
         : AbortSignal.timeout(options.fetchTimeout || 30000),
     });
     attempt.status = response.status;
-    if (!response.ok) { attempt.reason = `http_${response.status}`; throw new Error(`DeepSeek API returned HTTP ${response.status}`); }
+    attempt.upstreamRequestId = upstreamErrorDetails(response).upstreamRequestId;
+    if (!response.ok) {
+      Object.assign(attempt, upstreamErrorDetails(response, await response.text()));
+      throw new Error(`DeepSeek upstream failed (${attempt.reason}, HTTP ${response.status})`);
+    }
     const result = await response.json();
     const content = result.choices?.[0]?.message?.content;
     if (!content) { attempt.reason = "empty_response"; throw Object.assign(new Error("DeepSeek returned an empty response"), { code: "PLAN_JSON", usage: result.usage }); }
@@ -58,7 +67,7 @@ export async function invokeDashboardAi(options, { provider: internalProvider, m
       throw Object.assign(new Error("DeepSeek returned invalid JSON"), { code: "PLAN_JSON", usage: result.usage });
     }
   } catch (error) {
-    attempt.reason ||= /abort|timeout/i.test(error?.name || "") ? "timeout" : "request_error";
+    attempt.reason ||= classifyAiError({ error });
     throw error;
   } finally {
     attempt.elapsedMs = Date.now() - startedAt;

@@ -12,7 +12,7 @@ function setup(t) {
 }
 function request(provider, work) {
   return new Promise((resolve, reject) => {
-    const req = { get: () => provider, baseUrl: "/api/chat", path: "/" };
+    const req = { get: (header) => header === "X-Chat-AI-Provider" ? provider : undefined, baseUrl: "/api/chat", path: "/" };
     const res = { statusCode: 200, setHeader() {}, status(n) { this.statusCode = n; return this; }, json(body) { resolve({ status: this.statusCode, body }); } };
     aiRequestContext(req, res, () => Promise.resolve().then(work).then(result => res.json(result)).catch(reject));
   });
@@ -27,7 +27,7 @@ test("singleAttempt preserves production endpoint fallback and tries one model p
   const result = await request(undefined, async () => { await invokeDashboardAi({...options, singleAttempt: true}); return {source: "ai"}; });
   assert.equal(calls.length, 3);
   assert.equal(result.body.ai.provider, "deepseek");
-  assert.equal(result.body.ai.attempts[0].reason, "http_429");
+  assert.equal(result.body.ai.attempts[0].reason, "rate_limited");
 });
 test("explicit DeepSeek never calls Kimi", async t => {
   setup(t); process.env.CHAT_AI_EXPERIMENT_ENABLED = "1";

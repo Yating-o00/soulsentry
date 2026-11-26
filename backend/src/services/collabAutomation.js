@@ -1,3 +1,4 @@
+import { runAiTaskContext } from "../lib/aiContext.js";
 // 协同空间 Agent 自动化：入群欢迎、每日打卡公布。
 // 这些动作只使用当前协同空间的数据，不调用 AI 规划、不扣 AI 点数；
 // 由空间发起人在 Agent 设置中开启，开启后写入 metadata.collab.agent.settings。
@@ -503,6 +504,10 @@ async function markCustomRuleRun(taskId, ruleId, key) {
 }
 
 async function executeCustomRule(task, rule, settings, now) {
+  return runAiTaskContext("collab.custom_rule", () => executeCustomRuleInContext(task, rule, settings, now), () => ({ businessSuccess: true }));
+}
+
+async function executeCustomRuleInContext(task, rule, settings, now) {
   const snapshot = await loadSpaceSnapshot(task);
   const spaceText = formatSpaceData(task, snapshot).slice(0, 5000);
   const members = [task.user, ...(task.members || []).map((item) => item.user)]

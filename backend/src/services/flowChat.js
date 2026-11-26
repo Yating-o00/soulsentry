@@ -820,7 +820,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   // 模型偶尔会漏掉 reply 但仍给出提案/办事目标：不能因为少一句措辞就把整次成功调用判死
   const rawReply = typeof result.reply === "string" ? result.reply : "";
   if (!rawReply && !result.agent_goal && !result.extracted) {
-    console.warn("[flowChat] model response missing reply:", JSON.stringify(result).slice(0, 300));
+    console.warn("[flowChat] model response missing reply");
     throw new Error("invalid chat response");
   }
   let safeReply = rawReply || (result.agent_goal ? "好，我去网页上看看，稍后把结果带回来。" : "我在，接着说就好。");
@@ -834,7 +834,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
       .replace(/来不及了/g, "时间还够")
       .replace(/惩罚/g, "约束")
       .replace(/后果/g, "影响");
-    console.log("[flowChat] reply tone softened:", before.slice(0, 80), "->", safeReply.slice(0, 80));
+    console.log("[flowChat] reply tone softened");
   }
   const agentGoal = trim(result.agent_goal, 200) || null;
   // 同一件事不要重复：agent_goal 已覆盖的请求，不再出同名约定提案

@@ -7,6 +7,7 @@ import morgan from "morgan";
 import { env } from "./config/env.js";
 import { healthRouter } from "./routes/health.js";
 import { versionRouter } from "./routes/version.js";
+import { aiHttpContext } from "./lib/aiContext.js";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
 import { creditsRouter } from "./routes/credits.js";
@@ -67,6 +68,7 @@ app.use(cors({
 app.use(morgan("dev"));
 app.post("/api/wechat/notify", express.raw({ type: "application/json" }), handleWechatNotify);
 app.use(express.json({ limit: "2mb" }));
+app.use("/api", aiHttpContext);
 
 app.get("/", (_req, res) => {
   res.json({

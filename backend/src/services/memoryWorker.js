@@ -1,3 +1,4 @@
+import { runAiTaskContext } from "../lib/aiContext.js";
 import { randomUUID } from "node:crypto";
 import { invokeDashboardAi } from "../lib/dashboardAi.js";
 import { activeMemoryScope, createMemory, currentMemoryVersion, knownSources, memoryInclude, recallableMessageScope, updateMemory } from "./memoryStore.js";
@@ -191,7 +192,11 @@ async function prepareEmbeddings(db, batch, now) {
   return result;
 }
 
-export async function runMemoryJob(db, { invoke = invokeDashboardAi, clock = () => new Date() } = {}) {
+export async function runMemoryJob(db, options = {}) {
+  return runAiTaskContext("memory.job", () => runMemoryJobInContext(db, options), (result) => ({ businessSuccess: result !== null }));
+}
+
+async function runMemoryJobInContext(db, { invoke = invokeDashboardAi, clock = () => new Date() } = {}) {
   const before = clock();
   // The final attempt may have crashed without writing failedAt.
   await db.memoryJob.updateMany({

@@ -23,5 +23,6 @@ jobs:
             backend/package-lock.json
       - run: npm ci
       - run: npm ci --prefix backend
+      - run: npm run prisma:generate --prefix backend
       - run: npm run test:observability
       - run: npm run build:release

@@ -6,6 +6,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { env } from "./config/env.js";
 import { healthRouter } from "./routes/health.js";
+import { versionRouter } from "./routes/version.js";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
 import { creditsRouter } from "./routes/credits.js";
@@ -60,7 +61,8 @@ app.use(cors({
       callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true
+  credentials: true,
+  exposedHeaders: ["X-Request-ID"]
 }));
 app.use(morgan("dev"));
 app.post("/api/wechat/notify", express.raw({ type: "application/json" }), handleWechatNotify);
@@ -74,6 +76,7 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/api/health", healthRouter);
+app.use("/api/version", versionRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/credits", creditsRouter);

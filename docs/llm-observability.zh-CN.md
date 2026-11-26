@@ -32,6 +32,7 @@ sudo node scripts/observability/current-state.mjs > /tmp/soulsentry-current-stat
 - `[chatAi] event=request_started` 标识业务请求开始。HTTP 与后台分别使用 `kind=http/background`。
 - `[aiAttempt] event=started/completed` 标识单次尝试。`reason` 是错误分类；`status` 是 HTTP 状态；`elapsedMs` 是耗时。`errorCode` 与 `upstreamRequestId` 仅保留安全元数据。
 - `[chatAi] event=request_completed` 标识最终业务结果。`businessSuccess` 显式为 true/false/null；`source` 区分 ai/fallback/cached/local/system/error；一次模型成功不等于业务成功。
+- 心签分析成功但回应使用模板时，`analysisSource=ai`、`source=fallback`，分析业务仍可成功；分析尚在处理的回执为 `system`、业务结果未知，不能算缓存成功。
 - 业务已结束的调用仍保留同一个 request ID。其后完成的尝试带 `late=true`，不会改写已经返回给用户的结果。
 
 只读查询器再次按字段白名单清洗输入，不输出 Key、提示词、回复正文、错误正文或原始 journal 行。解析失败只计数，不回显出错行。

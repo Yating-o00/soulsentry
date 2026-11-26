@@ -82,6 +82,15 @@ function identity(file) {
   return { deploymentId: x.deploymentId, commitSha: x.commitSha, builtAt: x.builtAt };
 }
 function sameIdentity(a, b) { return ['deploymentId', 'commitSha', 'builtAt'].every((k) => a[k] === b[k]); }
+function setPublicAssetModes(directory) {
+  fs.chmodSync(directory, 0o755);
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const file = path.join(directory, entry.name);
+    if (entry.isDirectory()) setPublicAssetModes(file);
+    else if (entry.isFile()) fs.chmodSync(file, 0o644);
+    else throw new Error('Public assets must be regular files and directories');
+  }
+}
 function removeRuntimeFiles(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
@@ -142,9 +151,13 @@ try {
   if (unresolved) throw new Error('Previous interrupted or failed rollback deployment requires verification; inspect records before deploying again');
   if (process.env.SKIP_FRONTEND_BUILD && process.env.SKIP_FRONTEND_BUILD !== '1') throw new Error('Production frontend builds are disabled; upload a prebuilt artifact');
   phase('validate_artifact');
-  const artifact = path.resolve(options['--artifact'] || process.env.DEPLOY_ARTIFACT || '');
+  const upload = path.resolve(options['--artifact'] || process.env.DEPLOY_ARTIFACT || '');
   const expectedSha = options['--sha256'] || process.env.DEPLOY_ARTIFACT_SHA256 || '';
-  if (!/^[a-f0-9]{64}$/.test(expectedSha) || !fs.statSync(artifact).isFile()) throw new Error('Artifact file and SHA-256 are required');
+  if (!/^[a-f0-9]{64}$/.test(expectedSha) || !fs.statSync(upload).isFile()) throw new Error('Artifact file and SHA-256 are required');
+  stage = fs.mkdtempSync(path.join(shared, '.artifact-'));
+  const artifact = path.join(stage, 'verified-upload.tar.gz');
+  fs.copyFileSync(upload, artifact, fs.constants.COPYFILE_EXCL);
+  fs.chmodSync(artifact, 0o600);
   manifest.artifactSha256 = digest(artifact);
   update({ artifactSha256: manifest.artifactSha256 });
   if (manifest.artifactSha256 !== expectedSha) throw new Error('Artifact SHA-256 mismatch');
@@ -156,7 +169,6 @@ try {
     if (normalized.startsWith('/') || normalized.split('/').includes('..') || normalized.includes('\\')
       || !(normalized === 'release-identity.json' || normalized === 'dist' || normalized.startsWith('dist/'))) throw new Error('Unsafe artifact entry');
   }
-  stage = fs.mkdtempSync(path.join(shared, '.artifact-'));
   await run('tar', ['-xzf', artifact, '-C', stage]);
   const releaseIdentity = identity(path.join(stage, 'release-identity.json'));
   const frontIdentity = identity(path.join(stage, 'dist/release-identity.json'));
@@ -174,28 +186,72 @@ try {
   update({ commitSha: sha, previousRelease: previous, previousIdentity });
   if (!fs.statSync(sharedEnv).isFile()) throw new Error('Missing shared backend environment');
   phase('prepare_release');
+  const serviceUser = (await run('systemctl', ['show', service, '--property=User', '--value'], { capture: true })).trim() || 'root';
+  const dynamicUser = (await run('systemctl', ['show', service, '--property=DynamicUser', '--value'], { capture: true })).trim();
+  if (dynamicUser === 'yes') throw new Error('DynamicUser requires a systemd-managed credential for backend.env');
+  const uidText = (await run('id', ['-u', '--', serviceUser], { capture: true })).trim();
+  if (!/^\d+$/.test(uidText)) throw new Error('Could not resolve backend service user');
+  const uid = Number(uidText);
+  const unitGroup = (await run('systemctl', ['show', service, '--property=Group', '--value'], { capture: true })).trim();
+  const serviceGroup = unitGroup || (await run('id', ['-g', '--', serviceUser], { capture: true })).trim();
+  fs.chmodSync(sharedEnv, 0o600);
+  fs.chmodSync(records, 0o700);
+  await run('chgrp', ['--', serviceGroup, shared]);
+  fs.chmodSync(shared, 0o710);
+  const gid = fs.statSync(shared).gid;
+  // Private records and staging already have explicit modes. Runtime code and npm
+  // dependencies need to be readable by the service, even when deployed by root.
+  process.umask(0o022);
   fs.mkdirSync(releases, { recursive: true });
-  fs.mkdirSync(target);
+  const releaseParentMode = fs.statSync(releases).mode & 0o7777;
+  if (!(releaseParentMode & 0o001)) {
+    await run('chgrp', ['--', serviceGroup, releases]);
+    fs.chmodSync(releases, releaseParentMode | 0o010);
+  }
+  fs.mkdirSync(target, { mode: 0o700 });
   // Only committed source files enter a release. No local env, uploads, keys or raw logs.
   const sourceTar = path.join(stage, 'source.tar');
   await run('git', ['archive', '--format=tar', '--output', sourceTar, sha]);
   await run('tar', ['-xf', sourceTar, '-C', target]);
   removeRuntimeFiles(target);
   fs.rmSync(path.join(target, 'dist'), { recursive: true, force: true });
-  fs.cpSync(path.join(stage, 'dist'), path.join(target, 'dist'), { recursive: true });
+  const targetDist = path.join(target, 'dist');
+  fs.cpSync(path.join(stage, 'dist'), targetDist, { recursive: true });
+  setPublicAssetModes(targetDist);
   atomicJson(path.join(target, 'release-identity.json'), releaseIdentity);
-  fs.copyFileSync(sharedEnv, path.join(target, 'backend/.env'));
-  fs.chmodSync(path.join(target, 'backend/.env'), 0o600);
+  fs.chmodSync(path.join(target, 'release-identity.json'), 0o644);
+  const runtimeEnv = path.join(target, 'backend/.env');
+  fs.writeFileSync(runtimeEnv, fs.readFileSync(sharedEnv), { flag: 'wx', mode: 0o600 });
+  fs.chownSync(runtimeEnv, uid, -1);
+  fs.chmodSync(target, 0o755);
   const oldSchema = path.join(previous, 'backend/prisma/schema.prisma');
   if (digest(oldSchema) !== digest(path.join(target, 'backend/prisma/schema.prisma'))) throw new Error('Schema changes require a separately reviewed migration; deploy does not mutate the database');
   const uploads = path.join(shared, 'uploads');
-  fs.mkdirSync(uploads, { recursive: true });
+  const newUploads = fs.mkdirSync(uploads, { recursive: true, mode: 0o700 });
   const oldUploads = path.join(previous, 'backend/uploads');
   if (fs.existsSync(oldUploads) && !fs.lstatSync(oldUploads).isSymbolicLink()) await run('rsync', ['-a', `${oldUploads}/`, `${uploads}/`]);
+  if (newUploads) fs.chownSync(uploads, uid, -1);
   fs.rmSync(path.join(target, 'backend/uploads'), { recursive: true, force: true });
   fs.symlinkSync(uploads, path.join(target, 'backend/uploads'));
   await run('npm', ['--prefix', path.join(target, 'backend'), 'ci']);
   await run('npm', ['--prefix', path.join(target, 'backend'), 'run', 'prisma:generate']);
+  // Test access through the actual parent directories and uploads symlink before
+  // switching. Strip the deployer's groups when checking as the service account.
+  const probe = `
+    const fs = require('node:fs');
+    const [uid, gid, target] = process.argv.slice(1);
+    if (process.getuid() === 0) {
+      process.setgroups([]);
+      process.setgid(Number(gid));
+      process.setuid(Number(uid));
+    }
+    if (process.getuid() !== Number(uid) || process.getgid() !== Number(gid)) process.exit(1);
+    fs.closeSync(fs.openSync(target + '/backend/.env', 'r'));
+    fs.accessSync(target + '/release-identity.json', fs.constants.R_OK);
+    fs.accessSync(target + '/backend/node_modules', fs.constants.R_OK | fs.constants.X_OK);
+    fs.accessSync(target + '/backend/uploads', fs.constants.W_OK | fs.constants.X_OK);
+  `;
+  await run(process.execPath, ['-e', probe, String(uid), String(gid), target]);
   if (interrupted) throw new Error('Deployment interrupted');
   phase('switch_release');
   switched = true; // A partially failed publish also requires frontend rollback.
@@ -213,19 +269,30 @@ try {
   shuttingDown = true;
   const failurePhase = manifest.phase;
   log(error.message);
-  update({ failurePhase, failureReason: error.message, status: interrupted ? 'interrupted' : 'failed', exitCode: interrupted ? 130 : 1 });
-  if (switched && manifest.previousRelease) {
-    update({ phase: 'rollback', rollbackStatus: 'running' });
-    try {
-      replaceCurrent(manifest.previousRelease);
-      await publish(manifest.previousRelease);
-      await restart();
-      await verify(manifest.previousIdentity, true);
-      update({ rollbackStatus: 'success', rollbackRelease: manifest.previousRelease });
-    } catch (rollbackError) {
-      update({ rollbackStatus: manifest.previousIdentity ? 'failed' : 'unverified', rollbackReason: rollbackError.message, needsVerification: true });
-      log(`Rollback requires attention: ${rollbackError.message}`);
+  const restore = switched && !!manifest.previousRelease;
+  update({ failurePhase, failureReason: error.message, status: interrupted ? 'interrupted' : 'failed', exitCode: interrupted ? 130 : 1,
+    ...(restore ? { phase: 'rollback', rollbackStatus: 'running', needsVerification: true } : {}) });
+  if (restore) {
+    const rollbackSteps = {};
+    const actions = [
+      ['symlink', () => replaceCurrent(manifest.previousRelease)],
+      ['frontend', () => publish(manifest.previousRelease)],
+      ['backend', restart],
+      ['verification', () => verify(manifest.previousIdentity, true)],
+    ];
+    for (const [name, action] of actions) {
+      try {
+        await action();
+        rollbackSteps[name] = { status: 'success' };
+      } catch (stepError) {
+        rollbackSteps[name] = { status: 'failed', reason: stepError.message };
+        log(`Rollback ${name} failed: ${stepError.message}`);
+      }
+      update({ rollbackSteps });
     }
+    const restored = Object.values(rollbackSteps).every(step => step.status === 'success');
+    const rollbackStatus = restored ? 'success' : manifest.previousIdentity ? 'failed' : 'unverified';
+    update({ rollbackStatus, needsVerification: !restored, ...(restored ? { rollbackRelease: manifest.previousRelease } : {}) });
   }
   update({ finishedAt: now() });
   process.exitCode = interrupted ? 130 : 1;

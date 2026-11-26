@@ -3523,6 +3523,7 @@ ${correctionHints.length ? `用户纠正历史（必须参考）：\n- ${correct
           if (respNorm.length >= 10 && noteNorm.length >= 10) {
             const overlap = [...respNorm].filter((ch) => noteNorm.includes(ch)).length / respNorm.length;
             if (overlap > 0.7) {
+              ai_analysis.reply_source = "local_template";
               ai_analysis.emotional_response = "内容已经整理成表格啦，一目了然。";
             }
           }

@@ -976,6 +976,8 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       singleAttempt: Boolean(planRun),
     });
 
+    let planFailed = false;
+
     // 协同约定强意图优先：「建立/创建…协同约定」明确要的是多人共创卡片，
     // 模型若误读成智能规划（plan）或普通约定，一律按协同提案覆盖，话术同步换掉
     {
@@ -1192,6 +1194,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
         const planErrors = validateScheduledSessions(planned, constraints);
         if (planErrors.length) {
+          planFailed = true;
           if (planRun) {
             planRun.status = "invalid";
             planRun.validation = noteValidation(planErrors);
@@ -1209,6 +1212,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
         }
       } catch (planErr) {
+        planFailed = true;
         if (planRun && planRun.status === "chat") planRun.status = planRun.signal.aborted ? "timeout" : "invalid";
         if (!planRun) console.warn("[flowChat] 规划失败:", planErr?.message || planErr);
         out.reply = `计划暂时无法生成：${planErr?.message || "请稍后重试"}。你可以调整要求后重新规划。`;
@@ -1273,6 +1277,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       if (planRun && constraints.busy == null) constraints.busy = await loadPlanningBusy(prisma, userId, constraints);
       const errors = validateScheduledSessions(out.extracted.plan, constraints);
       if (errors.length) {
+        planFailed = true;
         if (planRun) {
           planRun.status = "invalid";
           planRun.validation = noteValidation(errors);
@@ -1319,7 +1324,9 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         out.reply = `${out.reply}（小助手暂时没能出发，稍后再试试？）`;
       }
     }
-    return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
+    const plan = out.extracted?.plan;
+    const source = plan?.source === "fallback" || (planFailed && !plan) ? "fallback" : "ai";
+    return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source };
   } catch (err) {
     if (planRun) planRun.status = planRun.signal.aborted || err?.name === "TimeoutError" ? "timeout" : "provider_failure";
     // 带 planRun 时也必须留下失败原因，否则只剩 provider_failure 无法定位

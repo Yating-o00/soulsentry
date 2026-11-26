@@ -38,6 +38,7 @@ export function sanitizeRecord(record, tag) {
     requestedProvider: providers.has(record.requestedProvider) ? record.requestedProvider : null,
     provider: providers.has(record.provider) ? record.provider : null,
     model: safeToken(record.model, 100), source: sources.has(record.source) ? record.source : 'unknown',
+    analysisSource: sources.has(record.analysisSource) ? record.analysisSource : null,
     outcome: ['pending', 'success', 'error', 'failure', 'unknown'].includes(record.outcome) ? record.outcome : null,
     businessSuccess: typeof record.businessSuccess === 'boolean' ? record.businessSuccess : null,
     status: numericStatus(record.status ?? record.httpStatus),

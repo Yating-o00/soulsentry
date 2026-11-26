@@ -53,9 +53,18 @@ const app=process.env.APP_ROOT, command=path.basename(process.argv[1]), args=pro
 const current=fs.realpathSync(path.join(app,'current')); const expected=JSON.parse(fs.readFileSync(path.join(current,'release-identity.json')));
 if(command==='npm') {
  fs.appendFileSync(path.join(app,'npm-calls'),JSON.stringify(args)+'\\n');
+ if(args.includes('ci')) {
+  const module=path.join(args[1],'node_modules/example');
+  fs.mkdirSync(module,{recursive:true});
+  fs.writeFileSync(path.join(module,'index.js'),'module fixture');
+  fs.writeFileSync(path.join(module,'cli'),'executable fixture',{mode:0o755});
+ }
  if(process.env.FAKE_HOLD && args.includes('ci')) { fs.writeFileSync(path.join(app,'holding'),String(process.pid)); await new Promise(r=>setTimeout(r,Number(process.env.FAKE_HOLD))); }
 } else if(command==='systemctl') {
+ if(args.includes('--property=User')) console.log(process.getuid());
+ if(args.includes('--property=DynamicUser')) console.log('no');
  if(args[0]==='restart') {
+  fs.appendFileSync(path.join(app,'restarts'),current+'\\n');
   if(process.env.FAKE_FAIL_ROLLBACK && current.endsWith('/previous')) process.exit(1);
   const value=process.env.FAKE_STALE_VERSION ? JSON.parse(fs.readFileSync(path.join(app,'releases/previous/release-identity.json'))) : expected;
   fs.writeFileSync(path.join(app,'runtime.json'),JSON.stringify(value));
@@ -66,6 +75,7 @@ if(command==='npm') {
  else if(url.includes('/api/version')) console.log(fs.readFileSync(path.join(app,'runtime.json'),'utf8'));
  else console.log(fs.readFileSync(path.join(process.env.WEB_ROOT,'release-identity.json'),'utf8'));
 } else if(command==='rsync') {
+ if(process.env.FAKE_STATIC_ROLLBACK_FAILURE && args.at(-2).includes('/previous/dist/')) process.exit(1);
  if(process.env.FAKE_PARTIAL_PUBLISH && args.at(-1)===process.env.WEB_ROOT+'/' && !args.at(-2).includes('/previous/') && !fs.existsSync(path.join(app,'publish-failed'))) {
   fs.writeFileSync(path.join(app,'publish-failed'),'1'); fs.writeFileSync(path.join(process.env.WEB_ROOT,'index.html'),'partial publish'); process.exit(1);
  }
@@ -103,7 +113,10 @@ async function until(fn) {
 }
 
 test('prebuilt deployment records identity and verifies both front/backend without DB mutation or frontend build', async (t) => {
-  const f = fixture(t); const result = await f.start().done;
+  const f = fixture(t);
+  fs.chmodSync(path.join(f.app, 'shared'), 0o700);
+  fs.chmodSync(path.join(f.app, 'releases'), 0o700);
+  const result = await f.start().done;
   assert.equal(result.code, 0, result.output);
   const m = f.manifest(); assert.equal(m.status, 'success'); assert.equal(m.commitSha, f.identity.commitSha);
   assert.deepEqual(m.health, { local: true, public: true, version: true, frontend: true });
@@ -112,9 +125,53 @@ test('prebuilt deployment records identity and verifies both front/backend witho
   assert.equal(fs.readFileSync(path.join(f.app, 'shared/uploads/user-photo'), 'utf8'), 'keep-user-data');
   assert.equal(fs.existsSync(path.join(m.targetRelease, 'backend.env')), false);
   assert.equal(fs.readFileSync(path.join(m.targetRelease, 'backend/.env'), 'utf8'), 'DATABASE_URL=file:/private/user.db\n');
+  const mode = file => fs.statSync(file).mode & 0o777;
+  assert.equal(mode(path.join(f.app, 'shared')), 0o710);
+  assert.equal(fs.statSync(path.join(f.app, 'shared')).gid, process.getgid());
+  assert.equal(mode(path.join(f.app, 'shared/backend.env')), 0o600);
+  assert.equal(mode(path.join(f.app, 'shared/deployments')), 0o700);
+  assert.equal(mode(path.join(f.app, 'releases')), 0o710);
+  assert.equal(mode(m.targetRelease), 0o755);
+  for (const name of ['backend', 'backend/node_modules', 'backend/node_modules/example']) {
+    assert.ok(mode(path.join(m.targetRelease, name)) & 0o001, name);
+  }
+  assert.equal(mode(path.join(m.targetRelease, 'backend/node_modules/example/index.js')), 0o644);
+  assert.equal(mode(path.join(m.targetRelease, 'backend/node_modules/example/cli')), 0o755);
+  assert.equal(fs.statSync(path.join(f.app, 'shared/uploads')).uid, process.getuid());
+  assert.equal(mode(path.join(m.targetRelease, 'release-identity.json')), 0o644);
+  assert.equal(mode(path.join(m.targetRelease, 'backend/.env')), 0o600);
+  assert.equal(fs.statSync(path.join(m.targetRelease, 'backend/.env')).uid, process.getuid());
+  const record = path.join(f.app, 'shared/deployments', m.deploymentId);
+  assert.equal(mode(record), 0o700);
+  for (const name of ['manifest.json', 'deploy.log', 'events.jsonl']) assert.equal(mode(path.join(record, name)), 0o600);
+  for (const parent of [path.join(m.targetRelease, 'dist'), f.env.WEB_ROOT]) {
+    for (const name of ['', 'assets']) assert.equal(mode(path.join(parent, name)), 0o755);
+    for (const name of ['index.html', 'assets/new.js', 'release-identity.json']) assert.equal(mode(path.join(parent, name)), 0o644);
+  }
   const calls = fs.readFileSync(path.join(f.app, 'npm-calls'), 'utf8'); assert.ok(!calls.includes('build')); assert.ok(!calls.includes('push'));
   const events = fs.readFileSync(path.join(f.app, 'shared/deployments', m.deploymentId, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(events.at(-1).status, 'success'); assert.ok(fs.statSync(path.join(f.app, 'shared/deployments', m.deploymentId, 'deploy.log')).size > 0);
+});
+test('replacing the upload after hashing does not replace the verified snapshot', async (t) => {
+  const f = fixture(t);
+  const a = f.artifact();
+  const tar = execFileSync('which', ['tar'], { encoding: 'utf8' }).trim();
+  const wrapper = [
+    `#!${node}`,
+    "import fs from 'node:fs'; import { spawnSync } from 'node:child_process';",
+    "const args = process.argv.slice(2);",
+    "if (args[0] === '-tzf') {",
+    "  if ((fs.statSync(args[1]).mode & 0o777) !== 0o600) process.exit(2);",
+    "  fs.writeFileSync(process.env.ORIGINAL_UPLOAD, 'replacement upload');",
+    "}",
+    `process.exit(spawnSync(${JSON.stringify(tar)}, args, { stdio: 'inherit' }).status ?? 1);`,
+  ].join('\n');
+  fs.writeFileSync(path.join(f.root, 'bin/tar'), wrapper, { mode: 0o755 });
+  const result = await f.start(a, { ORIGINAL_UPLOAD: a.file }).done;
+  assert.equal(result.code, 0, result.output);
+  assert.equal(fs.readFileSync(a.file, 'utf8'), 'replacement upload');
+  assert.equal(f.manifest().artifactSha256, a.hash);
+  assert.equal(fs.readFileSync(path.join(f.env.WEB_ROOT, 'index.html'), 'utf8'), 'new frontend');
 });
 test('checksum failure is recorded before mutation', async (t) => {
   const f = fixture(t); const a = f.artifact(); a.hash = '0'.repeat(64);
@@ -166,6 +223,17 @@ test('partially failed static publish is restored, failed rollback never reports
     assert.equal(fs.readFileSync(path.join(f.root, 'web/index.html'), 'utf8'), 'old frontend');
     assert.equal(f.manifest().status, 'failed');
   }
+});
+test('frontend rollback failure still restarts the previous backend and requires verification', async (t) => {
+  const f = fixture(t);
+  const result = await f.start(undefined, { FAKE_PARTIAL_PUBLISH: '1', FAKE_STATIC_ROLLBACK_FAILURE: '1' }).done;
+  assert.equal(result.code, 1, result.output);
+  const m = f.manifest();
+  assert.equal(m.rollbackStatus, 'failed');
+  assert.equal(m.needsVerification, true);
+  assert.equal(m.rollbackSteps.frontend.status, 'failed');
+  assert.equal(m.rollbackSteps.backend.status, 'success');
+  assert.equal(fs.readFileSync(path.join(f.app, 'restarts'), 'utf8').trim(), f.old);
 });
 test('parallel deployment cannot overlap a live lock', async (t) => {
   const f = fixture(t); const first = f.start(undefined, { FAKE_HOLD: '1500' });

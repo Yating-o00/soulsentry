@@ -125,7 +125,7 @@ function complete(context, { trace, status, disconnected = false, businessSucces
   context.finishedStatus = status;
   if (!context.active) return;
   const final = { ...(trace || aiTrace(disconnected || status >= 400 ? "error" : undefined)), ...identity(context) };
-  if (disconnected || status >= 400 || ["error", "fallback"].includes(final.source)) businessSuccess = false;
+  if (disconnected || status >= 400 || final.source === "error" || (final.source === "fallback" && businessSuccess === null)) businessSuccess = false;
   console.info("[chatAi]", JSON.stringify({
     ...final, event: "request_completed", status: status ?? null, businessSuccess,
     outcome: businessSuccess === true ? "success" : businessSuccess === false ? "failure" : "unknown",
@@ -144,20 +144,28 @@ export function aiHttpContext(req, res, next) {
   res.json = (body) => storage.run(context, () => {
     context.route = routeName(req);
     if (!context.active) return json(body);
-    const saved = body?.reply?.meta?.ai || (!body?.skipped && body?.ai_analysis?.ai);
-    const source = res.statusCode >= 400 || body?.error ? "error" : body?.skipped ? "cached"
-      : body?.degraded || body?.used_fallback ? "fallback" : body?.source || body?.ai_analysis?.source || saved?.source;
+    const analysis = body?.ai_analysis;
+    const processing = context.route === "/api/functions/analyzeHeartSign" && body?.skipped === true && !analysis;
+    const cached = body?.skipped && !processing;
+    const saved = body?.reply?.meta?.ai || (!body?.skipped && analysis?.ai);
+    const source = res.statusCode >= 400 || body?.error ? "error" : processing ? "system" : cached ? "cached"
+      : body?.degraded || body?.used_fallback ? "fallback" : body?.source || analysis?.source || saved?.source;
     const normalized = normalizeSource(source);
-    const trace = aiTrace(normalized);
+    // Heart-sign analysis can complete even when its user-facing reply needs a template.
+    const analysisSource = normalizeSource(analysis?.source);
+    const templateReply = !body?.skipped && normalized === "ai" && analysis?.reply_source === "local_template";
+    const trace = aiTrace(templateReply ? "fallback" : normalized);
+    if (!body?.skipped && analysisSource) trace.analysisSource = analysisSource;
     if (trace.source === "ai" && saved?.requestId === context.requestId && saved.source === "ai") {
       trace.provider = safeToken(saved.provider);
       trace.model = safeToken(saved.model);
     }
     // Never reuse another request's cached IDs or attempts.
-    if (body?.skipped) trace.cached = true;
+    if (cached) trace.cached = true;
     const explicitSuccess = typeof body?.businessSuccess === "boolean" ? body.businessSuccess
       : typeof body?.ok === "boolean" ? body.ok : typeof body?.success === "boolean" ? body.success : null;
-    const businessSuccess = res.statusCode >= 400 || body?.error || ["fallback", "error"].includes(trace.source) ? false
+    const businessSuccess = res.statusCode >= 400 || body?.error || ["fallback", "error"].includes(normalized) ? false
+      : processing ? null
       : explicitSuccess ?? (["cached", "local", "ai"].includes(normalized) ? true : null);
     result = { trace, status: res.statusCode, businessSuccess };
     if (!res.once) complete(context, result); // Small response doubles used by unit tests.
@@ -193,7 +201,7 @@ export async function runAiTaskContext(route, work, describeResult = () => ({}))
       const result = await work();
       // Completion of a model child is not proof of task business success.
       const description = describeResult(result);
-      const failed = result?.degraded || result?.error || result?.used_fallback || result?.fallback;
+      const failed = result?.degraded || result?.error || result?.used_fallback || result?.fallback || description?.source === "fallback";
       const success = failed ? false : typeof description?.businessSuccess === "boolean" ? description.businessSuccess
         : typeof result?.ok === "boolean" ? result.ok : typeof result?.businessSuccess === "boolean" ? result.businessSuccess : null;
       complete(context, { trace: failed ? aiTrace("fallback") : description?.source ? aiTrace(description.source) : undefined, status: null, businessSuccess: success });

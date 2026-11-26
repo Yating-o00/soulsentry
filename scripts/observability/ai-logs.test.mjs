@@ -8,6 +8,20 @@ const at = seconds => `2026-11-25T00:00:${String(seconds).padStart(2, '0')}.000Z
 const event = (requestId, seconds, values) => ({ ...base, requestId, timestamp: at(seconds), ...values });
 const start = (id, seconds = 0, values = {}) => event(id, seconds, { tag: 'chatAi', event: 'request_started', ...values });
 const finish = (id, seconds = 4, values = {}) => event(id, seconds, { tag: 'chatAi', event: 'request_completed', source: 'ai', provider: 'kimi', businessSuccess: true, outcome: 'success', elapsedMs: 4000, status: 200, attemptIds: [], ...values });
+
+test('analysis completion and template reply remain distinct in the query and metrics', async () => {
+  const input = [start('analysis-template'), finish('analysis-template', 4, {
+    source: 'fallback', analysisSource: 'ai', provider: null, businessSuccess: true,
+  })].map(row => JSON.stringify(row));
+  const { records, diagnostics } = await parseLines(input);
+  const chains = buildChains(records);
+  assert.equal(chains[0].final.analysisSource, 'ai');
+  assert.equal(chains[0].final.source, 'fallback');
+  const result = report(chains, diagnostics);
+  assert.equal(result.totals.businessSuccess.rate, 1);
+  assert.equal(result.totals.templateFallback.rate, 1);
+  assert.equal(result.totals.kimiAttemptSuccess.denominator, 0);
+});
 const attempt = (id, attemptId, provider, seconds, outcome = 'success', reason = null, extra = {}) => [
   event(id, seconds, { tag: 'aiAttempt', attemptId, provider, event: 'started', outcome: 'pending', model: `${provider}-chat` }),
   event(id, seconds + 1, { tag: 'aiAttempt', attemptId, provider, event: 'completed', outcome, reason, elapsedMs: 1000, status: outcome === 'success' ? 200 : 429, model: `${provider}-chat`, ...extra }),

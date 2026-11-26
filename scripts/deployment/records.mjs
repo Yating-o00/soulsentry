@@ -35,6 +35,40 @@ export function appendEvent(dir, event) {
   try { fs.writeSync(fd, JSON.stringify({ time: now(), ...event }) + '\n'); fs.fsyncSync(fd); }
   finally { fs.closeSync(fd); }
 }
+export function deploymentFinished(m) {
+  return ['success', 'failed', 'interrupted'].includes(m.status)
+    && Boolean(m.finishedAt) && m.rollbackStatus !== 'running';
+}
+
+// A generation is advanced only after its owner is dead. Leaving that stale inode
+// in place prevents a competing retry from deleting a newly acquired owner's lock.
+export function tryRecordLock(dir) {
+  const owner = processIdentity();
+  if (!owner) throw new Error('Cannot inspect deployment record lock owner');
+  const candidate = path.join(dir, `.record-owner-${randomUUID()}`);
+  atomicJson(candidate, { ...owner, token: randomUUID() });
+  try {
+    for (let generation = 0; ; generation++) {
+      const lock = path.join(dir, `.record-${generation}.lock`);
+      try {
+        fs.linkSync(candidate, lock);
+        return () => fs.unlinkSync(lock);
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+      }
+      try {
+        const holder = readJson(lock);
+        if (isAlive(holder)) return null;
+        // A process can release its slot and then exit between read and liveness check.
+        // Its unique token must still own this slot before we skip the dead generation.
+        if (readJson(lock).token !== holder.token) generation--;
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        generation--; // Released between link and read. Compete for the same slot.
+      }
+    }
+  } finally { fs.unlinkSync(candidate); }
+}
 export function reconcile(recordsDir) {
   const interrupted = [];
   if (!fs.existsSync(recordsDir)) return interrupted;
@@ -42,12 +76,20 @@ export function reconcile(recordsDir) {
     if (!entry.isDirectory()) continue;
     const dir = path.join(recordsDir, entry.name);
     try {
-      const m = readJson(path.join(dir, 'manifest.json'));
-      if (m.status !== 'running' || isAlive(m.process)) continue;
-      Object.assign(m, { status: 'interrupted', finishedAt: now(), rollbackStatus: 'unknown', needsVerification: true, githubSync: m.githubSync === 'disabled' ? 'disabled' : 'pending' });
-      atomicJson(path.join(dir, 'manifest.json'), m);
-      appendEvent(dir, { phase: m.phase, status: m.status, reason: 'process_not_running_or_host_restarted' });
-      interrupted.push(m.deploymentId);
+      const file = path.join(dir, 'manifest.json');
+      const initial = readJson(file);
+      if (deploymentFinished(initial) || isAlive(initial.process)) continue;
+      const unlock = tryRecordLock(dir);
+      if (!unlock) continue;
+      try {
+        // The owner may have finished just before its death was observed.
+        const m = readJson(file);
+        if (deploymentFinished(m) || isAlive(m.process)) continue;
+        Object.assign(m, { status: 'interrupted', finishedAt: now(), rollbackStatus: 'unknown', needsVerification: true, githubSync: m.githubSync === 'disabled' ? 'disabled' : 'pending' });
+        atomicJson(path.join(dir, 'manifest.json'), m);
+        appendEvent(dir, { phase: m.phase, status: m.status, reason: 'process_not_running_or_host_restarted' });
+        interrupted.push(m.deploymentId);
+      } finally { unlock(); }
     } catch { /* An incomplete record is never a successful deployment. */ }
   }
   return interrupted;
@@ -76,12 +118,18 @@ export function acquireLock(sharedDir, owner) {
 }
 export function pruneRecords(recordsDir, retentionDays = 90) {
   const cutoff = Date.now() - retentionDays * 86400000;
+  const expired = m => deploymentFinished(m) && !m.needsVerification
+    && m.githubSync !== 'pending' && Date.parse(m.finishedAt) < cutoff;
   for (const e of fs.readdirSync(recordsDir, { withFileTypes: true })) {
     if (!e.isDirectory()) continue;
     const dir = path.join(recordsDir, e.name);
     try {
-      const m = readJson(path.join(dir, 'manifest.json'));
-      if (['success', 'failed', 'interrupted'].includes(m.status) && !m.needsVerification && m.githubSync !== 'pending' && Date.parse(m.finishedAt) < cutoff) fs.rmSync(dir, { recursive: true });
+      const file = path.join(dir, 'manifest.json');
+      if (!expired(readJson(file))) continue;
+      const unlock = tryRecordLock(dir);
+      if (!unlock) continue;
+      if (expired(readJson(file))) fs.rmSync(dir, { recursive: true });
+      else unlock();
     } catch { /* Preserve unknown/incomplete records for inspection. */ }
   }
 }

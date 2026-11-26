@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { atomicJson, readJson, appendEvent, now } from './records.mjs';
+import { atomicJson, readJson, appendEvent, now, deploymentFinished, tryRecordLock } from './records.mjs';
 
 // An explicit allowlist: paths, environment, error text and raw deploy logs never leave the host.
 export function publicSummary(m) {
@@ -14,11 +14,23 @@ export function publicSummary(m) {
 }
 export async function syncGithub(dir, { fetchImpl = fetch, env = process.env } = {}) {
   const file = path.join(dir, 'manifest.json');
-  const m = readJson(file);
-  if (m.status === 'running') return false; // Do not race a live deploy's manifest updates.
-  if (!env.DEPLOY_GITHUB_REPOSITORY) return false;
-  m.githubSync = 'pending';
-  atomicJson(file, m);
+  if (!env.DEPLOY_GITHUB_REPOSITORY || !deploymentFinished(readJson(file))) return false;
+  const unlock = tryRecordLock(dir);
+  if (!unlock) return false;
+  try {
+    const m = readJson(file);
+    if (!deploymentFinished(m)) return false;
+    if (m.githubSync === 'synced') return true;
+    return await publishGithub(dir, file, m, fetchImpl, env);
+  } finally { unlock(); }
+}
+
+async function publishGithub(dir, file, m, fetchImpl, env) {
+  function saveGithubFields(fields) {
+    const latest = readJson(file);
+    atomicJson(file, { ...latest, ...fields });
+  }
+  saveGithubFields({ githubSync: 'pending' });
   try {
     if (!/^[\w.-]+\/[\w.-]+$/.test(env.DEPLOY_GITHUB_REPOSITORY) || !env.DEPLOY_GITHUB_TOKEN || !/^[a-f0-9]{40}$/.test(m.commitSha || '')) throw new Error('github_configuration_missing');
     const base = `https://api.github.com/repos/${env.DEPLOY_GITHUB_REPOSITORY}`;
@@ -46,7 +58,7 @@ export async function syncGithub(dir, { fetchImpl = fetch, env = process.env } =
         if (!Number.isSafeInteger(deployment.id)) throw new Error('github_invalid_response');
         m.githubDeploymentId = deployment.id;
       }
-      atomicJson(file, m);
+      saveGithubFields({ githubDeploymentId: m.githubDeploymentId });
     }
     const state = m.status === 'success' ? 'success' : m.status === 'running' ? 'in_progress' : m.status === 'interrupted' ? 'error' : 'failure';
     const body = { state, environment: 'production', auto_inactive: false, description: `${m.deploymentId} ${m.status}; rollback ${m.rollbackStatus}`.slice(0, 140) };
@@ -56,15 +68,16 @@ export async function syncGithub(dir, { fetchImpl = fetch, env = process.env } =
       body.log_url = url.href;
     }
     await api(`${base}/deployments/${m.githubDeploymentId}/statuses`, body);
-    Object.assign(m, { githubSync: 'synced', githubSyncedAt: now() });
-    delete m.githubSyncError;
-    atomicJson(file, m);
+    if (JSON.stringify(publicSummary(readJson(file))) !== JSON.stringify(summary)) {
+      throw new Error('github_summary_changed');
+    }
+    saveGithubFields({ githubSync: 'synced', githubSyncedAt: now(), githubSyncError: undefined });
     appendEvent(dir, { phase: 'github_sync', status: 'success', githubDeploymentId: m.githubDeploymentId });
     return true;
   } catch (error) {
     // Never persist an upstream response, token, or arbitrary error body in public summaries.
     m.githubSyncError = /^(github_http_\d+|github_[a-z_]+)$/.test(error.message) ? error.message : 'github_sync_failed';
-    atomicJson(file, m);
+    saveGithubFields({ githubSync: 'pending', githubSyncError: m.githubSyncError });
     appendEvent(dir, { phase: 'github_sync', status: 'pending', reason: m.githubSyncError });
     return false;
   }

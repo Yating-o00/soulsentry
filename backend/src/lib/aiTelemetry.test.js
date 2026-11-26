@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { aiHttpContext, aiRequestContext, aiTrace, getAiContext, recordAiAttempt, runAiTaskContext } from "./aiContext.js";
 import { callKimiChat } from "./kimi.js";
 import { invokeDashboardAi } from "./dashboardAi.js";
+import { runFlowChat } from "../services/flowChat.js";
 
 function setup(t) {
   const names = ["KIMI_API_KEY", "MOONSHOT_API_KEY", "KIMI_FALLBACK_API_KEY", "MOONSHOT_FALLBACK_API_KEY", "DEEPSEEK_API_KEY", "CHAT_AI_PROVIDER", "CHAT_AI_EXPERIMENT_ENABLED"];
@@ -19,9 +20,9 @@ function setup(t) {
 }
 const options = { messages: [{ role: "user", content: "PRIVATE_PROMPT" }], models: ["kimi-test"], singleAttempt: true, responseJsonSchema: true };
 const jsonResponse = (content = '{"answer":"PRIVATE_REPLY"}') => new Response(JSON.stringify({ choices: [{ message: { content } }] }), { headers: { "x-request-id": "upstream-123" } });
-function http(work, { headers = {}, gate = true, body = undefined, status = 200, finish = true } = {}) {
+function http(work, { headers = {}, gate = true, body = undefined, status = 200, finish = true, request = {} } = {}) {
   return new Promise((resolve, reject) => {
-    const req = { get: n => headers[n], baseUrl: "/api/companion", route: { path: "/messages" }, path: "/messages?private=true" };
+    const req = { get: n => headers[n], baseUrl: "/api/companion", route: { path: "/messages" }, path: "/messages?private=true", ...request };
     const res = new EventEmitter();
     Object.assign(res, { statusCode: status, headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(n) { this.statusCode = n; return this; }, json(value) { this.body = value; if (finish) { this.writableFinished = true; this.emit("finish"); } resolve(this); return this; } });
     const run = () => Promise.resolve().then(work).then(value => res.json(body ?? value)).catch(reject);
@@ -145,12 +146,68 @@ test("background boundaries associate multiple child calls and never claim busin
   assert.equal(new Set(events.map(e => e.requestId)).size, 1);
 });
 
-test("cached trace receives current request identity without replaying old attempts", async t => {
-  setup(t);
-  const res = await http(() => ({ skipped: true, ai_analysis: { ai: { requestId: "old-request", attempts: [{ outcome: "success" }] } } }));
+const heartSignRequest = { baseUrl: "/api/functions", params: { name: "analyzeHeartSign" } };
+
+test("cached heart-sign analysis is successful without replaying old attempts", async t => {
+  const { events } = setup(t);
+  const res = await http(() => ({
+    ok: true, skipped: true, ai_analysis: { ai: { requestId: "old-request", attempts: [{ outcome: "success" }] } },
+  }), { request: heartSignRequest });
   assert.notEqual(res.body.ai.requestId, "old-request");
   assert.deepEqual(res.body.ai.attempts, []);
   assert.equal(res.body.ai.source, "cached");
+  assert.equal(res.body.ai.cached, true);
+  assert.equal(events.at(-1).businessSuccess, true);
+});
+
+test("heart-sign processing acknowledgement has an unknown business outcome", async t => {
+  const { events } = setup(t);
+  const res = await http(() => ({ ok: true, skipped: true, message: "已有分析任务在进行中" }), { request: heartSignRequest });
+  assert.equal(res.body.ai.source, "system");
+  assert.equal(res.body.ai.cached, undefined);
+  assert.equal(events.at(-1).businessSuccess, null);
+});
+
+for (const usedFallback of [false, true]) test(`heart-sign template attribution with analysis fallback=${usedFallback}`, async t => {
+  const { events } = setup(t);
+  t.mock.method(globalThis, "fetch", async () => jsonResponse());
+  const res = await http(async () => {
+    await callKimiChat(options);
+    return {
+      ok: true, used_fallback: usedFallback,
+      ai_analysis: { source: usedFallback ? "local_fallback" : "kimi", reply_source: "local_template" },
+    };
+  }, { request: heartSignRequest });
+  const final = events.at(-1);
+  assert.equal(final.analysisSource, usedFallback ? "fallback" : "ai");
+  assert.equal(final.businessSuccess, !usedFallback);
+  assert.equal(final.attempts[0].outcome, "success");
+  for (const trace of [final, res.body.ai]) {
+    assert.equal(trace.source, "fallback");
+    assert.equal(trace.provider, null);
+    assert.equal(trace.model, null);
+  }
+});
+
+test("flow chat records a rejected plan adjustment as failure after a successful model call", async t => {
+  const { events } = setup(t);
+  t.mock.method(globalThis, "fetch", async () => jsonResponse('{"reply":"好的","extracted":null}'));
+  const res = await http(() => runFlowChat({
+    messages: [{ role: "user", content: "每周三次学习" }, { role: "user", content: "每天改到早上9点" }],
+    lastExtracted: {
+      type: "plan",
+      plan_request: { goal: "英语学习", horizon_days: 7, daily_minutes: 30 },
+      plan: { patterns: [{ plan_group: "学习", applies_to: "daily", session_type: "session",
+        start_time: "10:00", duration_minutes: 30, title: "复习", description: "英语练习" }] },
+    },
+  }), { request: { baseUrl: "/api/chat", route: { path: "/" } } });
+  assert.match(res.body.reply, /SESSION_COUNT/);
+  assert.equal(res.body.extracted, null);
+  const final = events.at(-1);
+  assert.equal(final.businessSuccess, false);
+  assert.equal(final.source, "fallback");
+  assert.equal(final.provider, null);
+  assert.equal(final.attempts[0].outcome, "success");
 });
 
 test("unexpected attempt fields are never serialized", async t => {

@@ -820,7 +820,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   // 模型偶尔会漏掉 reply 但仍给出提案/办事目标：不能因为少一句措辞就把整次成功调用判死
   const rawReply = typeof result.reply === "string" ? result.reply : "";
   if (!rawReply && !result.agent_goal && !result.extracted) {
-    console.warn("[flowChat] model response missing reply:", JSON.stringify(result).slice(0, 300));
+    console.warn("[flowChat] model response missing reply");
     throw new Error("invalid chat response");
   }
   let safeReply = rawReply || (result.agent_goal ? "好，我去网页上看看，稍后把结果带回来。" : "我在，接着说就好。");
@@ -834,7 +834,7 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
       .replace(/来不及了/g, "时间还够")
       .replace(/惩罚/g, "约束")
       .replace(/后果/g, "影响");
-    console.log("[flowChat] reply tone softened:", before.slice(0, 80), "->", safeReply.slice(0, 80));
+    console.log("[flowChat] reply tone softened");
   }
   const agentGoal = trim(result.agent_goal, 200) || null;
   // 同一件事不要重复：agent_goal 已覆盖的请求，不再出同名约定提案
@@ -975,6 +975,8 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       signal: planRun ? AbortSignal.any([planRun.signal, chatTimeout]) : chatTimeout,
       singleAttempt: Boolean(planRun),
     });
+
+    let planFailed = false;
 
     // 协同约定强意图优先：「建立/创建…协同约定」明确要的是多人共创卡片，
     // 模型若误读成智能规划（plan）或普通约定，一律按协同提案覆盖，话术同步换掉
@@ -1192,6 +1194,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
         const planErrors = validateScheduledSessions(planned, constraints);
         if (planErrors.length) {
+          planFailed = true;
           if (planRun) {
             planRun.status = "invalid";
             planRun.validation = noteValidation(planErrors);
@@ -1209,6 +1212,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         }
         }
       } catch (planErr) {
+        planFailed = true;
         if (planRun && planRun.status === "chat") planRun.status = planRun.signal.aborted ? "timeout" : "invalid";
         if (!planRun) console.warn("[flowChat] 规划失败:", planErr?.message || planErr);
         out.reply = `计划暂时无法生成：${planErr?.message || "请稍后重试"}。你可以调整要求后重新规划。`;
@@ -1273,6 +1277,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       if (planRun && constraints.busy == null) constraints.busy = await loadPlanningBusy(prisma, userId, constraints);
       const errors = validateScheduledSessions(out.extracted.plan, constraints);
       if (errors.length) {
+        planFailed = true;
         if (planRun) {
           planRun.status = "invalid";
           planRun.validation = noteValidation(errors);
@@ -1319,7 +1324,9 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         out.reply = `${out.reply}（小助手暂时没能出发，稍后再试试？）`;
       }
     }
-    return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source: "ai" };
+    const plan = out.extracted?.plan;
+    const source = plan?.source === "fallback" || (planFailed && !plan) ? "fallback" : "ai";
+    return { reply: out.reply, extracted: out.extracted, agentGoal: out.agentGoal, agent, source };
   } catch (err) {
     if (planRun) planRun.status = planRun.signal.aborted || err?.name === "TimeoutError" ? "timeout" : "provider_failure";
     // 带 planRun 时也必须留下失败原因，否则只剩 provider_failure 无法定位

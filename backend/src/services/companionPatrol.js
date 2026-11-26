@@ -1,3 +1,4 @@
+import { runAiTaskContext } from "../lib/aiContext.js";
 // 小助手巡检：服务端代替小程序「后台常驻」，定时扫描每个活跃用户的约定状态，
 // 发现需要沟通的情况时，以小助手口吻在陪伴对话里留一条主动消息（kind=proactive）。
 // 触发信号（按优先级，每轮每用户至多一条）：
@@ -57,7 +58,7 @@ async function sendProactive(user, { dedupeKey, trigger, matterKey, content }) {
       meta: { trigger, matterKey }
     }
   });
-  console.log(`[companionPatrol] → ${user.displayName || user.id} [${trigger}] ${content.slice(0, 40)}…`);
+  console.log(`[companionPatrol] proactive message saved [${trigger}]`);
   return true;
 }
 
@@ -259,7 +260,7 @@ async function patrolUser(user, now) {
       if (!(await shouldRemindMatter(user.id, hit.matterKey, now))) continue;
       const content = await polishContent(user.id, { trigger: hit.trigger, draft: hit.content, recentTexts });
       await sendProactive(user, { ...hit, content });
-      return; // 每轮至多一条，最重要的先说
+      return { businessSuccess: content !== hit.content, used_fallback: content === hit.content }; // 每轮至多一条
     } catch (err) {
       console.warn(`[companionPatrol] trigger ${fn.name} failed for ${user.id}:`, err?.message || err);
     }
@@ -284,7 +285,7 @@ async function sweepOnce() {
       take: MAX_USERS_PER_SWEEP
     });
     for (const user of users) {
-      await patrolUser(user, now).catch((err) => {
+      await runAiTaskContext("companion.patrol", () => patrolUser(user, now)).catch((err) => {
         console.warn(`[companionPatrol] user ${user.id} failed:`, err?.message || err);
       });
     }

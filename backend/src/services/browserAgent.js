@@ -1,3 +1,4 @@
+import { runAiTaskContext } from "../lib/aiContext.js";
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
@@ -641,6 +642,10 @@ async function runLoop(session) {
 }
 
 export async function runBrowserAgent(execution, prisma) {
+  return runAiTaskContext("browser.agent", () => runBrowserAgentInContext(execution, prisma), () => ({ businessSuccess: true }));
+}
+
+async function runBrowserAgentInContext(execution, prisma) {
   const goal = String(execution.originalInput || execution.taskTitle || "").slice(0, 300);
   const browser = await getBrowser();
   const context = await browser.newContext({

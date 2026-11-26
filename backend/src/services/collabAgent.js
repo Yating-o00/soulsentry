@@ -1,3 +1,4 @@
+import { runAiTaskContext } from "../lib/aiContext.js";
 // 协同约定 Agent：整理（tidy/minutes/disputes/extract_subtasks）+ 沟通（coordinate）双模式。
 // 信任边界：只用当前空间数据（子约定树/讨论/节点/文档），不读成员私人记录、其他约定、心签；
 // 中性呈现观点、不评判对错、不替人承诺；输出草案必须人工确认后才生效。
@@ -1576,6 +1577,10 @@ const runningTasks = new Set();
  * 返回 { ok, action, degraded, result }，result 内含原始 ORM 对象（路由层负责序列化）。
  */
 export async function runCollabAgent(params) {
+  return runAiTaskContext("collab.agent", () => runCollabAgentInContext(params));
+}
+
+async function runCollabAgentInContext(params) {
   if (runningTasks.has(params.taskId)) {
     throw errorWith(409, "AGENT_BUSY", "Agent 正在处理本轮沟通，本次让行");
   }

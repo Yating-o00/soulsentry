@@ -1,4 +1,4 @@
-import { getAiContext, recordAiAttempt } from "./aiContext.js";
+import { activateAiContext, classifyAiError, getAiContext, recordAiAttempt, runAiTaskContext, upstreamErrorDetails } from "./aiContext.js";
 
 const DEFAULT_BASE_URL = "https://api.moonshot.cn/v1";
 const DEFAULT_FALLBACK_BASE_URL = "https://api.moonshot.ai/v1";
@@ -128,7 +128,11 @@ export function parseModelJson(content) {
   }
 }
 
-export async function callKimiChat({
+export async function callKimiChat(options) {
+  return runAiTaskContext("model.chat", () => callKimiChatInContext(options));
+}
+
+async function callKimiChatInContext({
   messages,
   responseJsonSchema,
   model,
@@ -142,6 +146,7 @@ export async function callKimiChat({
   singleAttempt = false,
   allowDeepSeekFallback = true
 }) {
+  activateAiContext();
   let endpoints = getEndpointConfigs(allowDeepSeekFallback);
   const hasImage = messages?.some((m) => Array.isArray(m.content) && m.content.some((part) => part.type === "image_url"));
   if (getAiContext()?.provider === "deepseek" && allowDeepSeekFallback && !tools?.length && !hasImage) {
@@ -198,7 +203,7 @@ export async function callKimiChat({
       };
       recordAiAttempt(attempt);
       try {
-        console.log(`[callKimiChat] attempt: endpoint=${endpoint.label}(${endpoint.baseUrl}), model=${candidateModel}, timeout=${attemptTimeout}ms`);
+        console.log(`[callKimiChat] attempt: endpoint=${endpoint.label}, model=${candidateModel}, timeout=${attemptTimeout}ms`);
         const controller = new AbortController();
         timeoutId = setTimeout(() => controller.abort(), attemptTimeout);
         response = await fetch(`${endpoint.baseUrl}/chat/completions`, {
@@ -212,6 +217,8 @@ export async function callKimiChat({
         });
 
         const duration = Date.now() - startAt;
+        attempt.status = response.status;
+        attempt.upstreamRequestId = upstreamErrorDetails(response).upstreamRequestId;
 
         if (response.ok) {
           const data = await response.json();
@@ -232,7 +239,7 @@ export async function callKimiChat({
               lastStatus = 200;
               lastErrorText = "RESPONSE_NOT_JSON";
               attempt.reason = "invalid_json";
-              console.log(`[callKimiChat] invalid json: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, head=${content.slice(0, 80)}`);
+              console.log(`[callKimiChat] invalid json: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms`);
               continue;
             }
           }
@@ -251,23 +258,23 @@ export async function callKimiChat({
 
         lastStatus = response.status;
         attempt.status = response.status;
-        attempt.reason = `http_${response.status}`;
         lastErrorText = await response.text();
-        console.log(`[callKimiChat] http error: endpoint=${endpoint.label}, model=${candidateModel}, status=${lastStatus}, duration=${duration}ms, body=${lastErrorText.slice(0, 200)}`);
+        Object.assign(attempt, upstreamErrorDetails(response, lastErrorText));
+        console.log(`[callKimiChat] http error: endpoint=${endpoint.label}, model=${candidateModel}, status=${lastStatus}, duration=${duration}ms, reason=${attempt.reason}`);
         lastError = null;
 
         if (!shouldTryFallback(response.status, lastErrorText)) {
-          const error = new Error(`Kimi API error ${lastStatus}: ${lastErrorText}`);
+          const error = new Error(`Model upstream failed (${attempt.reason}, HTTP ${lastStatus})`);
           error.status = 502;
           throw error;
         }
       } catch (error) {
         const duration = Date.now() - startAt;
         lastError = error;
-        attempt.reason ||= /abort|timeout/i.test(error?.name || "") ? "timeout" : "request_error";
+        attempt.reason ||= classifyAiError({ error });
         lastStatus = error?.status || 0;
         lastErrorText = error?.message || "Unknown request failure";
-        console.log(`[callKimiChat] exception: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, error=${lastErrorText.slice(0, 200)}`);
+        console.log(`[callKimiChat] exception: endpoint=${endpoint.label}, model=${candidateModel}, duration=${duration}ms, reason=${attempt.reason}`);
       } finally {
         if (timeoutId) clearTimeout(timeoutId);
         attempt.elapsedMs = Date.now() - startAt;
@@ -277,7 +284,7 @@ export async function callKimiChat({
     }
   }
 
-  console.log(`[callKimiChat] exhausted all attempts, lastStatus=${lastStatus}, lastError=${lastErrorText.slice(0, 200)}`);
+  console.log(`[callKimiChat] exhausted all attempts, lastStatus=${lastStatus}, reason=${classifyAiError({ status: lastStatus, errorText: lastErrorText, error: lastError })}`);
 
   signal?.throwIfAborted();
   if (lastError?.status && !shouldTryFallback(lastError.status, lastError.message || "")) {
@@ -289,7 +296,7 @@ export async function callKimiChat({
       ? "Kimi 返回内容不是合法 JSON"
       : lastErrorText === "RESPONSE_EMPTY"
         ? "Kimi 返回空内容（输出预算可能被推理耗尽，请调大 maxTokens 或重试）"
-        : `Kimi API error ${lastStatus}: ${lastErrorText}`
+        : `Model upstream failed (${classifyAiError({ status: lastStatus, errorText: lastErrorText, error: lastError })}, HTTP ${lastStatus})`
   );
   error.status = 502;
   if (lastStatus === 200 && /RESPONSE_(?:EMPTY|NOT_JSON)/.test(lastErrorText)) error.code = "PLAN_JSON";
@@ -347,7 +354,11 @@ export async function invokeKimiText({
   return { text: result.content, model: result.model };
 }
 
-export async function invokeKimiWebSearch({ query, language = "zh", maxRounds = 6, fetchTimeout } = {}) {
+export async function invokeKimiWebSearch(options = {}) {
+  return runAiTaskContext("model.web_search", () => invokeKimiWebSearchInContext(options));
+}
+
+async function invokeKimiWebSearchInContext({ query, language = "zh", maxRounds = 6, fetchTimeout } = {}) {
   const systemPrompt = language === "en"
     ? "You are a research assistant. Use the builtin web search tool to answer with concise, up-to-date information. End with references."
     : "你是一名联网研究助手。请使用内置联网搜索工具检索最新信息后作答，回答简洁并附上参考链接。";

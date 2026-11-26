@@ -5,9 +5,13 @@ import { fileURLToPath } from "node:url"
 import { defineConfig } from 'vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const releaseIdentity = process.env.SOULSENTRY_RELEASE_IDENTITY_JSON
+  ? JSON.parse(process.env.SOULSENTRY_RELEASE_IDENTITY_JSON)
+  : { deploymentId: 'unknown', commitSha: 'unknown', builtAt: null };
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: { __RELEASE_IDENTITY__: JSON.stringify(releaseIdentity) },
   server: {
     proxy: {
       "/api": {
@@ -28,6 +32,9 @@ export default defineConfig({
     }
   },
   plugins: [
+    { name: 'release-identity', generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'release-identity.json', source: JSON.stringify(releaseIdentity) });
+    } },
     react(),
     legacy({
       targets: ["chrome >= 60", "ios >= 10", "android >= 5", "safari >= 10"],

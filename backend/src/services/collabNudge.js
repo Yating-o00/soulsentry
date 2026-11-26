@@ -1,3 +1,4 @@
+import { runAiTaskContext } from "../lib/aiContext.js";
 // 协同约定的「主动推动」轮询：空间停滞时，Agent 主动出现推进事件。
 // 触发信号（满足其一且冷却期过后）：成员 ≥24h 无发言且有未决事项；草案 ≥24h 未确认；
 // 节点 48h 内到期且 ≥12h 无成员发言。Agent 以讨论消息 + 站内通知推动相关成员，幂等防刷屏。
@@ -188,6 +189,7 @@ async function maybeNudgeTask(task) {
     { field: "agent_action", field_label: "Agent 动作", new_value: usedLLM ? "nudge" : "nudge(template)" }
   ]);
   console.log(`[collabNudge] pushed task=${task.id} llm=${usedLLM} parties=${parties.length}`);
+  return { businessSuccess: usedLLM, used_fallback: !usedLLM };
 }
 
 let timer = null;
@@ -202,7 +204,7 @@ export function startCollabNudgeSweep() {
       });
       for (const task of tasks) {
         try {
-          await maybeNudgeTask(task);
+          await runAiTaskContext("collab.nudge", () => maybeNudgeTask(task));
         } catch (error) {
           console.error(`[collabNudge] task ${task.id} failed:`, error?.message || error);
         }

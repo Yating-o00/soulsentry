@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:observability": "node scripts/test-observability.mjs",
+    "build:release": "node scripts/build-release.mjs"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.32",

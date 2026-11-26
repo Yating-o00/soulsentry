@@ -1,5 +1,6 @@
 import { getChatAiProvider, setChatAiProvider } from "./aiPreference";
 import { standaloneApiBaseUrl } from "./platformConfig";
+import { frontendVersionHeaders } from "../lib/releaseIdentity";
 
 const ACCESS_TOKEN_KEY = "soulsentry_access_token";
 
@@ -63,7 +64,8 @@ export async function httpRequest(path, { method = "GET", body, headers = {} } =
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(chatProvider ? { "X-Chat-AI-Provider": chatProvider } : {}),
-      ...headers
+      ...headers,
+      ...frontendVersionHeaders()
     },
     body: isFormData ? body : (body ? JSON.stringify(body) : undefined)
   });

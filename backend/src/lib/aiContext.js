@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { getReleaseIdentity } from "./releaseIdentity.js";
+import { beginLatencyStage } from "../services/conversationLatency.js";
 
 const storage = new AsyncLocalStorage();
 const attemptStates = new WeakMap();
@@ -94,12 +95,17 @@ export function recordAiAttempt(attempt) {
   if (!state) {
     attempt.attemptId = randomUUID();
     state = { completed: false };
+    const endpoint = attempt.provider === "deepseek" ? "deepseek"
+      : attempt.endpoint === "fallback" ? "kimi_fallback" : "kimi_primary";
+    state.finishLatency = beginLatencyStage("model_attempt", endpoint);
     attemptStates.set(attempt, state);
     context.attempts.push(attempt);
     console.info("[aiAttempt]", JSON.stringify({ ...identity(context), ...attemptSnapshot(attempt), outcome: "pending", event: "started", late: context.finalized }));
   }
   if (attempt.outcome !== "pending" && !state.completed) {
     state.completed = true;
+    state.finishLatency?.(attempt.outcome === "success" ? "ok" : attempt.reason === "timeout" ? "timeout" : "error");
+    state.finishLatency = undefined;
     console.info("[aiAttempt]", JSON.stringify({ ...identity(context), ...attemptSnapshot(attempt), event: "completed", late: context.finalized }));
   }
 }

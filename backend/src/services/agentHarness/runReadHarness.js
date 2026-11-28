@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { invokeCapability } from "./capability.js";
+import { timeLatencyStage } from "../conversationLatency.js";
 
 const MAX_STEPS = 12;
 const RUN_TIMEOUT_MS = 60_000;
@@ -101,25 +102,25 @@ export async function runHarnessDecision({ actorId, taskId, input, continuation,
   for (let step = 1; step <= maxSteps; step += 1) {
     let raw;
     try {
-      raw = await withSignal(() => {
+      raw = await timeLatencyStage("harness_decision", () => withSignal(() => {
         modelCalls += 1;
         return decide({ input, continuation: structuredClone(continuation), capabilities: structuredClone(tools), observations: structuredClone(observations), signal: activeSignal });
-      }, activeSignal);
+      }, activeSignal));
     } catch {
       return activeSignal.aborted ? cancelled() : blocked("MODEL_FAILURE");
     }
     if (activeSignal.aborted) return cancelled();
-    const parsed = decisionSchema.safeParse(raw);
+    const parsed = timeLatencyStage("validation", () => decisionSchema.safeParse(raw), "decision_schema", (result) => result.success);
     if (!parsed.success) return blocked("INVALID_DECISION");
     const decision = parsed.data;
 
     if (decision.type === "ask") {
-      if (!groundedChoices(decision.choices, observations)) return blocked("MISSING_EVIDENCE");
+      if (!timeLatencyStage("validation", () => groundedChoices(decision.choices, observations), "evidence", Boolean)) return blocked("MISSING_EVIDENCE");
       trace.push({ step, type: "ask" });
       return outcome("awaiting_input", { question: decision.question, choices: decision.choices });
     }
     if (decision.type === "finish") {
-      if (!grounded(decision, observations)) return blocked("MISSING_EVIDENCE");
+      if (!timeLatencyStage("validation", () => grounded(decision, observations), "evidence", Boolean)) return blocked("MISSING_EVIDENCE");
       const evidenceIds = [...new Set(decision.evidenceIds)];
       trace.push({ step, type: "finish", evidenceIds });
       return outcome("completed", { reply: decision.reply, facts: decision.facts, evidenceIds });
@@ -145,16 +146,16 @@ export async function runHarnessDecision({ actorId, taskId, input, continuation,
           const cited = observations.filter((item) => decision.evidenceIds.includes(item.id) && item.result.ok);
           if (cited.length !== new Set(decision.evidenceIds).size) return blocked("MISSING_EVIDENCE");
           const normalized = capability.input.parse(args);
-          const preview = await withSignal(() => invokeCapability(capability, normalized, {
+          const preview = await timeLatencyStage("capability", () => withSignal(() => invokeCapability(capability, normalized, {
             actorId, evidence: structuredClone(cited.flatMap(({ result }) => result.data)),
-          }, { signal: activeSignal, phase: "prepare" }), activeSignal);
+          }, { signal: activeSignal, phase: "prepare" }), activeSignal), "prepare");
           trace.push({ step, type: "propose", tool, evidenceIds: decision.evidenceIds });
           return outcome("awaiting_confirmation", { action: { capability: tool, args: normalized }, preview });
         }
-        const value = await withSignal(() => {
+        const value = await timeLatencyStage("capability", () => withSignal(() => {
           toolCalls += 1;
           return invokeCapability(capability, structuredClone(args), { actorId }, { signal: activeSignal });
-        }, activeSignal);
+        }, activeSignal), "read");
         result = { ok: true, data: JSON.parse(JSON.stringify(value)) };
       } catch (error) {
         if (activeSignal.aborted) return cancelled();

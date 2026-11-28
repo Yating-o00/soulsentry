@@ -10,6 +10,7 @@ import { applyRememberedDuration, loadPlanningBusy, planningConstraints, resolve
 import { trainingClarification } from "./trainingWorkflow.js";
 import { RECENT_CHAT_WINDOW, renderMemoryContext } from "./memoryContext.js";
 import { buildPlanInsights, renderInsightsForPrompt } from "./planInsights.js";
+import { markConversationLatency, timeLatencyStage } from "./conversationLatency.js";
 
 // 心流对话：用户用聊天的方式告诉 SoulSentry 想记什么，
 // AI 负责理解意图（立约定 / 记心签 / 存链接 / 网页办事 / 闲聊），
@@ -861,6 +862,19 @@ agent_goal（网页办事，即时执行）：用户想让你"现在就去网上
   };
 }
 
+async function startFlowBrowserAgent(goal, userId, prisma) {
+  markConversationLatency({ path: "browser_agent" });
+  try {
+    const started = await timeLatencyStage("capability", () => startStandaloneBrowserExecution({ goal, userId, prisma }),
+      "browser_agent_start", (result) => result.status === "started");
+    if (started.status !== "started") markConversationLatency({ outcome: "fallback" });
+    return started;
+  } catch (error) {
+    markConversationLatency({ outcome: "fallback" });
+    throw error;
+  }
+}
+
 /**
  * 对话入口：messages 为完整对话历史（客户端持有），lastExtracted 为当前待确认提案。
  * agentExecutionId：对话中挂着浏览器小助手会话时，用户消息直接转发给 Agent。
@@ -876,7 +890,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       const type = String(a?.type || "");
       if (type.startsWith("image/") && a?.url) {
         try {
-          const r = await analyzeImage({ fileUrl: a.url });
+          const r = await timeLatencyStage("context", () => analyzeImage({ fileUrl: a.url }), "image_attachment");
           const desc = [r?.extracted_text, r?.suggestion].filter(Boolean).join("；").slice(0, 600);
           parts.push(`图片「${name}」的内容：${desc || "（未能识别内容）"}`);
         } catch {
@@ -885,7 +899,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
       } else {
         // 文件附件：提取文本内容注入对话（pdf/docx/xlsx/txt/csv 等），让 Agent 能真正读到
         try {
-          const text = await readAttachmentText(a);
+          const text = await timeLatencyStage("context", () => readAttachmentText(a), "file_attachment");
           parts.push(text ? text.slice(0, 1500) : `文件「${name}」（${type || "未知类型"}，内容暂未能读取）`);
         } catch {
           parts.push(`文件「${name}」（内容未能读取）`);
@@ -934,7 +948,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
 
   // —— AI 点数预检：对话是用户主动触发的 AI 调用，余额不足时不消耗 AI、直接温柔提示充值 ——
   if (userId && prisma) {
-    const creditUser = await prisma.user.findUnique({ where: { id: userId }, select: { aiCredits: true } });
+    const creditUser = await timeLatencyStage("context", () => prisma.user.findUnique({ where: { id: userId }, select: { aiCredits: true } }), "credit_check");
     const balance = creditUser?.aiCredits ?? 0;
     if (balance < 1) {
       return {
@@ -964,17 +978,17 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           }
         }
       : lastExtracted;
-    const personaTone = await loadPersonaTone({ userId, prisma });
-    const userContext = await loadDialogueContext({ userId, prisma });
+    const personaTone = await timeLatencyStage("context", () => loadPersonaTone({ userId, prisma }), "persona");
+    const userContext = await timeLatencyStage("context", () => loadDialogueContext({ userId, prisma }), "dialogue_context");
     if (planRun) planRun.chatCalls += 1;
     // 外层给今日对话的 Kimi 调用和 DeepSeek 兜底留出时间。
     const chatTimeout = AbortSignal.timeout(45000);
-    const out = await chatWithKimi({
+    const out = await timeLatencyStage("dialogue_model", () => chatWithKimi({
       messages: safeMessages, lastExtracted: dialogueLastExtracted, attachmentCtx,
       personaTone, userContext, memories, memoryContext,
       signal: planRun ? AbortSignal.any([planRun.signal, chatTimeout]) : chatTimeout,
       singleAttempt: Boolean(planRun),
-    });
+    }));
 
     let planFailed = false;
 
@@ -992,8 +1006,11 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     // —— 智能约定规划：调规划器（注入已有安排避障），把逐日执行计划填进提案 ——
     // plan 字段由服务端生成，不落模型之手；每次带最新 plan_request 重排，确认/改期都走这里
     if (out.extracted?.type === "plan" && out.extracted.plan_request && userId && prisma) {
+      markConversationLatency({ path: "schedule" });
       try {
-        const resolved = planRun && resolvePlanningRequest(out.extracted.plan_request, userTexts, planningMemories);
+        const resolved = planRun && timeLatencyStage("validation", () => resolvePlanningRequest(
+          out.extracted.plan_request, userTexts, planningMemories,
+        ), "planning_constraints");
         const req = resolved ? resolved.request : applyRememberedDuration(out.extracted.plan_request, lastUser.content, planningMemories);
         out.extracted.plan_request = req;
         const userContext = userTexts.join(" ");
@@ -1025,14 +1042,14 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           }
           out.reply = question || missingQuestion;
         } else {
-        if (planRun) constraints.busy = await loadPlanningBusy(prisma, userId, constraints);
+        if (planRun) constraints.busy = await timeLatencyStage("context", () => loadPlanningBusy(prisma, userId, constraints), "busy_windows");
         const horizon = req.horizon_days || 7;
         const dayMs = 86400000;
         const start = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
         const end = new Date(Date.now() + 8 * 3600 * 1000 + (horizon + 1) * dayMs).toISOString().slice(0, 10);
         const rangeStart = new Date(`${start}T00:00:00+08:00`);
         const rangeEnd = new Date(`${end}T00:00:00+08:00`);
-        const busyTasks = await prisma.task.findMany({
+        const busyTasks = await timeLatencyStage("context", () => prisma.task.findMany({
           where: {
             userId,
             deletedAt: null,
@@ -1044,7 +1061,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           },
           select: { title: true, reminderTime: true, endTime: true, dueAt: true },
           take: 50
-        });
+        }), "existing_tasks");
         const toCn = (d) => new Date(d.getTime() + 8 * 3600 * 1000).toISOString();
         const existing = busyTasks
           .map((t) => ({
@@ -1055,7 +1072,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
           }))
           .filter((b) => b.date);
         // 个性化输入：历史活跃时段/完成率/既有打卡约定/窗口负载（只读，失败不影响规划）
-        const insights = await buildPlanInsights({ userId, prisma, busyTasks: existing }).catch((e) => {
+        const insights = await timeLatencyStage("context", () => buildPlanInsights({ userId, prisma, busyTasks: existing }), "plan_insights").catch((e) => {
           console.warn("[flowChat] 规划画像构建失败:", e?.message || e);
           return null;
         });
@@ -1166,11 +1183,12 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             insights,
             constraints,
             signal: planRun?.signal,
-            onAttempt: planRun && (({ attempt, errors, failed }) => {
+            onAttempt: planRun && (({ attempt, errors, failed, reason }) => {
               planRun.plannerCalls = attempt + 1;
               if (attempt === 0) planRun.firstValidation = noteValidation(errors);
               planRun.validation = noteValidation(errors);
               if (failed) planRun.status = planRun.signal.aborted ? "timeout" : "provider_failure";
+              if (failed) planRun.failureReason = reason;
             }),
           });
           out.extracted.plan = {
@@ -1192,7 +1210,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
             };
           }
         }
-        const planErrors = validateScheduledSessions(planned, constraints);
+        const planErrors = timeLatencyStage("validation", () => validateScheduledSessions(planned, constraints), "planned_schedule", (errors) => !errors.length);
         if (planErrors.length) {
           planFailed = true;
           if (planRun) {
@@ -1275,7 +1293,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
         ? resolvePlanningRequest(req, userTexts, planningMemories).constraints
         : planningConstraints({ goal: req.goal, horizonDays: req.horizon_days, sessionMinutes: req.daily_minutes, context: userTexts.join(" "), latestContext: lastUser.content, memories: planningMemories }));
       if (planRun && constraints.busy == null) constraints.busy = await loadPlanningBusy(prisma, userId, constraints);
-      const errors = validateScheduledSessions(out.extracted.plan, constraints);
+      const errors = timeLatencyStage("validation", () => validateScheduledSessions(out.extracted.plan, constraints), "proposed_schedule", (errors) => !errors.length);
       if (errors.length) {
         planFailed = true;
         if (planRun) {
@@ -1294,12 +1312,12 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     if (userId && prisma && out.usage) {
       try {
         const { cost, billableTokens } = usageCost(out.usage);
-        await chargeAICredits({
+        await timeLatencyStage("persistence", () => chargeAICredits({
           userId,
           cost,
           feature: "flow_chat",
           description: `心流对话（${Math.round(billableTokens)} tokens）`
-        });
+        }), "model_usage");
       } catch (chargeErr) {
         if (chargeErr?.code === "INSUFFICIENT_CREDITS") {
           console.warn(`[flowChat] 结算时余额不足（余额 ${chargeErr.balance}），本次放行`);
@@ -1313,7 +1331,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     let agent = null;
     if (out.agentGoal && userId && prisma) {
       try {
-        const started = await startStandaloneBrowserExecution({ goal: out.agentGoal, userId, prisma });
+        const started = await startFlowBrowserAgent(out.agentGoal, userId, prisma);
         if (started.status === "started") {
           agent = { executionId: started.executionId, status: "running" };
         } else {
@@ -1341,7 +1359,7 @@ export async function runFlowChat({ messages, lastExtracted = null, userId = nul
     // 兜底识别出"现在就去网页办事"：直接启动浏览器小助手
     if (raw && raw.agent_goal && userId && prisma) {
       try {
-        const started = await startStandaloneBrowserExecution({ goal: raw.agent_goal, userId, prisma });
+        const started = await startFlowBrowserAgent(raw.agent_goal, userId, prisma);
         if (started.status === "started") {
           return {
             reply: "好，我让浏览器小助手去帮你办这件事，过程和结果马上回到这里～",

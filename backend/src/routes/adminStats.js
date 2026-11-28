@@ -3,6 +3,8 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { beijingToday, beijingDayRange } from "../lib/behavior.js";
 import { computeDayStats } from "../services/statsRollup.js";
+import { retentionStart } from "../services/conversationLatency.js";
+import { conversationLatencyScope, summarizeConversationLatency } from "../services/conversationLatencyStats.js";
 
 /**
  * Admin 数据看板接口：跨用户聚合，仅 ADMIN 角色可用。
@@ -16,6 +18,41 @@ adminStatsRouter.use(requireAuth, (req, res, next) => {
     return res.status(403).json({ error: "FORBIDDEN", message: "需要管理员权限" });
   }
   next();
+});
+
+const traceSummaryFields = { id: true, startedAt: true, entry: true, path: true, outcome: true, httpStatus: true, totalMs: true, modelCalls: true };
+
+adminStatsRouter.get("/conversation-latency", async (req, res) => {
+  const scope = conversationLatencyScope(req.query);
+  if (!scope) return res.status(400).json({ error: "INVALID_FILTERS", message: "请选择有效的日期和筛选条件" });
+  const rows = await prisma.conversationLatency.findMany({ where: scope.where, select: {
+    startedAt: true, entry: true, path: true, outcome: true, totalMs: true, modelCalls: true, modelCallsByPhase: true, phaseMs: true,
+  } });
+  return res.json(summarizeConversationLatency(rows, scope.range));
+});
+
+adminStatsRouter.get("/conversation-latency/traces", async (req, res) => {
+  const scope = conversationLatencyScope(req.query);
+  if (!scope) return res.status(400).json({ error: "INVALID_FILTERS", message: "请选择有效的日期和筛选条件" });
+  const limit = 20;
+  const latest = [{ startedAt: "desc" }, { id: "desc" }];
+  const rows = await prisma.conversationLatency.findMany({
+    where: scope.where,
+    select: traceSummaryFields,
+    orderBy: scope.sort === "recent" ? latest : [{ totalMs: "desc" }, ...latest],
+    ...(scope.cursor ? { cursor: { id: scope.cursor }, skip: 1 } : {}),
+    take: limit + 1,
+  });
+  return res.json({ traces: rows.slice(0, limit), next: rows.length > limit ? rows[limit - 1].id : null });
+});
+
+adminStatsRouter.get("/conversation-latency/traces/:id", async (req, res) => {
+  const trace = await prisma.conversationLatency.findFirst({
+    where: { id: req.params.id, startedAt: { gte: retentionStart() } },
+    select: { ...traceSummaryFields, spans: true },
+  });
+  if (!trace) return res.status(404).json({ error: "TRACE_NOT_FOUND", message: "找不到该轮轨迹" });
+  return res.json(trace);
 });
 
 // 活跃用户数：最近 N 天有任意行为事件的去重用户数

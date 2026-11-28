@@ -12,6 +12,7 @@ import { sweepStaleBrowserExecutions } from "./services/browserAgent.js";
 import { attachAgentStream } from "./services/agentStream.js";
 import { prisma } from "./lib/prisma.js";
 import { startMemoryWorker } from "./services/memoryWorker.js";
+import { startConversationLatencyCleanup } from "./services/conversationLatency.js";
 
 process.on("uncaughtException", (error) => {
   console.error("[uncaughtException]", error);
@@ -35,6 +36,7 @@ startCollabCustomRuleCron();
 startCompanionPatrol();
 // 数据看板日汇总：每天 03:07 滚昨天，启动后回补缺失日期（独立于提醒开关）
 startStatsCron();
+startConversationLatencyCleanup(prisma.conversationLatency);
 startMemoryWorker(prisma);
 sweepStaleBrowserExecutions(prisma);
 

@@ -10,8 +10,9 @@ export async function runTaskHarness({ draft, validate, maxRepairs = 1, onAttemp
     try {
       result = await draft({ attempt, errors });
     } catch (error) {
-      onAttempt?.({ attempt, errors: [], failed: true });
-      return { status: "error", reason: error.name === "TimeoutError" || error.message === "PLAN_TIMEOUT" ? "timeout" : "provider_failure", message: error.message };
+      const reason = error.name === "TimeoutError" || error.message === "PLAN_TIMEOUT" ? "timeout" : "provider_failure";
+      onAttempt?.({ attempt, errors: [], failed: true, reason });
+      return { status: "error", reason, message: error.message };
     }
     errors = validate(result);
     onAttempt?.({ attempt, errors });

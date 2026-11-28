@@ -3,6 +3,7 @@ import {
   detectAutomationTypeFromInput,
   AUTOMATION_EXECUTE_COSTS,
 } from "./executeAutomation.js";
+import { withoutConversationLatency } from "./conversationLatency.js";
 
 const MIN_CONTENT_CHARS = 6;
 
@@ -42,7 +43,7 @@ export async function startStandaloneBrowserExecution({ goal, userId, prisma }) 
 
   console.log(`[autoAutomation] chat-embedded browser agent execution=${execution.id}`);
 
-  runAutoPhases(execution.id, userId, prisma).catch((err) => {
+  withoutConversationLatency(() => runAutoPhases(execution.id, userId, prisma)).catch((err) => {
     console.error(`[autoAutomation] 对话内嵌浏览器 Agent 失败 execution=${execution.id}:`, err?.message || err);
   });
 

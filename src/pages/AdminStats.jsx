@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { httpRequest } from "@/api/httpClient";
 import { useAuth } from "@/lib/AuthContext";
+import ConversationLatencyPanel from "@/components/admin/ConversationLatencyPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -218,6 +219,8 @@ export default function AdminStats() {
           <KpiCard icon={CalendarDays} label="WAU" value={totals?.wau ?? "-"} sub="近 7 天活跃用户" />
           <KpiCard icon={CalendarRange} label="MAU" value={totals?.mau ?? "-"} sub="近 30 天活跃用户" />
         </div>
+
+        <ConversationLatencyPanel />
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card className="border-[#c9d5ef] bg-white">

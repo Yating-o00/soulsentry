@@ -1,5 +1,6 @@
 import { invokeDashboardAi } from "../lib/dashboardAi.js";
 import { runTaskHarness, suggestWeeklySlots, validateScheduledSessions } from "./taskHarness.js";
+import { timeLatencyStage } from "./conversationLatency.js";
 import { renderMemoryContext } from "./memoryContext.js";
 
 // 智能约定规划：把「一类要做的事」（如"两周的健身计划"）落成母约定 + 逐日子约定。
@@ -882,13 +883,13 @@ ${constraints.training ? "训练日的 description 必须列出具体动作及�
   const outcome = await runTaskHarness({
     maxRepairs,
     onAttempt,
-    draft: async ({ errors }) => {
+    draft: async ({ attempt, errors }) => {
       signal?.throwIfAborted();
       let data, usage;
       const fetchTimeout = 60000;
       const timeout = AbortSignal.timeout(fetchTimeout);
       try {
-        ({ data, usage } = await invoke({
+        ({ data, usage } = await timeLatencyStage("planner_model", () => invoke({
           prompt: `${prompt}\n每条模板必须包含 session_type，主要推进填 session，休息/恢复填 recovery。${errors.length ? `上一版存在问题，请修正：${errors.join("；")}` : ""}`,
           systemPrompt: "你是约定规划师，也是通用任务规划师。把长期目标拆成母约定 + 1-5 个日型模板；工作/项目型计划写成可交付的工作流，学习/训练型计划写成可执行练习。只输出 JSON，不要长篇思考。",
           responseJsonSchema: schema,
@@ -898,7 +899,7 @@ ${constraints.training ? "训练日的 description 必须列出具体动作及�
           signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
           singleAttempt: Boolean(signal),
           withUsage: true,
-        }));
+        }), attempt ? "repair" : "draft"));
       } catch (error) {
         if (error.code === "PLAN_JSON" && constraints.checkWindows) return { malformedJson: true };
         throw error;
@@ -922,7 +923,9 @@ ${constraints.training ? "训练日的 description 必须列出具体动作及�
       }
       return null;
     },
-    validate: (plan) => plan?.malformedJson ? ["PLAN_JSON：请只返回符合格式的 JSON"] : validateScheduledSessions(plan, constraints),
+    validate: (plan) => timeLatencyStage("validation", () => plan?.malformedJson
+      ? ["PLAN_JSON：请只返回符合格式的 JSON"]
+      : validateScheduledSessions(plan, constraints), "planner_output", (errors) => !errors.length),
   });
   if (outcome.status !== "ready") {
     throw new Error(outcome.status === "invalid" ? outcome.errors.join("；")

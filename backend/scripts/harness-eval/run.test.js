@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { join } from "node:path";
 import { after, before, beforeEach, mock, test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 const backend = fileURLToPath(new URL("../../", import.meta.url));
@@ -68,6 +69,7 @@ before(async () => {
     calls.push({ phase, model: body.model, prompt: body.messages[1].content });
     const next = answers.shift();
     if (!next || next.phase !== phase) return new Response("unexpected fixture call", { status: 500 });
+    if (next.wait) await next.wait();
     if (next.timeout) throw new DOMException("synthetic timeout", "TimeoutError");
     if (next.status) return new Response("fixture provider error", { status: next.status });
     const data = typeof next.data === "function" ? next.data(JSON.parse(body.messages[1].content)) : next.data;
@@ -119,6 +121,15 @@ const approval = (outcome) => ({
   type: "confirm", taskId: outcome.taskId, proposal: { id: outcome.proposal.id, version: outcome.proposal.version },
 });
 
+async function waitForLatency(where, count) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const traces = await db.conversationLatency.findMany({ where });
+    if (traces.length >= count) return traces;
+    await delay(10);
+  }
+  assert.fail(`Expected ${count} stored response traces`);
+}
+
 test("the real companion workflow resumes a clarification and verifies one acknowledged write", async () => {
   const a = await db.task.create({ data: { userId: user.id, title: "周报 A" } });
   const b = await db.task.create({ data: { userId: user.id, title: "周报 B" } });
@@ -164,6 +175,16 @@ test("the real companion workflow resumes a clarification and verifies one ackno
   assert.equal((await db.task.findUnique({ where: { id: foreign.id } })).status, "TODO");
   assert.equal(await db.taskChangeLog.count({ where: { taskId: b.id, changeType: "harness_status" } }), 1);
   assert.equal(calls.length, 4);
+  const traces = await waitForLatency({ entry: "task_harness" }, 5);
+  assert.equal(new Set(traces.map(({ id }) => id)).size, 5);
+  assert.equal(traces.find(({ path }) => path === "message").id, first.requestId);
+  assert.deepEqual(traces.map(({ path, outcome }) => `${path}/${outcome}`).sort(), [
+    "confirm/blocked", "confirm/confirmed", "confirm/confirmed", "message/clarification", "reply/proposal",
+  ]);
+  assert.equal(traces.find(({ path }) => path === "message").modelCalls, 2);
+  assert.ok(traces.some(({ path, spans }) => path === "confirm" && spans.some(({ detail }) => detail === "apply")));
+  assert.ok(traces.some(({ path, spans }) => path === "confirm" && spans.some(({ detail }) => detail === "receipt")));
+  assert.ok(traces.filter(({ path }) => path === "confirm").every(({ modelCalls }) => modelCalls === 0));
 });
 
 test("an edit after preview blocks the old version until a fresh proposal is confirmed", async () => {
@@ -208,7 +229,7 @@ async function post(path, body, account = user, method = "POST") {
     headers: { authorization: "Bearer " + sign(account), "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  return { status: res.status, data: res.headers.get("content-type")?.includes("application/json") ? await res.json() : null };
+  return { status: res.status, requestId: res.headers.get("x-request-id"), data: res.headers.get("content-type")?.includes("application/json") ? await res.json() : null };
 }
 
 async function send(content, last_extracted) {
@@ -403,15 +424,30 @@ test("returns an actionable clarification when explicit weekday constraints are 
 });
 
 test("repairs two independently observable violations before showing the proposal", async () => {
-  await busy("2026-11-16T10:00:00", "2026-11-16T10:30:00");
-  intent();
-  draft({ days: "周一,周三,周五,周六" });
-  draft({ start: "10:30" });
-  assertSchedule(await send(study), 20, ["10:30", "10:30", "10:30"]);
-  assert.equal(plannerCalls().length, 2);
-  assert.match(plannerCalls()[1].prompt, /需要\s*3\s*次/);
-  assert.match(plannerCalls()[1].prompt, /冲突|重叠/);
-  assert.equal((await tasks()).length, 1); // Only the pre-existing busy task.
+  const tracedAt = new Date(Number(now) + 101);
+  mock.timers.setTime(Number(tracedAt));
+  try {
+    await busy("2026-11-16T10:00:00", "2026-11-16T10:30:00");
+    intent();
+    draft({ days: "周一,周三,周五,周六" });
+    draft({ start: "10:30" });
+    assertSchedule(await send(study), 20, ["10:30", "10:30", "10:30"]);
+    assert.equal(plannerCalls().length, 2);
+    assert.match(plannerCalls()[1].prompt, /需要\s*3\s*次/);
+    assert.match(plannerCalls()[1].prompt, /冲突|重叠/);
+    assert.equal((await tasks()).length, 1); // Only the pre-existing busy task.
+    const [trace] = await waitForLatency({ startedAt: tracedAt }, 1);
+    assert.equal(trace.path, "schedule");
+    assert.equal(trace.outcome, "proposal");
+    assert.equal(trace.modelCalls, 3);
+    assert.deepEqual(trace.modelCallsByPhase, { dialogue_model: 1, planner_model: 2 });
+    assert.deepEqual(trace.spans.filter(({ phase }) => phase === "planner_model").map(({ detail }) => detail), ["draft", "repair"]);
+    assert.deepEqual(trace.spans.filter(({ detail }) => detail === "planner_output").map(({ status }) => status), ["error", "ok"]);
+    assert.ok(trace.spans.some(({ phase }) => phase === "dialogue_model"));
+    assert.ok(trace.spans.some(({ detail }) => detail === "schedule_snapshot"));
+  } finally {
+    mock.timers.setTime(Number(now));
+  }
 });
 
 test("blocks the card after the single repair also fails", async () => {
@@ -514,13 +550,150 @@ test("asks for an unspecified duration even if the chat model supplies a guess",
 });
 
 test("times out promptly without calling a repair", async () => {
-  intent();
-  answers.push({ phase: "planner", timeout: true });
-  const result = await send(study);
-  assert.equal(result.extracted, null);
-  assert.match(result.reply.content, /超时/);
-  assert.equal(plannerCalls().length, 1);
-  assert.deepEqual(await tasks(), []);
+  const tracedAt = new Date(Number(now) + 102);
+  mock.timers.setTime(Number(tracedAt));
+  try {
+    intent();
+    answers.push({ phase: "planner", timeout: true });
+    const result = await send(study);
+    assert.equal(result.extracted, null);
+    assert.match(result.reply.content, /超时/);
+    assert.equal(plannerCalls().length, 1);
+    assert.deepEqual(await tasks(), []);
+    const [trace] = await waitForLatency({ startedAt: tracedAt }, 1);
+    assert.equal(trace.outcome, "timeout");
+    assert.equal(trace.httpStatus, 200);
+    assert.ok(trace.spans.some(({ phase, status }) => phase === "model_attempt" && status === "timeout"));
+  } finally {
+    mock.timers.setTime(Number(now));
+  }
+});
+
+test("admin response latency separates interruptions and captures HTTP 200 fallbacks without message content", { timeout: 10000 }, async () => {
+  const tracedAt = new Date("2026-11-14T00:00:00.000Z");
+  const auth = { authorization: "Bearer " + sign(user), "content-type": "application/json" };
+  const admin = await db.user.create({ data: { role: "ADMIN" } });
+  const endpoint = "/api/admin/stats/conversation-latency";
+  const window = "?from=2026-11-14&to=2026-11-14&entry=companion";
+  const message = "仅用于测试的隐私正文";
+  const started = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  mock.timers.setTime(Number(tracedAt));
+  try {
+    chatOnly();
+    await send(message);
+    answers.push({ phase: "chat", status: 503 });
+    await send(message);
+    await post(sendPath, { assistant_echo: message });
+    answers.push({ phase: "chat", data: { reply: "我听着呢。", extracted: null }, wait: () => {
+      started.resolve();
+      return release.promise;
+    } });
+    const controller = new AbortController();
+    const request = nativeFetch(base + sendPath, {
+      method: "POST", headers: auth, body: JSON.stringify({ content: message }), signal: controller.signal,
+    });
+    const interrupted = assert.rejects(request, { name: "AbortError" });
+    await started.promise;
+    controller.abort();
+    await interrupted;
+
+    const traces = await waitForLatency({ startedAt: tracedAt }, 3);
+    assert.deepEqual(traces.map(({ outcome }) => outcome).sort(), ["fallback", "interrupted", "reply"]);
+    const cancelled = traces.find(({ outcome }) => outcome === "interrupted");
+    assert.ok(cancelled.spans.some(({ phase, status }) => phase === "dialogue_model" && status === "interrupted"));
+    assert.equal((await post(endpoint + window, undefined, user, "GET")).status, 403);
+    assert.equal((await post(`${endpoint}/traces/${traces[0].id}`, undefined, user, "GET")).status, 403);
+    const summary = (await post(endpoint + window, undefined, admin, "GET")).data;
+    assert.equal(summary.total.count, 2);
+    assert.equal(summary.interrupted.count, 1);
+    assert.equal(summary.modelCalls, 3);
+    assert.equal(summary.stages.find(({ phase }) => phase === "dialogue_model").modelCalls, 2);
+    const cancelledSummary = (await post(endpoint + window + "&outcome=interrupted", undefined, admin, "GET")).data;
+    assert.equal(cancelledSummary.modelCalls, 1);
+    const list = (await post(endpoint + "/traces" + window + "&outcome=fallback", undefined, admin, "GET")).data;
+    assert.equal(list.traces.length, 1);
+    assert.equal(list.traces[0].httpStatus, 200);
+    const detail = (await post(`${endpoint}/traces/${list.traces[0].id}`, undefined, admin, "GET")).data;
+    assert.ok(detail.spans.some(({ phase, detail }) => phase === "context" && detail === "message_history"));
+    assert.doesNotMatch(JSON.stringify(detail), new RegExp(message));
+    assert.ok(detail.totalMs >= Math.max(...detail.spans.map(({ startMs, durationMs }) => startMs + durationMs)));
+
+    const expired = await db.conversationLatency.create({ data: { ...cancelled, id: randomUUID(), startedAt: new Date("2026-10-14T00:00:00Z") } });
+    assert.equal((await post(`${endpoint}/traces/${expired.id}`, undefined, admin, "GET")).status, 404);
+    const { pruneConversationLatency } = await import("../../src/services/conversationLatency.js");
+    await pruneConversationLatency(db.conversationLatency);
+    assert.equal(await db.conversationLatency.findUnique({ where: { id: expired.id } }), null);
+    assert.equal(await db.conversationLatency.count({ where: { startedAt: tracedAt } }), 3);
+  } finally {
+    release.resolve();
+    mock.timers.setTime(Number(now));
+  }
+});
+
+test("assistant traces record browser startup failures both after an AI decision and after local fallback", async () => {
+  const tracedAt = new Date(Number(now) + 103);
+  await db.user.update({ where: { id: user.id }, data: { aiCredits: 1 } });
+  mock.timers.setTime(Number(tracedAt));
+  try {
+    const browse = "请打开 https://example.com 查询今天的活动";
+    answers.push({ phase: "chat", data: { reply: "我去看看。", agent_goal: browse } });
+    await send(browse);
+    answers.push({ phase: "chat", status: 503 });
+    await send(browse);
+    const traces = await waitForLatency({ startedAt: tracedAt }, 2);
+    for (const trace of traces) {
+      assert.equal(trace.path, "browser_agent");
+      assert.equal(trace.outcome, "fallback");
+      assert.ok(trace.spans.some(({ detail, status }) => detail === "browser_agent_start" && status === "error"));
+    }
+    assert.equal(await db.taskExecution.count({ where: { userId: user.id } }), 0);
+  } finally {
+    mock.timers.setTime(Number(now));
+  }
+});
+
+test("assistant traces distinguish buddy proposals from local fallback replies", async () => {
+  const tracedAt = new Date(Number(now) + 104);
+  await db.userPreference.create({ data: { userId: user.id, metadata: { _extraFields: { buddy_profiles: { study: { status: "active", answers: {} } } } } } });
+  mock.timers.setTime(Number(tracedAt));
+  try {
+    answers.push({ phase: "chat", data: { reply: "我来整理这个提案。", proposal: { type: "create_collab" } } });
+    const proposal = await post(sendPath, { content: "帮我想个学习安排", buddy_id: "study" });
+    assert.equal(proposal.data.proposal?.type, "create_collab");
+    answers.push({ phase: "chat", status: 503 });
+    const fallback = await post(sendPath, { content: "聊聊学习", buddy_id: "study" });
+    assert.equal(fallback.status, 200);
+    await db.$executeRaw`CREATE TRIGGER fail_assistant_save BEFORE INSERT ON CompanionMessage
+      WHEN NEW.role = 'assistant' BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END`;
+    try {
+      answers.push({ phase: "chat", data: { reply: "我来整理这个提案。", proposal: { type: "create_collab" } } });
+      const failed = await post(sendPath, { content: "帮我想个学习安排", buddy_id: "study" });
+      assert.equal(failed.status, 500);
+      const traces = await waitForLatency({ startedAt: tracedAt }, 3);
+      assert.deepEqual(traces.map(({ path, outcome }) => `${path}/${outcome}`).sort(), ["buddy/error", "buddy/fallback", "buddy/proposal"]);
+    } finally {
+      await db.$executeRaw`DROP TRIGGER fail_assistant_save`;
+    }
+  } finally {
+    mock.timers.setTime(Number(now));
+  }
+});
+
+test("admin latency pagination preserves every trace when the sort keys tie", async () => {
+  const startedAt = new Date("2026-11-13T00:00:00.000Z");
+  const ids = Array.from({ length: 21 }, () => randomUUID());
+  await db.conversationLatency.createMany({ data: ids.map((id) => ({
+    id, startedAt, entry: "companion", path: "chat", outcome: "reply", httpStatus: 200, totalMs: 123,
+    modelCalls: 0, modelCallsByPhase: {}, phaseMs: {}, spans: [],
+  })) });
+  const admin = await db.user.create({ data: { role: "ADMIN" } });
+  const path = "/api/admin/stats/conversation-latency/traces?from=2026-11-13&to=2026-11-13";
+  const first = (await post(path, undefined, admin, "GET")).data;
+  assert.equal(first.traces.length, 20);
+  const last = (await post(path + "&cursor=" + first.next, undefined, admin, "GET")).data;
+  assert.equal(last.next, null);
+  assert.deepEqual([...first.traces, ...last.traces].map(({ id }) => id).sort(), ids.sort());
 });
 
 test("keeps the main duration when a model adds an unnecessary recovery template", async () => {

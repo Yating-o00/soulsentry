@@ -75,6 +75,22 @@ model HarnessTask {
   @@index([userId])
 }
 
+model ConversationLatency {
+  id                String   @id
+  startedAt         DateTime
+  entry             String
+  path              String
+  outcome           String
+  httpStatus        Int?
+  totalMs           Int
+  modelCalls        Int
+  modelCallsByPhase Json
+  phaseMs           Json
+  spans             Json
+
+  @@index([startedAt])
+}
+
 // 小助手陪伴对话：用户消息与助手回复都落库（巡检主动消息 kind=proactive），跨端/重进可读
 model CompanionMessage {
   id        String    @id @default(cuid())

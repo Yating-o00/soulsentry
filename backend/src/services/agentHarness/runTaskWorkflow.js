@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { invokeCapability } from "./capability.js";
 import { runHarnessDecision, withSignal } from "./runReadHarness.js";
+import { timeLatencyStage } from "../conversationLatency.js";
 
 const CLAIM_EXPIRY_MS = 15_000;
 const REPLAY_WAIT_MS = 1_000;
@@ -19,7 +20,9 @@ function receiptOutcome(receipt, operationId) {
 async function verify(capability, args, context) {
   try {
     const signal = AbortSignal.timeout(WRITE_TIMEOUT_MS);
-    const receipt = await withSignal(() => invokeCapability(capability, args, context, { phase: "verify", signal }), signal);
+    const receipt = await timeLatencyStage("validation", () => withSignal(
+      () => invokeCapability(capability, args, context, { phase: "verify", signal }), signal,
+    ), "receipt", (result) => result?.operationId === context.operationId);
     return receipt?.operationId === context.operationId ? receipt : null;
   } catch {
     return null;
@@ -29,7 +32,7 @@ async function verify(capability, args, context) {
 async function applyAndVerify(capability, args, context) {
   try {
     const signal = AbortSignal.timeout(WRITE_TIMEOUT_MS);
-    await withSignal(() => invokeCapability(capability, args, context, { signal }), signal);
+    await timeLatencyStage("capability", () => withSignal(() => invokeCapability(capability, args, context, { signal }), signal), "apply");
   } catch (error) {
     const code = controlledError(error);
     if (code) return { status: "blocked", code };
@@ -91,7 +94,7 @@ export function createTaskWorkflow({ store, capabilities, decide, now = Date.now
         }
       } else if (state.status === "applying") {
         if (performance.now() >= deadline) return answer({ status: "unverified", operationId: context.operationId });
-        await delay(20);
+        await timeLatencyStage("replay_wait", () => delay(20));
       } else {
         return answer({ status: "blocked", code: "stale_proposal" });
       }

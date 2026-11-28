@@ -2271,6 +2271,7 @@ export async function runBuddyChatFromCompanion({ userId, buddyId, text, attachm
     }
   }
 
+  const responseOutcome = proposal || task ? "proposal" : !reply ? "fallback" : "reply";
   if (!reply) {
     if (capture?.kind === "running_log") {
       const d = capture.data || {};
@@ -2285,6 +2286,7 @@ export async function runBuddyChatFromCompanion({ userId, buddyId, text, attachm
 
   return {
     reply,
+    responseOutcome,
     capture: capture?.kind && capture.kind !== "none" ? capture : null,
     proposal,
     task,

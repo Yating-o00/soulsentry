@@ -2,7 +2,7 @@
 // POST /messages 发送：用户消息落库 → 复用心流对话引擎（意图理解/提案）→ 助手回复落库
 // 巡检产生的主动消息（kind=proactive）也在这条时间线上，未读数驱动小程序入口角标
 import { Router } from "express";
-import { aiRequestContext, aiTrace } from "../lib/aiContext.js";
+import { aiRequestContext, aiTrace, getAiContext } from "../lib/aiContext.js";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
@@ -20,6 +20,7 @@ import { createTaskWorkflow } from "../services/agentHarness/runTaskWorkflow.js"
 import { ownedTaskCapabilities } from "../services/agentHarness/taskCapabilities.js";
 import { createTaskWorkflowStore } from "../services/agentHarness/taskWorkflowStore.js";
 import { resolveCompanionBuddyId, runBuddyChatFromCompanion } from "./buddies.js";
+import { admitConversationLatency, markConversationLatency, timeLatencyStage, withConversationLatency } from "../services/conversationLatency.js";
 
 export const companionRouter = Router();
 
@@ -39,14 +40,20 @@ const workflowInput = z.discriminatedUnion("type", [
   z.object({ type: z.literal("confirm"), taskId, proposal: z.object({ id: taskId, version: z.number().int().positive() }).strict() }).strict(),
 ]);
 
-companionRouter.post("/harness", async (req, res) => {
+companionRouter.post("/harness", withConversationLatency(async (req, res) => {
   const request = workflowInput.safeParse(req.body);
   if (!request.success) return res.status(400).json({ error: "INVALID_INPUT", details: request.error.flatten() });
+  admitConversationLatency("task_harness", request.data.type, getAiContext()?.requestId);
   const outcome = await workflow({ ...request.data, actorId: req.user.id });
+  const result = {
+    awaiting_input: "clarification", awaiting_confirmation: "proposal", blocked: "blocked", unverified: "unverified",
+    completed: request.data.type === "confirm" ? "confirmed" : "reply",
+  }[outcome.status];
+  markConversationLatency({ outcome: outcome.code === "RUN_TIMEOUT" ? "timeout" : result ?? "error" });
   const status = outcome.code === "forbidden" ? 404
     : ["stale_proposal", "precondition_changed", "task_changed"].includes(outcome.code) ? 409 : 200;
   return res.status(status).json(outcome);
-});
+}));
 
 const serialize = (m) => ({
   id: m.id,
@@ -101,7 +108,7 @@ const sendSchema = z.object({
   assistant_echo: z.string().min(1).max(1000).optional()
 }).refine((d) => d.content || d.assistant_echo, { message: "content 或 assistant_echo 至少提供一个" });
 
-companionRouter.post("/messages", aiRequestContext, async (req, res) => {
+companionRouter.post("/messages", aiRequestContext, withConversationLatency(async (req, res) => {
   const payload = sendSchema.safeParse(req.body);
   if (!payload.success) {
     return res.status(400).json({ error: "INVALID_INPUT", details: payload.error.flatten() });
@@ -115,43 +122,46 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
     return res.status(201).json({ message: serialize(echo) });
   }
 
+  admitConversationLatency("companion", "chat", getAiContext()?.requestId);
   const content = payload.data.content.trim();
   const attachments = Array.isArray(payload.data.attachments) ? payload.data.attachments : [];
   const explicitMemory = content.match(/^(?:请)?(?:帮我)?记住[：:,，\s]*(.+)$/s);
   const memoryText = explicitMemory?.[1].trim().slice(0, 1000);
+  if (memoryText) markConversationLatency({ path: "memory_write" });
 
   // @搭子（或正文直接点名）：这条消息交给对应搭子人格处理，主聊天只负责路由和回执
   const routedBuddyId = memoryText
     ? null
-    : await resolveCompanionBuddyId(req.user.id, content, payload.data.buddy_id);
+    : await timeLatencyStage("context", () => resolveCompanionBuddyId(req.user.id, content, payload.data.buddy_id), "buddy_routing");
   if (routedBuddyId) {
+    markConversationLatency({ path: "buddy" });
     // 同一颗搭子在主聊天里的上一段对话，接着聊不丢上下文
-    const recentRows = await prisma.companionMessage.findMany({
+    const recentRows = await timeLatencyStage("context", () => prisma.companionMessage.findMany({
       where: recallableMessageScope(req.user.id),
       orderBy: { createdAt: "desc" },
       take: 30,
-    });
+    }), "message_history");
     const buddyHistory = recentRows
       .reverse()
       .filter((m) => m.meta?.buddy?.id === routedBuddyId || m.meta?.buddy_id === routedBuddyId)
       .slice(-8)
       .map((m) => ({ role: m.role, content: String(m.content || "").slice(0, 500) }));
-    const userMsg = await prisma.companionMessage.create({
+    const userMsg = await timeLatencyStage("persistence", () => prisma.companionMessage.create({
       data: {
         userId: req.user.id, role: "user", content, kind: "chat",
         meta: { buddy_id: routedBuddyId, ...(attachments.length > 0 ? { attachments } : {}) },
       },
-    });
+    }), "user_message");
     enqueueMemoryMessage(prisma, userMsg).catch(() => {});
     let result = null;
     try {
-      result = await runBuddyChatFromCompanion({
+      result = await timeLatencyStage("capability", () => runBuddyChatFromCompanion({
         userId: req.user.id,
         buddyId: routedBuddyId,
         text: content,
         attachments,
         history: buddyHistory,
-      });
+      }), "buddy");
     } catch (error) {
       console.error("[companion] 搭子路由失败:", error?.message || error);
       result = { error: "FAILED", message: "搭子刚才走神了一下，再跟我说一次好吗？" };
@@ -165,12 +175,13 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
       ...(result?.proposal ? { proposal: result.proposal } : {}),
       ...(result?.task ? { task: result.task } : {}),
     };
-    const assistantMsg = await prisma.companionMessage.create({
+    const assistantMsg = await timeLatencyStage("persistence", () => prisma.companionMessage.create({
       data: {
         userId: req.user.id, role: "assistant", content: replyText, kind: "chat",
         ...(Object.keys(assistantMeta).length > 0 ? { meta: assistantMeta } : {}),
       },
-    });
+    }), "assistant_message");
+    markConversationLatency({ outcome: result?.responseOutcome ?? (result?.reply && !result?.error ? "reply" : "fallback") });
     return res.json({
       message: serialize(userMsg),
       reply: serialize(assistantMsg),
@@ -185,7 +196,7 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
     });
   }
 
-  const { userMsg, savedReply } = await prisma.$transaction(async (tx) => {
+  const { userMsg, savedReply } = await timeLatencyStage("persistence", () => prisma.$transaction(async (tx) => {
     const feedbackProposal = !memoryText && /(?:因为|由于|我通常|我平常|我更喜欢|我没空|我没法|我不能|对我来说)/.test(content)
       ? await ownedMemoryProposal(tx, req.user.id, payload.data.last_extracted?.memory_proposal_id) : null;
     const userMeta = {
@@ -217,15 +228,15 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
       },
     });
     return { userMsg, savedReply };
-  });
+  }), memoryText ? "explicit_memory" : "user_message");
   if (savedReply) return res.json({ message: serialize(userMsg), reply: serialize(savedReply), extracted: null, actions: null });
 
   // 从持久化时间线取最近上下文，保证跨端/重进后语境连续
-  const history = await prisma.companionMessage.findMany({
+  const history = await timeLatencyStage("context", () => prisma.companionMessage.findMany({
     where: recallableMessageScope(req.user.id),
     orderBy: { createdAt: "desc" },
     take: 25
-  });
+  }), "message_history");
   const messages = history
     .reverse()
     .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) }));
@@ -233,7 +244,7 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
   try {
     const supplied = payload.data.last_extracted;
     const previousId = supplied?.plan_proposal_id || supplied?.memory_proposal_id;
-    const previous = previousId ? await ownedMemoryProposal(prisma, req.user.id, previousId) : null;
+    const previous = previousId ? await timeLatencyStage("context", () => ownedMemoryProposal(prisma, req.user.id, previousId), "previous_proposal") : null;
     const lastExtracted = previous?.meta.planDraft?.extracted
       ?? (supplied?.plan_proposal_id || (previousId && !previous) ? null : supplied);
 
@@ -242,12 +253,14 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
     // 动作意图优先：「勾掉/改/删现有约定心签」的指令先走动作提取，
     // 避免被对话引擎误当成心签/新约定（用户确认后才真正落库）
     try {
-      const actionResult = !localMove && await extractActions({ messages, userId: req.user.id });
+      const actionResult = !localMove && await timeLatencyStage("action_extraction", () => extractActions({ messages, userId: req.user.id }));
       if (actionResult?.actions?.length > 0) {
+        markConversationLatency({ path: "action_proposal" });
         const reply = actionResult.reply || "好的，我整理了一下要做的修改，确认后我就动手～";
-        const assistantMsg = await prisma.companionMessage.create({
+        const assistantMsg = await timeLatencyStage("persistence", () => prisma.companionMessage.create({
           data: { userId: req.user.id, role: "assistant", content: reply, kind: "chat", meta: { ai: aiTrace(actionResult.reply ? "ai" : "local") } }
-        });
+        }), "assistant_message");
+        markConversationLatency({ outcome: "proposal" });
         return res.json({
           message: serialize(userMsg),
           reply: serialize(assistantMsg),
@@ -262,26 +275,27 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
 
     const hybridEnabled = process.env.MEMORY_HYBRID_ENABLED === "1";
     const [retrieved, memoryContext] = await Promise.all([
-      retrievePersonalMemories({
+      timeLatencyStage("memory", () => retrievePersonalMemories({
         prisma, userId: req.user.id, query: content,
         mode: hybridEnabled ? "hybrid" : "lexical",
-      }),
-      loadMemoryContext(prisma, req.user.id),
+      }), "relevant_memories"),
+      timeLatencyStage("memory", () => loadMemoryContext(prisma, req.user.id), "memory_context"),
     ]);
     const profileIds = new Set(memoryContext.profile.map(({ id }) => id));
     const memories = retrieved.filter(({ id }) => !profileIds.has(id));
-    memoryContext.commitments = await loadRememberedCommitments(prisma, req.user.id, content);
+    memoryContext.commitments = await timeLatencyStage("memory", () => loadRememberedCommitments(prisma, req.user.id, content), "remembered_commitments");
     if (process.env.MEMORY_TOPIC_SUMMARY_ENABLED === "1") memoryContext.topicSummary = buildMemoryTopicSummary(memories);
     if (hybridEnabled && memories.length < 2) {
-      memoryContext.transcript = await searchMemoryTranscript({
+      memoryContext.transcript = await timeLatencyStage("memory", () => searchMemoryTranscript({
         prisma, userId: req.user.id, query: content,
         excludeIds: [...history.map(({ id }) => id), ...memoryContext.recap.map(({ sourceId }) => sourceId)],
-      });
+      }), "transcript_search");
     }
     const startedAt = performance.now();
     const planRun = { signal: AbortSignal.timeout(90000), status: "chat", chatCalls: 0, plannerCalls: 0 };
     let result;
     if (localMove) {
+      markConversationLatency({ path: "schedule" });
       planRun.status = localMove.error ? "invalid" : "local_adjustment";
       planRun.constraints = prior.constraints;
       result = localMove.error ? { reply: localMove.error } : {
@@ -297,6 +311,7 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
     let replyText = String(result?.reply || "").trim() || "我在听，你继续说～";
     let planDraft;
     if (extracted?.type === "plan" && extracted.plan && extracted.plan.source !== "fallback") {
+      markConversationLatency({ path: "schedule" });
       // Fallback adjustment paths must also pass the service's window checks before
       // the assistant reply becomes a confirmable version.
       const constraints = planRun.constraints || resolvePlanningRequest(
@@ -304,7 +319,9 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
         messages.filter(({ role }) => role === "user").map(({ content }) => content),
         [...memoryContext.profile, ...memories],
       ).constraints;
-      const { snapshot, errors } = await checkSchedule({ plan: extracted.plan, constraints }, { db: prisma, actorId: req.user.id });
+      const { snapshot, errors } = await timeLatencyStage("validation", () => checkSchedule(
+        { plan: extracted.plan, constraints }, { db: prisma, actorId: req.user.id },
+      ), "schedule_snapshot", ({ errors }) => errors.length === 0);
       if (errors.length || planRun.signal.aborted) {
         extracted = null;
         planRun.status = planRun.signal.aborted ? "timeout" : "invalid";
@@ -318,7 +335,7 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
       extracted = null;
     }
     const reply = memories.length ? `${replyText}\n\n参考记忆：${memories.map((memory) => memory.title).join("；")}` : replyText;
-    const assistantMsg = await prisma.companionMessage.create({
+    const assistantMsg = await timeLatencyStage("persistence", () => prisma.companionMessage.create({
       data: {
         userId: req.user.id, role: "assistant", content: reply, kind: "chat",
         meta: {
@@ -329,6 +346,12 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
           ...(planDraft ? { planProposal: true, planTitle: extracted.plan.parent?.title, planDraft } : {}),
         },
       }
+    }), "assistant_message");
+    if (result?.agent) markConversationLatency({ path: "browser_agent" });
+    const outcome = { timeout: "timeout", provider_failure: "fallback", invalid: "blocked", clarify: "clarification" }[planRun.status];
+    markConversationLatency({
+      outcome: !extracted && planRun.failureReason === "timeout" ? "timeout" : outcome,
+      defaultOutcome: result?.source === "fallback" ? "fallback" : result?.insufficientCredits ? "blocked" : extracted ? "proposal" : "reply",
     });
     if (planRun.status !== "chat" || planRun.plannerCalls) {
       console.info("[planHarness]", JSON.stringify({
@@ -352,12 +375,13 @@ companionRouter.post("/messages", aiRequestContext, async (req, res) => {
     });
   } catch (err) {
     console.error("[companion] 对话处理失败:", err?.message || err);
-    const fallback = await prisma.companionMessage.create({
+    const fallback = await timeLatencyStage("persistence", () => prisma.companionMessage.create({
       data: { userId: req.user.id, role: "assistant", content: "刚才走神了一下…你再说一遍好吗？", kind: "chat", meta: { ai: aiTrace("fallback") } }
-    });
+    }), "assistant_message");
+    markConversationLatency({ outcome: "fallback" });
     return res.json({ message: serialize(userMsg), reply: serialize(fallback), extracted: null, agent: null });
   }
-});
+}));
 
 // POST /api/companion/actions — 用户确认动作提案后执行（服务端校验权限并落库）
 const actionsSchema = z.object({

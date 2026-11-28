@@ -1,3 +1,5 @@
+import { timeLatencyStage } from "./conversationLatency.js";
+
 export function embeddingModel() {
   return process.env.MEMORY_HYBRID_ENABLED === "1" && process.env.MEMORY_EMBEDDING_URL && process.env.MEMORY_EMBEDDING_MODEL
     ? process.env.MEMORY_EMBEDDING_MODEL : null;
@@ -13,17 +15,19 @@ export async function embedMemoryText(text, { timeout = 1000, fetchImpl = fetch 
   const model = embeddingModel();
   if (!model) return null;
   const key = process.env.MEMORY_EMBEDDING_API_KEY;
-  const response = await fetchImpl(process.env.MEMORY_EMBEDDING_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(key ? { Authorization: "Bearer " + key } : {}) },
-    body: JSON.stringify({ model, input: String(text).slice(0, 600) }),
-    signal: AbortSignal.timeout(timeout),
-  });
-  if (!response.ok) throw new Error("Memory embedding request failed");
-  const data = await response.json();
-  const values = vector(data.data?.[0]?.embedding);
-  if (!values) throw new Error("Invalid memory embedding response");
-  return { model, values };
+  return timeLatencyStage("model_attempt", async () => {
+    const response = await fetchImpl(process.env.MEMORY_EMBEDDING_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(key ? { Authorization: "Bearer " + key } : {}) },
+      body: JSON.stringify({ model, input: String(text).slice(0, 600) }),
+      signal: AbortSignal.timeout(timeout),
+    });
+    if (!response.ok) throw new Error("Memory embedding request failed");
+    const data = await response.json();
+    const values = vector(data.data?.[0]?.embedding);
+    if (!values) throw new Error("Invalid memory embedding response");
+    return { model, values };
+  }, "memory_embedding");
 }
 
 export async function memoryVectorScores(records, query, embed = embedMemoryText) {
